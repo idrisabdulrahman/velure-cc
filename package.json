@@ -10,6 +10,8 @@
     "build": "NODE_OPTIONS=--max-old-space-size=4096 vite build",
     "start": "HOST=0.0.0.0 node .output/server/index.mjs",
     "preview": "vite preview",
+    "hooks:install": "git config core.hooksPath .githooks",
+    "hooks:pre-push": "bun run build",
     "test": "vitest run",
     "format": "biome format",
     "lint": "biome lint",
