@@ -1,21 +1,3 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { CreateInvoicePanel } from "#/features/invoices/components/create-invoice-panel";
+import { createFileRoute } from '@tanstack/react-router'
 
-export const Route = createFileRoute("/invoices/new")({
-	component: NewInvoice,
-});
-
-function NewInvoice() {
-	const navigate = useNavigate();
-
-	return (
-		<div className="mx-auto max-w-6xl">
-			<CreateInvoicePanel
-				mode="page"
-				onCreated={() => {
-					navigate({ to: "/invoices" });
-				}}
-			/>
-		</div>
-	);
-}
+export const Route = createFileRoute('/invoices/new')({})

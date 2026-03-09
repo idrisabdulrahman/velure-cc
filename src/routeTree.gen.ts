@@ -48,27 +48,31 @@ const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any).lazy(() => import('./routes/auth.lazy').then((d) => d.Route))
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any).lazy(() => import('./routes/index.lazy').then((d) => d.Route))
 const InvoicesIndexRoute = InvoicesIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => InvoicesRoute,
-} as any)
+} as any).lazy(() =>
+  import('./routes/invoices.index.lazy').then((d) => d.Route),
+)
 const ClientsIndexRoute = ClientsIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ClientsRoute,
-} as any)
+} as any).lazy(() => import('./routes/clients.index.lazy').then((d) => d.Route))
 const SettingsSecurityRoute = SettingsSecurityRouteImport.update({
   id: '/security',
   path: '/security',
   getParentRoute: () => SettingsRoute,
-} as any)
+} as any).lazy(() =>
+  import('./routes/settings.security.lazy').then((d) => d.Route),
+)
 const InvoicesProductsRoute = InvoicesProductsRouteImport.update({
   id: '/products',
   path: '/products',
@@ -78,7 +82,7 @@ const InvoicesNewRoute = InvoicesNewRouteImport.update({
   id: '/new',
   path: '/new',
   getParentRoute: () => InvoicesRoute,
-} as any)
+} as any).lazy(() => import('./routes/invoices.new.lazy').then((d) => d.Route))
 const ITokenRoute = ITokenRouteImport.update({
   id: '/i/$token',
   path: '/i/$token',
@@ -88,7 +92,7 @@ const ClientsNewRoute = ClientsNewRouteImport.update({
   id: '/new',
   path: '/new',
   getParentRoute: () => ClientsRoute,
-} as any)
+} as any).lazy(() => import('./routes/clients.new.lazy').then((d) => d.Route))
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
