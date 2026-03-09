@@ -1,0 +1,16 @@
+node_modules/
+.agents/
+.agent/
+.DS_Store
+dist
+dist-ssr
+*.local
+.env
+.env.local
+.nitro
+.tanstack
+.wrangler
+.output
+.vinxi
+__unconfig*
+todos.json

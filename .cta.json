@@ -1,0 +1,30 @@
+{
+  "projectName": "velure",
+  "mode": "file-router",
+  "typescript": true,
+  "packageManager": "pnpm",
+  "includeExamples": false,
+  "tailwind": true,
+  "addOnOptions": {},
+  "envVarValues": {
+    "CONVEX_DEPLOYMENT": "https://blessed-vole-608.convex.cloud",
+    "VITE_CONVEX_URL": "https://blessed-vole-608.convex.site"
+  },
+  "git": true,
+  "routerOnly": false,
+  "version": 1,
+  "framework": "react-cra",
+  "chosenAddOns": [
+    "biome",
+    "nitro",
+    "convex",
+    "compiler",
+    "oRPC",
+    "shadcn",
+    "t3env",
+    "table",
+    "better-auth",
+    "store",
+    "tanstack-query"
+  ]
+}
