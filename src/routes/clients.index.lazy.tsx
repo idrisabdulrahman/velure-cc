@@ -1,22 +1,12 @@
-import { createLazyFileRoute, Link } from '@tanstack/react-router'
-import { MoreHorizontal, Pencil, Star, Trash2 } from 'lucide-react'
-import { useMutation, useQuery } from 'convex/react'
-import { useEffect, useMemo, useState } from 'react'
-import { api } from '../../convex/_generated/api'
-import type { Id } from '../../convex/_generated/dataModel'
-import { Button } from '#/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
-import { Input } from '#/components/ui/input'
-import { Badge } from '#/components/ui/badge'
-import { Label } from '#/components/ui/label'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '#/components/ui/table'
+import { createLazyFileRoute, Link } from "@tanstack/react-router";
+import { MoreHorizontal, Pencil, Star, Trash2 } from "lucide-react";
+import { useMutation, useQuery } from "convex/react";
+import { useEffect, useMemo, useState } from "react";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
+import { Label } from "#/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,118 +16,119 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '#/components/ui/alert-dialog'
+} from "#/components/ui/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '#/components/ui/dropdown-menu'
+} from "#/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '#/components/ui/select'
-import { toast } from '#/components/ui/use-toast'
+} from "#/components/ui/select";
+import { toast } from "#/components/ui/use-toast";
 
-export const Route = createLazyFileRoute('/clients/')({
+export const Route = createLazyFileRoute("/clients/")({
   component: ClientsIndex,
-})
+});
 
-type ClientStatus = 'active' | 'pending' | 'inactive' | 'archived'
+type ClientStatus = "active" | "pending" | "inactive" | "archived";
 
 type ClientRow = {
-  id: Id<'clients'>
-  name: string
-  company?: string
-  email: string
-  phone?: string
-  website?: string
-  billingAddress?: string
-  taxId?: string
-  currency: string
-  paymentTerms: string
-  internalNotes?: string
+  id: Id<"clients">;
+  name: string;
+  company?: string;
+  email: string;
+  phone?: string;
+  website?: string;
+  billingAddress?: string;
+  taxId?: string;
+  currency: string;
+  paymentTerms: string;
+  internalNotes?: string;
   contact: {
-    fullName?: string
-    role?: string
-    email?: string
-    phone?: string
-  }
-  favorite: boolean
-  status: ClientStatus
-  createdAt: number
-  updatedAt: number
-}
+    fullName?: string;
+    role?: string;
+    email?: string;
+    phone?: string;
+  };
+  favorite: boolean;
+  status: ClientStatus;
+  createdAt: number;
+  updatedAt: number;
+};
 
 function ClientsIndex() {
-  const updateClient = useMutation(api.clients.update)
-  const archiveClient = useMutation(api.clients.archive)
-  const removeClient = useMutation(api.clients.remove)
-  const toggleFavorite = useMutation(api.clients.toggleFavorite)
+  const updateClient = useMutation(api.clients.update);
+  const archiveClient = useMutation(api.clients.archive);
+  const removeClient = useMutation(api.clients.remove);
+  const toggleFavorite = useMutation(api.clients.toggleFavorite);
 
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState("");
   const clientsFromQuery =
-    (useQuery(api.clients.list, { q: query, status: 'all' }) as ClientRow[] | undefined) ?? []
+    (useQuery(api.clients.list, {
+      q: query,
+      status: "all",
+    }) as ClientRow[] | undefined) ?? [];
 
-  const [clients, setClients] = useState<ClientRow[]>([])
-  const [selectedId, setSelectedId] = useState<Id<'clients'> | null>(null)
-  const [deleteTargetId, setDeleteTargetId] = useState<Id<'clients'> | null>(null)
-  const [busyAction, setBusyAction] = useState<'update' | 'archive' | 'delete' | null>(
-    null,
-  )
+  const [clients, setClients] = useState<ClientRow[]>([]);
+  const [selectedId, setSelectedId] = useState<Id<"clients"> | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<Id<"clients"> | null>(null);
+  const [busyAction, setBusyAction] = useState<"update" | "archive" | "delete" | null>(null);
 
   useEffect(() => {
-    setClients(clientsFromQuery)
-  }, [clientsFromQuery])
+    setClients(clientsFromQuery);
+  }, [clientsFromQuery]);
 
   useEffect(() => {
     if (!selectedId && clients.length > 0) {
-      setSelectedId(clients[0].id)
+      setSelectedId(clients[0].id);
     }
 
     if (selectedId && !clients.some((client) => client.id === selectedId)) {
-      setSelectedId(clients[0]?.id ?? null)
+      setSelectedId(clients[0]?.id ?? null);
     }
-  }, [clients, selectedId])
+  }, [clients, selectedId]);
 
   const selected = useMemo(
     () => clients.find((client) => client.id === selectedId) ?? null,
     [clients, selectedId],
-  )
+  );
 
   const [editState, setEditState] = useState({
-    name: '',
-    email: '',
-    company: '',
-    paymentTerms: 'Net 14',
-    status: 'active' as ClientStatus,
-  })
+    name: "",
+    email: "",
+    company: "",
+    paymentTerms: "Net 14",
+    status: "active" as ClientStatus,
+  });
 
   useEffect(() => {
-    if (!selected) return
+    if (!selected) return;
     setEditState({
       name: selected.name,
       email: selected.email,
-      company: selected.company ?? '',
+      company: selected.company ?? "",
       paymentTerms: selected.paymentTerms,
       status: selected.status,
-    })
-  }, [selected])
+    });
+  }, [selected]);
 
   const updateDisabled =
-    !selected || editState.name.trim().length === 0 || !/^\S+@\S+\.\S+$/.test(editState.email)
+    !selected || editState.name.trim().length === 0 || !/^\S+@\S+\.\S+$/.test(editState.email);
 
-  const patchLocal = (id: Id<'clients'>, updater: (client: ClientRow) => ClientRow) => {
-    setClients((prev) => prev.map((client) => (client.id === id ? updater(client) : client)))
-  }
+  const patchLocal = (id: Id<"clients">, updater: (client: ClientRow) => ClientRow) => {
+    setClients((prev) => prev.map((client) => (client.id === id ? updater(client) : client)));
+  };
 
   const onUpdate = async () => {
-    if (!selected || updateDisabled) return
+    if (!selected || updateDisabled) return;
 
-    const snapshot = clients
+    const snapshot = clients;
     patchLocal(selected.id, (client) => ({
       ...client,
       name: editState.name,
@@ -146,9 +137,9 @@ function ClientsIndex() {
       paymentTerms: editState.paymentTerms,
       status: editState.status,
       updatedAt: Date.now(),
-    }))
+    }));
 
-    setBusyAction('update')
+    setBusyAction("update");
     try {
       await updateClient({
         id: selected.id,
@@ -165,230 +156,220 @@ function ClientsIndex() {
         contact: selected.contact,
         favorite: selected.favorite,
         status: editState.status,
-      })
-      toast({ title: 'Client updated', variant: 'success' })
+      });
+      toast({ title: "Client updated", variant: "success" });
     } catch (error) {
-      setClients(snapshot)
+      setClients(snapshot);
       toast({
-        title: 'Update failed',
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'error',
-      })
+        title: "Update failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "error",
+      });
     } finally {
-      setBusyAction(null)
+      setBusyAction(null);
     }
-  }
+  };
 
   const onArchive = async () => {
-    if (!selected) return
+    if (!selected) return;
 
-    const snapshot = clients
+    const snapshot = clients;
     patchLocal(selected.id, (client) => ({
       ...client,
-      status: 'archived',
+      status: "archived",
       updatedAt: Date.now(),
-    }))
+    }));
 
-    setBusyAction('archive')
+    setBusyAction("archive");
     try {
-      await archiveClient({ id: selected.id })
-      toast({ title: 'Client archived', variant: 'success' })
+      await archiveClient({ id: selected.id });
+      toast({ title: "Client archived", variant: "success" });
     } catch (error) {
-      setClients(snapshot)
+      setClients(snapshot);
       toast({
-        title: 'Archive failed',
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'error',
-      })
+        title: "Archive failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "error",
+      });
     } finally {
-      setBusyAction(null)
+      setBusyAction(null);
     }
-  }
+  };
 
   const onDeleteConfirm = async () => {
-    if (!deleteTargetId) return
+    if (!deleteTargetId) return;
 
-    const snapshot = clients
-    setClients((prev) => prev.filter((client) => client.id !== deleteTargetId))
+    const snapshot = clients;
+    setClients((prev) => prev.filter((client) => client.id !== deleteTargetId));
     if (selectedId === deleteTargetId) {
-      setSelectedId(null)
+      setSelectedId(null);
     }
 
-    setBusyAction('delete')
+    setBusyAction("delete");
     try {
-      await removeClient({ id: deleteTargetId })
-      toast({ title: 'Client deleted', variant: 'success' })
+      await removeClient({ id: deleteTargetId });
+      toast({ title: "Client deleted", variant: "success" });
     } catch (error) {
-      setClients(snapshot)
+      setClients(snapshot);
       toast({
-        title: 'Delete failed',
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'error',
-      })
+        title: "Delete failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "error",
+      });
     } finally {
-      setBusyAction(null)
-      setDeleteTargetId(null)
+      setBusyAction(null);
+      setDeleteTargetId(null);
     }
-  }
+  };
 
   const onToggleFavorite = async () => {
-    if (!selected) return
+    if (!selected) return;
 
-    const nextFavorite = !selected.favorite
-    const snapshot = clients
+    const nextFavorite = !selected.favorite;
+    const snapshot = clients;
     patchLocal(selected.id, (client) => ({
       ...client,
       favorite: nextFavorite,
       updatedAt: Date.now(),
-    }))
+    }));
 
     try {
-      await toggleFavorite({ id: selected.id })
+      await toggleFavorite({ id: selected.id });
     } catch (error) {
-      setClients(snapshot)
+      setClients(snapshot);
       toast({
-        title: 'Favorite update failed',
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'error',
-      })
+        title: "Favorite update failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "error",
+      });
     }
-  }
+  };
 
   return (
     <>
-      <div className="flex h-full w-full flex-col gap-5">
-        <div className="flex items-start justify-between gap-4">
+      <div className="flex h-full w-full flex-col gap-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h1 className="font-serif text-4xl font-medium italic text-[#F2F3F5] md:text-5xl">
-              Clients
-            </h1>
-            <p className="mt-2 text-sm text-[#8A8F99]">
-              Manage client records, billing preferences, and lifecycle status.
+            <h1 className="text-3xl font-semibold tracking-[-0.02em] text-[#ece7de]">Clients</h1>
+            <p className="mt-2 text-sm text-[#a29b90]">
+              Keep contact details, billing defaults, and account status in one place.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search clients..."
-              className="h-10 w-[220px] rounded-[10px] border-[#1A1D22] bg-[#0D1016] text-sm text-[#F2F3F5] placeholder:text-[#7F8794] focus-visible:ring-0"
+              placeholder="Search clients"
+              className="h-10 w-full rounded-md border-[#2b2d30] bg-[#17191b] text-sm text-[#ece7de] placeholder:text-[#7f7a72] focus-visible:ring-0 lg:w-[260px]"
             />
             <Button
               asChild
-              className="h-10 rounded-[10px] bg-[#C8FF1A] px-4 text-xs font-bold tracking-wide text-[#050607] hover:bg-[#d3ff4f]"
+              className="h-10 rounded-md bg-[#a7bc62] px-4 text-sm font-medium text-[#121314] hover:bg-[#b5c97a]"
             >
-              <Link to="/clients/new">+ NEW CLIENT</Link>
+              <Link to="/clients/new">New client</Link>
             </Button>
           </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-          <Card className="overflow-hidden rounded-[10px] border-[#1A1D22] bg-[#0D1016]">
-            <CardHeader className="border-b border-[#1A1D22] px-4 py-3 md:px-5">
-              <CardTitle className="mb-0 text-sm font-semibold tracking-[0.04em] text-[#8A8F99]">
-                CLIENT DIRECTORY
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table className="w-full">
-                <TableHeader className="border-[#1A1D22]">
-                  <TableRow className="border-[#1A1D22] hover:bg-transparent">
-                    <TableHead className="h-11 border-r-0 px-4 text-[11px] font-semibold tracking-[0.04em] text-[#8A8F99] md:px-5">
-                      CLIENT
-                    </TableHead>
-                    <TableHead className="h-11 border-r-0 text-[11px] font-semibold tracking-[0.04em] text-[#8A8F99]">
-                      COMPANY
-                    </TableHead>
-                    <TableHead className="h-11 border-r-0 text-[11px] font-semibold tracking-[0.04em] text-[#8A8F99]">
-                      EMAIL
-                    </TableHead>
-                    <TableHead className="h-11 border-r-0 text-[11px] font-semibold tracking-[0.04em] text-[#8A8F99]">
-                      STATUS
-                    </TableHead>
-                    <TableHead className="h-11 border-r-0 text-[11px] font-semibold tracking-[0.04em] text-[#8A8F99]">
-                      UPDATED
-                    </TableHead>
-                    <TableHead className="h-11 border-r-0 text-right text-[11px] font-semibold tracking-[0.04em] text-[#8A8F99]">
-                      ACTIONS
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="border-[#1A1D22]">
-                  {clients.map((client, index) => (
-                    <TableRow
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <section className="ui-panel overflow-hidden rounded-md border border-[#2b2d30] bg-[#17191b]">
+            <div className="border-b border-[#2b2d30] px-4 py-3">
+              <p className="text-sm font-medium text-[#ece7de]">Client directory</p>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-sm">
+                <thead className="bg-[#15171a]">
+                  <tr className="border-b border-[#2b2d30] text-left text-[#8a857d]">
+                    <th className="px-4 py-3 font-medium">Client</th>
+                    <th className="px-4 py-3 font-medium">Company</th>
+                    <th className="px-4 py-3 font-medium">Email</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium">Updated</th>
+                    <th className="px-4 py-3 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clients.map((client) => (
+                    <tr
                       key={client.id}
-                      className={`h-[66px] border-[#1A1D22] ${index % 2 === 1 ? 'bg-[#0F131A]' : ''} ${
-                        selectedId === client.id ? 'bg-[#0F131A]' : ''
+                      className={`border-b border-[#2b2d30] ${
+                        selectedId === client.id
+                          ? "bg-[#1d2023]"
+                          : "transition-colors duration-150 hover:bg-[#1c1f22]"
                       }`}
                     >
-                      <TableCell className="border-r-0 px-4 md:px-5">
+                      <td className="px-4 py-3">
                         <button
                           type="button"
                           onClick={() => setSelectedId(client.id)}
-                          className="truncate text-left text-[13px] text-[#F2F3F5] hover:text-white"
+                          className="text-left font-medium text-[#ece7de] hover:text-white"
                         >
                           {client.name}
                         </button>
-                      </TableCell>
-                      <TableCell className="border-r-0 text-[13px] text-[#B8C0CF]">
-                        {client.company ?? '—'}
-                      </TableCell>
-                      <TableCell className="border-r-0 text-[13px] text-[#B8C0CF]">
-                        {client.email}
-                      </TableCell>
-                      <TableCell className="border-r-0">
+                      </td>
+                      <td className="px-4 py-3 text-[#b7b1a7]">{client.company ?? "—"}</td>
+                      <td className="px-4 py-3 text-[#b7b1a7]">{client.email}</td>
+                      <td className="px-4 py-3">
                         <StatusChip status={client.status} />
-                      </TableCell>
-                      <TableCell className="border-r-0 text-xs text-[#8A8F99]">
-                        {timeAgo(client.updatedAt)}
-                      </TableCell>
-                      <TableCell className="border-r-0 text-right">
+                      </td>
+                      <td className="px-4 py-3 text-[#a29b90]">{timeAgo(client.updatedAt)}</td>
+                      <td className="px-4 py-3 text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 rounded-md border border-[#262B34] bg-[#0D1016]"
+                              className="h-8 w-8 rounded-md border border-[#2b2d30] bg-[#17191b] hover:bg-[#20241e]"
                             >
-                              <MoreHorizontal className="h-3.5 w-3.5 text-[#7E8794]" />
+                              <MoreHorizontal className="h-4 w-4 text-[#d5d0c7]" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent className="border-[#1A1D22] bg-[#0D1016] text-[#F2F3F5]">
+                          <DropdownMenuContent className="border-[#2b2d30] bg-[#17191b] text-[#ece7de]">
                             <DropdownMenuItem
-                              className="gap-2 focus:bg-[#151A22]"
+                              className="gap-2 focus:bg-[#20241e]"
                               onClick={() => setSelectedId(client.id)}
                             >
-                              <Pencil className="h-3.5 w-3.5" /> Edit
+                              <Pencil className="h-4 w-4" />
+                              Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              className="gap-2 text-[#C77A7A] focus:bg-[#2A1515] focus:text-[#ffb0b0]"
+                              className="gap-2 text-[#d48f8f] focus:bg-[#2a1f1f] focus:text-[#efb1b1]"
                               onClick={() => setDeleteTargetId(client.id)}
                             >
-                              <Trash2 className="h-3.5 w-3.5" /> Delete
+                              <Trash2 className="h-4 w-4" />
+                              Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+                      </td>
+                    </tr>
                   ))}
-                </TableBody>
-              </Table>
-              {clients.length === 0 ? (
-                <div className="px-4 py-8 text-sm text-[#8A8F99]">No clients found.</div>
-              ) : null}
-            </CardContent>
-          </Card>
+                </tbody>
+              </table>
+            </div>
 
-          <Card className="h-fit rounded-[10px] border-[#1A1D22] bg-[#0D1016]">
-            <CardContent className="space-y-3 p-4">
-              <h2 className="text-sm font-semibold text-[#C8FF1A]">Selected Client</h2>
+            {clients.length === 0 ? (
+              <div className="px-4 py-8 text-sm text-[#a29b90]">No clients found.</div>
+            ) : null}
+          </section>
+
+          <section className="ui-stagger-2 rounded-md border border-[#2b2d30] bg-[#17191b]">
+            <div className="border-b border-[#2b2d30] px-4 py-3">
+              <p className="text-sm font-medium text-[#ece7de]">Selected client</p>
+            </div>
+
+            <div className="space-y-4 p-4">
               {!selected ? (
-                <p className="text-sm text-[#8A8F99]">Select a client from the table.</p>
+                <p className="text-sm text-[#a29b90]">Select a client from the table.</p>
               ) : (
                 <>
-                  <h3 className="font-serif text-3xl italic text-[#F2F3F5]">
-                    {selected.company || selected.name}
-                  </h3>
+                  <div className="border-b border-[#2b2d30] pb-4">
+                    <p className="text-lg font-medium text-[#ece7de]">
+                      {selected.company || selected.name}
+                    </p>
+                    <p className="mt-1 text-sm text-[#a29b90]">{selected.email}</p>
+                  </div>
 
                   <LabeledInput
                     label="Name"
@@ -406,25 +387,23 @@ function ClientsIndex() {
                     onChange={(value) => setEditState((prev) => ({ ...prev, company: value }))}
                   />
                   <LabeledInput
-                    label="Payment Terms"
+                    label="Payment terms"
                     value={editState.paymentTerms}
-                    onChange={(value) =>
-                      setEditState((prev) => ({ ...prev, paymentTerms: value }))
-                    }
+                    onChange={(value) => setEditState((prev) => ({ ...prev, paymentTerms: value }))}
                   />
 
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-[#8A8F99]">Status</Label>
+                  <div className="space-y-2">
+                    <Label className="text-sm text-[#b7b1a7]">Status</Label>
                     <Select
                       value={editState.status}
                       onValueChange={(value) =>
                         setEditState((prev) => ({ ...prev, status: value as ClientStatus }))
                       }
                     >
-                      <SelectTrigger className="h-9 rounded-[10px] border-[#1A1D22] bg-[#0A0D12] text-xs text-[#F2F3F5]">
+                      <SelectTrigger className="h-10 rounded-md border-[#2b2d30] bg-[#121314] text-sm text-[#ece7de]">
                         <SelectValue placeholder="Status" />
                       </SelectTrigger>
-                      <SelectContent className="border-[#1A1D22] bg-[#0D1016] text-[#F2F3F5]">
+                      <SelectContent className="border-[#2b2d30] bg-[#17191b] text-[#ece7de]">
                         <SelectItem value="active">active</SelectItem>
                         <SelectItem value="pending">pending</SelectItem>
                         <SelectItem value="inactive">inactive</SelectItem>
@@ -433,69 +412,68 @@ function ClientsIndex() {
                     </Select>
                   </div>
 
-                  <div className="space-y-2 border-t border-[#1A1D22] pt-3">
+                  <div className="space-y-2 border-t border-[#2b2d30] pt-4">
                     <Button
                       type="button"
                       onClick={() => void onUpdate()}
                       disabled={updateDisabled || busyAction !== null}
-                      className="h-10 w-full rounded-[10px] bg-[#C8FF1A] text-sm font-bold text-[#050607] hover:bg-[#d3ff4f] disabled:bg-[#C8FF1A66]"
+                      className="h-10 w-full rounded-md bg-[#a7bc62] text-sm font-medium text-[#121314] hover:bg-[#b5c97a] disabled:bg-[#66704e] disabled:text-[#121314]"
                     >
-                      {busyAction === 'update' ? 'Updating...' : 'Update Data'}
+                      {busyAction === "update" ? "Updating..." : "Save changes"}
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => void onArchive()}
                       disabled={busyAction !== null}
-                      className="h-10 w-full rounded-[10px] border-[#2A3038] bg-transparent text-sm font-semibold text-[#DCE1E8] hover:bg-[#141922]"
+                      className="h-10 w-full rounded-md border-[#2b2d30] bg-transparent text-sm font-medium text-[#d5d0c7] hover:bg-[#1d2023]"
                     >
-                      {busyAction === 'archive' ? 'Archiving...' : 'Archive Client'}
+                      {busyAction === "archive" ? "Archiving..." : "Archive client"}
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => setDeleteTargetId(selected.id)}
                       disabled={busyAction !== null}
-                      className="h-10 w-full rounded-[10px] border-[#4A2A2A] bg-transparent text-sm font-semibold text-[#C77A7A] hover:bg-[#1b1212]"
+                      className="h-10 w-full rounded-md border-[#5d4747] bg-transparent text-sm font-medium text-[#d48f8f] hover:bg-[#2a1f1f]"
                     >
-                      Delete Client
+                      Delete client
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => void onToggleFavorite()}
-                      className="h-9 w-full rounded-[10px] border-[#1A1D22] bg-transparent text-xs text-[#8A8F99] hover:bg-[#141922]"
+                      className="h-10 w-full rounded-md border-[#2b2d30] bg-transparent text-sm font-medium text-[#d5d0c7] hover:bg-[#1d2023]"
                     >
-                      <Star className="mr-2 h-3.5 w-3.5" />
-                      {selected.favorite ? 'Remove Favorite' : 'Save as Favorite'}
+                      <Star className="mr-2 h-4 w-4" />
+                      {selected.favorite ? "Remove favorite" : "Save as favorite"}
                     </Button>
-                    <p className="text-[11px] leading-5 text-[#8A8F99]">
-                      Deleting removes client history from quick access. This action requires
-                      confirmation.
-                    </p>
                   </div>
                 </>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </section>
         </div>
       </div>
 
-      <AlertDialog open={deleteTargetId !== null} onOpenChange={(open) => !open && setDeleteTargetId(null)}>
-        <AlertDialogContent className="border-[#1A1D22] bg-[#0D1016] text-[#F2F3F5]">
+      <AlertDialog
+        open={deleteTargetId !== null}
+        onOpenChange={(open) => !open && setDeleteTargetId(null)}
+      >
+        <AlertDialogContent className="border-[#2b2d30] bg-[#17191b] text-[#ece7de]">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-[#F2F3F5]">Delete client?</AlertDialogTitle>
-            <AlertDialogDescription className="text-[#8A8F99]">
+            <AlertDialogTitle className="text-[#ece7de]">Delete client?</AlertDialogTitle>
+            <AlertDialogDescription className="text-[#a29b90]">
               This will permanently remove the client from your list.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-[#2A3038] bg-transparent text-[#DCE1E8] hover:bg-[#141922]">
+            <AlertDialogCancel className="border-[#2b2d30] bg-transparent text-[#d5d0c7] hover:bg-[#1d2023]">
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => void onDeleteConfirm()}
-              className="bg-[#3d1f1f] text-[#ffb0b0] hover:bg-[#542929]"
+              className="bg-[#563333] text-[#f0d1d1] hover:bg-[#6a4040]"
             >
               Delete
             </AlertDialogAction>
@@ -503,7 +481,7 @@ function ClientsIndex() {
         </AlertDialogContent>
       </AlertDialog>
     </>
-  )
+  );
 }
 
 function LabeledInput({
@@ -511,55 +489,48 @@ function LabeledInput({
   value,
   onChange,
 }: {
-  label: string
-  value: string
-  onChange: (value: string) => void
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
 }) {
   return (
-    <div className="space-y-1.5">
-      <Label className="text-xs text-[#8A8F99]">{label}</Label>
+    <div className="space-y-2">
+      <Label className="text-sm text-[#b7b1a7]">{label}</Label>
       <Input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-9 rounded-[10px] border-[#1A1D22] bg-[#0A0D12] text-xs text-[#F2F3F5]"
+        className="h-10 rounded-md border-[#2b2d30] bg-[#121314] text-sm text-[#ece7de]"
       />
     </div>
-  )
+  );
 }
 
 function StatusChip({ status }: { status: ClientStatus }) {
-  if (status === 'active') {
-    return (
-      <Badge className="rounded-full border-[#2A351A] bg-[#131C0B] px-2.5 py-1 text-[10px] font-bold tracking-wide text-[#C8FF1A] hover:bg-[#131C0B]">
-        ACTIVE
-      </Badge>
-    )
-  }
-
-  if (status === 'pending') {
-    return (
-      <Badge className="rounded-full border-[#3A2E1A] bg-[#1B150B] px-2.5 py-1 text-[10px] font-bold tracking-wide text-[#F5BA62] hover:bg-[#1B150B]">
-        PENDING
-      </Badge>
-    )
-  }
+  const styles: Record<ClientStatus, string> = {
+    active: "border-[#425033] bg-[#1e2418] text-[#b7ca7c]",
+    pending: "border-[#5b4e34] bg-[#262016] text-[#d7bc7f]",
+    inactive: "border-[#373b40] bg-[#1c1f22] text-[#b7b1a7]",
+    archived: "border-[#4b4343] bg-[#231d1d] text-[#c1b2b2]",
+  };
 
   return (
-    <Badge className="rounded-full border-[#2B3038] bg-[#171A20] px-2.5 py-1 text-[10px] font-bold tracking-wide text-[#9AA2AF] hover:bg-[#171A20]">
-      {status.toUpperCase()}
-    </Badge>
-  )
+    <span
+      className={`inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium capitalize ${styles[status]}`}
+    >
+      {status}
+    </span>
+  );
 }
 
 function timeAgo(timestamp: number) {
-  const deltaMs = Date.now() - timestamp
-  const minutes = Math.max(1, Math.floor(deltaMs / 60000))
+  const deltaMs = Date.now() - timestamp;
+  const minutes = Math.max(1, Math.floor(deltaMs / 60000));
 
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}d ago`
-  const weeks = Math.floor(days / 7)
-  return `${weeks}w ago`
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  const weeks = Math.floor(days / 7);
+  return `${weeks}w ago`;
 }

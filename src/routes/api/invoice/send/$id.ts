@@ -1,59 +1,50 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { getInvoiceById } from '#/server/invoice-repository'
-import { renderInvoicePdf } from '#/server/pdf'
-import { Resend } from 'resend'
+import { createFileRoute } from "@tanstack/react-router";
+import { getInvoiceById } from "#/server/invoice-repository";
+import { renderInvoicePdf } from "#/server/pdf";
+import { Resend } from "resend";
 
 function isValidEmail(value: string) {
-  return /^\S+@\S+\.\S+$/.test(value)
+  return /^\S+@\S+\.\S+$/.test(value);
 }
 
 function sanitizeFromAddress(value: string | undefined) {
-  if (!value) return 'Invoice Gen <onboarding@resend.dev>'
-  return value
+  if (!value) return "Velure <onboarding@resend.dev>";
+  return value;
 }
 
-async function handle({
-  params,
-  request,
-}: {
-  params: { id: string }
-  request: Request
-}) {
-  const resendApiKey = process.env.RESEND_API_KEY
+async function handle({ params, request }: { params: { id: string }; request: Request }) {
+  const resendApiKey = process.env.RESEND_API_KEY;
   if (!resendApiKey) {
     return Response.json(
-      { ok: false, error: 'RESEND_API_KEY is missing on the server.' },
+      { ok: false, error: "RESEND_API_KEY is missing on the server." },
       { status: 500 },
-    )
+    );
   }
 
-  let payload: { to?: string }
+  let payload: { to?: string };
   try {
-    payload = await request.json()
+    payload = await request.json();
   } catch {
-    return Response.json(
-      { ok: false, error: 'Invalid request body.' },
-      { status: 400 },
-    )
+    return Response.json({ ok: false, error: "Invalid request body." }, { status: 400 });
   }
 
-  const to = payload.to?.trim().toLowerCase()
+  const to = payload.to?.trim().toLowerCase();
   if (!to || !isValidEmail(to)) {
     return Response.json(
-      { ok: false, error: 'A valid recipient email is required.' },
+      { ok: false, error: "A valid recipient email is required." },
       { status: 400 },
-    )
+    );
   }
 
-  const invoice = await getInvoiceById(params.id)
+  const invoice = await getInvoiceById(params.id);
   if (!invoice) {
-    return Response.json({ ok: false, error: 'Invoice not found.' }, { status: 404 })
+    return Response.json({ ok: false, error: "Invoice not found." }, { status: 404 });
   }
 
-  const publicUrl = `${new URL(request.url).origin}/i/${invoice.token}`
-  const pdfBytes = await renderInvoicePdf(invoice)
+  const publicUrl = `${new URL(request.url).origin}/i/${invoice.token}`;
+  const pdfBytes = await renderInvoicePdf(invoice);
 
-  const resend = new Resend(resendApiKey)
+  const resend = new Resend(resendApiKey);
 
   const result = await resend.emails.send({
     from: sanitizeFromAddress(process.env.RESEND_FROM),
@@ -74,25 +65,25 @@ async function handle({
     attachments: [
       {
         filename: `${invoice.invoiceNumber}.pdf`,
-        content: Buffer.from(pdfBytes).toString('base64'),
+        content: Buffer.from(pdfBytes).toString("base64"),
       },
     ],
-  })
+  });
 
   if (result.error) {
     return Response.json(
-      { ok: false, error: result.error.message ?? 'Failed to send email.' },
+      { ok: false, error: result.error.message ?? "Failed to send email." },
       { status: 502 },
-    )
+    );
   }
 
-  return Response.json({ ok: true, id: result.data?.id ?? null })
+  return Response.json({ ok: true, id: result.data?.id ?? null });
 }
 
-export const Route = createFileRoute('/api/invoice/send/$id')({
+export const Route = createFileRoute("/api/invoice/send/$id")({
   server: {
     handlers: {
       POST: handle,
     },
   },
-})
+});

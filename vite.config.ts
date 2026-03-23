@@ -2,10 +2,14 @@ import tailwindcss from '@tailwindcss/vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
 import { nitro } from 'nitro/vite'
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vite-plus'
 import tsconfigPaths from 'vite-tsconfig-paths'
 
 const config = defineConfig({
+  staged: {
+    "*": "vp check --fix"
+  },
+  lint: {"options":{"typeAware":true,"typeCheck":true}},
   build: {
       chunkSizeWarningLimit: 1000, // raises the warning threshold to 1MB
     rollupOptions: {

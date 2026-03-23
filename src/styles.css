@@ -1,6 +1,6 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
-@import 'tw-animate-css';
+@import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -10,85 +10,97 @@ html {
 
 body {
   @apply m-0;
-  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family:
+    "Bahnschrift",
+    "DIN Alternate",
+    "IBM Plex Sans Condensed",
+    "Aptos Narrow",
+    "Arial Narrow",
+    "IBM Plex Sans",
+    "Helvetica Neue",
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background: #121314;
+  color: #ece7de;
 }
 
 code {
-  font-family:
-    source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
 :root {
-  --background: hsl(0 0% 100%);
-  --foreground: hsl(0 0% 7%);
-  --card: hsl(45 18% 96%);
-  --card-foreground: hsl(0 0% 7%);
-  --popover: hsl(45 18% 96%);
-  --popover-foreground: hsl(0 0% 7%);
-  --primary: hsl(0 0% 7%);
-  --primary-foreground: hsl(0 0% 98%);
-  --secondary: hsl(40 11% 89%);
-  --secondary-foreground: hsl(0 0% 7%);
-  --muted: hsl(40 11% 89%);
-  --muted-foreground: hsl(0 0% 38%);
-  --accent: hsl(40 10% 94%);
-  --accent-foreground: hsl(0 0% 7%);
-  --destructive: hsl(359 100% 61%);
-  --destructive-foreground: hsl(0 0% 100%);
-  --border: hsl(45 5% 85%);
-  --input: hsl(45 5% 85%);
-  --ring: hsl(0 0% 7%);
-  --chart-1: hsl(0 0% 7%);
-  --chart-2: hsl(0 0% 40%);
-  --chart-3: hsl(0 0% 50%);
-  --chart-4: hsl(0 0% 65%);
-  --chart-5: hsl(0 0% 75%);
+  --background: hsl(40 12% 96%);
+  --foreground: hsl(28 12% 12%);
+  --card: hsl(40 18% 98%);
+  --card-foreground: hsl(28 12% 12%);
+  --popover: hsl(40 18% 98%);
+  --popover-foreground: hsl(28 12% 12%);
+  --primary: hsl(73 28% 43%);
+  --primary-foreground: hsl(40 18% 98%);
+  --secondary: hsl(40 16% 91%);
+  --secondary-foreground: hsl(28 12% 12%);
+  --muted: hsl(42 12% 92%);
+  --muted-foreground: hsl(32 8% 39%);
+  --accent: hsl(44 16% 90%);
+  --accent-foreground: hsl(28 12% 12%);
+  --destructive: hsl(5 52% 44%);
+  --destructive-foreground: hsl(40 18% 98%);
+  --border: hsl(34 9% 79%);
+  --input: hsl(34 9% 79%);
+  --ring: hsl(73 28% 43%);
+  --chart-1: hsl(73 28% 43%);
+  --chart-2: hsl(28 12% 12%);
+  --chart-3: hsl(32 8% 39%);
+  --chart-4: hsl(34 9% 60%);
+  --chart-5: hsl(44 16% 70%);
   --radius: 0px;
-  --sidebar: hsl(0 0% 100%);
-  --sidebar-foreground: hsl(0 0% 7%);
-  --sidebar-primary: hsl(0 0% 7%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(40 11% 89%);
-  --sidebar-accent-foreground: hsl(0 0% 7%);
-  --sidebar-border: hsl(45 5% 85%);
-  --sidebar-ring: hsl(0 0% 7%);
+  --sidebar: hsl(40 18% 98%);
+  --sidebar-foreground: hsl(28 12% 12%);
+  --sidebar-primary: hsl(73 28% 43%);
+  --sidebar-primary-foreground: hsl(40 18% 98%);
+  --sidebar-accent: hsl(44 16% 90%);
+  --sidebar-accent-foreground: hsl(28 12% 12%);
+  --sidebar-border: hsl(34 9% 79%);
+  --sidebar-ring: hsl(73 28% 43%);
 }
 
 .dark {
-  --background: hsl(0 0% 5%);
-  --foreground: hsl(0 0% 98%);
-  --card: hsl(0 0% 7%);
-  --card-foreground: hsl(0 0% 98%);
-  --popover: hsl(0 0% 7%);
-  --popover-foreground: hsl(0 0% 98%);
-  --primary: hsl(0 0% 98%);
-  --primary-foreground: hsl(0 0% 7%);
-  --secondary: hsl(0 0% 11%);
-  --secondary-foreground: hsl(0 0% 98%);
-  --muted: hsl(0 0% 11%);
-  --muted-foreground: hsl(0 0% 38%);
-  --accent: hsl(0 0% 11%);
-  --accent-foreground: hsl(0 0% 98%);
-  --destructive: hsl(359 100% 61%);
-  --destructive-foreground: hsl(0 0% 100%);
-  --border: hsl(0 0% 11%);
-  --input: hsl(0 0% 11%);
-  --ring: hsl(0 0% 70%);
-  --chart-1: hsl(0 0% 98%);
-  --chart-2: hsl(0 0% 66%);
-  --chart-3: hsl(0 0% 54%);
-  --chart-4: hsl(0 0% 45%);
-  --chart-5: hsl(0 0% 32%);
-  --sidebar: hsl(0 0% 5%);
-  --sidebar-foreground: hsl(0 0% 98%);
-  --sidebar-primary: hsl(0 0% 98%);
-  --sidebar-primary-foreground: hsl(0 0% 5%);
-  --sidebar-accent: hsl(0 0% 11%);
-  --sidebar-accent-foreground: hsl(0 0% 98%);
-  --sidebar-border: hsl(0 0% 11%);
-  --sidebar-ring: hsl(0 0% 70%);
+  --background: hsl(215 7% 9%);
+  --foreground: hsl(36 20% 90%);
+  --card: hsl(210 7% 12%);
+  --card-foreground: hsl(36 20% 90%);
+  --popover: hsl(210 7% 12%);
+  --popover-foreground: hsl(36 20% 90%);
+  --primary: hsl(73 28% 56%);
+  --primary-foreground: hsl(215 7% 9%);
+  --secondary: hsl(210 6% 16%);
+  --secondary-foreground: hsl(36 20% 90%);
+  --muted: hsl(210 6% 15%);
+  --muted-foreground: hsl(32 10% 64%);
+  --accent: hsl(210 6% 18%);
+  --accent-foreground: hsl(36 20% 90%);
+  --destructive: hsl(6 45% 49%);
+  --destructive-foreground: hsl(36 20% 90%);
+  --border: hsl(210 5% 22%);
+  --input: hsl(210 5% 22%);
+  --ring: hsl(73 28% 56%);
+  --chart-1: hsl(73 28% 56%);
+  --chart-2: hsl(36 20% 90%);
+  --chart-3: hsl(32 10% 64%);
+  --chart-4: hsl(210 5% 40%);
+  --chart-5: hsl(14 24% 50%);
+  --sidebar: hsl(215 7% 11%);
+  --sidebar-foreground: hsl(36 20% 90%);
+  --sidebar-primary: hsl(73 28% 56%);
+  --sidebar-primary-foreground: hsl(215 7% 9%);
+  --sidebar-accent: hsl(210 6% 18%);
+  --sidebar-accent-foreground: hsl(36 20% 90%);
+  --sidebar-border: hsl(210 5% 22%);
+  --sidebar-ring: hsl(73 28% 56%);
 }
 
 @theme inline {
@@ -164,8 +176,24 @@ code {
     border-radius: 0 !important;
   }
 
-  [class*='rounded-['] {
+  [class*="rounded-["] {
     border-radius: 0 !important;
+  }
+
+  .ui-panel {
+    animation: panel-enter 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .ui-stagger-1 {
+    animation: panel-enter 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .ui-stagger-2 {
+    animation: panel-enter 300ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .ui-stagger-3 {
+    animation: panel-enter 360ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 }
 
@@ -196,22 +224,29 @@ code {
 @keyframes route-fade-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
 @keyframes route-fade-out {
   from {
     opacity: 1;
-    transform: translateY(0);
   }
   to {
     opacity: 0;
-    transform: translateY(-4px);
+  }
+}
+
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -225,5 +260,12 @@ code {
   ::view-transition-new(root) {
     animation-duration: 1ms !important;
     animation-name: none !important;
+  }
+
+  .ui-panel,
+  .ui-stagger-1,
+  .ui-stagger-2,
+  .ui-stagger-3 {
+    animation: none !important;
   }
 }

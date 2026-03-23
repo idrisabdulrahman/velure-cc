@@ -1,41 +1,37 @@
-import type { QueryClient } from '@tanstack/react-query'
-import {
-  createRootRouteWithContext,
-  HeadContent,
-  Scripts,
-} from '@tanstack/react-router'
-import { Toaster } from '../components/ui/toaster'
-import ConvexProvider from '../integrations/convex/provider'
-import TanStackQueryProvider from '../integrations/tanstack-query/root-provider'
-import appCss from '../styles.css?url'
+import type { QueryClient } from "@tanstack/react-query";
+import { createRootRouteWithContext, HeadContent, Scripts } from "@tanstack/react-router";
+import { Toaster } from "../components/ui/toaster";
+import ConvexProvider from "../integrations/convex/provider";
+import TanStackQueryProvider from "../integrations/tanstack-query/root-provider";
+import appCss from "../styles.css?url";
 
 interface MyRouterContext {
-  queryClient: QueryClient
+  queryClient: QueryClient;
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   head: () => ({
     meta: [
       {
-        charSet: 'utf-8',
+        charSet: "utf-8",
       },
       {
-        name: 'viewport',
-        content: 'width=device-width, initial-scale=1',
+        name: "viewport",
+        content: "width=device-width, initial-scale=1",
       },
       {
-        title: 'Invoice Gen',
+        title: "Velure",
       },
     ],
     links: [
       {
-        rel: 'stylesheet',
+        rel: "stylesheet",
         href: appCss,
       },
     ],
   }),
   shellComponent: RootDocument,
-})
+});
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
@@ -43,7 +39,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <head>
         <HeadContent />
       </head>
-      <body className="bg-[#050607] text-[#F2F3F5]">
+      <body className="bg-background text-foreground antialiased dark">
         <ConvexProvider>
           <TanStackQueryProvider>
             {children}
@@ -53,5 +49,5 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <Scripts />
       </body>
     </html>
-  )
+  );
 }
