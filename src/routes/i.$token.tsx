@@ -1,113 +1,235 @@
 import { createFileRoute, useLocation } from "@tanstack/react-router";
-import { Download, ExternalLink } from "lucide-react";
 import { useQuery } from "convex/react";
-import { getInvoiceTemplateSize, toMiddayInvoice } from "#/features/invoices/midday-adapter";
-import { Button } from "#/components/ui/button";
+import { Check, Copy, CreditCard, Download, ExternalLink } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { useResizeObserver } from "#/components/hooks/use-resize-observer";
+import { toast } from "#/components/ui/use-toast";
+import {
+	getInvoiceTemplateSize,
+	toMiddayInvoice,
+} from "#/features/invoices/midday-adapter";
 import { HtmlTemplate } from "#/lib/midday-invoice/templates/html";
 import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/i/$token")({
-  component: PublicInvoicePage,
+	component: PublicInvoicePage,
 });
 
 function PublicInvoicePage() {
-  const { token } = Route.useParams();
-  const location = useLocation();
-  const invoice = useQuery(api.invoices.getByToken, { token });
-  const isEmbedded = new URLSearchParams(location.search).get("embed") === "1";
+	const { token } = Route.useParams();
+	const location = useLocation();
+	const stageRef = useRef<HTMLDivElement>(null);
+	const invoice = useQuery(api.invoices.getPublicByToken, { token });
+	const isEmbedded = new URLSearchParams(location.search).get("embed") === "1";
+	const stageEntry = useResizeObserver(stageRef);
+	const [isLinkCopied, setIsLinkCopied] = useState(false);
 
-  if (invoice === undefined) {
-    return (
-      <section className="mx-auto w-full max-w-[980px] p-4 md:p-8">
-        <div className="animate-pulse border border-[#1A1D22] bg-[#0A0E15] p-4">
-          <div className="mb-3 h-4 w-52 bg-[#1A1D22]" />
-          <div className="h-[700px] w-full bg-[#0F141E]" />
-        </div>
-      </section>
-    );
-  }
+	if (invoice === undefined) {
+		return (
+			<section className="flex min-h-[100dvh] flex-col bg-[#121314]">
+				<div className="mx-auto flex w-full max-w-[840px] items-center justify-between border-b border-[#2b2d30] px-4 py-5 sm:px-6">
+					<div className="flex items-center gap-3">
+						<div className="h-6 w-6 animate-pulse bg-[#22252a]" />
+						<div className="h-4 w-32 animate-pulse bg-[#22252a]" />
+					</div>
+					<div className="h-6 w-16 animate-pulse bg-[#22252a]" />
+				</div>
+				<div className="flex flex-1 items-center justify-center p-4 sm:p-8">
+					<div className="h-[750px] w-full max-w-[700px] animate-pulse border border-[#2b2d30] bg-[#17191b]" />
+				</div>
+				<div className="flex justify-center gap-3 p-4">
+					<div className="h-9 w-28 animate-pulse bg-[#22252a]" />
+					<div className="h-9 w-32 animate-pulse bg-[#22252a]" />
+				</div>
+			</section>
+		);
+	}
 
-  if (!invoice) {
-    return (
-      <section className="mx-auto w-full max-w-[740px] p-4 md:p-8">
-        <div className="border border-[#351A1A] bg-[#130B0E] p-5">
-          <h2 className="text-lg font-medium text-[#F1D9DE]">Invoice not found</h2>
-          <p className="mt-1 text-xs text-[#B58A95]">Token: {token}</p>
-        </div>
-      </section>
-    );
-  }
+	if (!invoice) {
+		return (
+			<section className="flex min-h-[100dvh] items-center justify-center bg-[#121314] p-4">
+				<div className="w-full max-w-md rounded-md border border-[#2b2d30] bg-[#17191b] p-6 text-center">
+					<h2 className="text-base font-medium text-[#ece7de]">
+						Invoice not found
+					</h2>
+					<p className="mt-2 text-sm text-[#a29b90]">
+						The invoice you are looking for does not exist or the link is
+						invalid.
+					</p>
+					<p className="mt-4 text-xs text-[#7f7a72]">Token: {token}</p>
+				</div>
+			</section>
+		);
+	}
 
-  const middayInvoice = toMiddayInvoice(invoice);
-  const { width, height } = getInvoiceTemplateSize(middayInvoice.template);
-  const previewScale = invoice.invoiceSize === "LETTER" ? 1.18 : 1.32;
-  const previewWidth = Math.round(width * previewScale);
-  const previewHeight = Math.round(height * previewScale);
-  const encodedId = encodeURIComponent(invoice.id);
-  const downloadUrl = `/api/invoice/download/${encodedId}`;
-  const previewUrl = `${downloadUrl}?preview=true`;
-  const paperLabel = invoice.invoiceSize === "LETTER" ? "Letter" : "A4";
+	const middayInvoice = toMiddayInvoice(invoice);
+	const { width, height } = getInvoiceTemplateSize(middayInvoice.template);
+	const encodedToken = encodeURIComponent(invoice.token);
+	const downloadUrl = `/api/invoice/download/${encodedToken}`;
+	const sellerName =
+		invoice.compliance?.seller.legalName?.trim() ||
+		invoice.compliance?.seller.tradingName?.trim() ||
+		"Invoice";
+	const statusLabel =
+		invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1);
+	const badgeTone =
+		invoice.status === "paid"
+			? "border-[#23402f] bg-[#132118] text-[#c7f4d0]"
+			: invoice.status === "overdue"
+				? "border-[#4a2626] bg-[#1f1111] text-[#f1c6c6]"
+				: "border-[#262626] bg-[#171717] text-[#d1d1d1]";
+	const stageWidth = stageEntry?.contentRect.width ?? width;
+	const stageHeight = stageEntry?.contentRect.height ?? height;
+	const paperScale = (() => {
+		if (isEmbedded) return 1;
 
-  return (
-    <section className="w-full">
-      <div
-        className={`mx-auto flex w-full flex-col gap-4 ${
-          isEmbedded ? "max-w-none p-0" : "max-w-[1020px] px-2 py-4 sm:px-4 sm:py-8"
-        }`}
-      >
-        {!isEmbedded ? (
-          <div className="ui-panel border border-[#1A1D22] bg-[#0A0E15] px-4 py-3 sm:px-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-medium text-[#E9EEF5]">
-                  Invoice {invoice.invoiceNumber}
-                </h2>
-                <p className="text-xs text-[#8A94A2]">
-                  Public preview • {paperLabel} • {invoice.currency}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  asChild
-                  variant="ghost"
-                  className="h-8 rounded-none border border-[#1A1D22] bg-[#0D1118] px-3 text-xs"
-                >
-                  <a href={previewUrl} target="_blank" rel="noreferrer">
-                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                    Preview PDF
-                  </a>
-                </Button>
-                <Button
-                  asChild
-                  className="h-8 rounded-none border border-[#3d4028] bg-[#d8b865] px-3 text-xs font-semibold text-[#111214] hover:bg-[#e2c577]"
-                >
-                  <a href={downloadUrl}>
-                    <Download className="mr-1.5 h-3.5 w-3.5" />
-                    Download PDF
-                  </a>
-                </Button>
-              </div>
-            </div>
-          </div>
-        ) : null}
+		const horizontalPadding = stageWidth > 900 ? 12 : 8;
+		const verticalPadding = stageHeight > 900 ? 20 : 10;
+		const availableWidth = Math.max(stageWidth - horizontalPadding, 1);
+		const availableHeight = Math.max(stageHeight - verticalPadding, 1);
 
-        <div
-          className={`flex justify-center overflow-auto border border-[#1A1D22] bg-[#0A0E15] ${
-            isEmbedded
-              ? "min-h-full p-0"
-              : "ui-panel p-3 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.55)]"
-          }`}
-        >
-          <div className="w-full max-w-full">
-            <HtmlTemplate
-              data={middayInvoice}
-              width={previewWidth}
-              height={previewHeight}
-              appearance={isEmbedded ? "app" : "print"}
-            />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
+		return Math.min(availableWidth / width, availableHeight / height, 1.08);
+	})();
+
+	const copyPublicLink = async () => {
+		try {
+			await navigator.clipboard.writeText(window.location.href);
+			setIsLinkCopied(true);
+			toast({
+				title: "Link copied",
+				description: "The public invoice link is ready to share.",
+				variant: "success",
+			});
+			window.setTimeout(() => setIsLinkCopied(false), 1800);
+		} catch {
+			toast({
+				title: "Could not copy link",
+				description: "Clipboard permission was denied.",
+				variant: "error",
+			});
+		}
+	};
+
+	const payUrl =
+		invoice.paymentLink?.trim() ||
+		`/api/payments/paystack/initialize?token=${encodeURIComponent(invoice.token)}`;
+
+	if (isEmbedded) {
+		return (
+			<section className="flex h-full w-full items-center justify-center overflow-hidden bg-[#0B0B0C] p-4">
+				<HtmlTemplate
+					data={middayInvoice}
+					width={width}
+					height={height}
+					appearance="public"
+				/>
+			</section>
+		);
+	}
+
+	return (
+		<section className="flex min-h-[100dvh] flex-col bg-[#121314] text-[#ece7de]">
+			<header className="border-b border-[#2b2d30] bg-[#121314] px-4 py-4 sm:px-6">
+				<div className="mx-auto flex w-full max-w-[840px] items-center justify-between">
+					<div className="flex min-w-0 items-center gap-3">
+						{invoice.logoUrl?.trim() ? (
+							<img
+								src={invoice.logoUrl}
+								alt={sellerName}
+								className="h-6 w-6 object-cover"
+							/>
+						) : (
+							<div className="flex h-6 w-6 items-center justify-center bg-[#22252a] text-xs font-medium text-[#ece7de]">
+								{sellerName.charAt(0).toUpperCase()}
+							</div>
+						)}
+						<div className="truncate text-[15px] font-medium text-[#ece7de]">
+							{sellerName}
+						</div>
+					</div>
+					<div
+						className={`inline-flex border border-[#2b2d30] px-2.5 py-1 text-[12px] font-medium ${badgeTone}`}
+					>
+						{statusLabel}
+					</div>
+				</div>
+			</header>
+
+			<main
+				ref={stageRef}
+				className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-8"
+			>
+				<div
+					className="overflow-hidden border border-[#2b2d30] bg-[#17191b] transition-transform duration-200"
+					style={{
+						width,
+						height,
+						transform: `scale(${paperScale})`,
+						transformOrigin: "center center",
+					}}
+				>
+					<HtmlTemplate
+						data={middayInvoice}
+						width={width}
+						height={height}
+						appearance="public"
+					/>
+				</div>
+			</main>
+
+			<footer className="border-t border-[#2b2d30] bg-[#121314] px-4 py-4 sm:px-6">
+				<div className="mx-auto flex w-full max-w-[840px] flex-col-reverse items-center justify-between gap-4 sm:flex-row">
+					<div className="text-[11px] text-[#8a857d]">Powered by Velure</div>
+
+					<div className="flex w-full items-center justify-center gap-3 sm:w-auto">
+						{invoice.status !== "paid" ? (
+							<a
+								href={payUrl}
+								target={invoice.paymentLink?.trim() ? "_blank" : undefined}
+								rel={invoice.paymentLink?.trim() ? "noreferrer" : undefined}
+								className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#a7bc62] px-4 text-[13px] font-medium text-[#121314] transition-colors hover:bg-[#b5c97a]"
+								aria-label="Pay invoice"
+								title="Pay invoice"
+							>
+								<CreditCard className="h-4 w-4 shrink-0" />
+								<span>Pay invoice</span>
+								{invoice.paymentLink?.trim() ? (
+									<ExternalLink className="h-3.5 w-3.5" />
+								) : null}
+							</a>
+						) : null}
+						<a
+							href={downloadUrl}
+							className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[#2b2d30] bg-[#17191b] px-4 text-[13px] text-[#d5d0c7] transition-colors hover:bg-[#1d2023]"
+							aria-label="Download invoice PDF"
+							title="Download invoice PDF"
+						>
+							<Download className="h-4 w-4 shrink-0" />
+							<span className="hidden sm:inline">Download PDF</span>
+							<span className="sm:hidden">PDF</span>
+						</a>
+						<button
+							type="button"
+							onClick={() => void copyPublicLink()}
+							className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[#2b2d30] bg-[#17191b] px-4 text-[13px] text-[#d5d0c7] transition-colors hover:bg-[#1d2023]"
+							aria-label="Copy public invoice link"
+							title="Copy public invoice link"
+						>
+							{isLinkCopied ? (
+								<Check className="h-4 w-4 shrink-0" />
+							) : (
+								<Copy className="h-4 w-4 shrink-0" />
+							)}
+							<span className="hidden sm:inline">
+								{isLinkCopied ? "Copied" : "Copy link"}
+							</span>
+							<span className="sm:hidden">
+								{isLinkCopied ? "Copied" : "Copy"}
+							</span>
+						</button>
+					</div>
+				</div>
+			</footer>
+		</section>
+	);
 }

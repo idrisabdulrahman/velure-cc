@@ -10,9 +10,19 @@ import {
   Repeat2,
   Search,
   SlidersHorizontal,
+  Upload,
   XCircle,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Button } from "#/components/ui/button";
 import { Calendar } from "#/components/ui/calendar";
 import {
@@ -28,7 +38,7 @@ import { Skeleton } from "#/components/ui/skeleton";
 import { toast } from "#/components/ui/use-toast";
 import { CreateInvoiceSheet } from "#/features/invoices/components/create-invoice-sheet";
 import { InvoiceDetailsSheet } from "#/features/invoices/components/invoice-details-sheet";
-import { formatMoney } from "#/features/invoices/format";
+import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import type { InvoiceRecord, InvoiceStatus } from "#/features/invoices/types";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -43,6 +53,30 @@ type InvoiceRow = InvoiceRecord & {
   amount: number;
 };
 
+type RevenueChartPoint = {
+  key: string;
+  label: string;
+  paidRevenue: number;
+  paidCount: number;
+  unpaidRevenue: number;
+  unpaidCount: number;
+};
+
+type InvoiceImportRow = {
+  invoiceNumber?: string;
+  customerName: string;
+  currency?: string;
+  status?: InvoiceStatus;
+  issueDate?: string;
+  dueDate?: string;
+  description: string;
+  quantity?: number;
+  price?: number;
+  notes?: string;
+  paymentDetails?: string;
+  paymentLink?: string;
+};
+
 const STATUS_OPTIONS: InvoiceStatus[] = [
   "draft",
   "unpaid",
@@ -52,10 +86,114 @@ const STATUS_OPTIONS: InvoiceStatus[] = [
   "scheduled",
 ];
 
+const PENDING_STATUSES = new Set<InvoiceStatus>(["draft", "unpaid", "overdue", "scheduled"]);
+
+function parseCsvLine(line: string) {
+  const cells: string[] = [];
+  let cell = "";
+  let quoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      cell += '"';
+      index += 1;
+      continue;
+    }
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (char === "," && !quoted) {
+      cells.push(cell.trim());
+      cell = "";
+      continue;
+    }
+    cell += char;
+  }
+
+  cells.push(cell.trim());
+  return cells;
+}
+
+function parseMoney(value?: string) {
+  const cleaned = (value ?? "").replace(/[^\d.-]/g, "");
+  const amount = Number(cleaned);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function parseInvoiceStatus(value?: string): InvoiceStatus | undefined {
+  const status = (value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
+  if (status === "open") return "unpaid";
+  if (status === "pending") return "unpaid";
+  if (STATUS_OPTIONS.includes(status as InvoiceStatus)) return status as InvoiceStatus;
+  return undefined;
+}
+
+function parseInvoiceCsv(text: string): InvoiceImportRow[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return [];
+
+  const headers = parseCsvLine(lines[0] ?? "").map((header) =>
+    header.toLowerCase().replace(/[^a-z0-9]/g, ""),
+  );
+  const at = (cells: string[], names: string[]) => {
+    const index = headers.findIndex((header) => names.includes(header));
+    return index >= 0 ? cells[index]?.trim() : undefined;
+  };
+
+  const hasInvoiceShape =
+    headers.some((header) => ["invoicenumber", "invoice", "invno", "number"].includes(header)) ||
+    headers.some((header) => ["customername", "clientname", "customer", "client"].includes(header));
+
+  if (!hasInvoiceShape) return [];
+
+  return lines
+    .slice(1)
+    .map((line) => {
+      const cells = parseCsvLine(line);
+      const quantity = Math.max(1, parseMoney(at(cells, ["quantity", "qty", "units"])) || 1);
+      const total = parseMoney(at(cells, ["amount", "total", "lineamount", "linetotal"]));
+      const unitPrice = parseMoney(at(cells, ["price", "unitprice", "rate"]));
+      const price = unitPrice > 0 ? unitPrice : total > 0 ? total / quantity : 0;
+
+      return {
+        invoiceNumber: at(cells, ["invoicenumber", "invoice", "invno", "number"]),
+        customerName: at(cells, ["customername", "clientname", "customer", "client", "name"]) ?? "",
+        currency: at(cells, ["currency", "curr"]),
+        status: parseInvoiceStatus(at(cells, ["status", "state"])),
+        issueDate: at(cells, ["issuedate", "date", "invoicedate"]),
+        dueDate: at(cells, ["duedate", "due"]),
+        description: at(cells, ["description", "item", "service", "product", "lineitem"]) ?? "",
+        quantity,
+        price,
+        notes: at(cells, ["notes", "note", "memo"]),
+        paymentDetails: at(cells, ["paymentdetails", "bankdetails"]),
+        paymentLink: at(cells, ["paymentlink", "paylink"]),
+      };
+    })
+    .filter((row) => row.customerName && row.description && (row.price ?? 0) > 0);
+}
+
+async function readXlsxAsCsv(file: File) {
+  const XLSX = await import("xlsx");
+  const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+  const firstSheetName = workbook.SheetNames[0];
+  if (!firstSheetName) return "";
+  const sheet = workbook.Sheets[firstSheetName];
+  if (!sheet) return "";
+  return XLSX.utils.sheet_to_csv(sheet);
+}
+
 function InvoicesIndex() {
   const saveInvoice = useMutation(api.invoices.save);
   const duplicateInvoice = useMutation(api.invoices.duplicate);
   const updateStatus = useMutation(api.invoices.updateStatus);
+  const importInvoices = useMutation(api.invoices.importCsv);
 
   const summary = useQuery(api.invoices.summary, {});
 
@@ -89,7 +227,10 @@ function InvoicesIndex() {
     () =>
       invoices.map((invoice: InvoiceRecord) => ({
         ...invoice,
-        amount: invoice.lineItems.reduce((sum, item) => sum + item.quantity * item.price, 0),
+        amount:
+          invoice.compliance?.grandTotal !== undefined
+            ? invoice.compliance.grandTotal - (invoice.compliance.withholdingTaxAmount ?? 0)
+            : invoice.lineItems.reduce((sum, item) => sum + item.quantity * item.price, 0),
       })),
     [invoices],
   );
@@ -99,6 +240,7 @@ function InvoicesIndex() {
     return Array.from(new Set(names)).filter((customer) => customer.length > 0);
   }, [invoices]);
   const summaryCurrency = rows[0]?.currency ?? "USD";
+  const revenueChartData = useMemo(() => buildRevenueChartData(rows), [rows]);
 
   const duePreset = (preset: "this-month" | "next-month" | "clear") => {
     if (preset === "clear") {
@@ -151,17 +293,52 @@ function InvoicesIndex() {
   };
 
   const onDuplicate = async (id: string) => {
-    await duplicateInvoice({ id });
+    await duplicateInvoice({ id: id as Id<"invoices"> });
     toast({ title: "Invoice duplicated", variant: "success" });
   };
 
-  const onStatusChange = async (id: string, status: InvoiceStatus) => {
-    await updateStatus({ id, status });
+  const onStatusChange = async (
+    id: string,
+    status: InvoiceStatus,
+    details?: { paidAt?: number; paymentReference?: string },
+  ) => {
+    await updateStatus({ id: id as Id<"invoices">, status, ...details });
     toast({
       title: "Status updated",
       description: `Marked as ${status}.`,
       variant: "success",
     });
+  };
+
+  const onInvoiceImport = async (file: File | undefined) => {
+    if (!file) return;
+
+    try {
+      const isXlsx = file.name.toLowerCase().endsWith(".xlsx");
+      const csvText = isXlsx ? await readXlsxAsCsv(file) : await file.text();
+      const rows = parseInvoiceCsv(csvText);
+      if (rows.length === 0) {
+        toast({
+          title: "No invoice rows found",
+          description: "File needs customer/client, description/item, and price/amount columns.",
+          variant: "error",
+        });
+        return;
+      }
+
+      const result = await importInvoices({ rows });
+      toast({
+        title: "Invoice import finished",
+        description: `${result.created} created, ${result.skipped} skipped.`,
+        variant: "success",
+      });
+    } catch (error) {
+      toast({
+        title: "Invoice import failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "error",
+      });
+    }
   };
 
   return (
@@ -305,6 +482,19 @@ function InvoicesIndex() {
           >
             New invoice
           </Button>
+          <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-[#2b2d30] bg-[#17191b] px-3 text-sm font-medium text-[#d5d0c7] transition-colors hover:bg-[#1d2023]">
+            <Upload className="h-4 w-4 text-[#a7bc62]" />
+            Import CSV
+            <input
+              type="file"
+              accept=".csv,text/csv,.xlsx"
+              className="hidden"
+              onChange={(event) => {
+                void onInvoiceImport(event.target.files?.[0]);
+                event.target.value = "";
+              }}
+            />
+          </label>
         </div>
       </div>
 
@@ -313,18 +503,23 @@ function InvoicesIndex() {
           label="Open"
           value={formatMoney(summary?.open ?? 0, summaryCurrency)}
           meta={`${rows.filter((invoice) => invoice.status === "draft" || invoice.status === "unpaid").length} invoices`}
+          isLoading={summary === undefined}
         />
         <SummaryCard
           label="Overdue"
           value={formatMoney(summary?.overdue ?? 0, summaryCurrency)}
           meta={`${rows.filter((invoice) => invoice.status === "overdue").length} invoices`}
+          isLoading={summary === undefined}
         />
         <SummaryCard
           label="Paid"
           value={formatMoney(summary?.paid ?? 0, summaryCurrency)}
           meta={`${rows.filter((invoice) => invoice.status === "paid").length} invoices`}
+          isLoading={summary === undefined}
         />
       </div>
+
+      <RevenueTrendCard data={revenueChartData} currency={summaryCurrency} />
 
       <div className="ui-panel overflow-hidden rounded-md border border-[#2b2d30] bg-[#17191b]">
         <div className="flex items-center justify-between border-b border-[#2b2d30] px-4 py-3">
@@ -425,11 +620,13 @@ function InvoicesIndex() {
                             </DropdownMenuItem>
                             <DropdownMenuItem asChild className="focus:bg-[#20241e]">
                               <a
-                                href={`/api/invoice/download/${encodeURIComponent(invoice.id)}`}
+                                href={`/i/${encodeURIComponent(invoice.token)}`}
+                                target="_blank"
+                                rel="noreferrer"
                                 className="flex cursor-pointer items-center"
                               >
                                 <Download className="mr-2 h-4 w-4" />
-                                Download
+                                Preview download
                               </a>
                             </DropdownMenuItem>
                             <DropdownMenuItem
@@ -479,7 +676,21 @@ function InvoicesIndex() {
         </div>
 
         {!isInvoicesLoading && rows.length === 0 ? (
-          <div className="px-4 py-10 text-sm text-[#a29b90]">No invoices yet.</div>
+          <div className="flex flex-col items-start gap-3 px-4 py-10 text-sm text-[#a29b90]">
+            <div>
+              <p className="font-medium text-[#ece7de]">No invoices yet.</p>
+              <p className="mt-1">
+                Create an invoice, add a client email, then share the Paystack-enabled public link.
+              </p>
+            </div>
+            <Button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className="h-9 rounded-md bg-[#a7bc62] px-3 text-sm font-medium text-[#121314] hover:bg-[#b5c97a]"
+            >
+              New invoice
+            </Button>
+          </div>
         ) : null}
       </div>
 
@@ -490,13 +701,18 @@ function InvoicesIndex() {
         }}
         invoice={activeInvoice}
         onSave={async (invoice) => {
+          const {
+            createdAt: _createdAt,
+            updatedAt: _updatedAt,
+            ...saveable
+          } = invoice;
           await saveInvoice({
-            ...invoice,
+            ...saveable,
             id: invoice.id as Id<"invoices">,
           });
         }}
-        onStatusChange={async (id, status) => {
-          await onStatusChange(id, status);
+        onStatusChange={async (id, status, details) => {
+          await onStatusChange(id, status, details);
         }}
       />
 
@@ -505,14 +721,240 @@ function InvoicesIndex() {
   );
 }
 
-function SummaryCard({ label, value, meta }: { label: string; value: string; meta: string }) {
+function SummaryCard({
+  label,
+  value,
+  meta,
+  isLoading,
+}: {
+  label: string;
+  value: string;
+  meta: string;
+  isLoading?: boolean;
+}) {
   return (
     <div className="ui-panel rounded-md border border-[#2b2d30] bg-[#17191b] px-4 py-4">
       <p className="text-sm text-[#8a857d]">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-[#ece7de]">{value}</p>
-      <p className="mt-1 text-sm text-[#a29b90]">{meta}</p>
+      {isLoading ? (
+        <>
+          <div className="mt-2 h-8 w-32 animate-pulse rounded bg-[#22252a]" />
+          <div className="mt-2 h-5 w-24 animate-pulse rounded bg-[#22252a]" />
+        </>
+      ) : (
+        <>
+          <p className="mt-2 text-2xl font-semibold text-[#ece7de]">{value}</p>
+          <p className="mt-1 text-sm text-[#a29b90]">{meta}</p>
+        </>
+      )}
     </div>
   );
+}
+
+function RevenueTrendCard({ data, currency }: { data: RevenueChartPoint[]; currency: string }) {
+  return (
+    <section className="ui-panel rounded-md border border-[#41463b] bg-[#17191b]/90 p-4 shadow-[0_0_0_rgba(167,188,98,0)] backdrop-blur-md transition-[border-color,box-shadow] duration-200 hover:border-[#5f6d41] hover:shadow-[0_18px_60px_rgba(167,188,98,0.08)]">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-medium text-[#ece7de]">Paid Invoices Over Time</h2>
+          <p className="mt-1 text-xs text-[#8a857d]">Paid and open invoice value by month.</p>
+        </div>
+        <div className="flex items-center gap-4 text-xs font-medium">
+          <span className="text-[#a7bc62]">● Paid</span>
+          <span className="text-[#d48f8f]">● Unpaid</span>
+        </div>
+      </div>
+
+      <div className="h-[300px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+            <CartesianGrid stroke="#2b2d30" strokeOpacity={0.35} vertical={false} />
+            <XAxis
+              dataKey="label"
+              tickLine={false}
+              axisLine={false}
+              tick={{ fill: "#8a857d", fontSize: 12 }}
+              dy={10}
+            />
+            <YAxis
+              width={72}
+              tickLine={false}
+              axisLine={false}
+              tick={{ fill: "#8a857d", fontSize: 12 }}
+              tickFormatter={(value) => formatCompactMoney(Number(value), currency)}
+              domain={[0, "dataMax"]}
+            />
+            <Tooltip
+              cursor={{ stroke: "#41463b", strokeWidth: 1 }}
+              content={<RevenueTooltip currency={currency} />}
+            />
+            <Line
+              type="monotone"
+              dataKey="paidRevenue"
+              stroke="#a7bc62"
+              strokeWidth={3}
+              dot={false}
+              activeDot={{
+                r: 5,
+                fill: "#a7bc62",
+                stroke: "#20241e",
+                strokeWidth: 2,
+              }}
+              style={{ filter: "drop-shadow(0 0 8px rgba(167,188,98,0.42))" }}
+            />
+            <Line
+              type="monotone"
+              dataKey="unpaidRevenue"
+              stroke="#d48f8f"
+              strokeWidth={2.5}
+              strokeDasharray="6 6"
+              dot={false}
+              activeDot={{
+                r: 5,
+                fill: "#d48f8f",
+                stroke: "#2a1f1f",
+                strokeWidth: 2,
+              }}
+              style={{ filter: "drop-shadow(0 0 8px rgba(212,143,143,0.28))" }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </section>
+  );
+}
+
+function RevenueTooltip({
+  active,
+  payload,
+  label,
+  currency,
+}: {
+  active?: boolean;
+  payload?: Array<{
+    dataKey?: string | number;
+    value?: number | string;
+    payload?: RevenueChartPoint;
+  }>;
+  label?: string;
+  currency: string;
+}) {
+  if (!active || !payload?.length) return null;
+
+  const point = payload[0]?.payload;
+  if (!point) return null;
+
+  return (
+    <div className="min-w-[190px] rounded-md border border-[#2b2d30] bg-[#121314]/95 px-3 py-3 text-xs shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-md">
+      <p className="mb-2 font-medium text-[#ece7de]">{label}</p>
+      <div className="space-y-2">
+        <TooltipRow
+          label="Paid"
+          revenue={point.paidRevenue}
+          count={point.paidCount}
+          currency={currency}
+          tone="paid"
+        />
+        <TooltipRow
+          label="Unpaid"
+          revenue={point.unpaidRevenue}
+          count={point.unpaidCount}
+          currency={currency}
+          tone="unpaid"
+        />
+      </div>
+    </div>
+  );
+}
+
+function TooltipRow({
+  label,
+  revenue,
+  count,
+  currency,
+  tone,
+}: {
+  label: string;
+  revenue: number;
+  count: number;
+  currency: string;
+  tone: "paid" | "unpaid";
+}) {
+  const toneClass = tone === "paid" ? "text-[#a7bc62]" : "text-[#d48f8f]";
+
+  return (
+    <div>
+      <div className={`flex items-center justify-between gap-4 font-medium ${toneClass}`}>
+        <span>{label}</span>
+        <span>{formatMoney(revenue, currency)}</span>
+      </div>
+      <div className="mt-1 flex items-center justify-between gap-4 text-[#a29b90]">
+        <span>Revenue</span>
+        <span>Count: {count} Invoices</span>
+      </div>
+    </div>
+  );
+}
+
+function buildRevenueChartData(rows: InvoiceRow[]) {
+  const months = new Map<string, RevenueChartPoint>();
+
+  for (const month of getRecentMonthKeys(6)) {
+    months.set(month.key, createEmptyPoint(month.key, month.label));
+  }
+
+  for (const invoice of rows) {
+    if (invoice.status === "canceled") continue;
+
+    const date = new Date(invoice.issueDate);
+    if (Number.isNaN(date.getTime())) continue;
+
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    const point = months.get(key) ?? createEmptyPoint(key, formatMonthLabel(date));
+
+    if (invoice.status === "paid") {
+      point.paidRevenue += invoice.amount;
+      point.paidCount += 1;
+    } else if (PENDING_STATUSES.has(invoice.status)) {
+      point.unpaidRevenue += invoice.amount;
+      point.unpaidCount += 1;
+    }
+
+    months.set(key, point);
+  }
+
+  return Array.from(months.values()).sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function getRecentMonthKeys(count: number) {
+  const now = new Date();
+  return Array.from({ length: count }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (count - 1 - index), 1);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    return { key, label: formatMonthLabel(date) };
+  });
+}
+
+function createEmptyPoint(key: string, label: string): RevenueChartPoint {
+  return {
+    key,
+    label,
+    paidRevenue: 0,
+    paidCount: 0,
+    unpaidRevenue: 0,
+    unpaidCount: 0,
+  };
+}
+
+function formatMonthLabel(date: Date) {
+  return new Intl.DateTimeFormat(undefined, { month: "short" }).format(date);
+}
+
+function formatCompactMoney(value: number, currency: string) {
+  if (value >= 1000) {
+    return `${formatMoney(value / 1000, currency)}k`;
+  }
+
+  return formatMoney(value, currency);
 }
 
 function StatusChip({ status }: { status: InvoiceStatus }) {
@@ -535,12 +977,5 @@ function StatusChip({ status }: { status: InvoiceStatus }) {
 }
 
 function formatDate(value: string) {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-
-  return parsed.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatInvoiceDate(value, "ng");
 }

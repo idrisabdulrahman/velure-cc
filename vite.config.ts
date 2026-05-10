@@ -1,40 +1,42 @@
-import tailwindcss from '@tailwindcss/vite'
-import { tanstackStart } from '@tanstack/react-start/plugin/vite'
-import viteReact from '@vitejs/plugin-react'
-import { nitro } from 'nitro/vite'
-import { defineConfig } from 'vite-plus'
-import tsconfigPaths from 'vite-tsconfig-paths'
+import tailwindcss from "@tailwindcss/vite";
+import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import viteReact from "@vitejs/plugin-react";
+import { nitro } from "nitro/vite";
+import { defineConfig } from "vite-plus";
+import tsconfigPaths from "vite-tsconfig-paths";
+
+const isTest = process.env.VITEST === "true";
 
 const config = defineConfig({
   staged: {
-    "*": "vp check --fix"
+    "*": "vp check --fix",
   },
-  lint: {"options":{"typeAware":true,"typeCheck":true}},
+  lint: { options: { typeAware: true, typeCheck: true } },
   build: {
-      chunkSizeWarningLimit: 1000, // raises the warning threshold to 1MB
+    chunkSizeWarningLimit: 1000, // raises the warning threshold to 1MB
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('node_modules')) {
+          if (id.includes("node_modules")) {
             if (
-              id.includes('/react-dom/') ||
-              id.includes('/react/') ||
-              id.includes('/scheduler/')
+              id.includes("/react-dom/") ||
+              id.includes("/react/") ||
+              id.includes("/scheduler/")
             ) {
-              return 'react-vendor'
+              return "react-vendor";
             }
 
             if (
-              id.includes('@react-pdf/') ||
-              id.includes('/qrcode') ||
-              id.includes('/fontkit') ||
-              id.includes('/pdfkit')
+              id.includes("@react-pdf/") ||
+              id.includes("/qrcode") ||
+              id.includes("/fontkit") ||
+              id.includes("/pdfkit")
             ) {
-              return 'pdf-vendor'
+              return "pdf-vendor";
             }
 
-            if (id.includes('framer-motion')) {
-              return 'motion-vendor'
+            if (id.includes("framer-motion")) {
+              return "motion-vendor";
             }
           }
         },
@@ -42,16 +44,16 @@ const config = defineConfig({
     },
   },
   plugins: [
-    nitro({ rollupConfig: { external: [/^@sentry\//] } }),
-    tsconfigPaths({ projects: ['./tsconfig.json'] }),
+    !isTest ? nitro({ rollupConfig: { external: [/^@sentry\//] } }) : null,
+    tsconfigPaths({ projects: ["./tsconfig.json"] }),
     tailwindcss(),
-    tanstackStart(),
+    !isTest ? tanstackStart() : null,
     viteReact({
       babel: {
-        plugins: ['babel-plugin-react-compiler'],
+        plugins: ["babel-plugin-react-compiler"],
       },
     }),
-  ],
-})
+  ].filter(Boolean),
+});
 
-export default config
+export default config;

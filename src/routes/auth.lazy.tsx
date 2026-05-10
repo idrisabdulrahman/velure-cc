@@ -144,7 +144,6 @@ function AuthPage() {
           email: email.trim().toLowerCase(),
           password,
           callbackURL: appCallbackURL("/invoices"),
-          rememberMe,
         });
 
         if (result.error) {
@@ -313,8 +312,9 @@ function AuthPage() {
 
                   <form onSubmit={onSubmit} className="space-y-4">
                     {mode === "sign-up" ? (
-                      <Field label="Name">
+                      <Field label="Name" htmlFor="name">
                         <Input
+                          id="name"
                           value={name}
                           onChange={(event) => setName(event.target.value)}
                           placeholder="Jane Doe"
@@ -324,8 +324,9 @@ function AuthPage() {
                     ) : null}
 
                     {mode !== "reset" ? (
-                      <Field label="Email">
+                      <Field label="Email" htmlFor="email">
                         <Input
+                          id="email"
                           type="email"
                           value={email}
                           onChange={(event) => setEmail(event.target.value)}
@@ -336,8 +337,9 @@ function AuthPage() {
                     ) : null}
 
                     {mode !== "forgot" ? (
-                      <Field label="Password">
+                      <Field label="Password" htmlFor="password">
                         <Input
+                          id="password"
                           type="password"
                           value={password}
                           onChange={(event) => setPassword(event.target.value)}
@@ -350,8 +352,9 @@ function AuthPage() {
                     ) : null}
 
                     {mode === "sign-up" || mode === "reset" ? (
-                      <Field label="Confirm password">
+                      <Field label="Confirm password" htmlFor="confirmPassword">
                         <Input
+                          id="confirmPassword"
                           type="password"
                           value={confirmPassword}
                           onChange={(event) => setConfirmPassword(event.target.value)}
@@ -363,8 +366,12 @@ function AuthPage() {
 
                     {mode === "sign-in" ? (
                       <div className="flex items-center justify-between gap-3 text-xs text-[#a49d91]">
-                        <label className="inline-flex items-center gap-2 text-[#aaa395]">
+                        <label
+                          htmlFor="rememberMe"
+                          className="inline-flex items-center gap-2 text-[#aaa395]"
+                        >
                           <Checkbox
+                            id="rememberMe"
                             checked={rememberMe}
                             onCheckedChange={(checked) => setRememberMe(checked === true)}
                             className="h-3.5 w-3.5 border-[#3a3d30] bg-[#121416] text-[#121314] data-[state=checked]:border-[#a7bc62] data-[state=checked]:bg-[#a7bc62]"
@@ -488,9 +495,17 @@ function AuthPage() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <label className="block">
+    <label htmlFor={htmlFor} className="block">
       <span className="mb-2 block text-sm text-[#c9c2b7]">{label}</span>
       {children}
     </label>

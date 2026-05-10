@@ -2,7 +2,6 @@ import { createLazyFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
-import { Card, CardContent } from "#/components/ui/card";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import {
@@ -47,7 +46,7 @@ const initialState: FormState = {
 	website: "",
 	billingAddress: "",
 	taxId: "",
-	currency: "USD",
+	currency: "NGN",
 	paymentTerms: "Net 14",
 	internalNotes: "",
 	contactName: "",
@@ -62,12 +61,19 @@ function NewClient() {
 	const createClient = useMutation(api.clients.create);
 	const [state, setState] = useState<FormState>(initialState);
 	const [submitting, setSubmitting] = useState(false);
+	const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
 	const nameError =
 		state.name.trim().length === 0 ? "Client name is required" : "";
-	const emailError = /^\S+@\S+\.\S+$/.test(state.email.trim())
-		? ""
-		: "Please enter a valid email";
+	const emailError =
+		state.email.trim().length === 0
+			? "Email is required"
+			: /^\S+@\S+\.\S+$/.test(state.email.trim())
+				? ""
+				: "Please enter a valid email";
+	const visibleNameError = attemptedSubmit ? nameError : "";
+	const visibleEmailError =
+		attemptedSubmit || state.email.trim() ? emailError : "";
 
 	const isValid = !nameError && !emailError;
 
@@ -82,10 +88,11 @@ function NewClient() {
 	}, [state.company, state.name]);
 
 	const inputClass =
-		"h-11 rounded-[10px] border-[#1A1D22] bg-[#0A0D12] text-sm text-[#F2F3F5] placeholder:text-[#7F8794] focus-visible:ring-0 focus-visible:border-[#2F3540]";
+		"h-10 rounded-md border-[#2b2d30] bg-[#121314] text-sm text-[#ece7de] placeholder:text-[#737b89] focus-visible:border-[#4a4f45] focus-visible:ring-0";
 
 	const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
+		setAttemptedSubmit(true);
 		if (!isValid || submitting) return;
 
 		setSubmitting(true);
@@ -109,51 +116,51 @@ function NewClient() {
 				},
 				favorite: state.favorite,
 				status: "active",
-			})
+			});
 
 			toast({
 				title: "Client created",
 				description: `${state.name} is now available in Clients.`,
 				variant: "success",
-			})
+			});
 			navigate({ to: "/clients" });
 		} catch (error) {
 			toast({
 				title: "Could not create client",
 				description: error instanceof Error ? error.message : "Unknown error",
 				variant: "error",
-			})
+			});
 		} finally {
 			setSubmitting(false);
 		}
-	}
+	};
 
 	return (
 		<div className="flex h-full w-full flex-col gap-5">
 			<div className="flex items-start justify-between gap-4">
 				<div>
-					<h1 className="font-serif text-4xl font-medium italic text-[#F2F3F5] md:text-5xl">
-						Create Client
+					<h1 className="text-[26px] font-medium tracking-[-0.02em] text-[#ece7de]">
+						New client
 					</h1>
-					<p className="mt-2 text-sm text-[#8A8F99]">
-						Add a new client to your CRM
+					<p className="mt-1 text-sm text-[#8d938f]">
+						Add billing and contact details.
 					</p>
 				</div>
 				<Button
 					type="button"
 					variant="outline"
-					className="h-9 rounded-md border border-[#262B34] bg-[#0D1016] px-4 text-xs font-medium text-[#B8C0CF] transition-colors hover:bg-[#1A1D22] hover:text-[#F2F3F5] hover:border-[#333A44]"
+					className="h-9 rounded-md border border-[#2b2d30] bg-[#17191b] px-4 text-xs font-medium text-[#d5d0c7] transition-colors hover:border-[#3a3d41] hover:bg-[#1d2023] hover:text-[#ece7de]"
 				>
 					Import
 				</Button>
 			</div>
 
 			<div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-				<Card className="rounded-[10px] border-[#1A1D22] bg-[#0D1016]">
-					<CardContent className="p-4 md:p-5">
+				<div className="rounded-md border border-[#2b2d30] bg-[#17191b]">
+					<div className="p-4 md:p-5">
 						<form onSubmit={onSubmit} className="space-y-4">
 							<div className="grid gap-3 md:grid-cols-2">
-								<Field label="Client Name *" error={nameError}>
+								<Field label="Client name *" error={visibleNameError}>
 									<Input
 										value={state.name}
 										onChange={(event) =>
@@ -163,7 +170,7 @@ function NewClient() {
 											}))
 										}
 										className={inputClass}
-										placeholder="Client Name *"
+										placeholder="Client name"
 									/>
 								</Field>
 								<Field label="Company">
@@ -179,7 +186,7 @@ function NewClient() {
 										placeholder="Company"
 									/>
 								</Field>
-								<Field label="Email *" error={emailError}>
+								<Field label="Email *" error={visibleEmailError}>
 									<Input
 										value={state.email}
 										onChange={(event) =>
@@ -188,8 +195,8 @@ function NewClient() {
 												email: event.target.value,
 											}))
 										}
-										className={`${inputClass} ${emailError ? "border-[#B75555]" : ""}`}
-										placeholder="Email *"
+										className={`${inputClass} ${visibleEmailError ? "border-[#c76f5b]" : ""}`}
+										placeholder="Email"
 									/>
 								</Field>
 								<Field label="Phone">
@@ -202,7 +209,7 @@ function NewClient() {
 											}))
 										}
 										className={inputClass}
-										placeholder="Phone"
+										placeholder="+234 801 234 5678"
 									/>
 								</Field>
 								<Field label="Website">
@@ -218,7 +225,7 @@ function NewClient() {
 										placeholder="Website"
 									/>
 								</Field>
-								<Field label="Tax ID / VAT">
+								<Field label="TIN">
 									<Input
 										value={state.taxId}
 										onChange={(event) =>
@@ -228,7 +235,7 @@ function NewClient() {
 											}))
 										}
 										className={inputClass}
-										placeholder="Tax ID / VAT"
+										placeholder="10-digit TIN"
 									/>
 								</Field>
 								<Field label="Currency">
@@ -241,9 +248,9 @@ function NewClient() {
 										<SelectTrigger className={`${inputClass} w-full`}>
 											<SelectValue placeholder="Currency" />
 										</SelectTrigger>
-										<SelectContent className="border-[#1A1D22] bg-[#0D1016] text-[#F2F3F5]">
+										<SelectContent className="border-[#2b2d30] bg-[#17191b] text-[#ece7de]">
+											<SelectItem value="NGN">NGN</SelectItem>
 											<SelectItem value="USD">USD</SelectItem>
-											<SelectItem value="EUR">EUR</SelectItem>
 											<SelectItem value="GBP">GBP</SelectItem>
 										</SelectContent>
 									</Select>
@@ -258,7 +265,7 @@ function NewClient() {
 										<SelectTrigger className={`${inputClass} w-full`}>
 											<SelectValue placeholder="Payment Terms" />
 										</SelectTrigger>
-										<SelectContent className="border-[#1A1D22] bg-[#0D1016] text-[#F2F3F5]">
+										<SelectContent className="border-[#2b2d30] bg-[#17191b] text-[#ece7de]">
 											<SelectItem value="Due on receipt">
 												Due on receipt
 											</SelectItem>
@@ -280,7 +287,7 @@ function NewClient() {
 											billingAddress: event.target.value,
 										}))
 									}
-									className="resize-none rounded-[10px] border-[#1A1D22] bg-[#0A0D12] text-sm text-[#F2F3F5] placeholder:text-[#7F8794] focus-visible:ring-0 focus-visible:border-[#2F3540]"
+									className="resize-none rounded-md border-[#2b2d30] bg-[#121314] text-sm text-[#ece7de] placeholder:text-[#737b89] focus-visible:border-[#4a4f45] focus-visible:ring-0"
 									placeholder="Billing Address"
 								/>
 							</Field>
@@ -295,127 +302,121 @@ function NewClient() {
 											internalNotes: event.target.value,
 										}))
 									}
-									className="resize-none rounded-[10px] border-[#1A1D22] bg-[#0A0D12] text-sm text-[#F2F3F5] placeholder:text-[#7F8794] focus-visible:ring-0 focus-visible:border-[#2F3540]"
+									className="resize-none rounded-md border-[#2b2d30] bg-[#121314] text-sm text-[#ece7de] placeholder:text-[#737b89] focus-visible:border-[#4a4f45] focus-visible:ring-0"
 									placeholder="Internal Notes"
 								/>
 							</Field>
 
-							<Card className="rounded-[10px] border-[#1A1D22] bg-[#0A0D12]">
-								<CardContent className="p-3 md:p-4">
-									<h2 className="mb-3 text-sm font-semibold text-[#C8FF1A]">
-										Contact Person
-									</h2>
-									<div className="grid gap-3 md:grid-cols-2">
-										<Input
-											value={state.contactName}
-											onChange={(event) =>
-												setState((prev) => ({
-													...prev,
-													contactName: event.target.value,
-												}))
-											}
-											className={inputClass}
-											placeholder="Full name"
-										/>
-										<Input
-											value={state.contactRole}
-											onChange={(event) =>
-												setState((prev) => ({
-													...prev,
-													contactRole: event.target.value,
-												}))
-											}
-											className={inputClass}
-											placeholder="Role"
-										/>
-										<Input
-											value={state.contactEmail}
-											onChange={(event) =>
-												setState((prev) => ({
-													...prev,
-													contactEmail: event.target.value,
-												}))
-											}
-											className={inputClass}
-											placeholder="Contact email"
-										/>
-										<Input
-											value={state.contactPhone}
-											onChange={(event) =>
-												setState((prev) => ({
-													...prev,
-													contactPhone: event.target.value,
-												}))
-											}
-											className={inputClass}
-											placeholder="Contact phone"
-										/>
-									</div>
-								</CardContent>
-							</Card>
+							<section className="rounded-md border border-[#2b2d30] bg-[#121314] p-3 md:p-4">
+								<h2 className="mb-3 text-sm font-medium text-[#ece7de]">
+									Contact person
+								</h2>
+								<div className="grid gap-3 md:grid-cols-2">
+									<Input
+										value={state.contactName}
+										onChange={(event) =>
+											setState((prev) => ({
+												...prev,
+												contactName: event.target.value,
+											}))
+										}
+										className={inputClass}
+										placeholder="Full name"
+									/>
+									<Input
+										value={state.contactRole}
+										onChange={(event) =>
+											setState((prev) => ({
+												...prev,
+												contactRole: event.target.value,
+											}))
+										}
+										className={inputClass}
+										placeholder="Role"
+									/>
+									<Input
+										value={state.contactEmail}
+										onChange={(event) =>
+											setState((prev) => ({
+												...prev,
+												contactEmail: event.target.value,
+											}))
+										}
+										className={inputClass}
+										placeholder="Contact email"
+									/>
+									<Input
+										value={state.contactPhone}
+										onChange={(event) =>
+											setState((prev) => ({
+												...prev,
+												contactPhone: event.target.value,
+											}))
+										}
+										className={inputClass}
+										placeholder="Contact phone"
+									/>
+								</div>
+							</section>
 
-							<div className="inline-flex items-center gap-2 text-sm text-[#AEB6C2]">
+							<div className="inline-flex items-center gap-2 text-sm text-[#d5d0c7]">
 								<Switch
 									checked={state.favorite}
 									onCheckedChange={(checked) =>
 										setState((prev) => ({ ...prev, favorite: checked }))
 									}
-									className="data-[state=checked]:bg-[#C8FF1A] data-[state=unchecked]:bg-[#2A3038]"
+									className="data-[state=checked]:bg-[#a7bc62] data-[state=unchecked]:bg-[#2b2d30]"
 								/>
 								<span>Save as favorite client</span>
 							</div>
 
-							<div className="flex items-center justify-between border-t border-[#1A1D22] pt-4">
+							<div className="flex items-center justify-between border-t border-[#2b2d30] pt-4">
 								<Button
 									type="button"
 									variant="outline"
 									onClick={() => navigate({ to: "/clients" })}
-									className="h-10 rounded-[10px] border-[#2A3038] bg-transparent text-sm font-semibold text-[#DCE1E8] hover:bg-[#141922]"
+									className="h-10 rounded-md border-[#2b2d30] bg-transparent text-sm font-medium text-[#d5d0c7] hover:bg-[#1d2023] hover:text-[#ece7de]"
 								>
 									Cancel
 								</Button>
 								<Button
 									type="submit"
 									disabled={!isValid || submitting}
-									className="h-10 rounded-[10px] bg-[#C8FF1A] text-sm font-bold text-[#050607] hover:bg-[#d3ff4f] disabled:bg-[#C8FF1A66] disabled:text-[#1E260D]"
+									className="h-10 rounded-md bg-[#a7bc62] text-sm font-medium text-[#121314] hover:bg-[#b5c97a] disabled:bg-[#3a3d30] disabled:text-[#7f7a72]"
 								>
-									{submitting ? "Creating..." : "Create Client"}
+									{submitting ? "Creating..." : "Create client"}
 								</Button>
 							</div>
-							<p className="text-xs text-[#8A8F99]">* Required fields</p>
+							<p className="text-xs text-[#8d938f]">* Required fields</p>
 						</form>
-					</CardContent>
-				</Card>
+					</div>
+				</div>
 
-				<Card className="h-fit rounded-[10px] border-[#1A1D22] bg-[#0D1016]">
-					<CardContent className="p-4">
-						<h2 className="text-sm font-semibold text-[#C8FF1A]">
-							Client Preview
-						</h2>
-						<div className="mt-3 flex items-center gap-3">
-							<span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#141B24] text-xs font-semibold text-[#B8C0CF]">
-								{initials || "VC"}
-							</span>
-							<div>
-								<p className="text-sm font-medium text-[#F2F3F5]">
-									{state.name || "Client Name"}
-								</p>
-								<p className="text-xs text-[#8A8F99]">
-									{state.company || "Company"}
-								</p>
-							</div>
+				<aside className="h-fit rounded-md border border-[#2b2d30] bg-[#17191b] p-4">
+					<h2 className="text-sm font-medium text-[#ece7de]">Preview</h2>
+					<div className="mt-3 flex items-center gap-3">
+						<span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[#202326] text-xs font-medium text-[#d5d0c7]">
+							{initials || "VC"}
+						</span>
+						<div>
+							<p className="text-sm font-medium text-[#ece7de]">
+								{state.name || "Client name"}
+							</p>
+							<p className="text-xs text-[#8d938f]">
+								{state.company || "Company"}
+							</p>
 						</div>
-						<div className="mt-3 rounded-[10px] border border-[#1A1D22] bg-[#0A0D12] p-3 text-xs text-[#B8C0CF]">
-							<p>Contact: {state.email || "—"}</p>
-							<p>Payment Terms: {state.paymentTerms}</p>
-							<p>Currency: {state.currency}</p>
-							<p>Favorite: {state.favorite ? "Yes" : "No"}</p>
-						</div>
-					</CardContent>
-				</Card>
+					</div>
+					<div className="mt-3 rounded-md border border-[#2b2d30] bg-[#121314] p-3 text-xs text-[#d5d0c7]">
+						<p>Contact: {state.email || "—"}</p>
+						<p>Payment terms: {state.paymentTerms}</p>
+						<p>Currency: {state.currency}</p>
+						<p>Favorite: {state.favorite ? "Yes" : "No"}</p>
+					</div>
+				</aside>
 			</div>
 		</div>
-	)
+	);
 }
 
 function Field({
@@ -429,9 +430,9 @@ function Field({
 }) {
 	return (
 		<div className="space-y-1.5">
-			<Label className="text-xs text-[#8A8F99]">{label}</Label>
+			<Label className="text-xs text-[#8d938f]">{label}</Label>
 			{children}
-			{error ? <p className="text-xs text-[#C77A7A]">{error}</p> : null}
+			{error ? <p className="text-xs text-[#c76f5b]">{error}</p> : null}
 		</div>
-	)
+	);
 }

@@ -11,11 +11,7 @@ type Props = {
 export function Header({ customerName, status, logoUrl, isValidLogo }: Props) {
   return (
     <div tw="flex mb-12 items-center justify-between w-full">
-      <Avatar
-        logoUrl={logoUrl}
-        isValidLogo={isValidLogo}
-        customerName={customerName || ""}
-      />
+      <Avatar logoUrl={logoUrl} isValidLogo={isValidLogo} customerName={customerName || ""} />
       <Status status={status} />
     </div>
   );

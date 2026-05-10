@@ -1,5 +1,5 @@
-import { createEnv } from '@t3-oss/env-core'
-import { z } from 'zod'
+import { createEnv } from "@t3-oss/env-core";
+import { z } from "zod";
 
 export const env = createEnv({
   server: {
@@ -8,6 +8,8 @@ export const env = createEnv({
     RESEND_API_KEY: z.string().min(1),
     RESEND_FROM: z.string().min(1).optional(),
     SITE_URL: z.string().url().optional(),
+    PAYSTACK_SECRET_KEY: z.string().min(1).optional(),
+    PAYSTACK_PUBLIC_KEY: z.string().min(1).optional(),
   },
 
   client: {
@@ -18,7 +20,7 @@ export const env = createEnv({
    * The prefix that client-side variables must have. This is enforced both at
    * a type-level and at runtime.
    */
-  clientPrefix: 'VITE_',
+  clientPrefix: "VITE_",
 
   /**
    * What object holds the environment variables at runtime. This is usually
@@ -40,4 +42,4 @@ export const env = createEnv({
    * explicitly specify this option as true.
    */
   emptyStringAsUndefined: true,
-})
+});

@@ -1,5 +1,5 @@
 import { createLazyFileRoute, Link } from "@tanstack/react-router";
-import { MoreHorizontal, Pencil, Star, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Star, Trash2, Upload } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../convex/_generated/api";
@@ -62,18 +62,93 @@ type ClientRow = {
   updatedAt: number;
 };
 
+type ClientImportRow = {
+  name: string;
+  company?: string;
+  email: string;
+  phone?: string;
+  billingAddress?: string;
+  taxId?: string;
+  currency?: string;
+  paymentTerms?: string;
+};
+
+function parseCsvLine(line: string) {
+  const cells: string[] = [];
+  let cell = "";
+  let quoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      cell += '"';
+      index += 1;
+      continue;
+    }
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (char === "," && !quoted) {
+      cells.push(cell.trim());
+      cell = "";
+      continue;
+    }
+    cell += char;
+  }
+
+  cells.push(cell.trim());
+  return cells;
+}
+
+function parseClientCsv(text: string): ClientImportRow[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return [];
+
+  const headers = parseCsvLine(lines[0] ?? "").map((header) =>
+    header.toLowerCase().replace(/\s+/g, ""),
+  );
+  const at = (cells: string[], names: string[]) => {
+    const index = headers.findIndex((header) => names.includes(header));
+    return index >= 0 ? cells[index]?.trim() : undefined;
+  };
+
+  return lines
+    .slice(1)
+    .map((line) => {
+      const cells = parseCsvLine(line);
+      return {
+        name: at(cells, ["name", "clientname", "customername"]) ?? "",
+        company: at(cells, ["company", "business", "businessname"]),
+        email: at(cells, ["email", "clientemail", "customeremail"]) ?? "",
+        phone: at(cells, ["phone", "telephone"]),
+        billingAddress: at(cells, ["billingaddress", "address"]),
+        taxId: at(cells, ["taxid", "tin"]),
+        currency: at(cells, ["currency"]),
+        paymentTerms: at(cells, ["paymentterms", "terms"]),
+      };
+    })
+    .filter((row) => row.name.trim() && row.email.trim());
+}
+
 function ClientsIndex() {
   const updateClient = useMutation(api.clients.update);
   const archiveClient = useMutation(api.clients.archive);
   const removeClient = useMutation(api.clients.remove);
   const toggleFavorite = useMutation(api.clients.toggleFavorite);
+  const importClients = useMutation(api.clients.importCsv);
 
   const [query, setQuery] = useState("");
-  const clientsFromQuery =
-    (useQuery(api.clients.list, {
-      q: query,
-      status: "all",
-    }) as ClientRow[] | undefined) ?? [];
+  const queryResult = useQuery(api.clients.list, {
+    q: query,
+    status: "all",
+  });
+  const isLoading = queryResult === undefined;
+  const clientsFromQuery = (queryResult as ClientRow[] | undefined) ?? [];
 
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [selectedId, setSelectedId] = useState<Id<"clients"> | null>(null);
@@ -245,6 +320,33 @@ function ClientsIndex() {
     }
   };
 
+  const onCsvImport = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const rows = parseClientCsv(await file.text());
+      if (rows.length === 0) {
+        toast({
+          title: "No clients imported",
+          description: "CSV needs name and email columns.",
+          variant: "error",
+        });
+        return;
+      }
+      const result = await importClients({ clients: rows });
+      toast({
+        title: "Client import finished",
+        description: `${result.created} created, ${result.skipped} skipped.`,
+        variant: "success",
+      });
+    } catch (error) {
+      toast({
+        title: "Client import failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "error",
+      });
+    }
+  };
+
   return (
     <>
       <div className="flex h-full w-full flex-col gap-6">
@@ -256,6 +358,19 @@ function ClientsIndex() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-[#2b2d30] bg-[#17191b] px-3 text-sm text-[#d5d0c7] hover:bg-[#1d2023]">
+              <Upload className="h-4 w-4" />
+              Import CSV
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(event) => {
+                  void onCsvImport(event.target.files?.[0]);
+                  event.target.value = "";
+                }}
+              />
+            </label>
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -349,8 +464,24 @@ function ClientsIndex() {
               </table>
             </div>
 
-            {clients.length === 0 ? (
-              <div className="px-4 py-8 text-sm text-[#a29b90]">No clients found.</div>
+            {isLoading ? (
+              <div className="flex px-4 py-8 text-sm text-[#a29b90]">Loading clients...</div>
+            ) : clients.length === 0 ? (
+              <div className="flex flex-col items-start gap-3 px-4 py-8 text-sm text-[#a29b90]">
+                <div>
+                  <p className="font-medium text-[#ece7de]">No clients found.</p>
+                  <p className="mt-1">
+                    Add client name, email, tax ID, currency, and payment terms before sending
+                    invoices.
+                  </p>
+                </div>
+                <Button
+                  asChild
+                  className="h-9 rounded-md bg-[#a7bc62] px-3 text-sm font-medium text-[#121314] hover:bg-[#b5c97a]"
+                >
+                  <Link to="/clients/new">New client</Link>
+                </Button>
+              </div>
             ) : null}
           </section>
 

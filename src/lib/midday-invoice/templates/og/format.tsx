@@ -10,10 +10,7 @@ export function formatEditorContent(doc?: EditorDoc) {
       {doc.content.map((node, nodeIndex) => {
         if (node.type === "paragraph") {
           return (
-            <p
-              key={`paragraph-${nodeIndex.toString()}`}
-              tw="flex flex-col mb-0"
-            >
+            <p key={`paragraph-${nodeIndex.toString()}`} tw="flex flex-col mb-0">
               {node.content?.map((inlineContent, inlineIndex) => {
                 if (inlineContent.type === "text") {
                   let style = "text-[22px]";
@@ -42,9 +39,7 @@ export function formatEditorContent(doc?: EditorDoc) {
                 }
 
                 if (inlineContent.type === "hardBreak") {
-                  return (
-                    <br key={`break-${nodeIndex}-${inlineIndex.toString()}`} />
-                  );
+                  return <br key={`break-${nodeIndex}-${inlineIndex.toString()}`} />;
                 }
 
                 return null;

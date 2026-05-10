@@ -1,0 +1,42 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { MarketingShell } from "#/components/marketing/MarketingLayout";
+
+export const Route = createFileRoute("/terms")({
+  component: TermsPage,
+});
+
+function TermsPage() {
+  return (
+    <MarketingShell>
+      <main className="mx-auto max-w-4xl px-6 py-20 text-[#ece7de]">
+        <h1 className="text-4xl font-semibold tracking-[-0.03em]">Terms</h1>
+        <div className="mt-8 space-y-6 text-sm leading-7 text-[#a29b90]">
+          <section className="rounded-md border border-[#2b2d30] bg-[#17191b] p-5">
+            <h2 className="text-base font-medium text-[#ece7de]">Product use</h2>
+            <p className="mt-2">
+              Velure helps businesses create invoices, manage clients, send reminders, and export
+              finance records. You are responsible for account access, invoice accuracy, and lawful
+              use of the service.
+            </p>
+          </section>
+          <section className="rounded-md border border-[#2b2d30] bg-[#17191b] p-5">
+            <h2 className="text-base font-medium text-[#ece7de]">Invoice and tax disclaimer</h2>
+            <p className="mt-2">
+              Velure provides invoice formatting and calculation support. It does not replace legal,
+              tax, or accounting advice. Confirm VAT, WHT, FIRS, and record-keeping requirements
+              with your accountant or tax adviser.
+            </p>
+          </section>
+          <section className="rounded-md border border-[#2b2d30] bg-[#17191b] p-5">
+            <h2 className="text-base font-medium text-[#ece7de]">Payments</h2>
+            <p className="mt-2">
+              Payment links may route through third-party providers such as Paystack. Provider fees,
+              settlement timing, chargebacks, and payment disputes are handled under the provider
+              terms.
+            </p>
+          </section>
+        </div>
+      </main>
+    </MarketingShell>
+  );
+}

@@ -4,7 +4,7 @@ import * as React from "react";
 import { cn } from "../../utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center text-sm font-medium transition-[background-color,border-color,color,opacity,transform] duration-200 ease-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 active:translate-y-px",
+  "inline-flex items-center justify-center text-sm font-medium transition-[transform,opacity,background-color,border-color,color] duration-[110ms] ease-out focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_rgba(183,242,86,0.35)] disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
@@ -37,8 +37,16 @@ export interface ButtonProps
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
+    const isPrimaryVariant = variant === "default";
+    const motionClass = isPrimaryVariant
+      ? "duration-[150ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-[0.96]"
+      : "duration-[110ms] ease-out active:scale-[0.94]";
     return (
-      <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+      <Comp
+        className={cn(buttonVariants({ variant, size }), motionClass, className)}
+        ref={ref}
+        {...props}
+      />
     );
   },
 );

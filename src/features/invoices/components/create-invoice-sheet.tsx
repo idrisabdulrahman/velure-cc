@@ -18,8 +18,8 @@ export function CreateInvoiceSheet({ open, onOpenChange, onCreated }: CreateInvo
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        contentClassName="w-full sm:max-w-[700px] p-0"
-        className="flex h-full min-h-0 flex-col border-[#202225] bg-[#0f1114] p-0 text-[#ece7de]"
+        contentClassName="w-full p-0 md:p-0 sm:max-w-[940px]"
+        className="flex h-full min-h-0 flex-col border-[#2b2d30] bg-[#121314] p-0 text-[#ece7de]"
         title="Create invoice"
       >
         <SheetHeader className="sr-only">

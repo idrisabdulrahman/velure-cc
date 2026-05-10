@@ -8,12 +8,18 @@
  * @module
  */
 
+import type * as account from "../account.js";
 import type * as auth from "../auth.js";
 import type * as clients from "../clients.js";
+import type * as compliance from "../compliance.js";
+import type * as crons from "../crons.js";
 import type * as env from "../env.js";
 import type * as http from "../http.js";
+import type * as integrations from "../integrations.js";
 import type * as invoices from "../invoices.js";
-import type * as todos from "../todos.js";
+import type * as nigeria from "../nigeria.js";
+import type * as reminders from "../reminders.js";
+import type * as rls from "../rls.js";
 
 import type {
   ApiFromModules,
@@ -22,12 +28,18 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  account: typeof account;
   auth: typeof auth;
   clients: typeof clients;
+  compliance: typeof compliance;
+  crons: typeof crons;
   env: typeof env;
   http: typeof http;
+  integrations: typeof integrations;
   invoices: typeof invoices;
-  todos: typeof todos;
+  nigeria: typeof nigeria;
+  reminders: typeof reminders;
+  rls: typeof rls;
 }>;
 
 /**

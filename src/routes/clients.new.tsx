@@ -61,15 +61,22 @@ function NewClient() {
 	const navigate = useNavigate();
 	const createClient = useMutation(api.clients.create);
 	const [state, setState] = useState<FormState>(initialState);
+	const [touched, setTouched] = useState({ name: false, email: false });
 	const [submitting, setSubmitting] = useState(false);
 
 	const nameError =
-		state.name.trim().length === 0 ? "Client name is required" : "";
-	const emailError = /^\S+@\S+\.\S+$/.test(state.email.trim())
-		? ""
-		: "Please enter a valid email";
+		touched.name && state.name.trim().length === 0
+			? "Client name is required"
+			: "";
+	const emailError =
+		touched.email &&
+		state.email.trim().length > 0 &&
+		!/^\S+@\S+\.\S+$/.test(state.email.trim())
+			? "Please enter a valid email"
+			: "";
 
-	const isValid = !nameError && !emailError;
+	const isValid =
+		state.name.trim().length > 0 && /^\S+@\S+\.\S+$/.test(state.email.trim());
 
 	const initials = useMemo(() => {
 		const from = state.name || state.company || "VC";
@@ -156,12 +163,13 @@ function NewClient() {
 								<Field label="Client Name *" error={nameError}>
 									<Input
 										value={state.name}
-										onChange={(event) =>
+										onChange={(event) => {
 											setState((prev) => ({
 												...prev,
 												name: event.target.value,
-											}))
-										}
+											}));
+											setTouched((prev) => ({ ...prev, name: true }));
+										}}
 										className={inputClass}
 										placeholder="Client Name *"
 									/>
@@ -182,12 +190,13 @@ function NewClient() {
 								<Field label="Email *" error={emailError}>
 									<Input
 										value={state.email}
-										onChange={(event) =>
+										onChange={(event) => {
 											setState((prev) => ({
 												...prev,
 												email: event.target.value,
-											}))
-										}
+											}));
+											setTouched((prev) => ({ ...prev, email: true }));
+										}}
 										className={`${inputClass} ${emailError ? "border-[#B75555]" : ""}`}
 										placeholder="Email *"
 									/>
@@ -243,7 +252,6 @@ function NewClient() {
 										</SelectTrigger>
 										<SelectContent className="border-[#1A1D22] bg-[#0D1016] text-[#F2F3F5]">
 											<SelectItem value="USD">USD</SelectItem>
-											<SelectItem value="EUR">EUR</SelectItem>
 											<SelectItem value="GBP">GBP</SelectItem>
 										</SelectContent>
 									</Select>

@@ -46,10 +46,7 @@ export function OgTemplate({ data, isValidLogo }: Props) {
 
       <div tw="flex justify-between mt-10">
         <div tw="flex flex-col flex-1 max-w-[50%]">
-          <span
-            tw="text-[#858585] text-[22px] mb-1"
-            style={{ fontFamily: "hedvig-sans" }}
-          >
+          <span tw="text-[#858585] text-[22px] mb-1" style={{ fontFamily: "hedvig-sans" }}>
             {template.fromLabel}
           </span>
           <EditorContent content={fromDetails} />
@@ -58,10 +55,7 @@ export function OgTemplate({ data, isValidLogo }: Props) {
         <div tw="w-12" />
 
         <div tw="flex flex-col flex-1 max-w-[50%]">
-          <span
-            tw="text-[#858585] text-[22px] mb-1"
-            style={{ fontFamily: "hedvig-sans" }}
-          >
+          <span tw="text-[#858585] text-[22px] mb-1" style={{ fontFamily: "hedvig-sans" }}>
             {template.customerLabel}
           </span>
           <EditorContent content={customerDetails} />

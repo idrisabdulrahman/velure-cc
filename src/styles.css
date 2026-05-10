@@ -1,6 +1,10 @@
 @import "tailwindcss";
 
 @import "tw-animate-css";
+@import "@fontsource/ibm-plex-sans-condensed/400.css";
+@import "@fontsource/ibm-plex-sans-condensed/500.css";
+@import "@fontsource/ibm-plex-sans-condensed/600.css";
+@import "@fontsource/ibm-plex-sans-condensed/700.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -11,21 +15,27 @@ html {
 body {
   @apply m-0;
   font-family:
-    "Bahnschrift",
-    "DIN Alternate",
     "IBM Plex Sans Condensed",
-    "Aptos Narrow",
+    "Nimbus Sans Narrow",
     "Arial Narrow",
-    "IBM Plex Sans",
+    "Liberation Sans Narrow",
     "Helvetica Neue",
     ui-sans-serif,
     system-ui,
     -apple-system,
     sans-serif;
+  font-feature-settings: "cv05" 1;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: #121314;
   color: #ece7de;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
 }
 
 code {
@@ -146,8 +156,40 @@ code {
   * {
     @apply border-border outline-ring/50;
   }
+
+  button,
+  a[href],
+  [role="button"],
+  summary {
+    transition-property: transform, opacity, background-color, border-color, color;
+    transition-duration: 110ms;
+    transition-timing-function: ease;
+  }
+
+  button:not(:disabled):active,
+  a[href]:active,
+  [role="button"]:not([aria-disabled="true"]):active,
+  summary:active {
+    transform: scale(0.94);
+  }
+
+  textarea,
+  select {
+    transition-property: opacity, background-color, border-color, color;
+    transition-duration: 110ms;
+    transition-timing-function: ease;
+  }
+
   body {
     @apply bg-background text-foreground;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  [role="button"]:focus-visible {
+    box-shadow: 0 0 0 2px rgba(183, 242, 86, 0.35);
   }
 }
 
@@ -194,6 +236,26 @@ code {
 
   .ui-stagger-3 {
     animation: panel-enter 360ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .ui-secondary-action {
+    transition-property: transform, opacity, background-color, border-color, color;
+    transition-duration: 110ms;
+    transition-timing-function: ease;
+  }
+
+  .ui-secondary-action:not(:disabled):active {
+    transform: scale(0.94);
+  }
+
+  .ui-primary-action {
+    transition-property: transform, opacity, background-color, border-color, color;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .ui-primary-action:not(:disabled):active {
+    transform: scale(0.96);
   }
 }
 
@@ -250,9 +312,76 @@ code {
   }
 }
 
+@keyframes invoice-ready-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.88;
+  }
+}
+
+@keyframes invoice-line-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes invoice-line-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+
+@keyframes invoice-value-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ui-primary-action-ready {
+    animation: invoice-ready-pulse 1.4s ease-in-out infinite;
+  }
+
+  .invoice-line-enter {
+    animation: invoice-line-enter 180ms ease forwards;
+  }
+
+  .invoice-line-exit {
+    animation: invoice-line-exit 160ms ease forwards;
+  }
+
+  .invoice-value-fade {
+    animation: invoice-value-fade 120ms ease forwards;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 
   ::view-transition-group(root),

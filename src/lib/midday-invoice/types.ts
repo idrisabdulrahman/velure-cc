@@ -40,6 +40,9 @@ export type Invoice = {
   paidAt: string | null;
   vat: number | null;
   tax: number | null;
+  withholdingTax: number | null;
+  netPayable: number | null;
+  regulatoryNotice: string | null;
   filePath: string[] | null;
   status: "draft" | "overdue" | "paid" | "unpaid" | "canceled" | "scheduled";
   viewedAt: string | null;
@@ -81,6 +84,8 @@ export type Template = {
   subtotalLabel: string;
   taxLabel: string;
   discountLabel: string;
+  withholdingTaxLabel: string;
+  netAmountLabel: string;
   timezone: string;
   paymentLabel: string;
   noteLabel: string;
@@ -98,6 +103,7 @@ export type Template = {
   includeQr: boolean;
   taxRate: number;
   vatRate: number;
+  withholdingTaxRate: number;
   size: "a4" | "letter";
   deliveryType: "create" | "create_and_send" | "scheduled";
   locale: string;

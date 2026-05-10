@@ -1,8 +1,20 @@
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
-import { useEffect, useRef } from "react";
+import { useConvexAuth } from "convex/react";
 import { useReducedMotion } from "framer-motion";
-import { Bell, FileText, LayoutGrid, Loader2, Settings, Users } from "lucide-react";
-import { authClient } from "#/lib/auth-client";
+import {
+  Bell,
+  BellRing,
+  FileText,
+  LayoutGrid,
+  Loader2,
+  Plug,
+  Scale,
+  Settings,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
+import { useEffect, useRef } from "react";
+import { RouteTransition } from "#/components/navigation/RouteTransition";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
 import {
@@ -12,7 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
-import { RouteTransition } from "#/components/navigation/RouteTransition";
+import { authClient } from "#/lib/auth-client";
 
 const navItems = [
   {
@@ -38,11 +50,52 @@ const navItems = [
   },
 ];
 
+const settingsItems = [
+  {
+    to: "/settings",
+    icon: Settings,
+    match: (pathname: string) => pathname === "/settings",
+    label: "General",
+    description: "Business profile and account plan",
+  },
+  {
+    to: "/settings/compliance",
+    icon: Scale,
+    match: (pathname: string) => pathname.startsWith("/settings/compliance"),
+    label: "Compliance",
+    description: "Business identity, tax rules, and exports",
+  },
+  {
+    to: "/settings/collections",
+    icon: BellRing,
+    match: (pathname: string) => pathname.startsWith("/settings/collections"),
+    label: "Collections",
+    description: "Email reminders and manual follow-up",
+  },
+  {
+    to: "/settings/integrations",
+    icon: Plug,
+    match: (pathname: string) => pathname.startsWith("/settings/integrations"),
+    label: "Integrations",
+    description: "Payment and accounting apps",
+    disabled: true,
+  },
+  {
+    to: "/settings/security",
+    icon: ShieldCheck,
+    match: (pathname: string) => pathname.startsWith("/settings/security"),
+    label: "Security",
+    description: "Authentication, sessions, and account safety",
+  },
+] as const;
+
 export function DashboardLayout() {
   const location = useLocation();
   const mainRef = useRef<HTMLElement | null>(null);
   const shouldReduceMotion = useReducedMotion();
   const { data: session, isPending } = authClient.useSession();
+  const { isLoading: isConvexAuthLoading, isAuthenticated: isConvexAuthenticated } =
+    useConvexAuth();
 
   useEffect(() => {
     if (location.hash) return;
@@ -53,7 +106,7 @@ export function DashboardLayout() {
     });
   }, [location.pathname, location.search, location.hash, shouldReduceMotion]);
 
-  if (isPending) {
+  if (isPending || isConvexAuthLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[#121314]">
         <Loader2 className="h-8 w-8 animate-spin text-[#a7bc62]" />
@@ -61,7 +114,7 @@ export function DashboardLayout() {
     );
   }
 
-  if (!session?.user) {
+  if (!session?.user || !isConvexAuthenticated) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[#121314] px-6">
         <div className="w-full max-w-md rounded-md border border-[#2b2d30] bg-[#181a1d] p-6 text-center">
@@ -83,8 +136,8 @@ export function DashboardLayout() {
   const userInitial = session.user.name?.charAt(0)?.toUpperCase() ?? "U";
 
   return (
-    <div className="flex min-h-screen bg-[#121314] text-[#ece7de]">
-      <aside className="ui-stagger-1 hidden w-[252px] shrink-0 border-r border-[#2b2d30] bg-[#17191b] lg:flex lg:flex-col">
+    <div className="flex h-screen overflow-hidden bg-[#121314] text-[#ece7de]">
+      <aside className="ui-stagger-1 hidden h-screen w-[260px] shrink-0 border-r border-[#2b2d30] bg-[#17191b] lg:flex lg:flex-col">
         <div className="border-b border-[#2b2d30] px-5 py-5">
           <Link to="/invoices" className="flex items-center gap-3">
             <span className="flex h-8 w-8 items-center justify-center rounded-sm border border-[#3a3d41] bg-[#202327] text-sm font-semibold text-[#ece7de]">
@@ -97,56 +150,113 @@ export function DashboardLayout() {
           </Link>
         </div>
 
-        <nav className="flex-1 px-3 py-4">
-          <div className="space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const active = item.match(location.pathname);
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+          <nav className="space-y-6">
+            <div className="space-y-1">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const active = item.match(location.pathname);
 
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={`flex items-start gap-3 rounded-md border px-3 py-3 transition-[background-color,border-color,color] duration-200 ${
-                    active
-                      ? "border-[#41463b] bg-[#20241e]"
-                      : "border-transparent text-[#b7b1a7] hover:border-[#2b2d30] hover:bg-[#1b1e20]"
-                  }`}
-                >
-                  <Icon
-                    className={`mt-0.5 h-4 w-4 shrink-0 ${
-                      active ? "text-[#a7bc62]" : "text-[#8a857d]"
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={`flex items-start gap-3 rounded-md border px-3 py-3 transition-[background-color,border-color,color] duration-200 ${
+                      active
+                        ? "border-[#41463b] bg-[#20241e]"
+                        : "border-transparent text-[#b7b1a7] hover:border-[#2b2d30] hover:bg-[#1b1e20]"
                     }`}
-                  />
-                  <div className="min-w-0">
-                    <p
-                      className={`text-sm font-medium ${
-                        active ? "text-[#ece7de]" : "text-[#d5d0c7]"
+                  >
+                    <Icon
+                      className={`mt-0.5 h-4 w-4 shrink-0 ${
+                        active ? "text-[#a7bc62]" : "text-[#8a857d]"
+                      }`}
+                    />
+                    <div className="min-w-0">
+                      <p
+                        className={`text-sm font-medium ${
+                          active ? "text-[#ece7de]" : "text-[#d5d0c7]"
+                        }`}
+                      >
+                        {item.label}
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-[#8a857d]">{item.description}</p>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+
+            <div className="border-t border-[#2b2d30] pt-4">
+              <p className="px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-[#7f7a72]">
+                Settings
+              </p>
+              <div className="mt-2 space-y-1">
+                {settingsItems.map((item) => {
+                  const Icon = item.icon;
+                  const active = item.match(location.pathname);
+                  const disabled = "disabled" in item && item.disabled;
+
+                  if (disabled) {
+                    return (
+                      <div
+                        key={item.to}
+                        aria-disabled="true"
+                        className="flex cursor-not-allowed items-start gap-3 rounded-md border border-transparent px-3 py-3 text-[#77726b] opacity-70"
+                        title="Coming soon"
+                      >
+                        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[#6f7860]" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-[#a9a39a]">{item.label}</p>
+                            <span className="rounded-sm border border-[#3a3d30] bg-[#20241e] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.06em] text-[#a7bc62]">
+                              Soon
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs leading-5 text-[#77726b]">
+                            {item.description}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      className={`flex items-start gap-3 rounded-md border px-3 py-3 transition-[background-color,border-color,color] duration-200 ${
+                        active
+                          ? "border-[#41463b] bg-[#20241e]"
+                          : "border-transparent text-[#b7b1a7] hover:border-[#2b2d30] hover:bg-[#1b1e20]"
                       }`}
                     >
-                      {item.label}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-[#8a857d]">{item.description}</p>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </nav>
-
-        <div className="border-t border-[#2b2d30] p-3">
-          <Link
-            to="/settings/security"
-            className="flex items-center gap-3 rounded-md px-3 py-3 text-sm text-[#b7b1a7] hover:bg-[#1b1e20]"
-          >
-            <Settings className="h-4 w-4 text-[#8a857d]" />
-            Security
-          </Link>
+                      <Icon
+                        className={`mt-0.5 h-4 w-4 shrink-0 ${
+                          active ? "text-[#a7bc62]" : "text-[#8a857d]"
+                        }`}
+                      />
+                      <div className="min-w-0">
+                        <p
+                          className={`text-sm font-medium ${
+                            active ? "text-[#ece7de]" : "text-[#d5d0c7]"
+                          }`}
+                        >
+                          {item.label}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-[#8a857d]">{item.description}</p>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          </nav>
         </div>
       </aside>
 
-      <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-20 border-b border-[#2b2d30] bg-[#121314]/95 backdrop-blur-sm">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="shrink-0 border-b border-[#2b2d30] bg-[#121314]/95 backdrop-blur-sm">
           <div className="flex h-14 items-center justify-between gap-4 px-4 lg:px-8">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-[#ece7de]">
@@ -200,6 +310,12 @@ export function DashboardLayout() {
                     <Link to="/clients">Clients</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild className="focus:bg-[#20241e]">
+                    <Link to="/settings/compliance">Compliance</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild className="focus:bg-[#20241e]">
+                    <Link to="/settings/collections">Collections</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild className="focus:bg-[#20241e]">
                     <Link to="/settings/security">Security</Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="bg-[#2b2d30]" />
@@ -239,7 +355,10 @@ export function DashboardLayout() {
           </div>
         </header>
 
-        <main ref={mainRef} className="min-w-0 overflow-y-auto px-4 py-5 lg:px-8 lg:py-8">
+        <main
+          ref={mainRef}
+          className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 lg:px-8 lg:py-8"
+        >
           <div className="mx-auto w-full max-w-7xl">
             <RouteTransition routeKey={location.pathname}>
               <Outlet />

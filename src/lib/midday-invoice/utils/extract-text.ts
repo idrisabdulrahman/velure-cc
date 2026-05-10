@@ -22,11 +22,7 @@ export function extractTextFromValue(value: string): string {
       // Use TipTap's generateText utility for JSON content
       if (typeof parsed === "object" && parsed !== null) {
         try {
-          const textContent = generateText(parsed, [
-            StarterKit,
-            Link,
-            Underline,
-          ]);
+          const textContent = generateText(parsed, [StarterKit, Link, Underline]);
 
           if (textContent.trim()) {
             return textContent.trim();

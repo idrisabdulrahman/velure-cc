@@ -1,38 +1,38 @@
-import { useMemo, useState } from 'react'
-import type { InvoiceLineItem, InvoiceRecord, InvoiceStatus } from '../types'
-import { invoiceTotal } from '../calculate'
-import { formatMoney } from '../format'
+import { useMemo, useState } from "react";
+import type { InvoiceLineItem, InvoiceRecord, InvoiceStatus } from "../types";
+import { invoiceTotal } from "../calculate";
+import { formatMoney } from "../format";
 
 type Props = {
-  invoice: InvoiceRecord
-  mode: 'edit' | 'details'
-  onClose: () => void
-  onSave: (invoice: InvoiceRecord) => void
-}
+  invoice: InvoiceRecord;
+  mode: "edit" | "details";
+  onClose: () => void;
+  onSave: (invoice: InvoiceRecord) => void;
+};
 
 export function InvoiceSheet({ invoice, mode, onClose, onSave }: Props) {
-  const [draft, setDraft] = useState<InvoiceRecord>(invoice)
-  const isReadOnly = mode === 'details'
+  const [draft, setDraft] = useState<InvoiceRecord>(invoice);
+  const isReadOnly = mode === "details";
 
-  const total = useMemo(() => invoiceTotal(draft), [draft])
+  const total = useMemo(() => invoiceTotal(draft), [draft]);
 
   const updateLineItem = (itemId: string, updater: (item: InvoiceLineItem) => InvoiceLineItem) => {
     setDraft((prev) => ({
       ...prev,
       lineItems: prev.lineItems.map((item) => (item.id === itemId ? updater(item) : item)),
-    }))
-  }
+    }));
+  };
 
   const updateStatus = (status: InvoiceStatus) => {
-    setDraft((prev) => ({ ...prev, status }))
-  }
+    setDraft((prev) => ({ ...prev, status }));
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50">
       <aside className="h-full w-full max-w-2xl overflow-y-auto border-l border-slate-800 bg-slate-950 p-6">
         <div className="mb-6 flex items-center justify-between">
           <h3 className="text-lg font-semibold">
-            {mode === 'edit' ? 'Edit Invoice' : 'Invoice Details'}
+            {mode === "edit" ? "Edit Invoice" : "Invoice Details"}
           </h3>
           <button
             type="button"
@@ -88,9 +88,7 @@ export function InvoiceSheet({ invoice, mode, onClose, onSave }: Props) {
                 type="date"
                 value={draft.dueDate}
                 disabled={isReadOnly}
-                onChange={(event) =>
-                  setDraft((prev) => ({ ...prev, dueDate: event.target.value }))
-                }
+                onChange={(event) => setDraft((prev) => ({ ...prev, dueDate: event.target.value }))}
                 className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2"
               />
             </label>
@@ -114,7 +112,10 @@ export function InvoiceSheet({ invoice, mode, onClose, onSave }: Props) {
           <div className="space-y-2">
             <p className="text-sm text-slate-400">Line Items</p>
             {draft.lineItems.map((item) => (
-              <div key={item.id} className="grid grid-cols-1 gap-2 rounded-md border border-slate-800 p-3 md:grid-cols-6">
+              <div
+                key={item.id}
+                className="grid grid-cols-1 gap-2 rounded-md border border-slate-800 p-3 md:grid-cols-6"
+              >
                 <input
                   value={item.name}
                   disabled={isReadOnly}
@@ -162,11 +163,9 @@ export function InvoiceSheet({ invoice, mode, onClose, onSave }: Props) {
           <label className="block space-y-1">
             <span className="text-sm text-slate-400">Notes</span>
             <textarea
-              value={draft.notes ?? ''}
+              value={draft.notes ?? ""}
               disabled={isReadOnly}
-              onChange={(event) =>
-                setDraft((prev) => ({ ...prev, notes: event.target.value }))
-              }
+              onChange={(event) => setDraft((prev) => ({ ...prev, notes: event.target.value }))}
               className="min-h-20 w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2"
             />
           </label>
@@ -174,7 +173,8 @@ export function InvoiceSheet({ invoice, mode, onClose, onSave }: Props) {
 
         <div className="mt-6 flex items-center justify-between border-t border-slate-800 pt-4">
           <div className="text-sm text-slate-400">
-            Total: <span className="font-medium text-slate-100">{formatMoney(total, draft.currency)}</span>
+            Total:{" "}
+            <span className="font-medium text-slate-100">{formatMoney(total, draft.currency)}</span>
           </div>
           {!isReadOnly && (
             <button
@@ -188,5 +188,5 @@ export function InvoiceSheet({ invoice, mode, onClose, onSave }: Props) {
         </div>
       </aside>
     </div>
-  )
+  );
 }

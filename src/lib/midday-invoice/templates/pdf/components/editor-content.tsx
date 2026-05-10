@@ -11,9 +11,5 @@ export function EditorContent({ content }: Props) {
     return null;
   }
 
-  return (
-    <View style={{ marginTop: 10, lineHeight: 0.9 }}>
-      {formatEditorContent(content)}
-    </View>
-  );
+  return <View style={{ marginTop: 10, lineHeight: 0.9 }}>{formatEditorContent(content)}</View>;
 }

@@ -9,14 +9,26 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SecurityRouteImport } from './routes/security'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as InvoicesRouteImport } from './routes/invoices'
+import { Route as FeaturesRouteImport } from './routes/features'
+import { Route as ComplianceRouteImport } from './routes/compliance'
 import { Route as ClientsRouteImport } from './routes/clients'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as InvoicesIndexRouteImport } from './routes/invoices.index'
 import { Route as ClientsIndexRouteImport } from './routes/clients.index'
+import { Route as SolutionsSmallBusinessRouteImport } from './routes/solutions.small-business'
+import { Route as SolutionsEnterpriseRouteImport } from './routes/solutions.enterprise'
 import { Route as SettingsSecurityRouteImport } from './routes/settings.security'
+import { Route as SettingsIntegrationsRouteImport } from './routes/settings.integrations'
+import { Route as SettingsComplianceRouteImport } from './routes/settings.compliance'
+import { Route as SettingsCollectionsRouteImport } from './routes/settings.collections'
 import { Route as InvoicesProductsRouteImport } from './routes/invoices.products'
 import { Route as InvoicesNewRouteImport } from './routes/invoices.new'
 import { Route as ITokenRouteImport } from './routes/i.$token'
@@ -25,18 +37,53 @@ import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiSecurityLinkStepupVerifyRouteImport } from './routes/api/security/link-stepup/verify'
 import { Route as ApiSecurityLinkStepupStatusRouteImport } from './routes/api/security/link-stepup/status'
 import { Route as ApiSecurityLinkStepupRequestRouteImport } from './routes/api/security/link-stepup/request'
+import { Route as ApiPaymentsPaystackInitializeRouteImport } from './routes/api/payments/paystack/initialize'
 import { Route as ApiInvoiceSendIdRouteImport } from './routes/api/invoice/send/$id'
 import { Route as ApiInvoiceDownloadIdRouteImport } from './routes/api/invoice/download/$id'
+import { Route as ApiIntegrationsXeroConnectRouteImport } from './routes/api/integrations/xero/connect'
+import { Route as ApiIntegrationsXeroCallbackRouteImport } from './routes/api/integrations/xero/callback'
+import { Route as ApiIntegrationsQuickbooksConnectRouteImport } from './routes/api/integrations/quickbooks/connect'
+import { Route as ApiIntegrationsQuickbooksCallbackRouteImport } from './routes/api/integrations/quickbooks/callback'
 import { Route as ApiAuthFirstSecondRouteImport } from './routes/api/auth/$first/$second'
 
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SecurityRoute = SecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InvoicesRoute = InvoicesRouteImport.update({
   id: '/invoices',
   path: '/invoices',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FeaturesRoute = FeaturesRouteImport.update({
+  id: '/features',
+  path: '/features',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComplianceRoute = ComplianceRouteImport.update({
+  id: '/compliance',
+  path: '/compliance',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClientsRoute = ClientsRouteImport.update({
@@ -54,6 +101,13 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any).lazy(() => import('./routes/index.lazy').then((d) => d.Route))
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SettingsRoute,
+} as any).lazy(() =>
+  import('./routes/settings.index.lazy').then((d) => d.Route),
+)
 const InvoicesIndexRoute = InvoicesIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -66,12 +120,43 @@ const ClientsIndexRoute = ClientsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ClientsRoute,
 } as any).lazy(() => import('./routes/clients.index.lazy').then((d) => d.Route))
+const SolutionsSmallBusinessRoute = SolutionsSmallBusinessRouteImport.update({
+  id: '/solutions/small-business',
+  path: '/solutions/small-business',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SolutionsEnterpriseRoute = SolutionsEnterpriseRouteImport.update({
+  id: '/solutions/enterprise',
+  path: '/solutions/enterprise',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsSecurityRoute = SettingsSecurityRouteImport.update({
   id: '/security',
   path: '/security',
   getParentRoute: () => SettingsRoute,
 } as any).lazy(() =>
   import('./routes/settings.security.lazy').then((d) => d.Route),
+)
+const SettingsIntegrationsRoute = SettingsIntegrationsRouteImport.update({
+  id: '/integrations',
+  path: '/integrations',
+  getParentRoute: () => SettingsRoute,
+} as any).lazy(() =>
+  import('./routes/settings.integrations.lazy').then((d) => d.Route),
+)
+const SettingsComplianceRoute = SettingsComplianceRouteImport.update({
+  id: '/compliance',
+  path: '/compliance',
+  getParentRoute: () => SettingsRoute,
+} as any).lazy(() =>
+  import('./routes/settings.compliance.lazy').then((d) => d.Route),
+)
+const SettingsCollectionsRoute = SettingsCollectionsRouteImport.update({
+  id: '/collections',
+  path: '/collections',
+  getParentRoute: () => SettingsRoute,
+} as any).lazy(() =>
+  import('./routes/settings.collections.lazy').then((d) => d.Route),
 )
 const InvoicesProductsRoute = InvoicesProductsRouteImport.update({
   id: '/products',
@@ -116,6 +201,12 @@ const ApiSecurityLinkStepupRequestRoute =
     path: '/api/security/link-stepup/request',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPaymentsPaystackInitializeRoute =
+  ApiPaymentsPaystackInitializeRouteImport.update({
+    id: '/api/payments/paystack/initialize',
+    path: '/api/payments/paystack/initialize',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiInvoiceSendIdRoute = ApiInvoiceSendIdRouteImport.update({
   id: '/api/invoice/send/$id',
   path: '/api/invoice/send/$id',
@@ -126,6 +217,30 @@ const ApiInvoiceDownloadIdRoute = ApiInvoiceDownloadIdRouteImport.update({
   path: '/api/invoice/download/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiIntegrationsXeroConnectRoute =
+  ApiIntegrationsXeroConnectRouteImport.update({
+    id: '/api/integrations/xero/connect',
+    path: '/api/integrations/xero/connect',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiIntegrationsXeroCallbackRoute =
+  ApiIntegrationsXeroCallbackRouteImport.update({
+    id: '/api/integrations/xero/callback',
+    path: '/api/integrations/xero/callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiIntegrationsQuickbooksConnectRoute =
+  ApiIntegrationsQuickbooksConnectRouteImport.update({
+    id: '/api/integrations/quickbooks/connect',
+    path: '/api/integrations/quickbooks/connect',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiIntegrationsQuickbooksCallbackRoute =
+  ApiIntegrationsQuickbooksCallbackRouteImport.update({
+    id: '/api/integrations/quickbooks/callback',
+    path: '/api/integrations/quickbooks/callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAuthFirstSecondRoute = ApiAuthFirstSecondRouteImport.update({
   id: '/api/auth/$first/$second',
   path: '/api/auth/$first/$second',
@@ -136,19 +251,36 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/clients': typeof ClientsRouteWithChildren
+  '/compliance': typeof ComplianceRoute
+  '/features': typeof FeaturesRoute
   '/invoices': typeof InvoicesRouteWithChildren
+  '/pricing': typeof PricingRoute
+  '/privacy': typeof PrivacyRoute
+  '/security': typeof SecurityRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/terms': typeof TermsRoute
   '/clients/new': typeof ClientsNewRoute
   '/i/$token': typeof ITokenRoute
   '/invoices/new': typeof InvoicesNewRoute
   '/invoices/products': typeof InvoicesProductsRoute
+  '/settings/collections': typeof SettingsCollectionsRoute
+  '/settings/compliance': typeof SettingsComplianceRoute
+  '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/security': typeof SettingsSecurityRoute
+  '/solutions/enterprise': typeof SolutionsEnterpriseRoute
+  '/solutions/small-business': typeof SolutionsSmallBusinessRoute
   '/clients/': typeof ClientsIndexRoute
   '/invoices/': typeof InvoicesIndexRoute
+  '/settings/': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/auth/$first/$second': typeof ApiAuthFirstSecondRoute
+  '/api/integrations/quickbooks/callback': typeof ApiIntegrationsQuickbooksCallbackRoute
+  '/api/integrations/quickbooks/connect': typeof ApiIntegrationsQuickbooksConnectRoute
+  '/api/integrations/xero/callback': typeof ApiIntegrationsXeroCallbackRoute
+  '/api/integrations/xero/connect': typeof ApiIntegrationsXeroConnectRoute
   '/api/invoice/download/$id': typeof ApiInvoiceDownloadIdRoute
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
+  '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
   '/api/security/link-stepup/request': typeof ApiSecurityLinkStepupRequestRoute
   '/api/security/link-stepup/status': typeof ApiSecurityLinkStepupStatusRoute
   '/api/security/link-stepup/verify': typeof ApiSecurityLinkStepupVerifyRoute
@@ -156,18 +288,34 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/settings': typeof SettingsRouteWithChildren
+  '/compliance': typeof ComplianceRoute
+  '/features': typeof FeaturesRoute
+  '/pricing': typeof PricingRoute
+  '/privacy': typeof PrivacyRoute
+  '/security': typeof SecurityRoute
+  '/terms': typeof TermsRoute
   '/clients/new': typeof ClientsNewRoute
   '/i/$token': typeof ITokenRoute
   '/invoices/new': typeof InvoicesNewRoute
   '/invoices/products': typeof InvoicesProductsRoute
+  '/settings/collections': typeof SettingsCollectionsRoute
+  '/settings/compliance': typeof SettingsComplianceRoute
+  '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/security': typeof SettingsSecurityRoute
+  '/solutions/enterprise': typeof SolutionsEnterpriseRoute
+  '/solutions/small-business': typeof SolutionsSmallBusinessRoute
   '/clients': typeof ClientsIndexRoute
   '/invoices': typeof InvoicesIndexRoute
+  '/settings': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/auth/$first/$second': typeof ApiAuthFirstSecondRoute
+  '/api/integrations/quickbooks/callback': typeof ApiIntegrationsQuickbooksCallbackRoute
+  '/api/integrations/quickbooks/connect': typeof ApiIntegrationsQuickbooksConnectRoute
+  '/api/integrations/xero/callback': typeof ApiIntegrationsXeroCallbackRoute
+  '/api/integrations/xero/connect': typeof ApiIntegrationsXeroConnectRoute
   '/api/invoice/download/$id': typeof ApiInvoiceDownloadIdRoute
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
+  '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
   '/api/security/link-stepup/request': typeof ApiSecurityLinkStepupRequestRoute
   '/api/security/link-stepup/status': typeof ApiSecurityLinkStepupStatusRoute
   '/api/security/link-stepup/verify': typeof ApiSecurityLinkStepupVerifyRoute
@@ -177,19 +325,36 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/clients': typeof ClientsRouteWithChildren
+  '/compliance': typeof ComplianceRoute
+  '/features': typeof FeaturesRoute
   '/invoices': typeof InvoicesRouteWithChildren
+  '/pricing': typeof PricingRoute
+  '/privacy': typeof PrivacyRoute
+  '/security': typeof SecurityRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/terms': typeof TermsRoute
   '/clients/new': typeof ClientsNewRoute
   '/i/$token': typeof ITokenRoute
   '/invoices/new': typeof InvoicesNewRoute
   '/invoices/products': typeof InvoicesProductsRoute
+  '/settings/collections': typeof SettingsCollectionsRoute
+  '/settings/compliance': typeof SettingsComplianceRoute
+  '/settings/integrations': typeof SettingsIntegrationsRoute
   '/settings/security': typeof SettingsSecurityRoute
+  '/solutions/enterprise': typeof SolutionsEnterpriseRoute
+  '/solutions/small-business': typeof SolutionsSmallBusinessRoute
   '/clients/': typeof ClientsIndexRoute
   '/invoices/': typeof InvoicesIndexRoute
+  '/settings/': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/auth/$first/$second': typeof ApiAuthFirstSecondRoute
+  '/api/integrations/quickbooks/callback': typeof ApiIntegrationsQuickbooksCallbackRoute
+  '/api/integrations/quickbooks/connect': typeof ApiIntegrationsQuickbooksConnectRoute
+  '/api/integrations/xero/callback': typeof ApiIntegrationsXeroCallbackRoute
+  '/api/integrations/xero/connect': typeof ApiIntegrationsXeroConnectRoute
   '/api/invoice/download/$id': typeof ApiInvoiceDownloadIdRoute
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
+  '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
   '/api/security/link-stepup/request': typeof ApiSecurityLinkStepupRequestRoute
   '/api/security/link-stepup/status': typeof ApiSecurityLinkStepupStatusRoute
   '/api/security/link-stepup/verify': typeof ApiSecurityLinkStepupVerifyRoute
@@ -200,19 +365,36 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/clients'
+    | '/compliance'
+    | '/features'
     | '/invoices'
+    | '/pricing'
+    | '/privacy'
+    | '/security'
     | '/settings'
+    | '/terms'
     | '/clients/new'
     | '/i/$token'
     | '/invoices/new'
     | '/invoices/products'
+    | '/settings/collections'
+    | '/settings/compliance'
+    | '/settings/integrations'
     | '/settings/security'
+    | '/solutions/enterprise'
+    | '/solutions/small-business'
     | '/clients/'
     | '/invoices/'
+    | '/settings/'
     | '/api/auth/$'
     | '/api/auth/$first/$second'
+    | '/api/integrations/quickbooks/callback'
+    | '/api/integrations/quickbooks/connect'
+    | '/api/integrations/xero/callback'
+    | '/api/integrations/xero/connect'
     | '/api/invoice/download/$id'
     | '/api/invoice/send/$id'
+    | '/api/payments/paystack/initialize'
     | '/api/security/link-stepup/request'
     | '/api/security/link-stepup/status'
     | '/api/security/link-stepup/verify'
@@ -220,18 +402,34 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
-    | '/settings'
+    | '/compliance'
+    | '/features'
+    | '/pricing'
+    | '/privacy'
+    | '/security'
+    | '/terms'
     | '/clients/new'
     | '/i/$token'
     | '/invoices/new'
     | '/invoices/products'
+    | '/settings/collections'
+    | '/settings/compliance'
+    | '/settings/integrations'
     | '/settings/security'
+    | '/solutions/enterprise'
+    | '/solutions/small-business'
     | '/clients'
     | '/invoices'
+    | '/settings'
     | '/api/auth/$'
     | '/api/auth/$first/$second'
+    | '/api/integrations/quickbooks/callback'
+    | '/api/integrations/quickbooks/connect'
+    | '/api/integrations/xero/callback'
+    | '/api/integrations/xero/connect'
     | '/api/invoice/download/$id'
     | '/api/invoice/send/$id'
+    | '/api/payments/paystack/initialize'
     | '/api/security/link-stepup/request'
     | '/api/security/link-stepup/status'
     | '/api/security/link-stepup/verify'
@@ -240,19 +438,36 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/clients'
+    | '/compliance'
+    | '/features'
     | '/invoices'
+    | '/pricing'
+    | '/privacy'
+    | '/security'
     | '/settings'
+    | '/terms'
     | '/clients/new'
     | '/i/$token'
     | '/invoices/new'
     | '/invoices/products'
+    | '/settings/collections'
+    | '/settings/compliance'
+    | '/settings/integrations'
     | '/settings/security'
+    | '/solutions/enterprise'
+    | '/solutions/small-business'
     | '/clients/'
     | '/invoices/'
+    | '/settings/'
     | '/api/auth/$'
     | '/api/auth/$first/$second'
+    | '/api/integrations/quickbooks/callback'
+    | '/api/integrations/quickbooks/connect'
+    | '/api/integrations/xero/callback'
+    | '/api/integrations/xero/connect'
     | '/api/invoice/download/$id'
     | '/api/invoice/send/$id'
+    | '/api/payments/paystack/initialize'
     | '/api/security/link-stepup/request'
     | '/api/security/link-stepup/status'
     | '/api/security/link-stepup/verify'
@@ -262,13 +477,26 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
   ClientsRoute: typeof ClientsRouteWithChildren
+  ComplianceRoute: typeof ComplianceRoute
+  FeaturesRoute: typeof FeaturesRoute
   InvoicesRoute: typeof InvoicesRouteWithChildren
+  PricingRoute: typeof PricingRoute
+  PrivacyRoute: typeof PrivacyRoute
+  SecurityRoute: typeof SecurityRoute
   SettingsRoute: typeof SettingsRouteWithChildren
+  TermsRoute: typeof TermsRoute
   ITokenRoute: typeof ITokenRoute
+  SolutionsEnterpriseRoute: typeof SolutionsEnterpriseRoute
+  SolutionsSmallBusinessRoute: typeof SolutionsSmallBusinessRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiAuthFirstSecondRoute: typeof ApiAuthFirstSecondRoute
+  ApiIntegrationsQuickbooksCallbackRoute: typeof ApiIntegrationsQuickbooksCallbackRoute
+  ApiIntegrationsQuickbooksConnectRoute: typeof ApiIntegrationsQuickbooksConnectRoute
+  ApiIntegrationsXeroCallbackRoute: typeof ApiIntegrationsXeroCallbackRoute
+  ApiIntegrationsXeroConnectRoute: typeof ApiIntegrationsXeroConnectRoute
   ApiInvoiceDownloadIdRoute: typeof ApiInvoiceDownloadIdRoute
   ApiInvoiceSendIdRoute: typeof ApiInvoiceSendIdRoute
+  ApiPaymentsPaystackInitializeRoute: typeof ApiPaymentsPaystackInitializeRoute
   ApiSecurityLinkStepupRequestRoute: typeof ApiSecurityLinkStepupRequestRoute
   ApiSecurityLinkStepupStatusRoute: typeof ApiSecurityLinkStepupStatusRoute
   ApiSecurityLinkStepupVerifyRoute: typeof ApiSecurityLinkStepupVerifyRoute
@@ -276,6 +504,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -283,11 +518,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/security': {
+      id: '/security'
+      path: '/security'
+      fullPath: '/security'
+      preLoaderRoute: typeof SecurityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pricing': {
+      id: '/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/invoices': {
       id: '/invoices'
       path: '/invoices'
       fullPath: '/invoices'
       preLoaderRoute: typeof InvoicesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/features': {
+      id: '/features'
+      path: '/features'
+      fullPath: '/features'
+      preLoaderRoute: typeof FeaturesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/compliance': {
+      id: '/compliance'
+      path: '/compliance'
+      fullPath: '/compliance'
+      preLoaderRoute: typeof ComplianceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/clients': {
@@ -311,6 +581,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/': {
+      id: '/settings/'
+      path: '/'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/invoices/': {
       id: '/invoices/'
       path: '/'
@@ -325,11 +602,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClientsIndexRouteImport
       parentRoute: typeof ClientsRoute
     }
+    '/solutions/small-business': {
+      id: '/solutions/small-business'
+      path: '/solutions/small-business'
+      fullPath: '/solutions/small-business'
+      preLoaderRoute: typeof SolutionsSmallBusinessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/solutions/enterprise': {
+      id: '/solutions/enterprise'
+      path: '/solutions/enterprise'
+      fullPath: '/solutions/enterprise'
+      preLoaderRoute: typeof SolutionsEnterpriseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings/security': {
       id: '/settings/security'
       path: '/security'
       fullPath: '/settings/security'
       preLoaderRoute: typeof SettingsSecurityRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/integrations': {
+      id: '/settings/integrations'
+      path: '/integrations'
+      fullPath: '/settings/integrations'
+      preLoaderRoute: typeof SettingsIntegrationsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/compliance': {
+      id: '/settings/compliance'
+      path: '/compliance'
+      fullPath: '/settings/compliance'
+      preLoaderRoute: typeof SettingsComplianceRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/collections': {
+      id: '/settings/collections'
+      path: '/collections'
+      fullPath: '/settings/collections'
+      preLoaderRoute: typeof SettingsCollectionsRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/invoices/products': {
@@ -388,6 +700,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSecurityLinkStepupRequestRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/payments/paystack/initialize': {
+      id: '/api/payments/paystack/initialize'
+      path: '/api/payments/paystack/initialize'
+      fullPath: '/api/payments/paystack/initialize'
+      preLoaderRoute: typeof ApiPaymentsPaystackInitializeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/invoice/send/$id': {
       id: '/api/invoice/send/$id'
       path: '/api/invoice/send/$id'
@@ -400,6 +719,34 @@ declare module '@tanstack/react-router' {
       path: '/api/invoice/download/$id'
       fullPath: '/api/invoice/download/$id'
       preLoaderRoute: typeof ApiInvoiceDownloadIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/integrations/xero/connect': {
+      id: '/api/integrations/xero/connect'
+      path: '/api/integrations/xero/connect'
+      fullPath: '/api/integrations/xero/connect'
+      preLoaderRoute: typeof ApiIntegrationsXeroConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/integrations/xero/callback': {
+      id: '/api/integrations/xero/callback'
+      path: '/api/integrations/xero/callback'
+      fullPath: '/api/integrations/xero/callback'
+      preLoaderRoute: typeof ApiIntegrationsXeroCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/integrations/quickbooks/connect': {
+      id: '/api/integrations/quickbooks/connect'
+      path: '/api/integrations/quickbooks/connect'
+      fullPath: '/api/integrations/quickbooks/connect'
+      preLoaderRoute: typeof ApiIntegrationsQuickbooksConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/integrations/quickbooks/callback': {
+      id: '/api/integrations/quickbooks/callback'
+      path: '/api/integrations/quickbooks/callback'
+      fullPath: '/api/integrations/quickbooks/callback'
+      preLoaderRoute: typeof ApiIntegrationsQuickbooksCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$first/$second': {
@@ -442,11 +789,19 @@ const InvoicesRouteWithChildren = InvoicesRoute._addFileChildren(
 )
 
 interface SettingsRouteChildren {
+  SettingsCollectionsRoute: typeof SettingsCollectionsRoute
+  SettingsComplianceRoute: typeof SettingsComplianceRoute
+  SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute
   SettingsSecurityRoute: typeof SettingsSecurityRoute
+  SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsCollectionsRoute: SettingsCollectionsRoute,
+  SettingsComplianceRoute: SettingsComplianceRoute,
+  SettingsIntegrationsRoute: SettingsIntegrationsRoute,
   SettingsSecurityRoute: SettingsSecurityRoute,
+  SettingsIndexRoute: SettingsIndexRoute,
 }
 
 const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
@@ -457,13 +812,27 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
   ClientsRoute: ClientsRouteWithChildren,
+  ComplianceRoute: ComplianceRoute,
+  FeaturesRoute: FeaturesRoute,
   InvoicesRoute: InvoicesRouteWithChildren,
+  PricingRoute: PricingRoute,
+  PrivacyRoute: PrivacyRoute,
+  SecurityRoute: SecurityRoute,
   SettingsRoute: SettingsRouteWithChildren,
+  TermsRoute: TermsRoute,
   ITokenRoute: ITokenRoute,
+  SolutionsEnterpriseRoute: SolutionsEnterpriseRoute,
+  SolutionsSmallBusinessRoute: SolutionsSmallBusinessRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiAuthFirstSecondRoute: ApiAuthFirstSecondRoute,
+  ApiIntegrationsQuickbooksCallbackRoute:
+    ApiIntegrationsQuickbooksCallbackRoute,
+  ApiIntegrationsQuickbooksConnectRoute: ApiIntegrationsQuickbooksConnectRoute,
+  ApiIntegrationsXeroCallbackRoute: ApiIntegrationsXeroCallbackRoute,
+  ApiIntegrationsXeroConnectRoute: ApiIntegrationsXeroConnectRoute,
   ApiInvoiceDownloadIdRoute: ApiInvoiceDownloadIdRoute,
   ApiInvoiceSendIdRoute: ApiInvoiceSendIdRoute,
+  ApiPaymentsPaystackInitializeRoute: ApiPaymentsPaystackInitializeRoute,
   ApiSecurityLinkStepupRequestRoute: ApiSecurityLinkStepupRequestRoute,
   ApiSecurityLinkStepupStatusRoute: ApiSecurityLinkStepupStatusRoute,
   ApiSecurityLinkStepupVerifyRoute: ApiSecurityLinkStepupVerifyRoute,

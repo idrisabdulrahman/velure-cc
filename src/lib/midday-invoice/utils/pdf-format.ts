@@ -11,7 +11,7 @@ import {
  * and prepending the minus sign for negative amounts.
  *
  * @param amount - The numeric amount to format
- * @param currency - The currency code (e.g., "USD", "EUR", "SEK")
+ * @param currency - The currency code (e.g., "USD", "SEK")
  * @param locale - The locale for formatting (e.g., "en-US", "sv-SE")
  * @param maximumFractionDigits - Maximum number of decimal places
  * @returns Properly formatted currency string with minus sign preserved

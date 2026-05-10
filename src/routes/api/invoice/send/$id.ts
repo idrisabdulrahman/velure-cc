@@ -50,6 +50,7 @@ async function handle({ params, request }: { params: { id: string }; request: Re
     from: sanitizeFromAddress(process.env.RESEND_FROM),
     to,
     subject: `Invoice ${invoice.invoiceNumber}`,
+    text: `Invoice ${invoice.invoiceNumber} for ${invoice.customerName} is attached as a PDF. You can also view it online: ${publicUrl}`,
     html: `
       <div style="font-family: Arial, sans-serif; color: #111; line-height: 1.5;">
         <h2 style="margin: 0 0 12px;">Invoice ${invoice.invoiceNumber}</h2>
