@@ -6,10 +6,10 @@
   "includeExamples": false,
   "tailwind": true,
   "addOnOptions": {},
-  "envVarValues": {
-    "CONVEX_DEPLOYMENT": "https://blessed-vole-608.convex.cloud",
-    "VITE_CONVEX_URL": "https://blessed-vole-608.convex.site"
-  },
+"envVarValues": {
+  "CONVEX_DEPLOYMENT": "<your-convex-deployment>",
+  "VITE_CONVEX_URL": "<your-convex-url>"
+},
   "git": true,
   "routerOnly": false,
   "version": 1,
