@@ -56,6 +56,7 @@ Notes:
 
 - `SITE_URL` and `BETTER_AUTH_URL` should point at the same public app domain unless you have a deliberate split setup.
 - `VITE_CONVEX_SITE_URL` must be reachable from the deployed app. If it points to an unreachable Convex site, auth will fail.
+- Keep real Convex deployment URLs in `.env.local` or your deployment platform. If `.cta.json` is committed, leave `envVarValues` empty or use placeholder values instead of exposing a personal/dev Convex deployment URL.
 - Never commit real secrets.
 
 ## Production Build and Run
