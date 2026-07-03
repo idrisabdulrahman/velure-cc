@@ -7,11 +7,12 @@
     "ignoreDeprecations": "5.0",
     "paths": {
       "#/*": ["./src/*"],
+      "#convex/*": ["./convex/*"],
       "@midday/ui/*": ["./src/components/ui/*"],
       "@midday/utils/*": ["./src/shims/midday-utils/*"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vite/client"],
+    "types": ["vite/client","node"],
 
     /* Bundler mode */
     "moduleResolution": "bundler",

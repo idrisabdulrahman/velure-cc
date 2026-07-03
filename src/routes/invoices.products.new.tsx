@@ -1,0 +1,350 @@
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
+import { useState } from "react";
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
+import { Label } from "#/components/ui/label";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "#/components/ui/select";
+import { Switch } from "#/components/ui/switch";
+import { Textarea } from "#/components/ui/textarea";
+import { toast } from "#/components/ui/use-toast";
+import { api } from "../../convex/_generated/api";
+
+export const Route = createFileRoute("/invoices/products/new")({
+	component: NewProductPage,
+});
+
+type FormState = {
+	type: "product" | "service";
+	name: string;
+	description: string;
+	sku: string;
+	unitName: string;
+	defaultUnitPrice: string;
+	defaultTaxId: string;
+	isActive: boolean;
+};
+
+const initialState: FormState = {
+	type: "product",
+	name: "",
+	description: "",
+	sku: "",
+	unitName: "pcs",
+	defaultUnitPrice: "",
+	defaultTaxId: "",
+	isActive: true,
+};
+
+const UNIT_OPTIONS = [
+	{ value: "pcs", label: "Pieces (pcs)" },
+	{ value: "unit", label: "Unit" },
+	{ value: "project", label: "Project" },
+	{ value: "hour", label: "Hour" },
+	{ value: "day", label: "Day" },
+	{ value: "month", label: "Month" },
+	{ value: "kg", label: "Kilogram (kg)" },
+	{ value: "litre", label: "Litre" },
+];
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
+	return new Promise<T>((resolve, reject) => {
+		const timeoutId = window.setTimeout(() => {
+			reject(
+				new Error(
+					"Product creation timed out. Check your Convex connection and try again.",
+				),
+			);
+		}, timeoutMs);
+
+		promise.then(
+			(value) => {
+				window.clearTimeout(timeoutId);
+				resolve(value);
+			},
+			(error: unknown) => {
+				window.clearTimeout(timeoutId);
+				reject(error);
+			},
+		);
+	});
+}
+
+function NewProductPage() {
+	const navigate = useNavigate();
+	const createProduct = useMutation(api.products.create);
+	const [state, setState] = useState<FormState>(initialState);
+	const [submitting, setSubmitting] = useState(false);
+	const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+
+	const nameError =
+		state.name.trim().length === 0 ? "Product name is required" : "";
+	const unitPriceText = state.defaultUnitPrice.trim();
+	const parsedUnitPrice = Number(unitPriceText);
+	const priceError =
+		unitPriceText.length === 0
+			? "Unit price is required"
+			: !Number.isFinite(parsedUnitPrice)
+				? "Unit price must be a valid number"
+				: parsedUnitPrice < 0
+					? "Unit price must be non-negative"
+					: "";
+	const visibleNameError = attemptedSubmit ? nameError : "";
+	const visiblePriceError =
+		attemptedSubmit || unitPriceText.length > 0 ? priceError : "";
+
+	const isValid = !nameError && !priceError;
+	const previewUnitPrice = Number(state.defaultUnitPrice);
+	const hasPreviewUnitPrice =
+		state.defaultUnitPrice.trim().length > 0 &&
+		Number.isFinite(previewUnitPrice) &&
+		previewUnitPrice >= 0;
+
+	const inputClass =
+		"h-10 rounded-md border-[#30352f] bg-[#0f1111] text-sm text-[#f2efe7] placeholder:text-[#737b89] focus-visible:border-[#4a4f45] focus-visible:ring-0";
+
+	const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+		event.preventDefault();
+		setAttemptedSubmit(true);
+		if (!isValid || submitting) return;
+
+		setSubmitting(true);
+		try {
+			const trimmedName = state.name.trim();
+			await withTimeout(
+				createProduct({
+					type: state.type,
+					name: trimmedName,
+					description: state.description.trim() || undefined,
+					sku: state.sku.trim() || undefined,
+					unitName: state.unitName.trim() || undefined,
+					defaultUnitPrice: parsedUnitPrice,
+					defaultTaxId: state.defaultTaxId.trim() || undefined,
+					isActive: state.isActive,
+				}),
+				20_000,
+			);
+
+			toast({
+				title: "Product created",
+				description: `${trimmedName} is now in your catalog.`,
+				variant: "success",
+			});
+			void navigate({ to: "/invoices/products", replace: true });
+		} catch (error) {
+			toast({
+				title: "Could not create product",
+				description: error instanceof Error ? error.message : "Unknown error",
+				variant: "error",
+			});
+		} finally {
+			setSubmitting(false);
+		}
+	};
+
+	return (
+		<div className="flex h-full w-full flex-col gap-5">
+			<div className="flex items-start justify-between gap-4">
+				<div>
+					<h1 className="text-[26px] font-medium tracking-[-0.02em] text-[#f2efe7]">
+						New product
+					</h1>
+					<p className="mt-1 text-sm text-[#8d938f]">
+						Add a product or service to your catalog.
+					</p>
+				</div>
+			</div>
+
+			<div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+				<div className="rounded-md border border-[#30352f] bg-[#171a18]">
+					<div className="p-4 md:p-5">
+						<form onSubmit={onSubmit} className="space-y-4">
+							<div className="grid gap-3 md:grid-cols-2">
+								<Field label="Product type">
+									<Select
+										value={state.type}
+										onValueChange={(value) =>
+											setState((prev) => ({
+												...prev,
+												type: value as "product" | "service",
+											}))
+										}
+									>
+										<SelectTrigger className={`${inputClass} w-full`}>
+											<SelectValue placeholder="Type" />
+										</SelectTrigger>
+										<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
+											<SelectItem value="product">Product</SelectItem>
+											<SelectItem value="service">Service</SelectItem>
+										</SelectContent>
+									</Select>
+								</Field>
+								<Field label="Unit name">
+									<Select
+										value={state.unitName}
+										onValueChange={(value) =>
+											setState((prev) => ({ ...prev, unitName: value }))
+										}
+									>
+										<SelectTrigger className={`${inputClass} w-full`}>
+											<SelectValue placeholder="Unit" />
+										</SelectTrigger>
+										<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
+											{UNIT_OPTIONS.map((option) => (
+												<SelectItem key={option.value} value={option.value}>
+													{option.label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</Field>
+							</div>
+
+							<Field label="Product name *" error={visibleNameError}>
+								<Input
+									value={state.name}
+									onChange={(event) =>
+										setState((prev) => ({ ...prev, name: event.target.value }))
+									}
+									className={inputClass}
+									placeholder="e.g. Battery, Website Design"
+								/>
+							</Field>
+
+							<Field label="Description">
+								<Textarea
+									rows={3}
+									value={state.description}
+									onChange={(event) =>
+										setState((prev) => ({
+											...prev,
+											description: event.target.value,
+										}))
+									}
+									className="resize-none rounded-md border-[#30352f] bg-[#0f1111] text-sm text-[#f2efe7] placeholder:text-[#737b89] focus-visible:border-[#4a4f45] focus-visible:ring-0"
+									placeholder="Optional description"
+								/>
+							</Field>
+
+							<div className="grid gap-3 md:grid-cols-2">
+								<Field label="SKU">
+									<Input
+										value={state.sku}
+										onChange={(event) =>
+											setState((prev) => ({ ...prev, sku: event.target.value }))
+										}
+										className={inputClass}
+										placeholder="Optional SKU"
+									/>
+								</Field>
+								<Field label="Default unit price *" error={visiblePriceError}>
+									<Input
+										type="text"
+										inputMode="decimal"
+										value={state.defaultUnitPrice}
+										onChange={(event) =>
+											setState((prev) => ({
+												...prev,
+												defaultUnitPrice: event.target.value,
+											}))
+										}
+										className={inputClass}
+										placeholder="0.00"
+									/>
+								</Field>
+							</div>
+
+							<Field label="Default tax ID">
+								<Input
+									value={state.defaultTaxId}
+									onChange={(event) =>
+										setState((prev) => ({
+											...prev,
+											defaultTaxId: event.target.value,
+										}))
+									}
+									className={inputClass}
+									placeholder="Optional tax ID"
+								/>
+							</Field>
+
+							<div className="inline-flex items-center gap-2 text-sm text-[#d8d1c4]">
+								<Switch
+									checked={state.isActive}
+									onCheckedChange={(checked) =>
+										setState((prev) => ({ ...prev, isActive: checked }))
+									}
+									className="data-[state=checked]:bg-[#c8ff62] data-[state=unchecked]:bg-[#30352f]"
+								/>
+								<span>Active</span>
+							</div>
+
+							<div className="flex items-center justify-between border-t border-[#30352f] pt-4">
+								<Button
+									type="button"
+									variant="outline"
+									onClick={() => navigate({ to: "/invoices/products" })}
+									className="h-10 rounded-md border-[#30352f] bg-transparent text-sm font-medium text-[#d8d1c4] hover:bg-[#20241f] hover:text-[#f2efe7]"
+								>
+									Cancel
+								</Button>
+								<Button
+									type="submit"
+									disabled={!isValid || submitting}
+									className="h-10 rounded-md bg-[#c8ff62] text-sm font-medium text-[#0f1111] hover:bg-[#d5ff7a] disabled:bg-[#3f5130] disabled:text-[#817d72]"
+								>
+									{submitting ? "Creating..." : "Create product"}
+								</Button>
+							</div>
+							<p className="text-xs text-[#8d938f]">* Required fields</p>
+						</form>
+					</div>
+				</div>
+
+				<aside className="h-fit rounded-md border border-[#30352f] bg-[#171a18] p-4">
+					<h2 className="text-sm font-medium text-[#f2efe7]">Preview</h2>
+					<div className="mt-3 rounded-md border border-[#30352f] bg-[#0f1111] p-3 text-xs text-[#d8d1c4]">
+						<p className="font-medium text-[#f2efe7]">
+							{state.name || "Product name"}
+						</p>
+						<p className="mt-1 capitalize">{state.type}</p>
+						<p className="mt-1">
+							{hasPreviewUnitPrice
+								? `₦${previewUnitPrice.toLocaleString()}`
+								: "₦0.00"}{" "}
+							/ {state.unitName || "unit"}
+						</p>
+						{state.sku && <p className="mt-1">SKU: {state.sku}</p>}
+						<p className="mt-1">
+							Status: {state.isActive ? "Active" : "Inactive"}
+						</p>
+					</div>
+				</aside>
+			</div>
+		</div>
+	);
+}
+
+function Field({
+	label,
+	error,
+	children,
+}: {
+	label: string;
+	error?: string;
+	children: React.ReactNode;
+}) {
+	return (
+		<div className="space-y-1.5">
+			<Label className="text-xs text-[#8d938f]">{label}</Label>
+			{children}
+			{error ? <p className="text-xs text-[#c76f5b]">{error}</p> : null}
+		</div>
+	);
+}

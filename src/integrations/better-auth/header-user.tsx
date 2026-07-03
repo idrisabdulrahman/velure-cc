@@ -1,44 +1,46 @@
-import { authClient } from "#/lib/auth-client";
 import { Link } from "@tanstack/react-router";
+import { authClient } from "#/lib/auth-client";
 
 export default function BetterAuthHeader() {
-  const { data: session, isPending } = authClient.useSession();
+	const { data: session, isPending } = authClient.useSession();
 
-  if (isPending) {
-    return <div className="h-8 w-8 bg-neutral-100 dark:bg-neutral-800 animate-pulse" />;
-  }
+	if (isPending) {
+		return (
+			<div className="h-8 w-8 animate-pulse border border-[#30352f] bg-[#151817]" />
+		);
+	}
 
-  if (session?.user) {
-    return (
-      <div className="flex items-center gap-2">
-        {session.user.image ? (
-          <img src={session.user.image} alt="" className="h-8 w-8" />
-        ) : (
-          <div className="h-8 w-8 bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
-            <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">
-              {session.user.name?.charAt(0).toUpperCase() || "U"}
-            </span>
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            void authClient.signOut();
-          }}
-          className="flex-1 h-9 px-4 text-sm font-medium bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-50 border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
-        >
-          Sign out
-        </button>
-      </div>
-    );
-  }
+	if (session?.user) {
+		return (
+			<div className="flex items-center gap-2">
+				{session.user.image ? (
+					<img src={session.user.image} alt="" className="h-8 w-8" />
+				) : (
+					<div className="flex h-8 w-8 items-center justify-center border border-[#c8ff62]/45 bg-[#1a2117]">
+						<span className="text-xs font-bold text-[#f2efe7]">
+							{session.user.name?.charAt(0).toUpperCase() || "U"}
+						</span>
+					</div>
+				)}
+				<button
+					type="button"
+					onClick={() => {
+						void authClient.signOut();
+					}}
+					className="h-9 flex-1 border border-[#30352f] bg-[#151817] px-4 text-sm font-medium text-[#d8d1c4] transition-colors hover:border-[#3f5130] hover:bg-[#1a2117] hover:text-[#f2efe7]"
+				>
+					Sign out
+				</button>
+			</div>
+		);
+	}
 
-  return (
-    <Link
-      to="/auth"
-      className="h-9 px-4 text-sm font-medium bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-50 border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors inline-flex items-center"
-    >
-      Sign in
-    </Link>
-  );
+	return (
+		<Link
+			to="/auth"
+			className="inline-flex h-9 items-center border border-[#30352f] bg-[#151817] px-4 text-sm font-medium text-[#d8d1c4] transition-colors hover:border-[#3f5130] hover:bg-[#1a2117] hover:text-[#f2efe7]"
+		>
+			Sign in
+		</Link>
+	);
 }

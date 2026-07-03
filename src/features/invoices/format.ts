@@ -33,6 +33,7 @@ export function formatMoney(
 			: "code",
 	}: FormatMoneyOptions = {},
 ) {
+	const safeValue = Number.isFinite(value) ? value : 0;
 	const normalizedCurrency = normalizeCurrencyCode(currency);
 	const formatted = new Intl.NumberFormat(
 		locale ?? resolveCurrencyLocale(normalizedCurrency),
@@ -42,9 +43,31 @@ export function formatMoney(
 			currencyDisplay,
 			maximumFractionDigits,
 		},
-	).format(value);
+	).format(safeValue);
 
 	return formatted.replace(/[\u00A0\u202F]/g, " ");
+}
+
+export function formatCompactMoney(value: number, currency = "NGN") {
+	const absValue = Math.abs(value);
+	const compact =
+		absValue >= 1_000_000_000_000
+			? { divisor: 1_000_000_000_000, suffix: "T" }
+			: absValue >= 1_000_000_000
+				? { divisor: 1_000_000_000, suffix: "B" }
+				: absValue >= 1_000_000
+					? { divisor: 1_000_000, suffix: "M" }
+					: absValue >= 1_000
+						? { divisor: 1_000, suffix: "K" }
+						: null;
+
+	if (!compact) {
+		return formatMoney(value, currency, { maximumFractionDigits: 0 });
+	}
+
+	return `${formatMoney(value / compact.divisor, currency, {
+		maximumFractionDigits: absValue >= compact.divisor * 10 ? 1 : 2,
+	})}${compact.suffix}`;
 }
 
 export function formatInvoiceDate(

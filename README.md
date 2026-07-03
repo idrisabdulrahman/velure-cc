@@ -9,13 +9,14 @@ Velure is a dark-first invoice and client billing workspace built with TanStack 
 - Convex for backend data and Better Auth integration
 - Better Auth for email/password and Google OAuth
 - Resend for password reset and invoice email delivery
+- pnpm for package management
 
 ## Local Development
 
 ### Prerequisites
 
 - Node.js 20+
-- Bun
+- pnpm 10.32.1, preferably via Corepack
 - A reachable Convex deployment
 - Better Auth / Google OAuth credentials if you want to test auth flows
 - Resend API key if you want to test email delivery
@@ -23,13 +24,15 @@ Velure is a dark-first invoice and client billing workspace built with TanStack 
 ### Install
 
 ```bash
-bun install
+corepack enable
+corepack prepare pnpm@10.32.1 --activate
+pnpm install
 ```
 
 ### Start development server
 
 ```bash
-bun run dev
+pnpm dev
 ```
 
 The app runs on `http://localhost:3000`.
@@ -47,6 +50,7 @@ Required or commonly required values:
 - `BETTER_AUTH_URL`: public Better Auth base URL for the app
 - `BETTER_AUTH_BASE_URL`: optional explicit auth base URL override
 - `BETTER_AUTH_SECRET`: Better Auth signing secret
+- `AUTH_SESSION_VERSION`: optional version string; bump it to invalidate session-cache cookies
 - `GOOGLE_CLIENT_ID`: Google OAuth client ID
 - `GOOGLE_CLIENT_SECRET`: Google OAuth client secret
 - `RESEND_API_KEY`: Resend API key for email delivery
@@ -56,6 +60,7 @@ Notes:
 
 - `SITE_URL` and `BETTER_AUTH_URL` should point at the same public app domain unless you have a deliberate split setup.
 - `VITE_CONVEX_SITE_URL` must be reachable from the deployed app. If it points to an unreachable Convex site, auth will fail.
+- Bump `AUTH_SESSION_VERSION` when you need all browsers to refresh auth state and sign in again.
 - Keep real Convex deployment URLs in `.env.local` or your deployment platform. If `.cta.json` is committed, leave `envVarValues` empty or use placeholder values instead of exposing a personal/dev Convex deployment URL.
 - Never commit real secrets.
 
@@ -64,7 +69,7 @@ Notes:
 ### Build
 
 ```bash
-bun run build
+pnpm build
 ```
 
 The production build uses a larger Node heap because the Nitro server build can otherwise exhaust memory on this codebase.
@@ -72,7 +77,7 @@ The production build uses a larger Node heap because the Nitro server build can 
 ### Start production server
 
 ```bash
-PORT=3000 bun run start
+PORT=3000 pnpm start
 ```
 
 The production server:
@@ -172,11 +177,11 @@ If you change callback URLs, domains, or auth secrets, redeploy so the container
 
 ## Scripts
 
-- `bun run dev`: start the development server on port 3000
-- `bun run build`: create the production build
-- `bun run start`: run the built Nitro server
-- `bun run test`: run tests
-- `bun run check`: run Biome checks
+- `pnpm dev`: start the development server on port 3000
+- `pnpm build`: create the production build
+- `pnpm start`: run the built Nitro server
+- `pnpm test`: run tests
+- `pnpm check`: run Biome checks
 
 ## Temporary Branding Note
 

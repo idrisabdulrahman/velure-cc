@@ -3,17 +3,17 @@ import type { EditorDoc } from "../../../types";
 import { EditorContent } from "./editor-content";
 
 type Props = {
-  content?: EditorDoc | null;
-  paymentLabel?: string;
+	content?: EditorDoc | null;
+	paymentLabel?: string;
 };
 
 export function PaymentDetails({ content, paymentLabel }: Props) {
-  if (!content) return null;
+	if (!content) return null;
 
-  return (
-    <View style={{ marginTop: 20 }}>
-      <Text style={{ fontSize: 9, fontWeight: 500 }}>{paymentLabel}</Text>
-      <EditorContent content={content} />
-    </View>
-  );
+	return (
+		<View style={{ marginTop: 20 }}>
+			<Text style={{ fontSize: 9, fontWeight: 500 }}>{paymentLabel}</Text>
+			<EditorContent content={content} />
+		</View>
+	);
 }

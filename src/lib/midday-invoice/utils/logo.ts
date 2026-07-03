@@ -1,11 +1,11 @@
 export async function isValidLogoUrl(url: string): Promise<boolean> {
-  if (!url) return false;
+	if (!url) return false;
 
-  try {
-    const response = await fetch(url);
+	try {
+		const response = await fetch(url);
 
-    return response.ok;
-  } catch {
-    return false;
-  }
+		return response.ok;
+	} catch {
+		return false;
+	}
 }

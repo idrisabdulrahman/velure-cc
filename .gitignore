@@ -4,6 +4,7 @@ node_modules/
 .DS_Store
 dist
 dist-ssr
+# tests/
 *.local
 .env
 .env.local
@@ -14,3 +15,12 @@ dist-ssr
 .vinxi
 __unconfig*
 todos.json
+test-results/
+skills-lock.json
+review.md
+.vscode/mcp.json
+Architecture.md
+DATAFLOW_TEMPLATE.MD
+ProductStrategy.md
+skills-outsource/
+.mcp.json

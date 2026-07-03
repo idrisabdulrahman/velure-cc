@@ -3,13 +3,17 @@ import type { EditorDoc } from "../../../types";
 import { formatEditorContent } from "../format";
 
 type Props = {
-  content?: EditorDoc | null;
+	content?: EditorDoc | null;
 };
 
 export function EditorContent({ content }: Props) {
-  if (!content) {
-    return null;
-  }
+	if (!content) {
+		return null;
+	}
 
-  return <View style={{ marginTop: 10, lineHeight: 0.9 }}>{formatEditorContent(content)}</View>;
+	return (
+		<View style={{ marginTop: 10, lineHeight: 0.9 }}>
+			{formatEditorContent(content)}
+		</View>
+	);
 }

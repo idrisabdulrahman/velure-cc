@@ -1,33 +1,49 @@
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
+	Sheet,
+	SheetContent,
+	SheetDescription,
+	SheetHeader,
+	SheetTitle,
 } from "#/components/ui/sheet";
+import type { ImportedInvoiceDraft } from "#/features/invoices/import-spreadsheet";
 import { CreateInvoicePanel } from "./create-invoice-panel";
 
 type CreateInvoiceSheetProps = {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreated?: (invoiceId: string) => void;
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	onCreated?: (invoiceId: string) => void;
+	initialDraft?: ImportedInvoiceDraft | null;
+	initialDocumentType?: "standard" | "proforma";
 };
 
-export function CreateInvoiceSheet({ open, onOpenChange, onCreated }: CreateInvoiceSheetProps) {
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        contentClassName="w-full p-0 md:p-0 sm:max-w-[940px]"
-        className="flex h-full min-h-0 flex-col border-[#2b2d30] bg-[#121314] p-0 text-[#ece7de]"
-        title="Create invoice"
-      >
-        <SheetHeader className="sr-only">
-          <SheetTitle>Create invoice</SheetTitle>
-          <SheetDescription>Create a new invoice without leaving the dashboard.</SheetDescription>
-        </SheetHeader>
-        <CreateInvoicePanel mode="sheet" onCreated={onCreated} />
-      </SheetContent>
-    </Sheet>
-  );
+export function CreateInvoiceSheet({
+	open,
+	onOpenChange,
+	onCreated,
+	initialDraft,
+	initialDocumentType = "standard",
+}: CreateInvoiceSheetProps) {
+	return (
+		<Sheet open={open} onOpenChange={onOpenChange}>
+			<SheetContent
+				side="right"
+				contentClassName="w-full p-0 md:p-0 sm:max-w-[940px]"
+				className="flex h-full min-h-0 flex-col border-[#30352f] bg-[#0f1111] p-0 text-[#f2efe7]"
+				title="Create invoice"
+			>
+				<SheetHeader className="sr-only">
+					<SheetTitle>Create invoice</SheetTitle>
+					<SheetDescription>
+						Create a new invoice without leaving the dashboard.
+					</SheetDescription>
+				</SheetHeader>
+				<CreateInvoicePanel
+					mode="sheet"
+					onCreated={onCreated}
+					initialDraft={initialDraft}
+					initialDocumentType={initialDocumentType}
+				/>
+			</SheetContent>
+		</Sheet>
+	);
 }

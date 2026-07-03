@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { QueryClient, QueryClientProvider, isServer } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { convexQueryClient } from "#/integrations/convex/provider";
 
 type AppContext = {
   queryClient: QueryClient;
@@ -8,14 +9,23 @@ type AppContext = {
 let browserQueryClient: QueryClient | undefined;
 
 function createQueryClient() {
-  return new QueryClient();
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        queryKeyHashFn: convexQueryClient!.hashFn(),
+        queryFn: convexQueryClient!.queryFn(),
+        staleTime: 30_000,
+        gcTime: 600_000,
+      },
+    },
+  });
+
+  convexQueryClient!.connect(queryClient);
+
+  return queryClient;
 }
 
 function getQueryClient() {
-  if (isServer) {
-    return createQueryClient();
-  }
-
   if (!browserQueryClient) {
     browserQueryClient = createQueryClient();
   }

@@ -10,33 +10,37 @@ import { isValidJSON } from "./content";
  * @returns The extracted text content or the original value if extraction fails
  */
 export function extractTextFromValue(value: string): string {
-  if (isValidJSON(value)) {
-    try {
-      const parsed = JSON.parse(value);
+	if (isValidJSON(value)) {
+		try {
+			const parsed = JSON.parse(value);
 
-      // If it's a string, return as is
-      if (typeof parsed === "string") {
-        return parsed;
-      }
+			// If it's a string, return as is
+			if (typeof parsed === "string") {
+				return parsed;
+			}
 
-      // Use TipTap's generateText utility for JSON content
-      if (typeof parsed === "object" && parsed !== null) {
-        try {
-          const textContent = generateText(parsed, [StarterKit, Link, Underline]);
+			// Use TipTap's generateText utility for JSON content
+			if (typeof parsed === "object" && parsed !== null) {
+				try {
+					const textContent = generateText(parsed, [
+						StarterKit,
+						Link,
+						Underline,
+					]);
 
-          if (textContent.trim()) {
-            return textContent.trim();
-          }
-        } catch {
-          // If generateText fails, return original value
-          return value;
-        }
-      }
-    } catch {
-      // If parsing fails, return original value
-      return value;
-    }
-  }
+					if (textContent.trim()) {
+						return textContent.trim();
+					}
+				} catch {
+					// If generateText fails, return original value
+					return value;
+				}
+			}
+		} catch {
+			// If parsing fails, return original value
+			return value;
+		}
+	}
 
-  return value;
+	return value;
 }

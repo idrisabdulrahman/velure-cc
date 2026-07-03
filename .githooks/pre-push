@@ -3,4 +3,4 @@
 set -eu
 
 echo "pre-push: running production build"
-bun run hooks:pre-push
+pnpm run hooks:pre-push

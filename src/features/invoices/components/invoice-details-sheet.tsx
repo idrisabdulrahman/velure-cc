@@ -15,12 +15,6 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { FaTelegram, FaWhatsapp } from "react-icons/fa6";
 import { Button } from "#/components/ui/button";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "#/components/ui/dropdown-menu";
 import { Input } from "#/components/ui/input";
 import {
 	Sheet,
@@ -68,7 +62,14 @@ type Props = {
 		status: InvoiceRecord["status"],
 		details?: { paidAt?: number; paymentReference?: string },
 	) => Promise<void> | void;
+	onRecordPayment?: (
+		id: string,
+		amount: number,
+		reference?: string,
+	) => Promise<void> | void;
 };
+
+const AUTOSAVE_DEBOUNCE_MS = 1600;
 
 const PERSISTABLE_WARNING_CODES = new Set<ComplianceWarningCode>([
 	"missing_seller_tax_id",
@@ -116,12 +117,33 @@ function shareLinks(invoice: InvoiceRecord) {
 	return { publicUrl, telegramHref, whatsappHref };
 }
 
+async function readSendEmailPayload(response: Response) {
+	const body = await response.text();
+	if (!body) return {};
+
+	try {
+		return JSON.parse(body) as { ok?: boolean; error?: string };
+	} catch {
+		const message = body
+			.replace(/<[^>]*>/g, " ")
+			.replace(/\s+/g, " ")
+			.trim()
+			.slice(0, 240);
+		return { error: message || undefined };
+	}
+}
+
 function serializeInvoiceDraft(invoice: InvoiceRecord) {
 	return JSON.stringify({
 		id: invoice.id,
 		token: invoice.token,
+		documentType: invoice.documentType,
+		convertedToInvoiceId: invoice.convertedToInvoiceId,
+		shipmentDetails: invoice.shipmentDetails,
+		depositRequest: invoice.depositRequest,
 		invoiceNumber: invoice.invoiceNumber,
 		customerName: invoice.customerName,
+		customerPoNumber: invoice.customerPoNumber,
 		logoUrl: invoice.logoUrl,
 		currency: invoice.currency,
 		type: invoice.type,
@@ -133,8 +155,6 @@ function serializeInvoiceDraft(invoice: InvoiceRecord) {
 		dueDate: invoice.dueDate,
 		status: invoice.status,
 		paymentDetails: invoice.paymentDetails,
-		paymentLink: invoice.paymentLink,
-		paymentProvider: invoice.paymentProvider,
 		paidAt: invoice.paidAt,
 		paymentReference: invoice.paymentReference,
 		notes: invoice.notes,
@@ -144,14 +164,22 @@ function serializeInvoiceDraft(invoice: InvoiceRecord) {
 }
 
 function withPersistableCompliance(invoice: InvoiceRecord): InvoiceRecord {
-	if (!invoice.compliance) return invoice;
+	const withoutManualPaymentLink: InvoiceRecord = {
+		...invoice,
+		paymentLink: undefined,
+		paymentProvider:
+			invoice.paymentProvider === "manual"
+				? undefined
+				: invoice.paymentProvider,
+	};
+	if (!invoice.compliance) return withoutManualPaymentLink;
 	const {
 		netPayable: _netPayable,
 		sellerTaxStatus: _sellerTaxStatus,
 		...persistableCompliance
 	} = invoice.compliance;
 	return {
-		...invoice,
+		...withoutManualPaymentLink,
 		compliance: {
 			...persistableCompliance,
 			warnings: invoice.compliance.warnings.filter((warning) =>
@@ -248,12 +276,12 @@ function NumberStepperInput({
 	};
 
 	return (
-		<div className="flex h-10 items-center overflow-hidden rounded-md border border-[#2b2d30] bg-[#17191b]">
+		<div className="flex h-10 items-center overflow-hidden rounded-md border border-[#30352f] bg-[#171a18]">
 			<button
 				type="button"
 				disabled={disabled}
 				onClick={() => apply(value - step)}
-				className="inline-flex h-full w-10 items-center justify-center border-r border-[#2b2d30] text-[#9c968a] transition-colors hover:bg-[#20241e] hover:text-[#ece7de] disabled:cursor-not-allowed disabled:opacity-40"
+				className="inline-flex h-full w-10 items-center justify-center border-r border-[#30352f] text-[#9c968a] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7] disabled:cursor-not-allowed disabled:opacity-40"
 				aria-label="Decrease value"
 			>
 				-
@@ -265,13 +293,13 @@ function NumberStepperInput({
 				step={step}
 				value={value}
 				onChange={(event) => apply(Number(event.target.value) || min)}
-				className="h-full w-full border-0 bg-transparent px-3 text-center text-sm text-[#ece7de] [appearance:textfield] outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+				className="h-full w-full border-0 bg-transparent px-3 text-center text-sm text-[#f2efe7] [appearance:textfield] outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
 			/>
 			<button
 				type="button"
 				disabled={disabled}
 				onClick={() => apply(value + step)}
-				className="inline-flex h-full w-10 items-center justify-center border-l border-[#2b2d30] text-[#9c968a] transition-colors hover:bg-[#20241e] hover:text-[#ece7de] disabled:cursor-not-allowed disabled:opacity-40"
+				className="inline-flex h-full w-10 items-center justify-center border-l border-[#30352f] text-[#9c968a] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7] disabled:cursor-not-allowed disabled:opacity-40"
 				aria-label="Increase value"
 			>
 				+
@@ -290,9 +318,9 @@ function Section({
 	children: ReactNode;
 }) {
 	return (
-		<section className="rounded-md border border-[#2b2d30] bg-[#17191b]">
-			<div className="border-b border-[#2b2d30] px-5 py-4">
-				<h3 className="text-sm font-medium text-[#ece7de]">{title}</h3>
+		<section className="ui-panel rounded-md border border-[#30352f] bg-[#171a18]">
+			<div className="border-b border-[#30352f] px-5 py-4">
+				<h3 className="text-sm font-medium text-[#f2efe7]">{title}</h3>
 				{subtitle ? (
 					<p className="mt-1 text-sm text-[#9c968a]">{subtitle}</p>
 				) : null}
@@ -312,9 +340,101 @@ function FieldLabel({ children }: { children: ReactNode }) {
 
 function CompactMetric({ label, value }: { label: string; value: string }) {
 	return (
-		<div className="rounded-md border border-[#2b2d30] bg-[#111315] px-3 py-3">
-			<div className="text-xs text-[#7f7a72]">{label}</div>
-			<div className="mt-2 text-base font-medium text-[#ece7de]">{value}</div>
+		<div className="rounded-md border border-[#30352f] bg-[#0f1111] px-3 py-3">
+			<div className="text-xs text-[#817d72]">{label}</div>
+			<div className="mt-2 text-base font-medium text-[#f2efe7]">{value}</div>
+		</div>
+	);
+}
+
+function SkeletonBlock({ className = "" }: { className?: string }) {
+	return (
+		<div
+			className={`animate-pulse rounded-md bg-[#242923] shadow-[inset_0_0_0_1px_rgba(200,255,98,0.03)] ${className}`}
+		/>
+	);
+}
+
+function InvoiceDetailsSkeleton() {
+	return (
+		<div className="flex h-full min-h-0 flex-col">
+			<div className="shrink-0 border-b border-[#30352f] bg-[#101211] px-6 py-5">
+				<div className="flex items-start justify-between gap-6">
+					<div className="min-w-0 flex-1">
+						<SkeletonBlock className="h-8 w-56" />
+						<SkeletonBlock className="mt-3 h-4 w-80 max-w-full" />
+					</div>
+					<div className="hidden w-44 space-y-2 sm:block">
+						<SkeletonBlock className="h-4 w-full" />
+						<SkeletonBlock className="h-4 w-32 ml-auto" />
+					</div>
+				</div>
+			</div>
+
+			<div className="flex-1 overflow-hidden px-6 py-6">
+				<div className="space-y-6">
+					<section className="ui-panel rounded-md border border-[#30352f] bg-[#171a18]">
+						<div className="border-b border-[#30352f] px-5 py-4">
+							<SkeletonBlock className="h-4 w-32" />
+							<SkeletonBlock className="mt-2 h-3 w-52" />
+						</div>
+						<div className="px-5 py-5">
+							<div className="grid gap-3 md:grid-cols-4">
+								{["issue", "due", "status", "total"].map((item) => (
+									<div
+										key={item}
+										className="rounded-md border border-[#30352f] bg-[#0f1111] px-3 py-3"
+									>
+										<SkeletonBlock className="h-3 w-16" />
+										<SkeletonBlock className="mt-3 h-5 w-24" />
+									</div>
+								))}
+							</div>
+							<div className="mt-5 grid gap-4 md:grid-cols-2">
+								{["number", "customer", "issue-date", "due-date"].map(
+									(item) => (
+										<div key={item}>
+											<SkeletonBlock className="mb-2 h-3 w-20" />
+											<SkeletonBlock className="h-10 w-full" />
+										</div>
+									),
+								)}
+							</div>
+						</div>
+					</section>
+
+					<section className="ui-panel rounded-md border border-[#30352f] bg-[#171a18]">
+						<div className="border-b border-[#30352f] px-5 py-4">
+							<SkeletonBlock className="h-4 w-24" />
+							<SkeletonBlock className="mt-2 h-3 w-64 max-w-full" />
+						</div>
+						<div className="space-y-3 px-5 py-5">
+							{["line-1", "line-2", "line-3"].map((item) => (
+								<div
+									key={item}
+									className="grid gap-3 rounded-md border border-[#30352f] bg-[#0f1111] p-3 md:grid-cols-[1fr_110px_120px_130px_44px]"
+								>
+									<SkeletonBlock className="h-10" />
+									<SkeletonBlock className="h-10" />
+									<SkeletonBlock className="h-10" />
+									<SkeletonBlock className="h-10" />
+									<SkeletonBlock className="h-10" />
+								</div>
+							))}
+						</div>
+					</section>
+				</div>
+			</div>
+
+			<div className="shrink-0 border-t border-[#30352f] bg-[#15171a] px-6 py-4">
+				<div className="flex items-center justify-between gap-4">
+					<SkeletonBlock className="h-4 w-56" />
+					<div className="flex gap-3">
+						<SkeletonBlock className="h-10 w-20" />
+						<SkeletonBlock className="h-10 w-28 bg-[#405126]" />
+					</div>
+				</div>
+			</div>
 		</div>
 	);
 }
@@ -325,6 +445,7 @@ export function InvoiceDetailsSheet({
 	invoice,
 	onSave,
 	onStatusChange,
+	onRecordPayment,
 }: Props) {
 	const workspace = useQuery(api.compliance.getWorkspaceSettings, {});
 	const [draft, setDraft] = useState<InvoiceRecord | null>(
@@ -360,11 +481,7 @@ export function InvoiceDetailsSheet({
 		setRecipientEmail(normalizedInvoice?.compliance?.buyer?.email ?? "");
 		setPaymentReference(normalizedInvoice?.paymentReference ?? "");
 		setShowCompliance(false);
-		setShowPayment(
-			Boolean(
-				normalizedInvoice?.paymentLink || normalizedInvoice?.paymentReference,
-			),
-		);
+		setShowPayment(Boolean(normalizedInvoice?.paymentReference));
 		setShowNotes(
 			Boolean(normalizedInvoice?.notes || normalizedInvoice?.paymentDetails),
 		);
@@ -440,25 +557,8 @@ export function InvoiceDetailsSheet({
 
 		if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
 		autosaveTimeoutRef.current = setTimeout(() => {
-			setSaving(true);
-			void Promise.resolve(onSave(withPersistableCompliance(draft)))
-				.then(() => {
-					lastSavedSnapshotRef.current = snapshot;
-					showSavePill("saved");
-				})
-				.catch((error: unknown) => {
-					showSavePill("error");
-					toast({
-						title: "Could not save invoice",
-						description:
-							error instanceof Error ? error.message : "Unknown error",
-						variant: "error",
-					});
-				})
-				.finally(() => {
-					setSaving(false);
-				});
-		}, 700);
+			void persistDraft(draft).catch(() => undefined);
+		}, AUTOSAVE_DEBOUNCE_MS);
 
 		return () => {
 			if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
@@ -603,23 +703,27 @@ export function InvoiceDetailsSheet({
 				`/api/invoice/send/${encodeURIComponent(draft.id)}`,
 				{
 					method: "POST",
+					credentials: "include",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({ to }),
 				},
 			);
 
-			const payload = (await response.json()) as {
-				ok?: boolean;
-				error?: string;
-			};
+			const payload = await readSendEmailPayload(response);
 			if (!response.ok || !payload.ok) {
-				setEmailStatus(payload.error ?? "Failed to send invoice email.");
+				setEmailStatus(
+					payload.error ?? `Failed to send invoice email (${response.status}).`,
+				);
 				return;
 			}
 
 			setEmailStatus("Invoice email sent.");
-		} catch {
-			setEmailStatus("Failed to send invoice email.");
+		} catch (error) {
+			setEmailStatus(
+				error instanceof Error
+					? error.message
+					: "Failed to send invoice email.",
+			);
 		} finally {
 			setIsSendingEmail(false);
 		}
@@ -634,6 +738,30 @@ export function InvoiceDetailsSheet({
 					description: `Created as ${draft.status.toUpperCase()}.`,
 					icon: FileText,
 				},
+				...(draft.lifecycle?.sentAt
+					? [
+							{
+								id: "sent",
+								label: "Invoice sent",
+								meta: new Date(draft.lifecycle.sentAt).toLocaleDateString(),
+								description: "Email delivered to recipient.",
+								icon: Send,
+							},
+						]
+					: []),
+				...(draft.lifecycle?.firstViewedAt
+					? [
+							{
+								id: "viewed",
+								label: "First viewed",
+								meta: new Date(
+									draft.lifecycle.firstViewedAt,
+								).toLocaleDateString(),
+								description: "Recipient opened the invoice.",
+								icon: ExternalLink,
+							},
+						]
+					: []),
 				{
 					id: "due",
 					label: "Payment due",
@@ -641,10 +769,26 @@ export function InvoiceDetailsSheet({
 					description: "Expected settlement date for this invoice.",
 					icon: CalendarClock,
 				},
+				...(draft.lifecycle?.paymentReceivedAt
+					? [
+							{
+								id: "paid",
+								label: "Payment received",
+								meta: new Date(
+									draft.lifecycle.paymentReceivedAt,
+								).toLocaleDateString(),
+								description: "Payment confirmed.",
+								icon: CheckCircle2,
+							},
+						]
+					: []),
 				{
 					id: "status",
 					label: "Current status",
-					meta: draft.status.toUpperCase(),
+					meta:
+						draft.status === "partially-paid"
+							? "PARTIALLY PAID"
+							: draft.status.toUpperCase(),
 					description: "Latest workflow state applied to this invoice.",
 					icon: CheckCircle2,
 				},
@@ -657,16 +801,16 @@ export function InvoiceDetailsSheet({
 				<SheetContent
 					side="right"
 					contentClassName="w-full sm:max-w-[820px] p-0"
-					className="flex h-full min-h-0 flex-col border-[#2b2d30] bg-[#111315] p-0 text-[#ece7de]"
+					className="flex h-full min-h-0 flex-col border-[#30352f] bg-[#101211] p-0 text-[#f2efe7] [background-image:none]"
 					title={draft ? `Edit ${draft.invoiceNumber}` : "Edit invoice"}
 				>
 					{draft ? (
 						<>
-							<div className="border-b border-[#2b2d30] px-6 py-5">
+							<div className="border-b border-[#30352f] bg-[#101211] px-6 py-5">
 								<SheetHeader className="space-y-0 text-left">
 									<div className="flex items-start justify-between gap-6">
 										<div>
-											<SheetTitle className="text-[28px] font-semibold tracking-[-0.03em] text-[#ece7de]">
+											<SheetTitle className="text-[28px] font-semibold tracking-[-0.03em] text-[#f2efe7]">
 												{draft.invoiceNumber}
 											</SheetTitle>
 											<SheetDescription className="mt-2 text-sm text-[#9c968a]">
@@ -675,14 +819,14 @@ export function InvoiceDetailsSheet({
 										</div>
 										<div className="grid gap-1 text-right text-sm text-[#9c968a]">
 											<div>
-												<span className="text-[#7f7a72]">Customer:</span>{" "}
-												<span className="text-[#ece7de]">
+												<span className="text-[#817d72]">Customer:</span>{" "}
+												<span className="text-[#f2efe7]">
 													{draft.customerName || "Unassigned"}
 												</span>
 											</div>
 											<div>
-												<span className="text-[#7f7a72]">Amount:</span>{" "}
-												<span className="text-[#ece7de]">
+												<span className="text-[#817d72]">Amount:</span>{" "}
+												<span className="text-[#f2efe7]">
 													{formatMoney(invoiceTotal(draft), draft.currency)}
 												</span>
 											</div>
@@ -727,7 +871,7 @@ export function InvoiceDetailsSheet({
 															invoiceNumber: event.target.value.toUpperCase(),
 														}))
 													}
-													className="h-10 rounded-md border-[#2b2d30] bg-[#111315] text-[#ece7de]"
+													className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
 												/>
 											</div>
 											<div>
@@ -749,7 +893,21 @@ export function InvoiceDetailsSheet({
 																: prev.compliance,
 														}))
 													}
-													className="h-10 rounded-md border-[#2b2d30] bg-[#111315] text-[#ece7de]"
+													className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
+												/>
+											</div>
+											<div>
+												<FieldLabel>Customer PO number</FieldLabel>
+												<Input
+													value={draft.customerPoNumber ?? ""}
+													onChange={(event) =>
+														patchDraft((prev) => ({
+															...prev,
+															customerPoNumber: event.target.value.slice(0, 80),
+														}))
+													}
+													placeholder="PO number from the client"
+													className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
 												/>
 											</div>
 											<div>
@@ -763,7 +921,7 @@ export function InvoiceDetailsSheet({
 															issueDate: event.target.value,
 														}))
 													}
-													className="h-10 rounded-md border-[#2b2d30] bg-[#111315] text-[#ece7de]"
+													className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
 												/>
 											</div>
 											<div>
@@ -777,7 +935,7 @@ export function InvoiceDetailsSheet({
 															dueDate: event.target.value,
 														}))
 													}
-													className="h-10 rounded-md border-[#2b2d30] bg-[#111315] text-[#ece7de]"
+													className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
 												/>
 											</div>
 											<div>
@@ -787,7 +945,7 @@ export function InvoiceDetailsSheet({
 													onChange={(event) =>
 														updateCurrency(event.target.value)
 													}
-													className="h-10 w-full rounded-md border border-[#2b2d30] bg-[#111315] px-3 text-sm text-[#ece7de] outline-none"
+													className="h-10 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
 												>
 													{Object.keys(NGN_PER_CURRENCY).map((option) => (
 														<option key={option} value={option}>
@@ -806,7 +964,7 @@ export function InvoiceDetailsSheet({
 															template: event.target.value,
 														}))
 													}
-													className="h-10 rounded-md border-[#2b2d30] bg-[#111315] text-[#ece7de]"
+													className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
 												/>
 											</div>
 										</div>
@@ -821,7 +979,7 @@ export function InvoiceDetailsSheet({
 												type="button"
 												variant="ghost"
 												onClick={() => setShowCompliance(true)}
-												className="h-9 rounded-md border border-[#2b2d30] bg-[#111315] px-4 text-sm text-[#d5d0c7] hover:bg-[#20241e] hover:text-[#ece7de]"
+												className="h-9 rounded-md border border-[#30352f] bg-[#0f1111] px-4 text-sm text-[#d8d1c4] hover:bg-[#1a2117] hover:text-[#f2efe7]"
 											>
 												Review compliance settings
 											</Button>
@@ -847,7 +1005,7 @@ export function InvoiceDetailsSheet({
 																}))
 															}
 															placeholder="10-digit TIN"
-															className="h-10 rounded-md border-[#2b2d30] bg-[#111315] text-[#ece7de]"
+															className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
 														/>
 													</div>
 													<div>
@@ -870,7 +1028,7 @@ export function InvoiceDetailsSheet({
 																}))
 															}
 															placeholder="RC-1234567"
-															className="h-10 rounded-md border-[#2b2d30] bg-[#111315] text-[#ece7de]"
+															className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
 														/>
 													</div>
 													<div>
@@ -892,7 +1050,7 @@ export function InvoiceDetailsSheet({
 																}))
 															}
 															placeholder="10-digit TIN"
-															className="h-10 rounded-md border-[#2b2d30] bg-[#111315] text-[#ece7de]"
+															className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
 														/>
 													</div>
 													<div>
@@ -916,7 +1074,7 @@ export function InvoiceDetailsSheet({
 																}));
 															}}
 															placeholder="client@email.com"
-															className="h-10 rounded-md border-[#2b2d30] bg-[#111315] text-[#ece7de]"
+															className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
 														/>
 													</div>
 													<div>
@@ -940,7 +1098,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															className="h-10 w-full rounded-md border border-[#2b2d30] bg-[#111315] px-3 text-sm text-[#ece7de] outline-none"
+															className="h-10 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
 														>
 															{JURISDICTION_OPTIONS.map((option) => (
 																<option key={option.value} value={option.value}>
@@ -974,7 +1132,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															className="h-10 w-full rounded-md border border-[#2b2d30] bg-[#111315] px-3 text-sm text-[#ece7de] outline-none"
+															className="h-10 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
 														>
 															{JURISDICTION_OPTIONS.map((option) => (
 																<option key={option.value} value={option.value}>
@@ -1005,7 +1163,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															className="h-10 w-full rounded-md border border-[#2b2d30] bg-[#111315] px-3 text-sm text-[#ece7de] outline-none"
+															className="h-10 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
 														>
 															{SELLER_TAX_STATUS_OPTIONS.map((option) => (
 																<option key={option.value} value={option.value}>
@@ -1030,7 +1188,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															className="h-10 w-full rounded-md border border-[#2b2d30] bg-[#111315] px-3 text-sm text-[#ece7de] outline-none"
+															className="h-10 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
 														>
 															{TAX_TREATMENT_OPTIONS.map((option) => (
 																<option key={option.value} value={option.value}>
@@ -1058,7 +1216,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															className="h-10 rounded-md border-[#2b2d30] bg-[#111315] text-[#ece7de]"
+															className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
 														/>
 													</div>
 													<div>
@@ -1084,7 +1242,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															className="h-10 w-full rounded-md border border-[#2b2d30] bg-[#111315] px-3 text-sm text-[#ece7de] outline-none"
+															className="h-10 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
 														>
 															{WITHHOLDING_CATEGORY_OPTIONS.map((option) => (
 																<option key={option.value} value={option.value}>
@@ -1116,7 +1274,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															className="h-10 w-full rounded-md border border-[#2b2d30] bg-[#111315] px-3 text-sm text-[#ece7de] outline-none"
+															className="h-10 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
 														>
 															{WITHHOLDING_ENTITY_TYPE_OPTIONS.map((option) => (
 																<option key={option.value} value={option.value}>
@@ -1148,7 +1306,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															className="h-10 w-full rounded-md border border-[#2b2d30] bg-[#111315] px-3 text-sm text-[#ece7de] outline-none"
+															className="h-10 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
 														>
 															{WITHHOLDING_RESIDENCY_OPTIONS.map((option) => (
 																<option key={option.value} value={option.value}>
@@ -1233,11 +1391,11 @@ export function InvoiceDetailsSheet({
 											{draft.lineItems.map((item) => (
 												<div
 													key={item.id}
-													className="rounded-md border border-[#2b2d30] bg-[#111315] p-3 md:border-0 md:bg-transparent md:p-0"
+													className="rounded-md border border-[#30352f] bg-[#0f1111] p-3 md:border-0 md:bg-transparent md:p-0"
 												>
 													<div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_132px_132px_160px_44px] md:items-center">
 														<div>
-															<div className="mb-2 text-[11px] text-[#7f7a72] md:hidden">
+															<div className="mb-2 text-[11px] text-[#817d72] md:hidden">
 																Description
 															</div>
 															<Input
@@ -1253,11 +1411,11 @@ export function InvoiceDetailsSheet({
 																	})
 																}
 																placeholder="Item description"
-																className="h-10 rounded-md border-[#2b2d30] bg-[#111315] text-[#ece7de]"
+																className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
 															/>
 														</div>
 														<div>
-															<div className="mb-2 text-[11px] text-[#7f7a72] md:hidden">
+															<div className="mb-2 text-[11px] text-[#817d72] md:hidden">
 																Quantity
 															</div>
 															<NumberStepperInput
@@ -1271,7 +1429,7 @@ export function InvoiceDetailsSheet({
 															/>
 														</div>
 														<div>
-															<div className="mb-2 text-[11px] text-[#7f7a72] md:hidden">
+															<div className="mb-2 text-[11px] text-[#817d72] md:hidden">
 																Unit price
 															</div>
 															<NumberStepperInput
@@ -1285,11 +1443,11 @@ export function InvoiceDetailsSheet({
 															/>
 														</div>
 														<div>
-															<div className="mb-2 text-[11px] text-[#7f7a72] md:hidden">
+															<div className="mb-2 text-[11px] text-[#817d72] md:hidden">
 																Line total
 															</div>
-															<div className="flex h-10 items-center justify-between rounded-md border border-[#2b2d30] bg-[#111315] px-3 text-sm font-medium text-[#ece7de] md:justify-end">
-																<span className="md:hidden text-[#7f7a72]">
+															<div className="flex h-10 items-center justify-between rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm font-medium text-[#f2efe7] md:justify-end">
+																<span className="md:hidden text-[#817d72]">
 																	Total
 																</span>
 																<span className="text-right">
@@ -1304,7 +1462,7 @@ export function InvoiceDetailsSheet({
 															<button
 																type="button"
 																onClick={() => removeLineItem(item.id)}
-																className="inline-flex h-10 w-11 items-center justify-center rounded-md border border-[#2b2d30] bg-[#111315] text-[#9c968a] transition-colors hover:bg-[#20241e] hover:text-[#ece7de]"
+																className="inline-flex h-10 w-11 items-center justify-center rounded-md border border-[#30352f] bg-[#0f1111] text-[#9c968a] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7]"
 																aria-label="Remove line item"
 															>
 																<X className="h-4 w-4" />
@@ -1314,20 +1472,20 @@ export function InvoiceDetailsSheet({
 												</div>
 											))}
 
-											<div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#2b2d30] pt-3">
+											<div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#30352f] pt-3">
 												<Button
 													type="button"
 													variant="ghost"
 													onClick={addLineItem}
-													className="h-10 rounded-md border border-[#2b2d30] bg-[#111315] px-4 text-sm text-[#d5d0c7] hover:bg-[#20241e] hover:text-[#ece7de]"
+													className="h-10 rounded-md border border-[#30352f] bg-[#0f1111] px-4 text-sm text-[#d8d1c4] hover:bg-[#1a2117] hover:text-[#f2efe7]"
 												>
 													<Plus className="mr-2 h-4 w-4" />
 													Add line item
 												</Button>
-												<div className="w-full max-w-[260px] space-y-2 rounded-md border border-[#2b2d30] bg-[#111315] px-4 py-3">
+												<div className="w-full max-w-[260px] space-y-2 rounded-md border border-[#30352f] bg-[#0f1111] px-4 py-3">
 													<div className="flex items-center justify-between text-sm text-[#9c968a]">
 														<span>Subtotal</span>
-														<span className="text-[#ece7de]">
+														<span className="text-[#f2efe7]">
 															{formatMoney(
 																draft.compliance?.subtotal ?? 0,
 																draft.currency,
@@ -1340,7 +1498,7 @@ export function InvoiceDetailsSheet({
 																{draft.compliance?.taxLabel ?? "VAT"} (
 																{draft.compliance?.taxRate ?? 0}%)
 															</span>
-															<span className="text-[#ece7de]">
+															<span className="text-[#f2efe7]">
 																{formatMoney(
 																	draft.compliance?.totalTax ?? 0,
 																	draft.currency,
@@ -1354,7 +1512,7 @@ export function InvoiceDetailsSheet({
 																{draft.compliance?.withholdingTaxLabel ?? "WHT"}{" "}
 																({draft.compliance?.withholdingTaxRate ?? 0}%)
 															</span>
-															<span className="text-[#ece7de]">
+															<span className="text-[#f2efe7]">
 																-
 																{formatMoney(
 																	draft.compliance?.withholdingTaxAmount ?? 0,
@@ -1363,9 +1521,9 @@ export function InvoiceDetailsSheet({
 															</span>
 														</div>
 													) : null}
-													<div className="flex items-center justify-between border-t border-[#2b2d30] pt-2 text-sm">
+													<div className="flex items-center justify-between border-t border-[#30352f] pt-2 text-sm">
 														<span className="text-[#9c968a]">Net payable</span>
-														<span className="text-lg font-semibold text-[#ece7de]">
+														<span className="text-lg font-semibold text-[#f2efe7]">
 															{formatMoney(invoiceTotal(draft), draft.currency)}
 														</span>
 													</div>
@@ -1376,75 +1534,67 @@ export function InvoiceDetailsSheet({
 
 									<div className="grid gap-6 lg:grid-cols-2">
 										<Section title="Status">
-											{onStatusChange ? (
-												<DropdownMenu>
-													<DropdownMenuTrigger asChild>
-														<Button
-															variant="ghost"
-															className="h-10 w-full justify-between rounded-md border border-[#2b2d30] bg-[#111315] px-3 text-sm capitalize text-[#ece7de] hover:bg-[#20241e]"
-														>
-															{draft.status}
-														</Button>
-													</DropdownMenuTrigger>
-													<DropdownMenuContent
-														align="end"
-														className="min-w-[220px] border-[#2b2d30] bg-[#17191b] p-1 text-[#ece7de]"
-													>
-														{[
-															"draft",
-															"unpaid",
-															"paid",
-															"overdue",
-															"canceled",
-															"scheduled",
-														].map((status) => (
-															<DropdownMenuItem
-																key={status}
-																onClick={async () => {
-																	const paidAt =
-																		status === "paid"
-																			? (draft.paidAt ?? Date.now())
-																			: undefined;
-																	await onStatusChange(
-																		draft.id,
-																		status as InvoiceRecord["status"],
-																		status === "paid"
-																			? {
-																					paidAt,
-																					paymentReference:
-																						paymentReference.trim() ||
-																						undefined,
-																				}
-																			: undefined,
-																	);
-																	setDraft((prev) =>
-																		prev
-																			? {
-																					...prev,
-																					status:
-																						status as InvoiceRecord["status"],
-																					paidAt,
-																					paymentReference:
-																						status === "paid"
-																							? paymentReference.trim() ||
-																								prev.paymentReference
-																							: prev.paymentReference,
-																				}
-																			: prev,
-																	);
-																}}
-																className="capitalize focus:bg-[#20241e]"
-															>
-																{status}
-															</DropdownMenuItem>
-														))}
-													</DropdownMenuContent>
-												</DropdownMenu>
-											) : (
-												<div className="rounded-md border border-[#2b2d30] bg-[#111315] px-3 py-2 text-sm capitalize text-[#ece7de]">
-													{draft.status}
+											<div className="space-y-3">
+												<div className="rounded-md border border-[#30352f] bg-[#0f1111] px-3 py-2 text-sm capitalize text-[#f2efe7]">
+													{draft.status === "unpaid"
+														? "sent"
+														: draft.status.replace("-", " ")}
 												</div>
-											)}
+												<div className="grid gap-2 sm:grid-cols-2">
+													<Button
+														type="button"
+														variant="ghost"
+														disabled={!onRecordPayment || draft.balance <= 0}
+														onClick={async () => {
+															if (!onRecordPayment) return;
+															await onRecordPayment(
+																draft.id,
+																draft.balance,
+																paymentReference.trim() || undefined,
+															);
+															setDraft((prev) =>
+																prev
+																	? {
+																			...prev,
+																			paymentAmount: prev.total,
+																			balance: 0,
+																			status: "paid",
+																			paymentReference:
+																				paymentReference.trim() ||
+																				prev.paymentReference,
+																		}
+																	: prev,
+															);
+														}}
+														className="h-9 whitespace-nowrap rounded-md border border-[#3f5130] bg-[#1a2117] px-3 text-sm font-medium text-[#c8ff62] hover:bg-[#202a18] hover:text-[#d5ff7a]"
+													>
+														Mark as paid
+													</Button>
+													<Button
+														type="button"
+														variant="ghost"
+														disabled={
+															!onStatusChange || draft.status === "canceled"
+														}
+														onClick={async () => {
+															if (!onStatusChange) return;
+															await onStatusChange(draft.id, "canceled");
+															setDraft((prev) =>
+																prev
+																	? {
+																			...prev,
+																			status: "canceled",
+																			canceledAt: Date.now(),
+																		}
+																	: prev,
+															);
+														}}
+														className="h-9 rounded-md border border-[#4b2d2d] bg-[#1a1111] px-3 text-sm text-[#efb1b1] hover:bg-[#2a1f1f]"
+													>
+														Cancel invoice
+													</Button>
+												</div>
+											</div>
 										</Section>
 
 										<Section title="Share">
@@ -1459,13 +1609,13 @@ export function InvoiceDetailsSheet({
 															}
 															type="email"
 															placeholder="client@email.com"
-															className="h-10 rounded-md border-[#2b2d30] bg-[#111315] text-[#ece7de]"
+															className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
 														/>
 														<Button
 															onClick={onSendEmail}
 															disabled={isSendingEmail}
 															variant="ghost"
-															className="h-10 rounded-md border border-[#2b2d30] bg-[#111315] px-3 hover:bg-[#20241e]"
+															className="h-10 rounded-md border border-[#30352f] bg-[#0f1111] px-3 hover:bg-[#1a2117]"
 														>
 															{isSendingEmail ? (
 																<Loader2 className="h-4 w-4 animate-spin" />
@@ -1487,7 +1637,7 @@ export function InvoiceDetailsSheet({
 														target="_blank"
 														rel="noreferrer"
 														aria-label="Share on Telegram"
-														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#2b2d30] bg-[#111315] text-[#d5d0c7] transition-colors hover:bg-[#20241e] hover:text-[#ece7de]"
+														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#30352f] bg-[#0f1111] text-[#d8d1c4] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7]"
 													>
 														<FaTelegram className="h-4 w-4" />
 													</a>
@@ -1496,7 +1646,7 @@ export function InvoiceDetailsSheet({
 														target="_blank"
 														rel="noreferrer"
 														aria-label="Share on WhatsApp"
-														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#2b2d30] bg-[#111315] text-[#d5d0c7] transition-colors hover:bg-[#20241e] hover:text-[#ece7de]"
+														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#30352f] bg-[#0f1111] text-[#d8d1c4] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7]"
 													>
 														<FaWhatsapp className="h-4 w-4" />
 													</a>
@@ -1517,7 +1667,7 @@ export function InvoiceDetailsSheet({
 															);
 														}}
 														aria-label="Share link"
-														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#2b2d30] bg-[#111315] text-[#d5d0c7] transition-colors hover:bg-[#20241e] hover:text-[#ece7de]"
+														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#30352f] bg-[#0f1111] text-[#d8d1c4] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7]"
 													>
 														<Share2 className="h-4 w-4" />
 													</button>
@@ -1531,7 +1681,7 @@ export function InvoiceDetailsSheet({
 															)
 														}
 														aria-label="Open invoice"
-														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#2b2d30] bg-[#111315] text-[#d5d0c7] transition-colors hover:bg-[#20241e] hover:text-[#ece7de]"
+														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#30352f] bg-[#0f1111] text-[#d8d1c4] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7]"
 													>
 														<ExternalLink className="h-4 w-4" />
 													</button>
@@ -1543,7 +1693,7 @@ export function InvoiceDetailsSheet({
 															)
 														}
 														aria-label="Copy link"
-														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#2b2d30] bg-[#111315] text-[#d5d0c7] transition-colors hover:bg-[#20241e] hover:text-[#ece7de]"
+														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#30352f] bg-[#0f1111] text-[#d8d1c4] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7]"
 													>
 														<Copy className="h-4 w-4" />
 													</button>
@@ -1552,7 +1702,7 @@ export function InvoiceDetailsSheet({
 														target="_blank"
 														rel="noreferrer"
 														aria-label="Preview before download"
-														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#2b2d30] bg-[#111315] text-[#d5d0c7] transition-colors hover:bg-[#20241e] hover:text-[#ece7de]"
+														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#30352f] bg-[#0f1111] text-[#d8d1c4] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7]"
 													>
 														<ArrowDownToLine className="h-4 w-4" />
 													</a>
@@ -1567,29 +1717,12 @@ export function InvoiceDetailsSheet({
 												type="button"
 												variant="ghost"
 												onClick={() => setShowPayment(true)}
-												className="h-9 rounded-md border border-[#2b2d30] bg-[#111315] px-4 text-sm text-[#d5d0c7] hover:bg-[#20241e] hover:text-[#ece7de]"
+												className="h-9 rounded-md border border-[#30352f] bg-[#0f1111] px-4 text-sm text-[#d8d1c4] hover:bg-[#1a2117] hover:text-[#f2efe7]"
 											>
 												Add payment details
 											</Button>
 										) : (
-											<div className="grid gap-4 md:grid-cols-2">
-												<div>
-													<FieldLabel>Payment link</FieldLabel>
-													<Input
-														value={draft.paymentLink ?? ""}
-														onChange={(event) =>
-															patchDraft((prev) => ({
-																...prev,
-																paymentLink: event.target.value,
-																paymentProvider: event.target.value.trim()
-																	? "manual"
-																	: "paystack",
-															}))
-														}
-														placeholder="https://paystack.com/pay/..."
-														className="h-10 rounded-md border-[#2b2d30] bg-[#111315] text-[#ece7de]"
-													/>
-												</div>
+											<div className="grid gap-4">
 												<div>
 													<FieldLabel>Payment reference</FieldLabel>
 													<Input
@@ -1598,7 +1731,7 @@ export function InvoiceDetailsSheet({
 															setPaymentReference(event.target.value)
 														}
 														placeholder="Transfer ref, Paystack ref, or receipt no."
-														className="h-10 rounded-md border-[#2b2d30] bg-[#111315] text-[#ece7de]"
+														className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
 													/>
 													<p className="mt-2 text-xs text-[#9c968a]">
 														Select Paid in status after entering reference.
@@ -1617,7 +1750,7 @@ export function InvoiceDetailsSheet({
 												type="button"
 												variant="ghost"
 												onClick={() => setShowNotes(true)}
-												className="h-9 rounded-md border border-[#2b2d30] bg-[#111315] px-4 text-sm text-[#d5d0c7] hover:bg-[#20241e] hover:text-[#ece7de]"
+												className="h-9 rounded-md border border-[#30352f] bg-[#0f1111] px-4 text-sm text-[#d8d1c4] hover:bg-[#1a2117] hover:text-[#f2efe7]"
 											>
 												Add notes & payment instructions
 											</Button>
@@ -1633,7 +1766,7 @@ export function InvoiceDetailsSheet({
 																paymentDetails: event.target.value,
 															}))
 														}
-														className="min-h-32 w-full rounded-md border border-[#2b2d30] bg-[#111315] px-3 py-2 text-sm text-[#ece7de] outline-none placeholder:text-[#7f7a72]"
+														className="min-h-32 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 py-2 text-sm text-[#f2efe7] outline-none placeholder:text-[#817d72]"
 														placeholder={
 															"Bank Name: Zenith Bank\nAccount Name: Velure Studio\nAccount Number: 0123456789"
 														}
@@ -1654,7 +1787,7 @@ export function InvoiceDetailsSheet({
 																notes: event.target.value,
 															}))
 														}
-														className="min-h-32 w-full rounded-md border border-[#2b2d30] bg-[#111315] px-3 py-2 text-sm text-[#ece7de] outline-none placeholder:text-[#7f7a72]"
+														className="min-h-32 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 py-2 text-sm text-[#f2efe7] outline-none placeholder:text-[#817d72]"
 														placeholder="Private context for the team"
 													/>
 												</div>
@@ -1669,15 +1802,15 @@ export function InvoiceDetailsSheet({
 												return (
 													<div
 														key={item.id}
-														className="rounded-md border border-[#2b2d30] bg-[#111315] px-3 py-3"
+														className="rounded-md border border-[#30352f] bg-[#0f1111] px-3 py-3"
 													>
 														<div className="flex items-start justify-between gap-3">
 															<div className="flex items-start gap-3">
-																<div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-md border border-[#3a4330] bg-[#20241e] text-[#b7ca7c]">
+																<div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-md border border-[#3a4330] bg-[#1a2117] text-[#b7ca7c]">
 																	<Icon className="h-4 w-4" />
 																</div>
 																<div>
-																	<p className="text-sm font-medium text-[#ece7de]">
+																	<p className="text-sm font-medium text-[#f2efe7]">
 																		{item.label}
 																	</p>
 																	<p className="mt-1 text-xs text-[#9c968a]">
@@ -1685,7 +1818,7 @@ export function InvoiceDetailsSheet({
 																	</p>
 																</div>
 															</div>
-															<p className="text-xs text-[#7f7a72]">
+															<p className="text-xs text-[#817d72]">
 																{item.meta}
 															</p>
 														</div>
@@ -1697,19 +1830,17 @@ export function InvoiceDetailsSheet({
 								</div>
 							</div>
 
-							<div className="shrink-0 border-t border-[#2b2d30] bg-[#15171a] px-6 py-4">
+							<div className="shrink-0 border-t border-[#30352f] bg-[#15171a] px-6 py-4">
 								<div className="flex items-center justify-between gap-4">
 									<div className="text-sm text-[#9c968a]">
-										{saving
-											? "Saving changes..."
-											: "Changes autosave while you edit."}
+										{saving ? "Saving changes..." : ""}
 									</div>
 									<div className="flex items-center gap-3">
 										<Button
 											type="button"
 											variant="ghost"
 											onClick={onResetDraft}
-											className="h-10 rounded-md border border-[#2b2d30] bg-[#111315] px-4 text-sm text-[#d5d0c7] hover:bg-[#20241e] hover:text-[#ece7de]"
+											className="h-10 rounded-md border border-[#30352f] bg-[#0f1111] px-4 text-sm text-[#d8d1c4] hover:bg-[#1a2117] hover:text-[#f2efe7]"
 										>
 											Reset
 										</Button>
@@ -1717,7 +1848,7 @@ export function InvoiceDetailsSheet({
 											type="button"
 											onClick={onSaveDraft}
 											disabled={saving}
-											className="h-10 rounded-md bg-[#a7bc62] px-4 text-sm font-medium text-[#121314] hover:bg-[#b5c97a]"
+											className="h-10 rounded-md bg-[#c8ff62] px-4 text-sm font-medium text-[#0f1111] hover:bg-[#d5ff7a]"
 										>
 											{saving ? (
 												<>
@@ -1733,9 +1864,7 @@ export function InvoiceDetailsSheet({
 							</div>
 						</>
 					) : (
-						<div className="px-6 py-8 text-sm text-[#9c968a]">
-							Loading invoice details...
-						</div>
+						<InvoiceDetailsSkeleton />
 					)}
 				</SheetContent>
 			</Sheet>

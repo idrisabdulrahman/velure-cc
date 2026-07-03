@@ -33,15 +33,17 @@ export function formatCurrencyForPDF({
 
 	const isNegative = amount < 0;
 	const absoluteAmount = Math.abs(amount);
-	const formatted = formatMoney(
-		absoluteAmount,
-		normalizeCurrencyCode(currency),
-		{
-			locale: locale || resolveCurrencyLocale(currency),
-			maximumFractionDigits,
-			currencyDisplay,
-		},
-	);
+	const normalizedCurrency = normalizeCurrencyCode(currency);
+	const pdfCurrencyDisplay =
+		normalizedCurrency === "NGN" &&
+		(currencyDisplay === "symbol" || currencyDisplay === "narrowSymbol")
+			? "code"
+			: currencyDisplay;
+	const formatted = formatMoney(absoluteAmount, normalizedCurrency, {
+		locale: locale || resolveCurrencyLocale(currency),
+		maximumFractionDigits,
+		currencyDisplay: pdfCurrencyDisplay,
+	});
 
 	// Manually prepend minus sign for negative values
 	return isNegative ? `-${formatted}` : formatted || "";

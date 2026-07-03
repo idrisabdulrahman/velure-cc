@@ -88,7 +88,7 @@ function NewClient() {
 	}, [state.company, state.name]);
 
 	const inputClass =
-		"h-10 rounded-md border-[#2b2d30] bg-[#121314] text-sm text-[#ece7de] placeholder:text-[#737b89] focus-visible:border-[#4a4f45] focus-visible:ring-0";
+		"h-10 rounded-md border-[#30352f] bg-[#0f1111] text-sm text-[#f2efe7] placeholder:text-[#737b89] focus-visible:border-[#4a4f45] focus-visible:ring-0";
 
 	const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
@@ -139,7 +139,7 @@ function NewClient() {
 		<div className="flex h-full w-full flex-col gap-5">
 			<div className="flex items-start justify-between gap-4">
 				<div>
-					<h1 className="text-[26px] font-medium tracking-[-0.02em] text-[#ece7de]">
+					<h1 className="text-[26px] font-medium tracking-[-0.02em] text-[#f2efe7]">
 						New client
 					</h1>
 					<p className="mt-1 text-sm text-[#8d938f]">
@@ -149,14 +149,14 @@ function NewClient() {
 				<Button
 					type="button"
 					variant="outline"
-					className="h-9 rounded-md border border-[#2b2d30] bg-[#17191b] px-4 text-xs font-medium text-[#d5d0c7] transition-colors hover:border-[#3a3d41] hover:bg-[#1d2023] hover:text-[#ece7de]"
+					className="h-9 rounded-md border border-[#30352f] bg-[#171a18] px-4 text-xs font-medium text-[#d8d1c4] transition-colors hover:border-[#30352f] hover:bg-[#20241f] hover:text-[#f2efe7]"
 				>
 					Import
 				</Button>
 			</div>
 
 			<div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-				<div className="rounded-md border border-[#2b2d30] bg-[#17191b]">
+				<div className="rounded-md border border-[#30352f] bg-[#171a18]">
 					<div className="p-4 md:p-5">
 						<form onSubmit={onSubmit} className="space-y-4">
 							<div className="grid gap-3 md:grid-cols-2">
@@ -248,7 +248,7 @@ function NewClient() {
 										<SelectTrigger className={`${inputClass} w-full`}>
 											<SelectValue placeholder="Currency" />
 										</SelectTrigger>
-										<SelectContent className="border-[#2b2d30] bg-[#17191b] text-[#ece7de]">
+										<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
 											<SelectItem value="NGN">NGN</SelectItem>
 											<SelectItem value="USD">USD</SelectItem>
 											<SelectItem value="GBP">GBP</SelectItem>
@@ -265,7 +265,7 @@ function NewClient() {
 										<SelectTrigger className={`${inputClass} w-full`}>
 											<SelectValue placeholder="Payment Terms" />
 										</SelectTrigger>
-										<SelectContent className="border-[#2b2d30] bg-[#17191b] text-[#ece7de]">
+										<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
 											<SelectItem value="Due on receipt">
 												Due on receipt
 											</SelectItem>
@@ -287,7 +287,7 @@ function NewClient() {
 											billingAddress: event.target.value,
 										}))
 									}
-									className="resize-none rounded-md border-[#2b2d30] bg-[#121314] text-sm text-[#ece7de] placeholder:text-[#737b89] focus-visible:border-[#4a4f45] focus-visible:ring-0"
+									className="resize-none rounded-md border-[#30352f] bg-[#0f1111] text-sm text-[#f2efe7] placeholder:text-[#737b89] focus-visible:border-[#4a4f45] focus-visible:ring-0"
 									placeholder="Billing Address"
 								/>
 							</Field>
@@ -302,13 +302,13 @@ function NewClient() {
 											internalNotes: event.target.value,
 										}))
 									}
-									className="resize-none rounded-md border-[#2b2d30] bg-[#121314] text-sm text-[#ece7de] placeholder:text-[#737b89] focus-visible:border-[#4a4f45] focus-visible:ring-0"
+									className="resize-none rounded-md border-[#30352f] bg-[#0f1111] text-sm text-[#f2efe7] placeholder:text-[#737b89] focus-visible:border-[#4a4f45] focus-visible:ring-0"
 									placeholder="Internal Notes"
 								/>
 							</Field>
 
-							<section className="rounded-md border border-[#2b2d30] bg-[#121314] p-3 md:p-4">
-								<h2 className="mb-3 text-sm font-medium text-[#ece7de]">
+							<section className="rounded-md border border-[#30352f] bg-[#0f1111] p-3 md:p-4">
+								<h2 className="mb-3 text-sm font-medium text-[#f2efe7]">
 									Contact person
 								</h2>
 								<div className="grid gap-3 md:grid-cols-2">
@@ -359,30 +359,30 @@ function NewClient() {
 								</div>
 							</section>
 
-							<div className="inline-flex items-center gap-2 text-sm text-[#d5d0c7]">
+							<div className="inline-flex items-center gap-2 text-sm text-[#d8d1c4]">
 								<Switch
 									checked={state.favorite}
 									onCheckedChange={(checked) =>
 										setState((prev) => ({ ...prev, favorite: checked }))
 									}
-									className="data-[state=checked]:bg-[#a7bc62] data-[state=unchecked]:bg-[#2b2d30]"
+									className="data-[state=checked]:bg-[#c8ff62] data-[state=unchecked]:bg-[#30352f]"
 								/>
 								<span>Save as favorite client</span>
 							</div>
 
-							<div className="flex items-center justify-between border-t border-[#2b2d30] pt-4">
+							<div className="flex items-center justify-between border-t border-[#30352f] pt-4">
 								<Button
 									type="button"
 									variant="outline"
 									onClick={() => navigate({ to: "/clients" })}
-									className="h-10 rounded-md border-[#2b2d30] bg-transparent text-sm font-medium text-[#d5d0c7] hover:bg-[#1d2023] hover:text-[#ece7de]"
+									className="h-10 rounded-md border-[#30352f] bg-transparent text-sm font-medium text-[#d8d1c4] hover:bg-[#20241f] hover:text-[#f2efe7]"
 								>
 									Cancel
 								</Button>
 								<Button
 									type="submit"
 									disabled={!isValid || submitting}
-									className="h-10 rounded-md bg-[#a7bc62] text-sm font-medium text-[#121314] hover:bg-[#b5c97a] disabled:bg-[#3a3d30] disabled:text-[#7f7a72]"
+									className="h-10 rounded-md bg-[#c8ff62] text-sm font-medium text-[#0f1111] hover:bg-[#d5ff7a] disabled:bg-[#3f5130] disabled:text-[#817d72]"
 								>
 									{submitting ? "Creating..." : "Create client"}
 								</Button>
@@ -392,14 +392,14 @@ function NewClient() {
 					</div>
 				</div>
 
-				<aside className="h-fit rounded-md border border-[#2b2d30] bg-[#17191b] p-4">
-					<h2 className="text-sm font-medium text-[#ece7de]">Preview</h2>
+				<aside className="h-fit rounded-md border border-[#30352f] bg-[#171a18] p-4">
+					<h2 className="text-sm font-medium text-[#f2efe7]">Preview</h2>
 					<div className="mt-3 flex items-center gap-3">
-						<span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[#202326] text-xs font-medium text-[#d5d0c7]">
+						<span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[#202326] text-xs font-medium text-[#d8d1c4]">
 							{initials || "VC"}
 						</span>
 						<div>
-							<p className="text-sm font-medium text-[#ece7de]">
+							<p className="text-sm font-medium text-[#f2efe7]">
 								{state.name || "Client name"}
 							</p>
 							<p className="text-xs text-[#8d938f]">
@@ -407,7 +407,7 @@ function NewClient() {
 							</p>
 						</div>
 					</div>
-					<div className="mt-3 rounded-md border border-[#2b2d30] bg-[#121314] p-3 text-xs text-[#d5d0c7]">
+					<div className="mt-3 rounded-md border border-[#30352f] bg-[#0f1111] p-3 text-xs text-[#d8d1c4]">
 						<p>Contact: {state.email || "—"}</p>
 						<p>Payment terms: {state.paymentTerms}</p>
 						<p>Currency: {state.currency}</p>
