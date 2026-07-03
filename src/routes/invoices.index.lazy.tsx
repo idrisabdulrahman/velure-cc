@@ -4,7 +4,6 @@ import { createLazyFileRoute } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import {
 	CalendarDays,
-	Check,
 	ChevronLeft,
 	ChevronRight,
 	CircleAlert,
@@ -12,7 +11,6 @@ import {
 	Download,
 	ExternalLink,
 	FileEdit,
-	Minus,
 	MoreHorizontal,
 	ReceiptText,
 	Repeat2,
@@ -51,6 +49,7 @@ import {
 } from "#/components/ui/alert-dialog";
 import { Button } from "#/components/ui/button";
 import { Calendar } from "#/components/ui/calendar";
+import { Checkbox } from "#/components/ui/checkbox";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -87,7 +86,6 @@ import {
 import {
 	keepVisibleInvoiceSelection,
 	setInvoiceSelectionForIds,
-	toggleInvoiceSelection as toggleInvoiceSelectionSet,
 } from "#/features/invoices/selection";
 import type { InvoiceRecord, InvoiceStatus } from "#/features/invoices/types";
 import { api } from "../../convex/_generated/api";
@@ -527,10 +525,16 @@ function InvoicesIndex() {
 		});
 	};
 
-	const toggleInvoiceSelection = (id: Id<"invoices">, checked: boolean) => {
-		setSelectedInvoiceIds((current) =>
-			toggleInvoiceSelectionSet(current, id, checked),
-		);
+	const toggleInvoiceSelection = (id: Id<"invoices">) => {
+		setSelectedInvoiceIds((current) => {
+			const next = new Set(current);
+			if (next.has(id)) {
+				next.delete(id);
+			} else {
+				next.add(id);
+			}
+			return next;
+		});
 	};
 
 	const toggleAllVisibleSelection = (checked: boolean) => {
@@ -1178,14 +1182,18 @@ function InvoicesIndex() {
 						<thead className="bg-[#15171a]">
 							<tr className="border-b border-[#30352f] text-left text-[#817d72]">
 								<th className="w-12 px-4 py-3 font-medium">
-									<SelectionBox
-										checked={allVisibleSelected}
-										indeterminate={someVisibleSelected}
-										label="Select all visible invoices"
-										onToggle={() =>
-											toggleAllVisibleSelection(!allVisibleSelected)
-										}
-									/>
+									<div className="flex items-center justify-center">
+										<Checkbox
+											checked={
+												someVisibleSelected ? "indeterminate" : allVisibleSelected
+											}
+											onCheckedChange={(checked) =>
+												toggleAllVisibleSelection(checked === true)
+											}
+											aria-label="Select all visible invoices"
+											className="relative z-10 h-5 w-5 border-[#3f5130] bg-[#101211] text-[#0f1111] data-[state=checked]:border-[#c8ff62] data-[state=checked]:bg-[#c8ff62] data-[state=indeterminate]:border-[#c8ff62] data-[state=indeterminate]:bg-[#c8ff62]"
+										/>
+									</div>
 								</th>
 								<th className="w-[34%] px-4 py-3 font-medium">Invoice</th>
 								<th className="px-4 py-3 font-medium">Status</th>
@@ -1235,34 +1243,24 @@ function InvoicesIndex() {
 														: ""
 											}`}
 										>
-											<td
-												className="px-4 py-3"
-												onPointerDown={(event) => event.stopPropagation()}
-												onClick={(event) => {
-													event.stopPropagation();
-													toggleInvoiceSelection(
-														invoice.id as Id<"invoices">,
-														!selectedInvoiceIds.has(
+											<td className="px-2 py-2">
+												<div className="flex items-center justify-center">
+													<Checkbox
+														checked={selectedInvoiceIds.has(
 															invoice.id as Id<"invoices">,
-														),
-													);
-												}}
-												onKeyDown={(event) => event.stopPropagation()}
-											>
-												<SelectionBox
-													checked={selectedInvoiceIds.has(
-														invoice.id as Id<"invoices">,
-													)}
-													label={`Select ${invoice.invoiceNumber}`}
-													onToggle={() =>
-														toggleInvoiceSelection(
-															invoice.id as Id<"invoices">,
-															!selectedInvoiceIds.has(
+														)}
+														onCheckedChange={() =>
+															toggleInvoiceSelection(
 																invoice.id as Id<"invoices">,
-															),
-														)
-													}
-												/>
+															)
+														}
+														onPointerDown={(event) => event.stopPropagation()}
+														onClick={(event) => event.stopPropagation()}
+														onKeyDown={(event) => event.stopPropagation()}
+														aria-label={`Select invoice ${invoice.invoiceNumber}`}
+														className="relative z-10 h-5 w-5 border-[#3f5130] bg-[#101211] text-[#0f1111] data-[state=checked]:border-[#c8ff62] data-[state=checked]:bg-[#c8ff62]"
+													/>
+												</div>
 											</td>
 											<td className="px-4 py-3 font-medium text-[#f2efe7]">
 												<div className="flex min-w-0 flex-col">
@@ -1677,44 +1675,6 @@ function CleanupPreviewGroup({
 				<p className="text-xs text-[#817d72]">{emptyText}</p>
 			)}
 		</div>
-	);
-}
-
-function SelectionBox({
-	checked,
-	indeterminate = false,
-	label,
-	onToggle,
-}: {
-	checked: boolean;
-	indeterminate?: boolean;
-	label: string;
-	onToggle: () => void;
-}) {
-	return (
-		<button
-			type="button"
-			role="checkbox"
-			aria-checked={indeterminate ? "mixed" : checked}
-			aria-label={label}
-			onPointerDown={(event) => event.stopPropagation()}
-			onKeyDown={(event) => event.stopPropagation()}
-			onClick={(event) => {
-				event.stopPropagation();
-				onToggle();
-			}}
-			className={`group inline-flex h-5 w-5 items-center justify-center rounded-[3px] border transition-[background-color,border-color,box-shadow,color] duration-150 focus:outline-none focus-visible:shadow-[0_0_0_2px_rgba(200,255,98,0.22)] ${
-				checked || indeterminate
-					? "border-[#c8ff62] bg-[#c8ff62] text-[#0f1111] shadow-[0_0_0_1px_rgba(200,255,98,0.18)]"
-					: "border-[#30352f] bg-[#101211] text-transparent hover:border-[#4c5741] hover:bg-[#1a2117] hover:text-[#817d72]"
-			}`}
-		>
-			{indeterminate ? (
-				<Minus className="h-3 w-3 stroke-[3]" />
-			) : (
-				<Check className="h-3 w-3 stroke-[3]" />
-			)}
-		</button>
 	);
 }
 

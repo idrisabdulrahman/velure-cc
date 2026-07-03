@@ -167,7 +167,7 @@ code {
 
   button,
   a[href],
-  [role="button"],
+  [role="button"]:not(tr),
   summary {
     transition-property: transform, opacity, background-color, border-color, color;
     transition-duration: 110ms;
@@ -176,7 +176,7 @@ code {
 
   button:not(:disabled):active,
   a[href]:active,
-  [role="button"]:not([aria-disabled="true"]):active,
+  [role="button"]:not(tr):not([aria-disabled="true"]):active,
   summary:active {
     transform: scale(0.94);
   }
@@ -196,7 +196,7 @@ code {
   input:focus-visible,
   textarea:focus-visible,
   select:focus-visible,
-  [role="button"]:focus-visible {
+  [role="button"]:not(tr):focus-visible {
     box-shadow: 0 0 0 2px rgba(200, 255, 98, 0.38);
   }
 }
