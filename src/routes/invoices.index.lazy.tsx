@@ -978,7 +978,7 @@ function InvoicesIndex() {
 					</FilterField>
 
 					<div className="flex items-end justify-between gap-3 md:col-span-2 lg:col-span-3 xl:col-span-1 xl:justify-end">
-						<div className="inline-flex h-10 min-w-[88px] items-center justify-center gap-2 rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-xs text-[#aaa294]">
+						<div className="inline-flex h-10 min-w-22 items-center justify-center gap-2 rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-xs text-[#aaa294]">
 							<SlidersHorizontal className="h-4 w-4 text-[#c8ff62]" />
 							<span>
 								{activeFilterCount === 0
@@ -1016,7 +1016,7 @@ function InvoicesIndex() {
 								value={summaryCurrency}
 								onValueChange={setSelectedSummaryCurrency}
 							>
-								<SelectTrigger className="h-9 min-w-[128px] rounded-md border-[#554b32] bg-[#0f1111] text-[#f2efe7]">
+								<SelectTrigger className="h-9 min-w-32 rounded-md border-[#554b32] bg-[#0f1111] text-[#f2efe7]">
 									<SelectValue placeholder="Currency" />
 								</SelectTrigger>
 								<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
@@ -1170,22 +1170,24 @@ function InvoicesIndex() {
 				</div>
 
 				{selectedCount > 0 ? (
-					<div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#30352f] bg-[#111412] px-4 py-3 text-sm">
-						<span className="font-medium text-[#f2efe7]">
+					<div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#30352f] bg-secondary  px-4 py-3 text-sm">
+						<span className="font-extrabold text-primary">
 							{selectedCount} selected
 						</span>
 					</div>
 				) : null}
 
 				<div className="overflow-x-auto">
-					<table className="w-full min-w-[820px] text-sm">
+					<table className="w-full min-w-205 text-sm">
 						<thead className="bg-[#15171a]">
 							<tr className="border-b border-[#30352f] text-left text-[#817d72]">
 								<th className="w-12 px-4 py-3 font-medium">
 									<div className="flex items-center justify-center">
 										<Checkbox
 											checked={
-												someVisibleSelected ? "indeterminate" : allVisibleSelected
+												someVisibleSelected
+													? "indeterminate"
+													: allVisibleSelected
 											}
 											onCheckedChange={(checked) =>
 												toggleAllVisibleSelection(checked === true)
@@ -1344,7 +1346,7 @@ function InvoicesIndex() {
 													</DropdownMenuTrigger>
 													<DropdownMenuContent
 														align="end"
-														className="min-w-[188px] border-[#30352f] bg-[#171a18] p-1 text-[#f2efe7]"
+														className="min-w-47 border-[#30352f] bg-[#171a18] p-1 text-[#f2efe7]"
 													>
 														<DropdownMenuItem
 															onClick={() =>
@@ -1441,7 +1443,7 @@ function InvoicesIndex() {
 																<CalendarDays className="mr-2 h-4 w-4" />
 																Mark as paid
 															</DropdownMenuSubTrigger>
-															<DropdownMenuSubContent className="min-w-[250px] border-[#30352f] bg-[#171a18] p-2 text-[#f2efe7]">
+															<DropdownMenuSubContent className="min-w-62 border-[#30352f] bg-[#171a18] p-2 text-[#f2efe7]">
 																<button
 																	type="button"
 																	onClick={() =>
@@ -1597,7 +1599,7 @@ function InvoicesIndex() {
 					</AlertDialogHeader>
 
 					{cleanupPreview ? (
-						<div className="grid max-h-[360px] gap-3 overflow-y-auto text-sm">
+						<div className="grid max-h-90 gap-3 overflow-y-auto text-sm">
 							<CleanupPreviewGroup
 								title="Will hard delete"
 								items={cleanupPreview.hardDelete}
@@ -1747,7 +1749,7 @@ function RevenueTrendCard({
 				</div>
 			</div>
 
-			<div className="h-[220px] w-full">
+			<div className="h-55 w-full">
 				<ResponsiveContainer width="100%" height="100%">
 					<LineChart
 						data={data}
@@ -1834,7 +1836,7 @@ function RevenueTooltip({
 	if (!point) return null;
 
 	return (
-		<div className="min-w-[190px] rounded-md border border-[#30352f] bg-[#0f1111]/95 px-3 py-3 text-xs shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-md">
+		<div className="min-w-47.5 rounded-md border border-[#30352f] bg-[#0f1111]/95 px-3 py-3 text-xs shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-md">
 			<p className="mb-2 font-medium text-[#f2efe7]">{label}</p>
 			<div className="space-y-2">
 				<TooltipRow

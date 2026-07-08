@@ -12,6 +12,7 @@ import {
 	Users,
 } from "lucide-react";
 import { useEffect } from "react";
+import { ThemeToggle } from "#/components/theme/theme-toggle";
 import { Button } from "#/components/ui/button";
 import { authClient } from "#/lib/auth-client";
 
@@ -117,6 +118,7 @@ function LandingPage() {
 						</a>
 					</nav>
 					<div className="flex items-center gap-2">
+						<ThemeToggle className="h-9 w-9 border border-[#30352f] bg-[#161918] text-[#d8d1c4]- hover:bg-[#20241f] hover:text-[#f2efe7]" />
 						<Button
 							asChild
 							variant="ghost"

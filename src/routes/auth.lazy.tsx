@@ -7,6 +7,7 @@ import {
 import { useMutation } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { ThemeToggle } from "#/components/theme/theme-toggle";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Input } from "#/components/ui/input";
@@ -424,9 +425,12 @@ function AuthPage() {
 	}
 
 	return (
-		<div className="min-h-screen bg-[#0f1111] text-[#f2efe7] [background-image:linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:32px_32px]">
+		<div className="min-h-screen bg-[#0f1111] text-[#f2efe7] bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:32px_32px]">
+			<div className="fixed right-4 top-4 z-50">
+				<ThemeToggle className="fixed right-4 top-4 z-50 h-9 w-9 border border-[#30352f] bg-[#161918] text-[#d8d1c4]- hover:bg-[#20241f] hover:text-[#f2efe7]" />
+			</div>
 			<div className="flex min-h-screen items-center justify-center p-6">
-				<div className="ui-panel grid w-full max-w-[980px] overflow-hidden border border-[#2a2d31] bg-[#141715] lg:grid-cols-[0.95fr_1.05fr]">
+				<div className="ui-panel grid w-full max-w-245 overflow-hidden border border-[#2a2d31] bg-[#141715] lg:grid-cols-[0.95fr_1.05fr]">
 					<section className="hidden border-r border-[#2a2d31] bg-[linear-gradient(180deg,#181a1d_0%,#141715_100%)] lg:flex lg:flex-col lg:justify-between">
 						<div className="p-7">
 							<Link

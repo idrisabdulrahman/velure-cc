@@ -6,7 +6,7 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "dev": "pnpm run convex:sync && pnpm run guard:convex-api && vite --host 0.0.0.0 --port 3000 --strictPort",
+    "dev": " vite --host 0.0.0.0 --port 3000 --strictPort",
     "build": "NODE_OPTIONS=--max-old-space-size=4096 vite build",
     "start": "HOST=0.0.0.0 node .output/server/index.mjs",
     "preview": "vite preview --host 0.0.0.0",

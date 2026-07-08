@@ -5,6 +5,7 @@ import {
 	Scripts,
 } from "@tanstack/react-router";
 import { MotionConfig } from "framer-motion";
+import { ThemeProvider } from "#/components/theme/theme-provider";
 import { Toaster } from "../components/ui/toaster";
 import ConvexProvider from "../integrations/convex/provider";
 import TanStackQueryProvider from "../integrations/tanstack-query/root-provider";
@@ -55,14 +56,16 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 				<HeadContent />
 			</head>
 			<body className="bg-background text-foreground antialiased dark">
-				<ConvexProvider>
-					<TanStackQueryProvider>
-						<MotionConfig reducedMotion="user">
-							{children}
-							<Toaster />
-						</MotionConfig>
-					</TanStackQueryProvider>
-				</ConvexProvider>
+				<ThemeProvider>
+					<ConvexProvider>
+						<TanStackQueryProvider>
+							<MotionConfig reducedMotion="user">
+								{children}
+								<Toaster />
+							</MotionConfig>
+						</TanStackQueryProvider>
+					</ConvexProvider>
+				</ThemeProvider>
 				<Scripts />
 			</body>
 		</html>

@@ -121,6 +121,54 @@ code {
   --sidebar-ring: hsl(82 100% 69%);
 }
 
+.light {
+  --background: hsl(76 19% 92%);
+  --foreground: hsl(120 12% 11%);
+  --card: hsl(72 18% 96%);
+  --card-foreground: hsl(120 12% 11%);
+  --popover: hsl(72 18% 96%);
+  --popover-foreground: hsl(120 12% 11%);
+  --primary: hsl(82 58% 52%);
+  --primary-foreground: hsl(120 12% 9%);
+  --secondary: hsl(80 15% 88%);
+  --secondary-foreground: hsl(120 10% 18%);
+  --muted: hsl(78 14% 88%);
+  --muted-foreground: hsl(84 8% 40%);
+  --accent: hsl(82 28% 83%);
+  --accent-foreground: hsl(86 42% 30%);
+  --destructive: hsl(5 58% 43%);
+  --destructive-foreground: hsl(76 24% 96%);
+  --border: hsl(78 10% 69%);
+  --input: hsl(78 10% 69%);
+  --ring: hsl(82 58% 42%);
+  --chart-1: hsl(82 58% 42%);
+  --chart-2: hsl(170 45% 38%);
+  --chart-3: hsl(42 62% 45%);
+  --chart-4: hsl(355 48% 52%);
+  --chart-5: hsl(84 8% 40%);
+  --sidebar: hsl(76 16% 90%);
+  --sidebar-foreground: hsl(120 12% 11%);
+  --sidebar-primary: hsl(82 58% 52%);
+  --sidebar-primary-foreground: hsl(120 12% 9%);
+  --sidebar-accent: hsl(82 28% 83%);
+  --sidebar-accent-foreground: hsl(86 42% 30%);
+  --sidebar-border: hsl(78 10% 69%);
+  --sidebar-ring: hsl(82 58% 42%);
+  --vl-bg: #eef1e8;
+  --vl-surface: #f6f7f1;
+  --vl-surface-2: #e9ede3;
+  --vl-border: #b6beaa;
+  --vl-accent: #6f8f1d;
+  --vl-accent-soft: #e4ead7;
+  --vl-accent-panel: #d9e4c6;
+  --vl-text: #171b14;
+  --vl-muted: #68705f;
+  --vl-table-head: #d5dccb;
+  --vl-danger: #9e514f;
+  --vl-warning: #7a6428;
+  --vl-info: #3d6c82;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -238,8 +286,8 @@ code {
   .vl-ledger-bg {
     background-color: var(--vl-bg);
     background-image:
-      linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+      linear-gradient(var(--vl-grid-line, rgba(255, 255, 255, 0.035)) 1px, transparent 1px),
+      linear-gradient(90deg, var(--vl-grid-line, rgba(255, 255, 255, 0.035)) 1px, transparent 1px);
     background-size: 48px 48px;
   }
 
@@ -298,6 +346,156 @@ code {
     filter: drop-shadow(0 0 5px rgba(200, 255, 98, 0.32));
     transform-origin: center;
   }
+}
+
+.light {
+  --vl-grid-line: rgba(46, 59, 35, 0.055);
+}
+
+.light [class*="bg-[#0f1111]"],
+.light [class*="bg-[#101211]"],
+.light [class*="bg-[#11140f]"] {
+  background-color: var(--vl-bg) !important;
+}
+
+.light [class*="bg-[#121514]"],
+.light [class*="bg-[#141715]"],
+.light [class*="bg-[#151817]"],
+.light [class*="bg-[#161918]"],
+.light [class*="bg-[#171a18]"],
+.light [class*="bg-[#181a1d]"] {
+  background-color: var(--vl-surface) !important;
+}
+
+.light [class*="bg-[#1a2117]"],
+.light [class*="bg-[#1b2019]"],
+.light [class*="bg-[#1c2118]"],
+.light [class*="bg-[#1f2618]"],
+.light [class*="bg-[#20241f]"] {
+  background-color: var(--vl-accent-soft) !important;
+}
+
+.light [class*="bg-[#c8ff62]"],
+.light [class*="bg-[#d5ff7a]"],
+.light [class*="bg-[#d7ff82]"] {
+  background-color: #b7d766 !important;
+}
+
+.light [class*="bg-[#0b1320]"],
+.light [class*="bg-[#0c1115]"],
+.light [class*="bg-[#151b23]"],
+.light [class*="bg-[#15171a]"] {
+  background-color: var(--vl-table-head) !important;
+}
+
+.light [class*="bg-[#241f0a]"] {
+  background-color: #eadfac !important;
+}
+
+.light [class*="bg-[#5b1515]"],
+.light [class*="bg-[#2a1f1f]"] {
+  background-color: #eed6d1 !important;
+}
+
+.light [class*="text-[#f2efe7]"],
+.light [class*="text-[#d8e0c2]"] {
+  color: var(--vl-text) !important;
+}
+
+.light [class*="text-[#d8d1c4]"],
+.light [class*="text-[#beb6a8]"] {
+  color: #30382b !important;
+}
+
+.light [class*="text-[#aaa294]"],
+.light [class*="text-[#a7a095]"],
+.light [class*="text-[#9f988d]"],
+.light [class*="text-[#8e877c]"],
+.light [class*="text-[#8d867a]"],
+.light [class*="text-[#817d72]"],
+.light [class*="text-[#77726b]"],
+.light [class*="text-[#6f6a62]"] {
+  color: var(--vl-muted) !important;
+}
+
+.light [class*="text-[#c8ff62]"] {
+  color: var(--vl-accent) !important;
+}
+
+.light [class*="text-[#0f1111]"],
+.light [class*="text-[#11140f]"] {
+  color: #14190f !important;
+}
+
+.light [class*="text-[#d48f8f]"],
+.light [class*="text-[#efb1b1]"] {
+  color: var(--vl-danger) !important;
+}
+
+.light [class*="text-[#d7ff82]"],
+.light [class*="text-[#d5ff7a]"] {
+  color: #52700f !important;
+}
+
+.light [class*="border-[#30352f]"],
+.light [class*="border-[#2a2d31]"],
+.light [class*="border-[#2b302b]"],
+.light [class*="border-[#343832]"],
+.light [class*="border-[#3f5130]"] {
+  border-color: var(--vl-border) !important;
+}
+
+.light [class*="border-[#c8ff62]"] {
+  border-color: #94b83d !important;
+}
+
+.light [class*="border-[#554b32]"] {
+  border-color: #cabb82 !important;
+}
+
+.light [class*="border-[#5d4747]"] {
+  border-color: #d4aaa1 !important;
+}
+
+.light [class*="shadow-[inset_3px_0_0_#c8ff62]"] {
+  box-shadow: inset 3px 0 0 #94b83d !important;
+}
+
+.light [class*="shadow-[12px_12px_0_#c8ff62]"] {
+  box-shadow: 12px 12px 0 #b7d766 !important;
+}
+
+.light [class*="focus:bg-[#1a2117]"]:focus,
+.light [class*="data-[state=open]:bg-[#1a2117]"][data-state="open"] {
+  background-color: var(--vl-accent-panel) !important;
+}
+
+.light [class*="hover:bg-[#1a2117]"]:hover,
+.light [class*="hover:bg-[#1b2019]"]:hover,
+.light [class*="hover:bg-[#20241f]"]:hover {
+  background-color: var(--vl-accent-panel) !important;
+}
+
+.light [class*="hover:text-[#f2efe7]"]:hover,
+.light [class*="focus:text-[#c8ff62]"]:focus,
+.light [class*="data-[state=open]:text-[#c8ff62]"][data-state="open"] {
+  color: var(--vl-text) !important;
+}
+
+.light table thead,
+.light [role="table"] [role="rowgroup"]:first-child,
+.light [class*="Invoice list"] {
+  color: var(--vl-text);
+}
+
+.light [class*="bg-[linear-gradient(180deg,#181a1d_0%,#141715_100%)]"] {
+  background-image: linear-gradient(180deg, #f6f7f1 0%, #e7ecdf 100%) !important;
+}
+
+.light [class*="[background-image:linear-gradient"] {
+  background-image:
+    linear-gradient(rgba(46, 59, 35, 0.075) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(46, 59, 35, 0.075) 1px, transparent 1px) !important;
 }
 
 .dark .dotted-bg {

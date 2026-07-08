@@ -23,7 +23,8 @@ import {
 	SheetHeader,
 	SheetTitle,
 } from "#/components/ui/sheet";
-import { toast } from "#/components/ui/use-toast";
+		import { toast } from "#/components/ui/use-toast";
+import { authClient } from "#/lib/auth-client";
 import { calculateInvoiceCompliance } from "#/features/compliance/calculate";
 import {
 	defaultTaxTreatmentForSellerTaxStatus,
@@ -704,7 +705,10 @@ export function InvoiceDetailsSheet({
 				{
 					method: "POST",
 					credentials: "include",
-					headers: { "Content-Type": "application/json" },
+					headers: {
+						"Content-Type": "application/json",
+						"X-Better-Auth-Cookie": authClient.getCookie(),
+					},
 					body: JSON.stringify({ to }),
 				},
 			);

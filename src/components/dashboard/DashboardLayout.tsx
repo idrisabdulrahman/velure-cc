@@ -8,7 +8,6 @@ import {
 	Building2,
 	ChartNoAxesCombined,
 	Check,
-	ChevronDown,
 	ChevronsUpDown,
 	FileText,
 	LayoutGrid,
@@ -21,6 +20,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { RouteTransition } from "#/components/navigation/RouteTransition";
+import { ThemeToggle } from "#/components/theme/theme-toggle";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
 import {
@@ -341,10 +341,9 @@ export function DashboardLayout() {
 	const workspaceLabel =
 		workspaceContext?.name ?? activeWorkspace?.name ?? "Select workspace";
 	const canSwitchWorkspace = workspaces.length > 1;
-	const activeInvoiceType = invoiceTypeItems.find((item) =>
+	const invoicesActive = invoiceTypeItems.some((item) =>
 		item.match(location.pathname),
 	);
-	const invoicesActive = Boolean(activeInvoiceType);
 	const switchWorkspace = async (workspaceId: Id<"workspaces">) => {
 		if (activeWorkspace?.id === workspaceId) return;
 
@@ -430,84 +429,32 @@ export function DashboardLayout() {
 				<div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
 					<nav className="space-y-6">
 						<div className="space-y-1">
-							<DropdownMenu>
-								<DropdownMenuTrigger asChild>
-									<button
-										type="button"
-										className={`flex w-full items-start gap-3 border px-3 py-3 text-left transition-[background-color,border-color,color] duration-200 ${
-											invoicesActive
-												? "border-[#c8ff62] bg-[#1a2117] shadow-[inset_3px_0_0_#c8ff62]"
-												: "border-transparent text-[#beb6a8] hover:border-[#30352f] hover:bg-[#1b2019]"
+							<Link
+								to="/invoices"
+								className={`flex w-full items-start gap-3 border px-3 py-3 text-left transition-[background-color,border-color,color] duration-200 ${
+									invoicesActive
+										? "border-[#c8ff62] bg-[#1a2117] shadow-[inset_3px_0_0_#c8ff62]"
+										: "border-transparent text-[#beb6a8] hover:border-[#30352f] hover:bg-[#1b2019]"
+								}`}
+							>
+								<LayoutGrid
+									className={`mt-0.5 h-4 w-4 shrink-0 ${
+										invoicesActive ? "text-[#c8ff62]" : "text-[#817d72]"
+									}`}
+								/>
+								<div className="min-w-0 flex-1">
+									<p
+										className={`text-sm font-medium ${
+											invoicesActive ? "text-[#f2efe7]" : "text-[#d8d1c4]"
 										}`}
-										aria-label="Choose invoice type"
 									>
-										<LayoutGrid
-											className={`mt-0.5 h-4 w-4 shrink-0 ${
-												invoicesActive ? "text-[#c8ff62]" : "text-[#817d72]"
-											}`}
-										/>
-										<div className="min-w-0 flex-1">
-											<p
-												className={`text-sm font-medium ${
-													invoicesActive ? "text-[#f2efe7]" : "text-[#d8d1c4]"
-												}`}
-											>
-												Invoices
-											</p>
-											<p className="mt-1 text-xs leading-5 text-[#817d72]">
-												{activeInvoiceType?.label ?? "Choose invoice type"}
-											</p>
-										</div>
-										<ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-[#817d72]" />
-									</button>
-								</DropdownMenuTrigger>
-								<DropdownMenuContent
-									side="right"
-									align="start"
-									className="w-64 border-[#30352f] bg-[#171a18] p-1 text-[#d8d1c4]"
-								>
-									{invoiceTypeItems.map((item) => {
-										const Icon = item.icon;
-										const active = item.match(location.pathname);
-
-										return (
-											<DropdownMenuItem
-												key={item.to}
-												asChild
-												className="px-0 py-0 focus:bg-[#1a2117]"
-											>
-												<Link
-													to={item.to}
-													className="flex w-full items-start gap-3 px-3 py-2.5"
-												>
-													<Icon
-														className={`mt-0.5 h-4 w-4 shrink-0 ${
-															active ? "text-[#c8ff62]" : "text-[#817d72]"
-														}`}
-													/>
-													<div className="min-w-0 flex-1">
-														<p
-															className={`text-sm font-medium ${
-																active ? "text-[#f2efe7]" : "text-[#d8d1c4]"
-															}`}
-														>
-															{item.label}
-														</p>
-														<p className="mt-1 text-xs leading-5 text-[#817d72]">
-															{item.description}
-														</p>
-													</div>
-													<Check
-														className={`mt-0.5 h-4 w-4 shrink-0 ${
-															active ? "opacity-100" : "opacity-0"
-														}`}
-													/>
-												</Link>
-											</DropdownMenuItem>
-										);
-									})}
-								</DropdownMenuContent>
-							</DropdownMenu>
+										Invoices
+									</p>
+									<p className="mt-1 text-xs leading-5 text-[#817d72]">
+										Standard and pro-forma documents
+									</p>
+								</div>
+							</Link>
 
 							{navItems.map((item) => {
 								const Icon = item.icon;
@@ -633,6 +580,7 @@ export function DashboardLayout() {
 						</div>
 
 						<div className="flex items-center gap-2">
+							<ThemeToggle className="h-9 w-9 border border-[#30352f] bg-[#151817] text-[#beb6a8] hover:border-[#3f5130] hover:bg-[#1a2117] hover:text-[#f2efe7]" />
 							<Button
 								type="button"
 								variant="ghost"

@@ -21,6 +21,7 @@ import type * as emailEvents from "../emailEvents.js";
 import type * as env from "../env.js";
 import type * as http from "../http.js";
 import type * as integrations from "../integrations.js";
+import type * as invoice_utils from "../invoice_utils.js";
 import type * as invoices from "../invoices.js";
 import type * as jobRuns from "../jobRuns.js";
 import type * as nigeria from "../nigeria.js";
@@ -35,6 +36,7 @@ import type * as reminders from "../reminders.js";
 import type * as reports from "../reports.js";
 import type * as revenueReporting from "../revenueReporting.js";
 import type * as rls from "../rls.js";
+import type * as validators from "../validators.js";
 import type * as workspaces from "../workspaces.js";
 
 import type {
@@ -57,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   env: typeof env;
   http: typeof http;
   integrations: typeof integrations;
+  invoice_utils: typeof invoice_utils;
   invoices: typeof invoices;
   jobRuns: typeof jobRuns;
   nigeria: typeof nigeria;
@@ -71,6 +74,7 @@ declare const fullApi: ApiFromModules<{
   reports: typeof reports;
   revenueReporting: typeof revenueReporting;
   rls: typeof rls;
+  validators: typeof validators;
   workspaces: typeof workspaces;
 }>;
 
