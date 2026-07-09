@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { useReducedMotion } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -32,6 +32,7 @@ import {
 } from "#/components/ui/dropdown-menu";
 import { toast } from "#/components/ui/use-toast";
 import { authClient } from "#/lib/auth-client";
+import { useDashboardAuth } from "#/lib/auth-hook";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -132,22 +133,19 @@ export function DashboardLayout() {
 	const mainRef = useRef<HTMLElement | null>(null);
 	const workspaceEnsureAttemptedRef = useRef(false);
 	const shouldReduceMotion = useReducedMotion();
-	const { data: session, isPending } = authClient.useSession();
-	const {
-		isLoading: isConvexAuthLoading,
-		isAuthenticated: isConvexAuthenticated,
-	} = useConvexAuth();
 	const [ensuringWorkspace, setEnsuringWorkspace] = useState(false);
+	
+	// Use unified auth hook
+	const {
+		data: session,
+		isPending,
+		isAuthenticated,
+		isConvexAuthenticated,
+		workspaces,
+		workspaceContext,
+	} = useDashboardAuth();
+	
 	const hasSession = Boolean(session?.user);
-	const workspaces =
-		useQuery(
-			api.account.listWorkspaces,
-			isConvexAuthenticated && hasSession ? {} : "skip",
-		) ?? [];
-	const workspaceContext = useQuery(
-		api.account.getWorkspaceContext,
-		isConvexAuthenticated && hasSession ? {} : "skip",
-	);
 	const setActiveWorkspace = useMutation(api.account.setActiveWorkspace);
 	const ensureWorkspaceContext = useMutation(
 		api.account.ensureWorkspaceContext,
@@ -217,7 +215,7 @@ export function DashboardLayout() {
 
 	if (
 		waitingForInitialSession ||
-		isConvexAuthLoading ||
+		isPending ||
 		waitingForConvexAuth ||
 		ensuringWorkspace ||
 		needsWorkspaceBootstrap
