@@ -3,7 +3,6 @@ import { useMutation } from "convex/react";
 import { useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
-import { Label } from "#/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -14,22 +13,17 @@ import {
 import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
+import type { FormState } from "#/features/products/product-form-utils";
+import {
+	Field,
+	UNIT_OPTIONS,
+	validateProductForm,
+} from "#/features/products/product-form-utils";
 import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/invoices/products/new")({
 	component: NewProductPage,
 });
-
-type FormState = {
-	type: "product" | "service";
-	name: string;
-	description: string;
-	sku: string;
-	unitName: string;
-	defaultUnitPrice: string;
-	defaultTaxId: string;
-	isActive: boolean;
-};
 
 const initialState: FormState = {
 	type: "product",
@@ -41,17 +35,6 @@ const initialState: FormState = {
 	defaultTaxId: "",
 	isActive: true,
 };
-
-const UNIT_OPTIONS = [
-	{ value: "pcs", label: "Pieces (pcs)" },
-	{ value: "unit", label: "Unit" },
-	{ value: "project", label: "Project" },
-	{ value: "hour", label: "Hour" },
-	{ value: "day", label: "Day" },
-	{ value: "month", label: "Month" },
-	{ value: "kg", label: "Kilogram (kg)" },
-	{ value: "litre", label: "Litre" },
-];
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
 	return new Promise<T>((resolve, reject) => {
@@ -83,23 +66,8 @@ function NewProductPage() {
 	const [submitting, setSubmitting] = useState(false);
 	const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
-	const nameError =
-		state.name.trim().length === 0 ? "Product name is required" : "";
-	const unitPriceText = state.defaultUnitPrice.trim();
-	const parsedUnitPrice = Number(unitPriceText);
-	const priceError =
-		unitPriceText.length === 0
-			? "Unit price is required"
-			: !Number.isFinite(parsedUnitPrice)
-				? "Unit price must be a valid number"
-				: parsedUnitPrice < 0
-					? "Unit price must be non-negative"
-					: "";
-	const visibleNameError = attemptedSubmit ? nameError : "";
-	const visiblePriceError =
-		attemptedSubmit || unitPriceText.length > 0 ? priceError : "";
-
-	const isValid = !nameError && !priceError;
+	const { parsedUnitPrice, visibleNameError, visiblePriceError, isValid } =
+		validateProductForm(state, attemptedSubmit);
 	const previewUnitPrice = Number(state.defaultUnitPrice);
 	const hasPreviewUnitPrice =
 		state.defaultUnitPrice.trim().length > 0 &&
@@ -327,24 +295,6 @@ function NewProductPage() {
 					</div>
 				</aside>
 			</div>
-		</div>
-	);
-}
-
-function Field({
-	label,
-	error,
-	children,
-}: {
-	label: string;
-	error?: string;
-	children: React.ReactNode;
-}) {
-	return (
-		<div className="space-y-1.5">
-			<Label className="text-xs text-[#8d938f]">{label}</Label>
-			{children}
-			{error ? <p className="text-xs text-[#c76f5b]">{error}</p> : null}
 		</div>
 	);
 }

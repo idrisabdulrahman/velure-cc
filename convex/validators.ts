@@ -105,7 +105,10 @@ export const invoiceDocumentTypeValidator = v.union(
 	v.literal("proforma"),
 );
 
-export const invoiceSizeValidator = v.union(v.literal("A4"), v.literal("LETTER"));
+export const invoiceSizeValidator = v.union(
+	v.literal("A4"),
+	v.literal("LETTER"),
+);
 
 export const invoiceDateFormatValidator = v.union(
 	v.literal("iso"),

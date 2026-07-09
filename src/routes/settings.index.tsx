@@ -164,15 +164,15 @@ function SettingsPage() {
 		if (!workspace) return;
 
 		const nextForm = {
-				name: workspace.name ?? "",
-				legalName: workspace.legalName ?? "",
-				email: workspace.email || session?.user.email || "",
-				phone: workspace.phone ?? "",
-				address: workspace.address ?? "",
-				logoUrl: workspace.logoUrl ?? "",
-				taxId: workspace.taxId ?? "",
-				rcNumber: (workspace as { rcNumber?: string }).rcNumber ?? "",
-				paymentDetails: workspace.paymentDetails ?? "",
+			name: workspace.name ?? "",
+			legalName: workspace.legalName ?? "",
+			email: workspace.email || session?.user.email || "",
+			phone: workspace.phone ?? "",
+			address: workspace.address ?? "",
+			logoUrl: workspace.logoUrl ?? "",
+			taxId: workspace.taxId ?? "",
+			rcNumber: (workspace as { rcNumber?: string }).rcNumber ?? "",
+			paymentDetails: workspace.paymentDetails ?? "",
 			defaultCurrency: workspace.baseCurrency ?? "NGN",
 			defaultPaymentTermsDays: String(workspace.defaultPaymentTermsDays ?? 14),
 			invoiceNumberMode: workspace.invoiceNumberMode ?? "prefix",
@@ -226,14 +226,14 @@ function SettingsPage() {
 		setSaving(true);
 		try {
 			await saveWorkspace({
-					name: form.name.trim(),
-					legalName: form.legalName.trim() || form.name.trim(),
-					email: form.email.trim(),
+				name: form.name.trim(),
+				legalName: form.legalName.trim() || form.name.trim(),
+				email: form.email.trim(),
 				phone: form.phone.trim() || undefined,
 				address: form.address.trim(),
 				website: workspace.website || undefined,
-					taxId: form.taxId.trim() || undefined,
-					rcNumber: form.rcNumber.trim() || undefined,
+				taxId: form.taxId.trim() || undefined,
+				rcNumber: form.rcNumber.trim() || undefined,
 				countryCode: workspace.countryCode,
 				baseCurrency: form.defaultCurrency,
 				sellerTaxStatus:
@@ -377,24 +377,24 @@ function SettingsPage() {
 					</div>
 
 					<div className="grid gap-4 md:grid-cols-2">
-							<Field label="Workspace Name*" error={errors.name}>
-								<Input
-									value={form.name}
-									onChange={(event) => updateField("name", event.target.value)}
-									className="rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62]"
-								/>
-							</Field>
-							<Field label="Registered Business Name" error={errors.legalName}>
-								<Input
-									value={form.legalName}
-									onChange={(event) =>
-										updateField("legalName", event.target.value)
-									}
-									placeholder="Shown on invoices when different"
-									className="rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62]"
-								/>
-							</Field>
-							<Field label="Business Email*" error={errors.email}>
+						<Field label="Workspace Name*" error={errors.name}>
+							<Input
+								value={form.name}
+								onChange={(event) => updateField("name", event.target.value)}
+								className="rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62]"
+							/>
+						</Field>
+						<Field label="Registered Business Name" error={errors.legalName}>
+							<Input
+								value={form.legalName}
+								onChange={(event) =>
+									updateField("legalName", event.target.value)
+								}
+								placeholder="Shown on invoices when different"
+								className="rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62]"
+							/>
+						</Field>
+						<Field label="Business Email*" error={errors.email}>
 							<Input
 								type="email"
 								value={form.email}
@@ -412,8 +412,8 @@ function SettingsPage() {
 								className="rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62]"
 							/>
 						</Field>
-							<Field label="TIN" error={errors.taxId}>
-								<Input
+						<Field label="TIN" error={errors.taxId}>
+							<Input
 								value={form.taxId}
 								onChange={(event) =>
 									updateField(
@@ -425,28 +425,28 @@ function SettingsPage() {
 								aria-invalid={Boolean(errors.taxId)}
 								className={`rounded-md bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62] ${
 									errors.taxId ? "border-[#c76f5b]" : "border-[#30352f]"
-									}`}
-								/>
-							</Field>
-							<Field label="CAC RC Number" error={errors.rcNumber}>
-								<Input
-									value={form.rcNumber}
-									onChange={(event) =>
-										updateField(
-											"rcNumber",
-											event.target.value
-												.toUpperCase()
-												.replace(/\s+/g, "")
-												.slice(0, 10),
-										)
-									}
-									placeholder="RC-1234567"
-									aria-invalid={Boolean(errors.rcNumber)}
-									className={`rounded-md bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62] ${
-										errors.rcNumber ? "border-[#c76f5b]" : "border-[#30352f]"
-									}`}
-								/>
-							</Field>
+								}`}
+							/>
+						</Field>
+						<Field label="CAC RC Number" error={errors.rcNumber}>
+							<Input
+								value={form.rcNumber}
+								onChange={(event) =>
+									updateField(
+										"rcNumber",
+										event.target.value
+											.toUpperCase()
+											.replace(/\s+/g, "")
+											.slice(0, 10),
+									)
+								}
+								placeholder="RC-1234567"
+								aria-invalid={Boolean(errors.rcNumber)}
+								className={`rounded-md bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62] ${
+									errors.rcNumber ? "border-[#c76f5b]" : "border-[#30352f]"
+								}`}
+							/>
+						</Field>
 						<Field label="Default Currency" error={errors.defaultCurrency}>
 							<Input
 								value={form.defaultCurrency}
@@ -609,8 +609,8 @@ function SettingsPage() {
 				<div className="border-b border-[#30352f] px-5 py-4">
 					<h2 className="text-sm font-medium text-[#f2efe7]">Account info</h2>
 				</div>
-					<div className="grid gap-3 px-5 py-5 md:grid-cols-2">
-						<ReadOnlyItem label="Member Since" value={memberSince} />
+				<div className="grid gap-3 px-5 py-5 md:grid-cols-2">
+					<ReadOnlyItem label="Member Since" value={memberSince} />
 					<div className="rounded-md border border-[#30352f] bg-[#101211] px-4 py-3">
 						<p className="text-xs text-[#aaa294]">Plan</p>
 						<div className="mt-2 flex items-center justify-between gap-3">
@@ -647,12 +647,12 @@ function SettingsPage() {
 						</p>
 					</div>
 					<div className="rounded-md border border-[#30352f] bg-[#101211] px-4 py-3">
-							<p className="text-sm font-medium text-[#f2efe7]">Tax disclaimer</p>
-							<p className="mt-1 text-sm text-[#aaa294]">
-								Velure helps structure invoice data for Nigerian finance
-								workflows. Confirm VAT, WHT, and filing treatment with your
-								accountant or tax advisor.
-							</p>
+						<p className="text-sm font-medium text-[#f2efe7]">Tax disclaimer</p>
+						<p className="mt-1 text-sm text-[#aaa294]">
+							Velure helps structure invoice data for Nigerian finance
+							workflows. Confirm VAT, WHT, and filing treatment with your
+							accountant or tax advisor.
+						</p>
 					</div>
 				</div>
 			</section>

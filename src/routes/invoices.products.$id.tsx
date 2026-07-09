@@ -3,10 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { Loader2 } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
-import { Label } from "#/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -18,34 +17,18 @@ import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
 import { formatMoney } from "#/features/invoices/format";
+import type { FormState } from "#/features/products/product-form-utils";
+import {
+	Field,
+	UNIT_OPTIONS,
+	validateProductForm,
+} from "#/features/products/product-form-utils";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/invoices/products/$id")({
 	component: ProductDetailPage,
 });
-
-type FormState = {
-	type: "product" | "service";
-	name: string;
-	description: string;
-	sku: string;
-	unitName: string;
-	defaultUnitPrice: string;
-	defaultTaxId: string;
-	isActive: boolean;
-};
-
-const UNIT_OPTIONS = [
-	{ value: "pcs", label: "Pieces (pcs)" },
-	{ value: "unit", label: "Unit" },
-	{ value: "project", label: "Project" },
-	{ value: "hour", label: "Hour" },
-	{ value: "day", label: "Day" },
-	{ value: "month", label: "Month" },
-	{ value: "kg", label: "Kilogram (kg)" },
-	{ value: "litre", label: "Litre" },
-];
 
 function ProductDetailPage() {
 	const { id } = Route.useParams();
@@ -103,22 +86,8 @@ function ProductDetailPage() {
 		);
 	}
 
-	const nameError =
-		state.name.trim().length === 0 ? "Product name is required" : "";
-	const unitPriceText = state.defaultUnitPrice.trim();
-	const parsedUnitPrice = Number(unitPriceText);
-	const priceError =
-		unitPriceText.length === 0
-			? "Unit price is required"
-			: !Number.isFinite(parsedUnitPrice)
-				? "Unit price must be a valid number"
-				: parsedUnitPrice < 0
-					? "Unit price must be non-negative"
-					: "";
-	const visibleNameError = attemptedSubmit ? nameError : "";
-	const visiblePriceError =
-		attemptedSubmit || unitPriceText.length > 0 ? priceError : "";
-	const isValid = !nameError && !priceError;
+	const { parsedUnitPrice, visibleNameError, visiblePriceError, isValid } =
+		validateProductForm(state, attemptedSubmit);
 	const inputClass =
 		"h-10 rounded-md border-[#30352f] bg-[#0f1111] text-sm text-[#f2efe7] placeholder:text-[#737b89] focus-visible:border-[#c8ff62] focus-visible:ring-0";
 
@@ -383,24 +352,6 @@ function ProductDetailPage() {
 					</div>
 				</div>
 			</div>
-		</div>
-	);
-}
-
-function Field({
-	label,
-	error,
-	children,
-}: {
-	label: string;
-	error?: string;
-	children: ReactNode;
-}) {
-	return (
-		<div className="space-y-1.5">
-			<Label className="text-xs text-[#8d938f]">{label}</Label>
-			{children}
-			{error ? <p className="text-xs text-[#c76f5b]">{error}</p> : null}
 		</div>
 	);
 }

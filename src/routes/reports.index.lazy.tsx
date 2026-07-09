@@ -36,13 +36,13 @@ import {
 	formatInvoiceDate,
 	formatMoney,
 } from "#/features/invoices/format";
+import type { PeriodPreset } from "#/utils/date";
+import { PERIOD_OPTIONS, resolvePeriod } from "#/utils/date";
 import { api } from "../../convex/_generated/api";
 
 export const Route = createLazyFileRoute("/reports/")({
 	component: ReportsIndex,
 });
-
-type PeriodPreset = "last-6-months" | "year-to-date" | "last-12-months";
 
 type CurrencySummary = {
 	currency: string;
@@ -64,31 +64,8 @@ type ChartTooltipPayload = {
 	payload?: Record<string, unknown>;
 };
 
-const PERIOD_OPTIONS: Array<{ value: PeriodPreset; label: string }> = [
-	{ value: "last-6-months", label: "Last 6 months" },
-	{ value: "year-to-date", label: "Year to date" },
-	{ value: "last-12-months", label: "Last 12 months" },
-];
 const METRIC_SKELETON_KEYS = ["billed", "collected", "outstanding", "overdue"];
 const TABLE_SKELETON_KEYS = ["customers", "late-payers", "products"];
-
-function toIsoDay(date: Date) {
-	return date.toISOString().slice(0, 10);
-}
-
-function resolvePeriod(value: PeriodPreset) {
-	const now = new Date();
-	const to = toIsoDay(now);
-
-	if (value === "year-to-date") {
-		return { from: `${now.getFullYear()}-01-01`, to };
-	}
-
-	const from = new Date(now);
-	from.setDate(1);
-	from.setMonth(from.getMonth() - (value === "last-6-months" ? 5 : 11));
-	return { from: toIsoDay(from), to };
-}
 
 function formatPercent(value: number) {
 	return `${Math.round(value * 100)}%`;

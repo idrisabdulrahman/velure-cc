@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
 import { Resend } from "resend";
+import { auth } from "#/lib/auth";
 import { getServerConvexClient } from "#/server/convex";
 import { getServerEnv } from "#/server/env";
 import {
@@ -121,26 +122,7 @@ async function sendInvoiceEmail({
 		);
 	}
 
-	const convexSiteUrl =
-		process.env.VITE_CONVEX_SITE_URL ?? process.env.CONVEX_SITE_URL;
-	const betterAuthCookie = request.headers.get("x-better-auth-cookie");
-	if (!betterAuthCookie || !convexSiteUrl) {
-		return Response.json(
-			{ ok: false, error: "Authentication required." },
-			{ status: 401 },
-		);
-	}
-
-	const tokenResp = await fetch(
-		`${convexSiteUrl}/api/auth/convex/token`,
-		{
-			method: "GET",
-			headers: { "Better-Auth-Cookie": betterAuthCookie },
-			redirect: "manual",
-		},
-	);
-	const tokenData = (await tokenResp.json()) as { token?: string };
-	const authToken = tokenData?.token;
+	const authToken = await auth.getToken().catch(() => null);
 	if (!authToken) {
 		return Response.json(
 			{ ok: false, error: "Authentication required." },

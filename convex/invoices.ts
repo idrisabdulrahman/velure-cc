@@ -1442,101 +1442,14 @@ export const createDraft = mutation({
 			args.autoSendEmail !== false &&
 			normalizedCompliance?.buyer?.email?.trim();
 
-		let emailSent = false;
-
 		if (shouldAutoSend) {
-			const recipient = normalizedCompliance.buyer.email.trim().toLowerCase();
-
-			try {
-				if (env.RESEND_API_KEY) {
-					const publicLink = `${env.SITE_URL ?? ""}/i/${args.token}`;
-					const safeInvoiceNumber = escapeHtml(invoiceNumber);
-					const safeCustomerName = escapeHtml(args.customerName);
-					const safePublicLink = escapeHtml(publicLink);
-
-					const response = await fetch("https://api.resend.com/emails", {
-						method: "POST",
-						headers: {
-							Authorization: `Bearer ${env.RESEND_API_KEY}`,
-							"Content-Type": "application/json",
-						},
-						body: JSON.stringify({
-							from: env.RESEND_FROM ?? "Velure <onboarding@resend.dev>",
-							to: [recipient],
-							subject: buildInvoiceEmailSubject(invoiceNumber, documentType),
-							text: `${documentLabel(documentType)} ${invoiceNumber} for ${args.customerName}. View it here: ${publicLink}`,
-							html: `<p>${documentLabel(documentType)} <strong>${safeInvoiceNumber}</strong> for ${safeCustomerName}.</p><p>View it here: <a href="${safePublicLink}">${safePublicLink}</a></p>`,
-						}),
-					});
-
-					const payload = response.ok
-						? ((await response.json().catch(() => null)) as {
-								id?: string;
-								data?: { id?: string };
-							} | null)
-						: null;
-					const providerMessageId = payload?.id ?? payload?.data?.id;
-
-					if (response.ok) {
-						emailSent = true;
-						const emailTimestamp = Date.now();
-
-						await ctx.db.patch(
-							id,
-							patchWithDerivedStatus(invoiceDoc, {
-								deliveredAt: emailTimestamp,
-								lifecycle: {
-									sentAt: emailTimestamp,
-									emailDeliveredAt: emailTimestamp,
-								},
-								updatedAt: emailTimestamp,
-							}),
-						);
-
-						const deliveryEventId = await ctx.db.insert(
-							"invoice_delivery_events",
-							{
-								workspaceId: scope.workspaceId,
-								ownerId: scope.userId,
-								invoiceId: id,
-								channel: "email",
-								recipient,
-								provider: "resend",
-								status: "sent",
-								providerMessageId,
-								publicUrl: publicLink,
-								createdAt: emailTimestamp,
-								updatedAt: emailTimestamp,
-							},
-						);
-
-						await recordEmailEvent(ctx, {
-							workspaceId: scope.workspaceId,
-							ownerId: scope.userId,
-							invoiceId: id,
-							deliveryEventId,
-							providerMessageId,
-							eventType: "sent",
-							recipient,
-						});
-
-						await recordAuditLog(ctx, {
-							workspaceId: scope.workspaceId,
-							actorId: scope.userId,
-							action: "invoice.sent",
-							resourceType: "invoice",
-							resourceId: String(id),
-							metadata: {
-								invoiceNumber,
-								recipient,
-								providerMessageId,
-							},
-						});
-					}
-				}
-			} catch (_error) {
-				// Email sending failed, but invoice was created successfully
-			}
+			await ctx.scheduler.runAfter(
+				0,
+				internal.invoices.sendInvoiceEmailAction,
+				{
+					invoiceId: id,
+				},
+			);
 		}
 
 		return mapInvoice({
@@ -1560,7 +1473,7 @@ export const createDraft = mutation({
 			issueDate: args.issueDate,
 			dueDate: args.dueDate,
 			paymentAmount: 0,
-			deliveredAt: emailSent ? Date.now() : undefined,
+			deliveredAt: undefined,
 			paymentDetails: args.paymentDetails,
 			notes: args.notes,
 			lineItems: args.lineItems,
@@ -1569,9 +1482,7 @@ export const createDraft = mutation({
 				normalizedCompliance.fiscalization ?? { status: "not_configured" },
 			reminder,
 			sync,
-			lifecycle: emailSent
-				? { sentAt: Date.now(), emailDeliveredAt: Date.now() }
-				: {},
+			lifecycle: {},
 			createdAt: existingDraft?.createdAt ?? now,
 			updatedAt: now,
 		});
@@ -2958,29 +2869,139 @@ export const recordDeliveryEvent = mutation({
 	},
 });
 
-export const sendInvoiceEmailInternal = mutation({
+export const getInvoiceForSendingInternal = internalMutation({
+	args: { invoiceId: v.id("invoices") },
+	handler: async (ctx, args) => {
+		const { scope, invoice } = await requireWritableInvoice(
+			ctx,
+			args.invoiceId,
+		);
+		return { scope, invoice };
+	},
+});
+
+export const recordEmailSentInternal = internalMutation({
 	args: {
 		invoiceId: v.id("invoices"),
+		recipient: v.string(),
+		providerMessageId: v.optional(v.string()),
+		publicLink: v.string(),
+		now: v.number(),
 	},
 	handler: async (ctx, args) => {
 		const { scope, invoice } = await requireWritableInvoice(
 			ctx,
 			args.invoiceId,
 		);
+		const currentLifecycle = invoice.lifecycle ?? {};
+
+		await ctx.db.patch(
+			args.invoiceId,
+			patchWithDerivedStatus(invoice, {
+				deliveredAt: invoice.deliveredAt ?? args.now,
+				lifecycle: {
+					...currentLifecycle,
+					sentAt: currentLifecycle.sentAt ?? args.now,
+					emailDeliveredAt: currentLifecycle.emailDeliveredAt ?? args.now,
+				},
+				updatedAt: args.now,
+			}),
+		);
+
+		const deliveryEventId = await ctx.db.insert("invoice_delivery_events", {
+			workspaceId: scope.workspaceId,
+			ownerId: scope.userId,
+			invoiceId: args.invoiceId,
+			channel: "email",
+			recipient: args.recipient,
+			provider: "resend",
+			status: "sent",
+			providerMessageId: args.providerMessageId,
+			publicUrl: args.publicLink,
+			createdAt: args.now,
+			updatedAt: args.now,
+		});
+
+		await recordEmailEvent(ctx, {
+			workspaceId: scope.workspaceId,
+			ownerId: scope.userId,
+			invoiceId: args.invoiceId,
+			deliveryEventId,
+			providerMessageId: args.providerMessageId,
+			eventType: "sent",
+			recipient: args.recipient,
+		});
+
+		await recordAuditLog(ctx, {
+			workspaceId: scope.workspaceId,
+			actorId: scope.userId,
+			action: "invoice.sent",
+			resourceType: "invoice",
+			resourceId: String(args.invoiceId),
+			metadata: {
+				invoiceNumber: invoice.invoiceNumber,
+				recipient: args.recipient,
+				providerMessageId: args.providerMessageId,
+			},
+		});
+	},
+});
+
+export const sendInvoiceEmailAction = internalAction({
+	args: {
+		invoiceId: v.id("invoices"),
+	},
+	handler: async (ctx, args) => {
+		const { scope, invoice } = await ctx.runMutation(
+			internal.invoices.getInvoiceForSendingInternal,
+			{ invoiceId: args.invoiceId },
+		);
 
 		const recipient = invoice.compliance?.buyer?.email?.trim().toLowerCase();
-		if (!recipient) {
+		if (!recipient)
 			throw new Error("No recipient email found on this invoice.");
-		}
 
-		if (!env.RESEND_API_KEY) {
+		const apiBaseUrl = env.SITE_URL ?? "";
+		if (!apiBaseUrl) throw new Error("SITE_URL is not configured.");
+		if (!env.RESEND_API_KEY)
 			throw new Error("RESEND_API_KEY is not configured.");
+
+		const publicLink = `${apiBaseUrl}/i/${invoice.token}`;
+
+		let pdfBytes = new Uint8Array();
+		try {
+			const pdfResponse = await fetch(
+				`${apiBaseUrl}/api/invoice/download/${encodeURIComponent(invoice.token)}`,
+			);
+			if (pdfResponse.ok) {
+				pdfBytes = new Uint8Array(await pdfResponse.arrayBuffer());
+			}
+		} catch {
+			// PDF generation unavailable, send without attachment
 		}
 
-		const publicLink = `${env.SITE_URL ?? ""}/i/${invoice.token}`;
 		const safeInvoiceNumber = escapeHtml(invoice.invoiceNumber);
 		const safeCustomerName = escapeHtml(invoice.customerName);
 		const safePublicLink = escapeHtml(publicLink);
+		const docLabel = documentLabel(invoice.documentType ?? "standard");
+
+		const emailBody: Record<string, unknown> = {
+			from: env.RESEND_FROM ?? "Velure <onboarding@resend.dev>",
+			to: [recipient],
+			subject: `${docLabel} ${invoice.invoiceNumber}`,
+			text: `${docLabel} ${invoice.invoiceNumber} for ${invoice.customerName} is attached as a PDF. You can also view it online: ${publicLink}`,
+			html: `<div style="font-family: Arial, sans-serif; color: #111; line-height: 1.5;"><h2 style="margin: 0 0 12px;">${docLabel} ${safeInvoiceNumber}</h2><p style="margin: 0 0 12px;">Hi,</p><p style="margin: 0 0 12px;">Your ${docLabel.toLowerCase()} for <strong>${safeCustomerName}</strong> is attached as a PDF.</p><p style="margin: 0 0 12px;">You can also view it online: <a href="${safePublicLink}">${safePublicLink}</a></p></div>`,
+		};
+
+		if (pdfBytes.length > 0) {
+			emailBody.attachments = [
+				{
+					filename: `${invoice.invoiceNumber}.pdf`,
+					content: Buffer.from(pdfBytes).toString("base64"),
+					contentType: "application/pdf",
+				},
+			];
+		}
 
 		const response = await fetch("https://api.resend.com/emails", {
 			method: "POST",
@@ -2988,16 +3009,7 @@ export const sendInvoiceEmailInternal = mutation({
 				Authorization: `Bearer ${env.RESEND_API_KEY}`,
 				"Content-Type": "application/json",
 			},
-			body: JSON.stringify({
-				from: env.RESEND_FROM ?? "Velure <onboarding@resend.dev>",
-				to: [recipient],
-				subject: buildInvoiceEmailSubject(
-					invoice.invoiceNumber,
-					invoice.documentType ?? "standard",
-				),
-				text: `${documentLabel(invoice.documentType ?? "standard")} ${invoice.invoiceNumber} for ${invoice.customerName}. View it here: ${publicLink}`,
-				html: `<p>${documentLabel(invoice.documentType ?? "standard")} <strong>${safeInvoiceNumber}</strong> for ${safeCustomerName}.</p><p>View it here: <a href="${safePublicLink}">${safePublicLink}</a></p>`,
-			}),
+			body: JSON.stringify(emailBody),
 		});
 
 		const payload = response.ok
@@ -3007,61 +3019,16 @@ export const sendInvoiceEmailInternal = mutation({
 				} | null)
 			: null;
 		const providerMessageId = payload?.id ?? payload?.data?.id;
-
 		const now = Date.now();
-		const currentLifecycle = invoice.lifecycle ?? {};
 
 		if (response.ok) {
-			await ctx.db.patch(
-				invoice._id,
-				patchWithDerivedStatus(invoice, {
-					deliveredAt: invoice.deliveredAt ?? now,
-					lifecycle: {
-						...currentLifecycle,
-						sentAt: currentLifecycle.sentAt ?? now,
-						emailDeliveredAt: currentLifecycle.emailDeliveredAt ?? now,
-					},
-					updatedAt: now,
-				}),
-			);
-
-			const deliveryEventId = await ctx.db.insert("invoice_delivery_events", {
-				workspaceId: scope.workspaceId,
-				ownerId: scope.userId,
+			await ctx.runMutation(internal.invoices.recordEmailSentInternal, {
 				invoiceId: invoice._id,
-				channel: "email",
 				recipient,
-				provider: "resend",
-				status: "sent",
 				providerMessageId,
-				publicUrl: publicLink,
-				createdAt: now,
-				updatedAt: now,
+				publicLink,
+				now,
 			});
-
-			await recordEmailEvent(ctx, {
-				workspaceId: scope.workspaceId,
-				ownerId: scope.userId,
-				invoiceId: invoice._id,
-				deliveryEventId,
-				providerMessageId,
-				eventType: "sent",
-				recipient,
-			});
-
-			await recordAuditLog(ctx, {
-				workspaceId: scope.workspaceId,
-				actorId: scope.userId,
-				action: "invoice.sent",
-				resourceType: "invoice",
-				resourceId: String(invoice._id),
-				metadata: {
-					invoiceNumber: invoice.invoiceNumber,
-					recipient,
-					providerMessageId,
-				},
-			});
-
 			return { ok: true, providerMessageId };
 		}
 

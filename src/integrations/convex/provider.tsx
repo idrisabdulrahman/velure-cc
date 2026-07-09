@@ -5,7 +5,9 @@ import { ConvexProvider } from "convex/react";
 import { authClient } from "#/lib/auth-client";
 
 const CONVEX_URL = import.meta.env.VITE_CONVEX_URL;
-export const convexQueryClient = CONVEX_URL ? new ConvexQueryClient(CONVEX_URL) : null;
+export const convexQueryClient = CONVEX_URL
+	? new ConvexQueryClient(CONVEX_URL)
+	: null;
 
 export default function AppConvexProvider({
 	children,

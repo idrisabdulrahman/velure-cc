@@ -32,10 +32,10 @@ import {
 	SELLER_TAX_STATUS_OPTIONS,
 } from "#/features/compliance/nigeria";
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
+import type { PeriodPreset } from "#/utils/date";
+import { PERIOD_OPTIONS, resolvePeriod } from "#/utils/date";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-
-type DashboardPeriod = "last-6-months" | "year-to-date" | "last-12-months";
 
 type ComplianceFormErrors = Partial<{
 	taxId: string;
@@ -48,15 +48,6 @@ type ComplianceFormErrors = Partial<{
 	profileLabel: string;
 	profileRate: string;
 }>;
-
-const DASHBOARD_PERIOD_OPTIONS: Array<{
-	value: DashboardPeriod;
-	label: string;
-}> = [
-	{ value: "last-6-months", label: "Last 6 months" },
-	{ value: "year-to-date", label: "Year to date" },
-	{ value: "last-12-months", label: "Last 12 months" },
-];
 
 const WARNING_LABELS: Record<string, string> = {
 	missing_seller_tax_id: "Missing seller TIN",
@@ -72,24 +63,6 @@ const WARNING_LABELS: Record<string, string> = {
 };
 
 const DASHBOARD_SKELETON_KEYS = ["vat", "wht", "warnings", "exports"] as const;
-
-function toIsoDay(date: Date) {
-	return date.toISOString().slice(0, 10);
-}
-
-function resolveDashboardWindow(value: DashboardPeriod) {
-	const now = new Date();
-	const to = toIsoDay(now);
-
-	if (value === "year-to-date") {
-		return { from: `${now.getFullYear()}-01-01`, to };
-	}
-
-	const from = new Date(now);
-	from.setDate(1);
-	from.setMonth(from.getMonth() - (value === "last-6-months" ? 5 : 11));
-	return { from: toIsoDay(from), to };
-}
 
 function formatCount(value: number) {
 	return new Intl.NumberFormat("en-NG").format(
@@ -171,12 +144,12 @@ function ComplianceSettingsPage() {
 		convexQuery(api.compliance.getWorkspaceSettings, {}),
 	);
 	const [dashboardPeriod, setDashboardPeriod] =
-		useState<DashboardPeriod>("last-6-months");
+		useState<PeriodPreset>("last-6-months");
 	const [selectedDashboardCurrency, setSelectedDashboardCurrency] = useState<
 		string | null
 	>(null);
 	const dashboardWindow = useMemo(
-		() => resolveDashboardWindow(dashboardPeriod),
+		() => resolvePeriod(dashboardPeriod),
 		[dashboardPeriod],
 	);
 	const { data: complianceDashboard } = useQuery(
@@ -343,14 +316,14 @@ function ComplianceSettingsPage() {
 						<Select
 							value={dashboardPeriod}
 							onValueChange={(value) =>
-								setDashboardPeriod(value as DashboardPeriod)
+								setDashboardPeriod(value as PeriodPreset)
 							}
 						>
 							<SelectTrigger className="h-10 w-full rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] sm:w-[170px]">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
-								{DASHBOARD_PERIOD_OPTIONS.map((item) => (
+								{PERIOD_OPTIONS.map((item) => (
 									<SelectItem key={item.value} value={item.value}>
 										{item.label}
 									</SelectItem>

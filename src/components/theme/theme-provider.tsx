@@ -1,6 +1,7 @@
 import {
 	createContext,
 	type ReactNode,
+	useCallback,
 	useContext,
 	useEffect,
 	useMemo,
@@ -37,6 +38,11 @@ function applyTheme(theme: Theme) {
 	document.documentElement.style.colorScheme = theme;
 }
 
+function prefersReducedMotion() {
+	if (typeof window === "undefined") return false;
+	return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
 	const [theme, setThemeState] = useState<Theme>(readStoredTheme);
 
@@ -45,17 +51,35 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 		window.localStorage.setItem(themeStorageKey, theme);
 	}, [theme]);
 
+	const changeTheme = useCallback(
+		(newTheme: Theme) => {
+			if (theme === newTheme) return;
+
+			if (
+				typeof document !== "undefined" &&
+				document.startViewTransition &&
+				!prefersReducedMotion()
+			) {
+				document.startViewTransition(() => {
+					applyTheme(newTheme);
+				});
+			} else {
+				applyTheme(newTheme);
+			}
+			setThemeState(newTheme);
+		},
+		[theme],
+	);
+
 	const value = useMemo<ThemeContextValue>(
 		() => ({
 			theme,
-			setTheme: setThemeState,
+			setTheme: changeTheme,
 			toggleTheme: () => {
-				setThemeState((currentTheme) =>
-					currentTheme === "dark" ? "light" : "dark",
-				);
+				changeTheme(theme === "dark" ? "light" : "dark");
 			},
 		}),
-		[theme],
+		[theme, changeTheme],
 	);
 
 	return (

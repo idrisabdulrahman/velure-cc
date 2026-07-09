@@ -23,8 +23,7 @@ import {
 	SheetHeader,
 	SheetTitle,
 } from "#/components/ui/sheet";
-		import { toast } from "#/components/ui/use-toast";
-import { authClient } from "#/lib/auth-client";
+import { toast } from "#/components/ui/use-toast";
 import { calculateInvoiceCompliance } from "#/features/compliance/calculate";
 import {
 	defaultTaxTreatmentForSellerTaxStatus,
@@ -51,6 +50,7 @@ import {
 import { invoiceTotal } from "#/features/invoices/calculate";
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import type { InvoiceLineItem, InvoiceRecord } from "#/features/invoices/types";
+import { authClient } from "#/lib/auth-client";
 import { api } from "../../../../convex/_generated/api";
 
 type Props = {
@@ -110,10 +110,13 @@ function formatDate(value: string) {
 function shareLinks(invoice: InvoiceRecord) {
 	const origin = typeof window !== "undefined" ? window.location.origin : "";
 	const publicUrl = `${origin}/i/${invoice.token}`;
-	const text = `Invoice ${invoice.invoiceNumber} for ${invoice.customerName}`;
+	const downloadUrl = `${publicUrl}?download=1`;
+	const label = invoice.documentType === "proforma" ? "Pro-forma" : "Invoice";
+	const text = `${label} ${invoice.invoiceNumber} for ${invoice.customerName}`;
+	const body = `${text}\n\nView & download: ${downloadUrl}`;
 
-	const telegramHref = `https://t.me/share/url?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(text)}`;
-	const whatsappHref = `https://wa.me/?text=${encodeURIComponent(`${text} ${publicUrl}`)}`;
+	const telegramHref = `https://t.me/share/url?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(body)}`;
+	const whatsappHref = `https://wa.me/?text=${encodeURIComponent(body)}`;
 
 	return { publicUrl, telegramHref, whatsappHref };
 }
@@ -1659,9 +1662,13 @@ export function InvoiceDetailsSheet({
 														onClick={async () => {
 															const links = shareLinks(draft);
 															if (navigator.share) {
+																const label =
+																	draft.documentType === "proforma"
+																		? "Pro-forma"
+																		: "Invoice";
 																await navigator.share({
-																	title: `Invoice ${draft.invoiceNumber}`,
-																	text: `Invoice for ${draft.customerName}`,
+																	title: `${label} ${draft.invoiceNumber}`,
+																	text: `${label} ${draft.invoiceNumber} for ${draft.customerName}`,
 																	url: links.publicUrl,
 																});
 																return;

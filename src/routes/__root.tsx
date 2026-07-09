@@ -45,6 +45,11 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 				href: "/favicon-outline.ico",
 			},
 		],
+		scripts: [
+			{
+				children: `(function(){try{var e=localStorage.getItem("velure.theme");if(e==="light"){document.documentElement.classList.remove("dark");document.documentElement.classList.add("light")}}catch(e){}})();`,
+			},
+		],
 	}),
 	shellComponent: RootDocument,
 });
@@ -55,7 +60,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 			<head>
 				<HeadContent />
 			</head>
-			<body className="bg-background text-foreground antialiased dark">
+			<body className="bg-background text-foreground antialiased">
 				<ThemeProvider>
 					<ConvexProvider>
 						<TanStackQueryProvider>

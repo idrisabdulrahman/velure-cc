@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { getInvoiceByToken } from "#/server/public-invoice-repository";
 import { renderInvoicePdf } from "#/server/pdf";
+import { getInvoiceByToken } from "#/server/public-invoice-repository";
 
 function safePdfFileName(invoiceNumber: string) {
 	const normalized =
