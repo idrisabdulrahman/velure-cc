@@ -39,12 +39,6 @@ const matchesPathSegment = (pathname: string, path: string) =>
 	pathname === path || pathname.startsWith(`${path}/`);
 
 const pendingBusinessNameKey = "velure.pending-business-name";
-const SESSION_PROBE_RETRY_DELAYS_MS = [350, 900, 1500] as const;
-
-const wait = (delayMs: number) =>
-	new Promise<void>((resolve) => {
-		window.setTimeout(resolve, delayMs);
-	});
 
 type InvoiceTypeItem = {
 	to: "/invoices";
@@ -139,17 +133,12 @@ export function DashboardLayout() {
 	const workspaceEnsureAttemptedRef = useRef(false);
 	const shouldReduceMotion = useReducedMotion();
 	const { data: session, isPending } = authClient.useSession();
-	const [verifiedSession, setVerifiedSession] = useState<typeof session | null>(
-		null,
-	);
-	const [sessionProbeComplete, setSessionProbeComplete] = useState(false);
 	const {
 		isLoading: isConvexAuthLoading,
 		isAuthenticated: isConvexAuthenticated,
 	} = useConvexAuth();
 	const [ensuringWorkspace, setEnsuringWorkspace] = useState(false);
-	const effectiveSession = session?.user ? session : verifiedSession;
-	const hasSession = Boolean(effectiveSession?.user);
+	const hasSession = Boolean(session?.user);
 	const workspaces =
 		useQuery(
 			api.account.listWorkspaces,
@@ -173,81 +162,13 @@ export function DashboardLayout() {
 		});
 	}, [location.pathname, location.search, location.hash, shouldReduceMotion]);
 
-	useEffect(() => {
-		if (session?.user) {
-			setVerifiedSession(session);
-			setSessionProbeComplete(true);
-			return;
-		}
-		if (!verifiedSession?.user) {
-			setSessionProbeComplete(false);
-		}
-	}, [location.pathname, session, verifiedSession?.user]);
 
-	useEffect(() => {
-		if (isPending || session?.user || sessionProbeComplete) return;
-
-		let cancelled = false;
-		const probeSession = async () => {
-			for (const [
-				attemptIndex,
-				delayMs,
-			] of SESSION_PROBE_RETRY_DELAYS_MS.entries()) {
-				if (attemptIndex > 0) {
-					await wait(delayMs);
-					if (cancelled) return;
-				}
-
-				const result = await authClient
-					.getSession({ fetchOptions: { throw: false } })
-					.catch(() => null);
-
-				if (cancelled) return;
-				const data =
-					result && typeof result === "object" && "data" in result
-						? result.data
-						: null;
-				const error =
-					result && typeof result === "object" && "error" in result
-						? result.error
-						: null;
-
-				if (data && typeof data === "object" && "user" in data) {
-					setVerifiedSession(data as typeof session);
-					(
-						authClient as typeof authClient & { updateSession?: () => void }
-					).updateSession?.();
-					setSessionProbeComplete(true);
-					return;
-				}
-
-				if (error) {
-					continue;
-				}
-
-				setVerifiedSession((current) => (current?.user ? current : null));
-				setSessionProbeComplete(true);
-				return;
-			}
-
-			if (!cancelled) {
-				setVerifiedSession((current) => (current?.user ? current : null));
-				setSessionProbeComplete(true);
-			}
-		};
-
-		void probeSession();
-
-		return () => {
-			cancelled = true;
-		};
-	}, [isPending, session?.user, sessionProbeComplete]);
 
 	useEffect(() => {
 		if (
-			(isPending && !effectiveSession?.user) ||
+			isPending ||
 			!isConvexAuthenticated ||
-			!effectiveSession?.user ||
+			!hasSession ||
 			workspaceContext !== null ||
 			workspaceEnsureAttemptedRef.current
 		) {
@@ -277,7 +198,7 @@ export function DashboardLayout() {
 			})
 			.finally(() => setEnsuringWorkspace(false));
 	}, [
-		effectiveSession?.user,
+		hasSession,
 		ensureWorkspaceContext,
 		isConvexAuthenticated,
 		isPending,
@@ -293,15 +214,9 @@ export function DashboardLayout() {
 		!workspaceEnsureAttemptedRef.current;
 	const waitingForConvexAuth =
 		!waitingForInitialSession && hasSession && !isConvexAuthenticated;
-	const verifyingSession =
-		!waitingForInitialSession &&
-		!hasSession &&
-		!session?.user &&
-		!sessionProbeComplete;
 
 	if (
 		waitingForInitialSession ||
-		verifyingSession ||
 		isConvexAuthLoading ||
 		waitingForConvexAuth ||
 		ensuringWorkspace ||
@@ -314,7 +229,7 @@ export function DashboardLayout() {
 		);
 	}
 
-	if (!effectiveSession?.user) {
+	if (!session?.user) {
 		return (
 			<div className="flex h-screen w-full items-center justify-center bg-[#0f1111] px-6">
 				<div className="w-full max-w-md border border-[#30352f] bg-[#151817] p-6 text-center">
@@ -336,7 +251,7 @@ export function DashboardLayout() {
 	}
 
 	const userInitial =
-		effectiveSession.user.name?.charAt(0)?.toUpperCase() ?? "U";
+		session.user.name?.charAt(0)?.toUpperCase() ?? "U";
 	const activeWorkspace = workspaces.find((workspace) => workspace.isActive);
 	const workspaceLabel =
 		workspaceContext?.name ?? activeWorkspace?.name ?? "Select workspace";
@@ -575,7 +490,7 @@ export function DashboardLayout() {
 								{workspaceLabel}
 							</p>
 							<p className="truncate text-xs text-[#817d72]">
-								{effectiveSession.user.email}
+								{session.user.email}
 							</p>
 						</div>
 
@@ -598,8 +513,8 @@ export function DashboardLayout() {
 									>
 										<Avatar className="h-9 w-9">
 											<AvatarImage
-												src={effectiveSession.user.image ?? undefined}
-												alt={effectiveSession.user.name ?? "User"}
+												src={session.user.image ?? undefined}
+												alt={session.user.name ?? "User"}
 											/>
 											<AvatarFallback className="bg-transparent text-sm font-bold text-[#f2efe7]">
 												{userInitial}
@@ -613,10 +528,10 @@ export function DashboardLayout() {
 								>
 									<div className="px-2 py-2 text-sm">
 										<p className="truncate font-medium text-[#f2efe7]">
-											{effectiveSession.user.name ?? "User"}
+											{session.user.name ?? "User"}
 										</p>
 										<p className="truncate text-xs text-[#817d72]">
-											{effectiveSession.user.email}
+											{session.user.email}
 										</p>
 									</div>
 									<DropdownMenuSeparator className="bg-[#30352f]" />
