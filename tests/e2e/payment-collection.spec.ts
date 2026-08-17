@@ -27,10 +27,6 @@ const paystackSecret =
 	readLocalEnvValue("PAYSTACK_SECRET_KEY") ??
 	"sk_test_e2e";
 
-function signature(body: string) {
-	return createHmac("sha512", paystackSecret).update(body).digest("hex");
-}
-
 test.use({
 	baseURL,
 	launchOptions: {
@@ -58,33 +54,34 @@ test.describe("invoice payment collection", () => {
 		expect(response.status()).toBe(401);
 		await expect(response.json()).resolves.toMatchObject({
 			ok: false,
-			error: "Invalid Paystack signature.",
+			error: "Unauthorized request.",
 		});
 	});
 
 	test("rejects signed but incomplete Paystack webhooks", async ({
 		request,
 	}) => {
-		const body = JSON.stringify({
+		// Build payload missing required `amount` field
+		const incomplete = JSON.stringify({
 			event: "charge.success",
-			data: {
-				status: "success",
-				reference: "velure-e2e-ref",
-			},
+			data: { status: "success", reference: "velure-e2e-ref" },
 		});
+		const sig = createHmac("sha512", paystackSecret)
+			.update(incomplete)
+			.digest("hex");
 
 		const response = await request.post("/api/payments/paystack/webhook", {
 			headers: {
-				"x-paystack-signature": signature(body),
+				"x-paystack-signature": sig,
 				"content-type": "application/json",
 			},
-			data: body,
+			data: incomplete,
 		});
 
 		expect(response.status()).toBe(400);
 		await expect(response.json()).resolves.toMatchObject({
 			ok: false,
-			error: "Incomplete Paystack payload.",
+			error: "Incomplete request payload.",
 		});
 	});
 });

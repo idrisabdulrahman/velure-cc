@@ -3,31 +3,44 @@ import { z } from "zod";
 
 export const env = createEnv({
 	server: {
-		SERVER_URL: z.string().url().optional(),
+		SERVER_URL: z.url().optional(),
 		BETTER_AUTH_SECRET: z.string().min(1),
+		CONVEX_URL: z.string().url().optional(),
+		CONVEX_SITE_URL: z.string().url().optional(),
 		RESEND_API_KEY: z.string().min(1),
-		RESEND_FROM: z.string().min(1).optional(),
+		RESEND_FROM_EMAIL: z.email().optional(),
 		RESEND_WEBHOOK_SECRET: z.string().min(1).optional(),
-		SITE_URL: z.string().url().optional(),
+		SITE_URL: z.url().optional(),
 		PAYSTACK_SECRET_KEY: z.string().min(1).optional(),
 		PAYSTACK_PUBLIC_KEY: z.string().min(1).optional(),
+		SUPABASE_URL: z.url().optional(),
+		SUPABASE_PUBLISHABLE_KEY: z.string().min(1).optional(),
+		SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+		ISSUER_URL: z.url().optional(),
+		BRIDGE_ADMIN_TOKEN: z.string().min(1).optional(),
 	},
 
 	client: {
 		VITE_APP_TITLE: z.string().min(1).optional(),
-		VITE_CONVEX_SITE_URL: z.string().url(),
+		VITE_CONVEX_URL: z.url(),
+		VITE_CONVEX_SITE_URL: z.url(),
+		VITE_SUPABASE_URL: z.url().optional(),
+		VITE_SUPABASE_PUBLISHABLE_KEY: z.string().min(1).optional(),
 	},
-	/**
-	 * The prefix that client-side variables must have. This is enforced both at
-	 * a type-level and at runtime.
-	 */
 	clientPrefix: "VITE_",
 
 	/**
 	 * What object holds the environment variables at runtime. This is usually
 	 * `process.env` or `import.meta.env`.
+	 *
+	 * In TanStack Start SSR (Nitro), import.meta.env may not have VITE_ vars
+	 * because Nitro's SSR bundler handles env differently. Merge with
+	 * process.env so SSR can find vars from the host environment too.
 	 */
-	runtimeEnv: import.meta.env,
+	runtimeEnv: {
+		...import.meta.env,
+		...(typeof process !== "undefined" ? process.env : {}),
+	} as Record<string, string | undefined>,
 
 	/**
 	 * By default, this library will feed the environment variables directly to

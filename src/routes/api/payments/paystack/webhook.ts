@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
 import { getServerConvexClient } from "#/server/convex";
-import { api } from "../../../../../convex/_generated/api";
+import { api } from "#convex/_generated/api";
 
 type PaystackWebhookPayload = {
 	event?: string;
@@ -46,7 +46,7 @@ export async function handle({ request }: { request: Request }) {
 	const secretKey = process.env.PAYSTACK_SECRET_KEY;
 	if (!secretKey) {
 		return Response.json(
-			{ ok: false, error: "PAYSTACK_SECRET_KEY is missing on the server." },
+			{ ok: false, error: "Server configuration error." },
 			{ status: 500 },
 		);
 	}
@@ -60,7 +60,7 @@ export async function handle({ request }: { request: Request }) {
 		)
 	) {
 		return Response.json(
-			{ ok: false, error: "Invalid Paystack signature." },
+			{ ok: false, error: "Unauthorized request." },
 			{ status: 401 },
 		);
 	}
@@ -70,7 +70,7 @@ export async function handle({ request }: { request: Request }) {
 		payload = JSON.parse(rawBody) as PaystackWebhookPayload;
 	} catch {
 		return Response.json(
-			{ ok: false, error: "Invalid Paystack payload." },
+			{ ok: false, error: "Invalid request payload." },
 			{ status: 400 },
 		);
 	}
@@ -84,7 +84,7 @@ export async function handle({ request }: { request: Request }) {
 		typeof data.amount !== "number"
 	) {
 		return Response.json(
-			{ ok: false, error: "Incomplete Paystack payload." },
+			{ ok: false, error: "Incomplete request payload." },
 			{ status: 400 },
 		);
 	}

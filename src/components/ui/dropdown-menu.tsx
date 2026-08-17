@@ -26,7 +26,7 @@ const DropdownMenuSubTrigger = React.forwardRef<
 	<DropdownMenuPrimitive.SubTrigger
 		ref={ref}
 		className={cn(
-			"flex cursor-default select-none items-center px-2 py-1.5 text-sm outline-none transition-[transform,opacity,background-color,border-color,color] duration-[110ms] ease-out focus:bg-[#1a2117] focus:text-[#c8ff62] data-[state=open]:bg-[#1a2117] data-[state=open]:text-[#c8ff62] active:scale-[0.94]",
+			"flex cursor-default select-none items-center px-2 py-1.5 text-sm outline-none transition-[transform,opacity,background-color,border-color,color] duration-[110ms] ease-out focus:bg-brand-soft focus:text-brand data-[state=open]:bg-brand-soft data-[state=open]:text-brand active:translate-y-px",
 			inset && "pl-8",
 			className,
 		)}
@@ -46,7 +46,7 @@ const DropdownMenuSubContent = React.forwardRef<
 	<DropdownMenuPrimitive.SubContent
 		ref={ref}
 		className={cn(
-			"z-50 min-w-[8rem] overflow-x-hidden border border-[#30352f] bg-[#101211] p-1 text-[#f2efe7] shadow-[0_24px_80px_rgba(0,0,0,0.35)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+			"z-50 min-w-[8rem] overflow-x-hidden rounded-[var(--hm-r-card)] border border-rule bg-paper p-1 text-ink shadow-[0_24px_80px_rgba(0,0,0,0.35)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
 			className,
 		)}
 		{...props}
@@ -66,7 +66,7 @@ const DropdownMenuContent = React.forwardRef<
 			ref={ref}
 			sideOffset={sideOffset}
 			className={cn(
-				"z-50 min-w-[8rem] overflow-x-hidden border border-[#30352f] bg-[#101211] p-1 text-[#f2efe7] shadow-[0_24px_80px_rgba(0,0,0,0.35)]",
+				"z-50 min-w-[8rem] overflow-x-hidden rounded-[var(--hm-r-card)] border border-rule bg-paper p-1 text-ink shadow-[0_24px_80px_rgba(0,0,0,0.35)]",
 				"data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
 				className,
 			)}
@@ -92,7 +92,7 @@ const DropdownMenuItem = React.forwardRef<
 	<DropdownMenuPrimitive.Item
 		ref={ref}
 		className={cn(
-			"relative flex cursor-default select-none items-center px-2 py-1.5 text-sm outline-none transition-[transform,opacity,background-color,border-color,color] duration-[110ms] ease-out focus:bg-[#1a2117] focus:text-[#c8ff62] active:scale-[0.94] data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+			"relative flex cursor-default select-none items-center px-2 py-1.5 text-sm outline-none transition-[transform,opacity,background-color,border-color,color] duration-[110ms] ease-out focus:bg-brand-soft focus:text-brand active:translate-y-px data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
 			inset && "pl-8",
 			className,
 		)}
@@ -109,7 +109,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<
 	<DropdownMenuPrimitive.CheckboxItem
 		ref={ref}
 		className={cn(
-			"relative flex cursor-default select-none items-center py-1.5 pl-4 pr-12 text-sm outline-none transition-[transform,opacity,background-color,border-color,color] duration-[110ms] ease-out focus:bg-[#1a2117] focus:text-[#c8ff62] active:scale-[0.94] data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+			"relative flex cursor-default select-none items-center py-1.5 pl-4 pr-12 text-sm outline-none transition-[transform,opacity,background-color,border-color,color] duration-[110ms] ease-out focus:bg-brand-soft focus:text-brand active:translate-y-px data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
 			className,
 		)}
 		checked={checked}
@@ -134,7 +134,7 @@ const DropdownMenuRadioItem = React.forwardRef<
 	<DropdownMenuPrimitive.RadioItem
 		ref={ref}
 		className={cn(
-			"relative flex cursor-default select-none items-center py-1.5 pl-4 pr-12 text-xs text-[#817d72] outline-none transition-[transform,opacity,background-color,border-color,color] duration-[110ms] ease-out focus:bg-[#1a2117] focus:text-[#c8ff62] active:scale-[0.94] data-[state=checked]:text-[#c8ff62] data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+			"relative flex cursor-default select-none items-center py-1.5 pl-4 pr-12 text-xs text-ink-3 outline-none transition-[transform,opacity,background-color,border-color,color] duration-[110ms] ease-out focus:bg-brand-soft focus:text-brand active:translate-y-px data-[state=checked]:text-brand data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
 			className,
 		)}
 		{...props}
@@ -173,7 +173,7 @@ const DropdownMenuSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
 	<DropdownMenuPrimitive.Separator
 		ref={ref}
-		className={cn("-mx-1 my-1 h-px bg-[#30352f]", className)}
+		className={cn("-mx-1 my-1 h-px bg-rule", className)}
 		{...props}
 	/>
 ));

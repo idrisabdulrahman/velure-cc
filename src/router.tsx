@@ -15,7 +15,9 @@ export function getRouter() {
 			block: "start",
 		},
 		defaultPreload: "intent",
-		defaultPreloadStaleTime: 0,
+		// Keep hover/focus preloads warm for a minute so a click after hovering
+		// reuses the already-loaded chunk + data instead of starting over.
+		defaultPreloadStaleTime: 60_000,
 	});
 
 	return router;

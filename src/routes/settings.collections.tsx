@@ -10,21 +10,30 @@ import {
 	MailCheck,
 	PauseCircle,
 	SearchCheck,
+	Settings2,
 	UserCheck,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "#/components/ui/select";
+import { Sheet, SheetContent } from "#/components/ui/sheet";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
 import { formatInvoiceDate } from "#/features/invoices/format";
 import type { InvoiceStatus } from "#/features/invoices/types";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-
 export const Route = createFileRoute("/settings/collections")({
-	beforeLoad: async ({ context }) => {
-		await Promise.all([
+	beforeLoad: ({ context }) => {
+		// Fire-and-forget: warm the cache without blocking the transition.
+		void Promise.all([
 			context.queryClient.prefetchQuery(
 				convexQuery(api.reminders.getReminderSettings, {}),
 			),
@@ -33,7 +42,7 @@ export const Route = createFileRoute("/settings/collections")({
 					daysBeforeDue: 3,
 				}),
 			),
-		]);
+		]).catch(() => undefined);
 	},
 	component: PaymentRemindersSettingsPage,
 });
@@ -108,6 +117,7 @@ function PaymentRemindersSettingsPage() {
 	const runReminderBatch = useAction(api.reminders.runReminderBatch);
 	const sendQueuedEmails = useAction(api.reminders.sendQueuedEmails);
 	const [note, setNote] = useState("");
+	const [scheduleOpen, setScheduleOpen] = useState(false);
 	const [lastRunResult, setLastRunResult] = useState<string | null>(null);
 	const [errors, setErrors] = useState<ReminderPolicyErrors>({});
 	const [busyAction, setBusyAction] = useState<
@@ -159,8 +169,8 @@ function PaymentRemindersSettingsPage() {
 	if (!settings) {
 		return (
 			<div className="flex min-h-80 items-center justify-center">
-				<div className="flex items-center gap-2 text-sm text-[#aaa294]">
-					<Loader2 className="h-5 w-5 animate-spin text-[#c8ff62]" />
+				<div className="flex items-center gap-2 text-sm text-ink-3">
+					<Loader2 className="h-5 w-5 animate-spin text-brand" />
 					<span>Loading payment reminder settings</span>
 				</div>
 			</div>
@@ -169,15 +179,23 @@ function PaymentRemindersSettingsPage() {
 
 	return (
 		<div className="mx-auto max-w-6xl space-y-6">
-			<div>
-				<h1 className="text-3xl font-semibold tracking-[-0.02em] text-[#f2efe7]">
-					Payment reminders
-				</h1>
-				<p className="mt-2 text-sm text-[#aaa294]">
-					Find unpaid invoices, queue polite customer emails, and move
-					exceptions into internal review. This stays inside invoicing; Velure
-					does not add legal escalation tools.
-				</p>
+			<div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+				<div>
+					<h1 className="text-3xl font-semibold tracking-[-0.02em] text-ink">
+						Payment reminders
+					</h1>
+					<p className="mt-2 text-sm text-ink-3">
+						Find unpaid invoices, queue polite customer emails, and move
+						exceptions into internal review. This stays inside invoicing; Velure
+						does not add legal escalation tools.
+					</p>
+				</div>
+				<Button
+					className="min-w-fit whitespace-nowrap bg-brand px-4 text-brand-ink hover:bg-brand-hi"
+					onClick={() => setScheduleOpen(true)}
+				>
+					<Settings2 className="mr-2 h-4 w-4" /> Reminder schedule
+				</Button>
 			</div>
 
 			<section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -211,220 +229,20 @@ function PaymentRemindersSettingsPage() {
 				/>
 			</section>
 
-			<section className="rounded-md border border-[#30352f] bg-[#171a18] p-5">
-				<div className="flex flex-col gap-1">
-					<h2 className="text-sm font-medium text-[#f2efe7]">
-						Automatic reminder schedule
+			<section className="flex flex-col gap-4 border-y border-rule py-5 sm:flex-row sm:items-center sm:justify-between">
+				<div>
+					<h2 className="text-sm font-medium text-ink">
+						Automatic reminders are {policy.enabled ? "on" : "off"}
 					</h2>
-					<p className="text-sm text-[#aaa294]">
-						Set the default follow-up timing once, then use the actions below to
-						check invoices, send reminders, and route exceptions for internal
-						review.
+					<p className="mt-1 text-sm text-ink-3">
+						First reminder {policy.daysBeforeDue} days before due, then every{" "}
+						{policy.overdueCadenceDays} days.
 					</p>
 				</div>
-				<div className="mt-4 grid gap-3 lg:grid-cols-3">
-					<div className="rounded-md border border-[#30352f] bg-[#0f1111] px-4 py-3">
-						<p className="text-sm font-medium text-[#f2efe7]">
-							1. Find due invoices
-						</p>
-						<p className="mt-1 text-xs text-[#aaa294]">
-							Scan today's invoices and queue the ones that need a reminder.
-						</p>
-					</div>
-					<div className="rounded-md border border-[#30352f] bg-[#0f1111] px-4 py-3">
-						<p className="text-sm font-medium text-[#f2efe7]">
-							2. Email the customer
-						</p>
-						<p className="mt-1 text-xs text-[#aaa294]">
-							Reminder emails go straight to the buyer email saved on the
-							invoice.
-						</p>
-					</div>
-					<div className="rounded-md border border-[#30352f] bg-[#0f1111] px-4 py-3">
-						<p className="text-sm font-medium text-[#f2efe7]">
-							3. Review exceptions
-						</p>
-						<p className="mt-1 text-xs text-[#aaa294]">
-							Pause reminders or mark invoices for manual follow-up when a
-							customer needs special handling.
-						</p>
-					</div>
-				</div>
-				<div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-					<div className="space-y-2">
-						<p className="text-xs uppercase tracking-[0.18em] text-[#7d7b74]">
-							First reminder
-						</p>
-						<Input
-							type="number"
-							min={0}
-							step={1}
-							value={policy.daysBeforeDue}
-							aria-invalid={Boolean(errors.daysBeforeDue)}
-							onChange={(event) => {
-								setPolicy((current) => ({
-									...current,
-									daysBeforeDue: Number(event.target.value) || 0,
-								}));
-								setErrors((current) => ({
-									...current,
-									daysBeforeDue: undefined,
-								}));
-							}}
-							className={`${errors.daysBeforeDue ? "border-[#c76f5b]" : "border-[#30352f]"} bg-[#0f1111]`}
-						/>
-						<p className="text-xs text-[#aaa294]">
-							Days before the due date to send the first reminder.
-						</p>
-					</div>
-					<div className="space-y-2">
-						<p className="text-xs uppercase tracking-[0.18em] text-[#7d7b74]">
-							Overdue gap
-						</p>
-						<Input
-							type="number"
-							min={1}
-							step={1}
-							value={policy.overdueCadenceDays}
-							aria-invalid={Boolean(errors.overdueCadenceDays)}
-							onChange={(event) => {
-								setPolicy((current) => ({
-									...current,
-									overdueCadenceDays: Number(event.target.value) || 0,
-								}));
-								setErrors((current) => ({
-									...current,
-									overdueCadenceDays: undefined,
-								}));
-							}}
-							className={`${errors.overdueCadenceDays ? "border-[#c76f5b]" : "border-[#30352f]"} bg-[#0f1111]`}
-						/>
-						<p className="text-xs text-[#aaa294]">
-							Days to wait between each overdue follow-up email.
-						</p>
-					</div>
-					<div className="space-y-2">
-						<p className="text-xs uppercase tracking-[0.18em] text-[#7d7b74]">
-							Overdue email limit
-						</p>
-						<Input
-							type="number"
-							min={0}
-							max={3}
-							step={1}
-							value={policy.maxOverdueReminders}
-							aria-invalid={Boolean(errors.maxOverdueReminders)}
-							onChange={(event) => {
-								setPolicy((current) => ({
-									...current,
-									maxOverdueReminders: Number(event.target.value) || 0,
-								}));
-								setErrors((current) => ({
-									...current,
-									maxOverdueReminders: undefined,
-								}));
-							}}
-							className={`${errors.maxOverdueReminders ? "border-[#c76f5b]" : "border-[#30352f]"} bg-[#0f1111]`}
-						/>
-						<p className="text-xs text-[#aaa294]">
-							Maximum number of overdue emails to send automatically, up to the
-							three built-in overdue stages.
-						</p>
-					</div>
-					<div className="space-y-2">
-						<p className="text-xs uppercase tracking-[0.18em] text-[#7d7b74]">
-							Review after
-						</p>
-						<Input
-							type="number"
-							min={0}
-							max={3}
-							step={1}
-							value={policy.escalateAfterCount}
-							aria-invalid={Boolean(errors.escalateAfterCount)}
-							onChange={(event) => {
-								setPolicy((current) => ({
-									...current,
-									escalateAfterCount: Number(event.target.value) || 0,
-								}));
-								setErrors((current) => ({
-									...current,
-									escalateAfterCount: undefined,
-								}));
-							}}
-							className={`${errors.escalateAfterCount ? "border-[#c76f5b]" : "border-[#30352f]"} bg-[#0f1111]`}
-						/>
-						<p className="text-xs text-[#aaa294]">
-							Move to internal review after this many overdue emails. Set it
-							equal to the limit to review after the final automatic email.
-						</p>
-					</div>
-				</div>
-				<div className="mt-4 space-y-2">
-					<p className="text-xs uppercase tracking-[0.18em] text-[#7d7b74]">
-						Email signature
-					</p>
-					<Input
-						value={policy.businessSignature}
-						aria-invalid={Boolean(errors.businessSignature)}
-						onChange={(event) => {
-							setPolicy((current) => ({
-								...current,
-								businessSignature: event.target.value,
-							}));
-							setErrors((current) => ({
-								...current,
-								businessSignature: undefined,
-							}));
-						}}
-						placeholder="Velure Finance Team"
-						className={`${errors.businessSignature ? "border-[#c76f5b]" : "border-[#30352f]"} bg-[#0f1111]`}
-					/>
-					<p className="text-xs text-[#aaa294]">
-						Printed at the end of reminder emails so customers know who is
-						following up.
-					</p>
-				</div>
-				{Object.values(errors).some(Boolean) ? (
-					<div className="mt-4 space-y-1 rounded-md border border-[#5d302b] bg-[#211513] px-4 py-3 text-xs text-[#f0a8a0]">
-						{Object.entries(errors).map(([field, message]) =>
-							message ? <p key={field}>{message}</p> : null,
-						)}
-					</div>
-				) : null}
-				<div className="mt-4 flex gap-3">
+				<div className="flex flex-wrap gap-2">
 					<Button
-						type="button"
-						className="bg-[#c8ff62] text-[#0f1111] hover:bg-[#d5ff7a]"
-						disabled={busyAction !== null}
-						onClick={async () => {
-							const nextErrors = validateReminderPolicy(policy);
-							setErrors(nextErrors);
-							if (Object.keys(nextErrors).length > 0) return;
-							setBusyAction("save");
-							try {
-								await saveSettings({
-									enabled: policy.enabled,
-									daysBeforeDue: policy.daysBeforeDue,
-									onDueDate: policy.onDueDate,
-									overdueCadenceDays: policy.overdueCadenceDays,
-									maxOverdueReminders: policy.maxOverdueReminders,
-									escalateAfterCount: policy.escalateAfterCount,
-									businessSignature: policy.businessSignature,
-								});
-								setLastRunResult("Reminder schedule saved.");
-								toast({ title: "Reminder schedule saved", variant: "success" });
-							} finally {
-								setBusyAction(null);
-							}
-						}}
-					>
-						{busyAction === "save" ? "Saving..." : "Save reminder schedule"}
-					</Button>
-					<Button
-						type="button"
 						variant="outline"
-						className="border-[#30352f] bg-transparent"
+						className="border-rule bg-paper"
 						disabled={busyAction !== null}
 						onClick={async () => {
 							setBusyAction("find");
@@ -445,14 +263,12 @@ function PaymentRemindersSettingsPage() {
 							}
 						}}
 					>
-						{busyAction === "find"
-							? "Checking invoices..."
-							: `Find invoices that need reminders (${reminderStats.actionableCount})`}
+						<SearchCheck className="mr-2 h-4 w-4" />
+						{busyAction === "find" ? "Scanning…" : "Scan invoices"}
 					</Button>
 					<Button
-						type="button"
 						variant="outline"
-						className="border-[#30352f] bg-transparent"
+						className="border-rule bg-paper"
 						disabled={busyAction !== null}
 						onClick={async () => {
 							setBusyAction("send");
@@ -475,52 +291,245 @@ function PaymentRemindersSettingsPage() {
 							}
 						}}
 					>
-						{busyAction === "send"
-							? "Sending emails..."
-							: "Send queued customer emails"}
+						<MailCheck className="mr-2 h-4 w-4" />
+						{busyAction === "send" ? "Sending…" : "Send queue"}
 					</Button>
 				</div>
-				{lastRunResult ? (
-					<div className="mt-4 flex items-start gap-3 rounded-md border border-[#425033] bg-[#1e2418] px-4 py-3 text-sm text-[#b7ca7c]">
-						<CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-						<span>{lastRunResult}</span>
-					</div>
-				) : null}
-				<p className="mt-3 text-xs text-[#aaa294]">
-					Customer reminders use the buyer email saved on the invoice. Velure
-					will not send a reminder when that email is missing.
-				</p>
 			</section>
 
-			<section className="rounded-md border border-[#30352f] bg-[#171a18] p-5">
+			<Sheet open={scheduleOpen} onOpenChange={setScheduleOpen}>
+				<SheetContent
+					title="Automatic reminder schedule"
+					contentClassName="sm:max-w-[620px]"
+					className="overflow-y-auto p-5 sm:p-7"
+				>
+					<div className="flex flex-col gap-1">
+						<h2 className="text-sm font-medium text-ink">
+							Automatic reminder schedule
+						</h2>
+						<p className="text-sm text-ink-3">
+							Set when automatic customer reminders are sent.
+						</p>
+					</div>
+					<div className="mt-6 grid gap-5 sm:grid-cols-2">
+						<div className="space-y-2">
+							<p className="text-xs uppercase tracking-[0.18em] text-ink-3">
+								First reminder
+							</p>
+							<Input
+								type="number"
+								min={0}
+								step={1}
+								value={policy.daysBeforeDue}
+								aria-invalid={Boolean(errors.daysBeforeDue)}
+								onChange={(event) => {
+									setPolicy((current) => ({
+										...current,
+										daysBeforeDue: Number(event.target.value) || 0,
+									}));
+									setErrors((current) => ({
+										...current,
+										daysBeforeDue: undefined,
+									}));
+								}}
+								className={`${errors.daysBeforeDue ? "border-danger" : "border-rule"} bg-paper`}
+							/>
+							<p className="text-xs text-ink-3">
+								Days before the due date to send the first reminder.
+							</p>
+						</div>
+						<div className="space-y-2">
+							<p className="text-xs uppercase tracking-[0.18em] text-ink-3">
+								Overdue gap
+							</p>
+							<Input
+								type="number"
+								min={1}
+								step={1}
+								value={policy.overdueCadenceDays}
+								aria-invalid={Boolean(errors.overdueCadenceDays)}
+								onChange={(event) => {
+									setPolicy((current) => ({
+										...current,
+										overdueCadenceDays: Number(event.target.value) || 0,
+									}));
+									setErrors((current) => ({
+										...current,
+										overdueCadenceDays: undefined,
+									}));
+								}}
+								className={`${errors.overdueCadenceDays ? "border-danger" : "border-rule"} bg-paper`}
+							/>
+							<p className="text-xs text-ink-3">
+								Days to wait between each overdue follow-up email.
+							</p>
+						</div>
+						<div className="space-y-2">
+							<p className="text-xs uppercase tracking-[0.18em] text-ink-3">
+								Overdue email limit
+							</p>
+							<Input
+								type="number"
+								min={0}
+								max={3}
+								step={1}
+								value={policy.maxOverdueReminders}
+								aria-invalid={Boolean(errors.maxOverdueReminders)}
+								onChange={(event) => {
+									setPolicy((current) => ({
+										...current,
+										maxOverdueReminders: Number(event.target.value) || 0,
+									}));
+									setErrors((current) => ({
+										...current,
+										maxOverdueReminders: undefined,
+									}));
+								}}
+								className={`${errors.maxOverdueReminders ? "border-danger" : "border-rule"} bg-paper`}
+							/>
+							<p className="text-xs text-ink-3">
+								Maximum number of overdue emails to send automatically, up to
+								the three built-in overdue stages.
+							</p>
+						</div>
+						<div className="space-y-2">
+							<p className="text-xs uppercase tracking-[0.18em] text-ink-3">
+								Review after
+							</p>
+							<Input
+								type="number"
+								min={0}
+								max={3}
+								step={1}
+								value={policy.escalateAfterCount}
+								aria-invalid={Boolean(errors.escalateAfterCount)}
+								onChange={(event) => {
+									setPolicy((current) => ({
+										...current,
+										escalateAfterCount: Number(event.target.value) || 0,
+									}));
+									setErrors((current) => ({
+										...current,
+										escalateAfterCount: undefined,
+									}));
+								}}
+								className={`${errors.escalateAfterCount ? "border-danger" : "border-rule"} bg-paper`}
+							/>
+							<p className="text-xs text-ink-3">
+								Move to internal review after this many overdue emails. Set it
+								equal to the limit to review after the final automatic email.
+							</p>
+						</div>
+					</div>
+					<div className="mt-4 space-y-2">
+						<p className="text-xs uppercase tracking-[0.18em] text-ink-3">
+							Email signature
+						</p>
+						<Input
+							value={policy.businessSignature}
+							aria-invalid={Boolean(errors.businessSignature)}
+							onChange={(event) => {
+								setPolicy((current) => ({
+									...current,
+									businessSignature: event.target.value,
+								}));
+								setErrors((current) => ({
+									...current,
+									businessSignature: undefined,
+								}));
+							}}
+							placeholder="Velure Finance Team"
+							className={`${errors.businessSignature ? "border-danger" : "border-rule"} bg-paper`}
+						/>
+						<p className="text-xs text-ink-3">
+							Printed at the end of reminder emails so customers know who is
+							following up.
+						</p>
+					</div>
+					{Object.values(errors).some(Boolean) ? (
+						<div className="mt-4 space-y-1 rounded-md border border-danger-line bg-danger-soft px-4 py-3 text-xs text-danger">
+							{Object.entries(errors).map(([field, message]) =>
+								message ? <p key={field}>{message}</p> : null,
+							)}
+						</div>
+					) : null}
+					<div className="mt-6">
+						<Button
+							type="button"
+							className="w-full bg-brand text-brand-ink hover:bg-brand-hi"
+							disabled={busyAction !== null}
+							onClick={async () => {
+								const nextErrors = validateReminderPolicy(policy);
+								setErrors(nextErrors);
+								if (Object.keys(nextErrors).length > 0) return;
+								setBusyAction("save");
+								try {
+									await saveSettings({
+										enabled: policy.enabled,
+										daysBeforeDue: policy.daysBeforeDue,
+										onDueDate: policy.onDueDate,
+										overdueCadenceDays: policy.overdueCadenceDays,
+										maxOverdueReminders: policy.maxOverdueReminders,
+										escalateAfterCount: policy.escalateAfterCount,
+										businessSignature: policy.businessSignature,
+									});
+									setLastRunResult("Reminder schedule saved.");
+									toast({
+										title: "Reminder schedule saved",
+										variant: "success",
+									});
+								} finally {
+									setBusyAction(null);
+								}
+							}}
+						>
+							{busyAction === "save" ? "Saving..." : "Save reminder schedule"}
+						</Button>
+					</div>
+					{lastRunResult ? (
+						<div className="mt-4 flex items-start gap-3 rounded-md border border-ok-line bg-ok-soft px-4 py-3 text-sm text-ok">
+							<CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+							<span>{lastRunResult}</span>
+						</div>
+					) : null}
+					<p className="mt-3 text-xs text-ink-3">
+						Customer reminders use the buyer email saved on the invoice. Velure
+						will not send a reminder when that email is missing.
+					</p>
+				</SheetContent>
+			</Sheet>
+
+			<section className="rounded-md border border-rule bg-paper-2 p-5">
 				<div className="flex flex-col gap-1">
-					<h2 className="text-sm font-medium text-[#f2efe7]">
+					<h2 className="text-sm font-medium text-ink">
 						Single invoice actions
 					</h2>
-					<p className="text-sm text-[#aaa294]">
+					<p className="text-sm text-ink-3">
 						Use this when one invoice needs special handling outside the
 						automatic schedule.
 					</p>
 				</div>
 				<div className="mt-4 flex flex-wrap gap-3">
-					<select
+					<Select
 						value={selectedInvoiceId ?? ""}
-						onChange={(event) =>
-							setSelectedInvoiceId(event.target.value || null)
-						}
-						className="h-10 min-w-[260px] rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
+						onValueChange={(value) => setSelectedInvoiceId(value || null)}
 					>
-						<option value="">Select invoice</option>
-						{invoices.map((invoice) => (
-							<option key={invoice.id} value={invoice.id}>
-								{invoice.invoiceNumber} • {invoice.customerName}
-							</option>
-						))}
-					</select>
+						<SelectTrigger className="h-10 min-w-[260px] flex-1 sm:max-w-[370px]">
+							<SelectValue placeholder="Select invoice" />
+						</SelectTrigger>
+						<SelectContent>
+							{invoices.map((invoice) => (
+								<SelectItem key={invoice.id} value={invoice.id}>
+									{invoice.invoiceNumber} •{" "}
+									{invoice.customerName || "Unnamed customer"}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
 					<Button
 						type="button"
 						variant="outline"
-						className="border-[#30352f] bg-transparent"
+						className="border-rule bg-transparent"
 						disabled={!selectedInvoice || busyAction !== null}
 						onClick={async () => {
 							if (!selectedInvoice) return;
@@ -559,7 +568,7 @@ function PaymentRemindersSettingsPage() {
 					<Button
 						type="button"
 						variant="outline"
-						className="border-[#30352f] bg-transparent"
+						className="border-rule bg-transparent"
 						disabled={!selectedInvoice || busyAction !== null}
 						onClick={async () => {
 							if (!selectedInvoice) return;
@@ -585,7 +594,7 @@ function PaymentRemindersSettingsPage() {
 					<Button
 						type="button"
 						variant="outline"
-						className="border-[#30352f] bg-transparent"
+						className="border-rule bg-transparent"
 						disabled={!selectedInvoice || busyAction !== null}
 						onClick={async () => {
 							if (!selectedInvoice) return;
@@ -609,13 +618,13 @@ function PaymentRemindersSettingsPage() {
 					</Button>
 				</div>
 				{selectedInvoice ? (
-					<div className="mt-4 rounded-md border border-[#30352f] bg-[#0f1111] p-4">
+					<div className="mt-4 rounded-md border border-rule bg-paper p-4">
 						<div className="flex flex-wrap items-start justify-between gap-3">
 							<div>
-								<p className="font-mono text-sm font-medium text-[#f2efe7]">
+								<p className="font-mono text-sm font-medium text-ink">
 									{selectedInvoice.invoiceNumber}
 								</p>
-								<p className="mt-1 text-xs text-[#aaa294]">
+								<p className="mt-1 text-xs text-ink-3">
 									{selectedInvoice.customerName || "Unnamed customer"} · Due{" "}
 									{formatInvoiceDate(selectedInvoice.dueDate)}
 								</p>
@@ -650,8 +659,8 @@ function PaymentRemindersSettingsPage() {
 								/>
 							</div>
 						</div>
-						<div className="mt-3 flex items-start gap-2 text-xs text-[#aaa294]">
-							<UserCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#c8ff62]" />
+						<div className="mt-3 flex items-start gap-2 text-xs text-ink-3">
+							<UserCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
 							<span>
 								{selectedInvoiceBuyerEmail
 									? `Customer reminders will be sent to ${selectedInvoiceBuyerEmail}.`
@@ -664,13 +673,13 @@ function PaymentRemindersSettingsPage() {
 					value={note}
 					onChange={(event) => setNote(event.target.value)}
 					placeholder="Add a note for your team, for example: customer promised payment on Friday."
-					className="mt-4 border-[#30352f] bg-[#0f1111]"
+					className="mt-4 border-rule bg-paper"
 				/>
 				<div className="mt-3">
 					<Button
 						type="button"
 						variant="outline"
-						className="border-[#30352f] bg-transparent"
+						className="border-rule bg-transparent"
 						disabled={
 							!selectedInvoice ||
 							note.trim().length === 0 ||
@@ -704,17 +713,17 @@ function PaymentRemindersSettingsPage() {
 
 				<div className="mt-5 space-y-3">
 					<div className="pb-1">
-						<p className="text-xs uppercase tracking-[0.18em] text-[#7d7b74]">
+						<p className="text-xs uppercase tracking-[0.18em] text-ink-3">
 							Activity history
 						</p>
-						<p className="mt-1 text-xs text-[#aaa294]">
+						<p className="mt-1 text-xs text-ink-3">
 							Shows what reminder actions have already happened for the selected
 							invoice.
 						</p>
 					</div>
 					{selectedInvoice && (timeline ?? []).length === 0 ? (
-						<div className="rounded-md border border-[#30352f] bg-[#0f1111] px-4 py-5 text-sm text-[#aaa294]">
-							<p className="font-medium text-[#f2efe7]">No activity yet.</p>
+						<div className="rounded-md border border-rule bg-paper px-4 py-5 text-sm text-ink-3">
+							<p className="font-medium text-ink">No activity yet.</p>
 							<p className="mt-1">
 								Queue a reminder or mark an exception to start this invoice
 								history.
@@ -722,8 +731,8 @@ function PaymentRemindersSettingsPage() {
 						</div>
 					) : null}
 					{!selectedInvoice ? (
-						<div className="rounded-md border border-[#30352f] bg-[#0f1111] px-4 py-5 text-sm text-[#aaa294]">
-							<p className="font-medium text-[#f2efe7]">
+						<div className="rounded-md border border-rule bg-paper px-4 py-5 text-sm text-ink-3">
+							<p className="font-medium text-ink">
 								Select an invoice to view activity.
 							</p>
 							<p className="mt-1">
@@ -735,10 +744,10 @@ function PaymentRemindersSettingsPage() {
 						? (timeline ?? []).map((event) => (
 								<div
 									key={event._id}
-									className="rounded-md border border-[#30352f] bg-[#0f1111] px-4 py-3"
+									className="rounded-md border border-rule bg-paper px-4 py-3"
 								>
 									<div className="flex flex-wrap items-start justify-between gap-3">
-										<p className="text-sm font-medium capitalize text-[#f2efe7]">
+										<p className="text-sm font-medium capitalize text-ink">
 											{event.stage.replaceAll("_", " ")}
 										</p>
 										<InvoiceReminderChip
@@ -752,12 +761,12 @@ function PaymentRemindersSettingsPage() {
 											}
 										/>
 									</div>
-									<p className="mt-1 text-xs text-[#aaa294]">
+									<p className="mt-1 text-xs text-ink-3">
 										{event.channel}
 										{event.meta ? ` • ${event.meta}` : ""}
 									</p>
 									<p
-										className="mt-1 text-xs text-[#7d7b74]"
+										className="mt-1 text-xs text-ink-3"
 										title={formatExactDateTime(
 											event.sentAt ?? event.scheduledFor ?? event.createdAt,
 										)}
@@ -815,11 +824,11 @@ function CollectionsMetric({
 	tone: MetricTone;
 }) {
 	const toneClass = {
-		danger: "border-[#5d302b] bg-[#211513] text-[#f0a8a0]",
-		muted: "border-[#30352f] bg-[#141517] text-[#aaa294]",
-		neutral: "border-[#30352f] bg-[#171a18] text-[#f2efe7]",
-		success: "border-[#425033] bg-[#1e2418] text-[#b7ca7c]",
-		warning: "border-[#594b25] bg-[#211c12] text-[#e7c76b]",
+		danger: "border-danger-line bg-danger-soft text-danger",
+		muted: "border-rule bg-paper-3 text-ink-3",
+		neutral: "border-rule bg-paper-2 text-ink",
+		success: "border-ok-line bg-ok-soft text-ok",
+		warning: "border-warn-line bg-warn-soft text-warn",
 	}[tone];
 
 	return (
@@ -830,7 +839,7 @@ function CollectionsMetric({
 				</p>
 				<Icon className="h-4 w-4 shrink-0 opacity-80" />
 			</div>
-			<p className="mt-3 text-2xl font-semibold text-[#f2efe7]">{value}</p>
+			<p className="mt-3 text-2xl font-semibold text-ink">{value}</p>
 			<p className="mt-1 text-xs leading-5 opacity-80">{helper}</p>
 		</div>
 	);
@@ -844,10 +853,10 @@ function InvoiceReminderChip({
 	tone: ChipTone;
 }) {
 	const toneClass = {
-		danger: "border-[#5d302b] bg-[#2a1714] text-[#f0a8a0]",
-		neutral: "border-[#343638] bg-[#1b1d1f] text-[#d5cfc4]",
-		success: "border-[#425033] bg-[#1e2418] text-[#b7ca7c]",
-		warning: "border-[#594b25] bg-[#211c12] text-[#e7c76b]",
+		danger: "border-danger-line bg-danger-soft text-danger",
+		neutral: "border-rule bg-paper-3 text-ink-3",
+		success: "border-ok-line bg-ok-soft text-ok",
+		warning: "border-warn-line bg-warn-soft text-warn",
 	}[tone];
 
 	return (

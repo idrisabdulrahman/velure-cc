@@ -128,19 +128,74 @@ test.describe("authenticated invoice creation session", () => {
 		await expect(
 			page.getByRole("heading", { name: "Authentication required" }),
 		).toHaveCount(0);
-		await expect(page.getByText("Invoice No.")).toBeVisible({
-			timeout: 30_000,
-		});
+		await expect(
+			page.getByRole("textbox", { name: "Edit Invoice No label" }),
+		).toHaveValue("Invoice No", { timeout: 30_000 });
 		await expect(page.getByText("From")).toBeVisible();
-		await expect(page.getByText("Payment Details")).toBeVisible();
+		await expect(
+			page.getByRole("textbox", { name: "Edit Payment Details label" }),
+		).toHaveValue("Payment Details");
 
 		await page.reload({ waitUntil: "domcontentloaded" });
-		await expect(page.getByText("Invoice No.")).toBeVisible({
-			timeout: 30_000,
-		});
+		await expect(
+			page.getByRole("textbox", { name: "Edit Invoice No label" }),
+		).toHaveValue("Invoice No", { timeout: 30_000 });
 
 		mkdirSync("test-results/.auth", { recursive: true });
 		await page.context().storageState({ path: authStatePath });
 		await page.screenshot({ path: screenshotPath, fullPage: true });
+	});
+
+	test("keeps the invoice builder usable across responsive widths", async ({
+		page,
+	}) => {
+		test.setTimeout(120_000);
+		await establishSession(page);
+
+		for (const width of [320, 375, 414, 768, 1280]) {
+			await page.setViewportSize({ width, height: 900 });
+			await page.goto("/invoices/new", { waitUntil: "domcontentloaded" });
+
+			await expect(
+				page.getByRole("textbox", { name: "Edit Invoice No label" }),
+			).toHaveValue("Invoice No", { timeout: 30_000 });
+			await expect(page.getByRole("button", { name: "Issue date" })).toBeVisible();
+			await expect(page.getByRole("button", { name: /Create/ }).last()).toBeVisible();
+			expect(
+				await page.evaluate(
+					() => document.documentElement.scrollWidth <= window.innerWidth + 1,
+				),
+			).toBe(true);
+
+			await page.screenshot({
+				path: `test-results/invoice-new-authenticated-${width}.png`,
+				fullPage: true,
+			});
+		}
+
+		await page.setViewportSize({ width: 1280, height: 900 });
+		await page.goto("/invoices/new", { waitUntil: "domcontentloaded" });
+		await page
+			.getByRole("combobox", { name: "Description" })
+			.first()
+			.fill(`Unlisted product ${Date.now()}`);
+		const noMatch = page.getByText("No catalog match");
+		await expect(noMatch).toBeVisible({ timeout: 30_000 });
+		expect(
+			await noMatch.evaluate((marker) => {
+				const input = document.querySelector<HTMLElement>(
+					'[role="combobox"][aria-controls^="invoice-product-options-"]',
+				);
+				let scroller = input?.parentElement ?? null;
+				while (scroller && getComputedStyle(scroller).overflowY !== "auto") {
+					scroller = scroller.parentElement;
+				}
+				return scroller !== null && !scroller.contains(marker);
+			}),
+		).toBe(true);
+		await page.screenshot({
+			path: "test-results/invoice-catalog-popover.png",
+			fullPage: true,
+		});
 	});
 });

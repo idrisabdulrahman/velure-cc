@@ -59,8 +59,8 @@ function ProductDetailPage() {
 	if (isPending) {
 		return (
 			<div className="flex h-full items-center justify-center">
-				<div className="flex items-center gap-2 text-sm text-[#817d72]">
-					<Loader2 className="h-5 w-5 animate-spin text-[#c8ff62]" />
+				<div className="flex items-center gap-2 text-sm text-ink-3">
+					<Loader2 className="h-5 w-5 animate-spin text-brand" />
 					<span>Loading product details</span>
 				</div>
 			</div>
@@ -71,13 +71,13 @@ function ProductDetailPage() {
 		return (
 			<div className="flex h-full items-center justify-center">
 				<div className="text-center">
-					<p className="text-sm font-medium text-[#f2efe7]">
+					<p className="text-sm font-medium text-ink">
 						Product not found
 					</p>
 					<button
 						type="button"
 						onClick={() => navigate({ to: "/invoices/products" })}
-						className="mt-2 text-sm text-[#c8ff62] hover:text-[#d5ff7a]"
+						className="mt-2 text-sm text-brand hover:text-brand-hi"
 					>
 						Back to products
 					</button>
@@ -89,7 +89,7 @@ function ProductDetailPage() {
 	const { parsedUnitPrice, visibleNameError, visiblePriceError, isValid } =
 		validateProductForm(state, attemptedSubmit);
 	const inputClass =
-		"h-10 rounded-md border-[#30352f] bg-[#0f1111] text-sm text-[#f2efe7] placeholder:text-[#737b89] focus-visible:border-[#c8ff62] focus-visible:ring-0";
+		"h-10 rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-brand focus-visible:ring-0";
 
 	const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
@@ -134,22 +134,22 @@ function ProductDetailPage() {
 					<button
 						type="button"
 						onClick={() => navigate({ to: "/invoices/products" })}
-						className="mb-2 text-sm text-[#817d72] hover:text-[#f2efe7]"
+						className="mb-2 text-sm text-ink-3 hover:text-ink"
 					>
 						← Back to products
 					</button>
-					<h1 className="text-[26px] font-medium tracking-[-0.02em] text-[#f2efe7]">
+					<h1 className="text-[26px] font-medium tracking-[-0.02em] text-ink">
 						{product.name}
 					</h1>
-					<p className="mt-1 text-sm text-[#8d938f]">
+					<p className="mt-1 text-sm text-ink-3">
 						Edit catalog details used on future invoices.
 					</p>
 				</div>
 				<span
 					className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium ${
 						product.isActive
-							? "border-[#425033] bg-[#1e2418] text-[#b7ca7c]"
-							: "border-[#5d4747] bg-[#261c1c] text-[#d4a0a0]"
+							? "border-ok-line bg-ok-soft text-ok"
+							: "border-danger-line bg-danger-soft text-danger"
 					}`}
 				>
 					{product.isActive ? "Active" : "Archived"}
@@ -157,12 +157,12 @@ function ProductDetailPage() {
 			</div>
 
 			<div className="grid gap-6 lg:grid-cols-2">
-				<div className="ui-panel rounded-md border border-[#30352f] bg-[#171a18]">
-					<div className="border-b border-[#30352f] px-5 py-4">
-						<h2 className="text-sm font-medium text-[#f2efe7]">
+				<div className="ui-panel rounded-md border border-rule bg-paper-2">
+					<div className="border-b border-rule px-5 py-4">
+						<h2 className="text-sm font-medium text-ink">
 							Product information
 						</h2>
-						<p className="mt-1 text-xs text-[#817d72]">
+						<p className="mt-1 text-xs text-ink-3">
 							Updates change the catalog default, not past invoices.
 						</p>
 					</div>
@@ -182,7 +182,7 @@ function ProductDetailPage() {
 									<SelectTrigger className={`${inputClass} w-full`}>
 										<SelectValue placeholder="Type" />
 									</SelectTrigger>
-									<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
+									<SelectContent className="border-rule bg-paper-2 text-ink">
 										<SelectItem value="product">Product</SelectItem>
 										<SelectItem value="service">Service</SelectItem>
 									</SelectContent>
@@ -200,7 +200,7 @@ function ProductDetailPage() {
 									<SelectTrigger className={`${inputClass} w-full`}>
 										<SelectValue placeholder="Unit" />
 									</SelectTrigger>
-									<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
+									<SelectContent className="border-rule bg-paper-2 text-ink">
 										{UNIT_OPTIONS.map((option) => (
 											<SelectItem key={option.value} value={option.value}>
 												{option.label}
@@ -233,7 +233,7 @@ function ProductDetailPage() {
 										prev ? { ...prev, description: event.target.value } : prev,
 									)
 								}
-								className="resize-none rounded-md border-[#30352f] bg-[#0f1111] text-sm text-[#f2efe7] placeholder:text-[#737b89] focus-visible:border-[#c8ff62] focus-visible:ring-0"
+								className="resize-none rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-brand focus-visible:ring-0"
 								placeholder="Optional description"
 							/>
 						</Field>
@@ -282,7 +282,7 @@ function ProductDetailPage() {
 							/>
 						</Field>
 
-						<div className="inline-flex items-center gap-2 text-sm text-[#d8d1c4]">
+						<div className="inline-flex items-center gap-2 text-sm text-ink-2">
 							<Switch
 								checked={state.isActive}
 								onCheckedChange={(checked) =>
@@ -290,62 +290,62 @@ function ProductDetailPage() {
 										prev ? { ...prev, isActive: checked } : prev,
 									)
 								}
-								className="data-[state=checked]:bg-[#c8ff62] data-[state=unchecked]:bg-[#30352f]"
+								className="data-[state=checked]:bg-brand data-[state=unchecked]:bg-rule"
 							/>
 							<span>Active in catalog</span>
 						</div>
 
-						<div className="flex items-center justify-between border-t border-[#30352f] pt-4">
+						<div className="flex items-center justify-between border-t border-rule pt-4">
 							<Button
 								type="button"
 								variant="outline"
 								onClick={() => navigate({ to: "/invoices/products" })}
-								className="h-10 rounded-md border-[#30352f] bg-transparent text-sm font-medium text-[#d8d1c4] hover:bg-[#20241f] hover:text-[#f2efe7]"
+								className="h-10 rounded-md border-rule bg-transparent text-sm font-medium text-ink-2 hover:bg-paper-3 hover:text-ink"
 							>
 								Cancel
 							</Button>
 							<Button
 								type="submit"
 								disabled={!isValid || submitting}
-								className="h-10 rounded-md bg-[#c8ff62] text-sm font-medium text-[#0f1111] hover:bg-[#d5ff7a] disabled:bg-[#3f5130] disabled:text-[#817d72]"
+								className="h-10 rounded-md bg-brand text-sm font-medium text-brand-ink hover:bg-brand-hi disabled:bg-brand-line disabled:text-ink-3"
 							>
 								{submitting ? "Saving..." : "Save product"}
 							</Button>
 						</div>
-						<p className="text-xs text-[#8d938f]">* Required fields</p>
+						<p className="text-xs text-ink-3">* Required fields</p>
 					</form>
 				</div>
 
-				<div className="ui-panel rounded-md border border-[#30352f] bg-[#171a18] p-5">
-					<h2 className="text-sm font-medium text-[#f2efe7]">
+				<div className="ui-panel rounded-md border border-rule bg-paper-2 p-5">
+					<h2 className="text-sm font-medium text-ink">
 						Catalog summary
 					</h2>
-					<div className="mt-4 rounded-md border border-[#30352f] bg-[#0f1111] p-4">
-						<p className="text-sm font-medium text-[#f2efe7]">
+					<div className="mt-4 rounded-md border border-rule bg-paper p-4">
+						<p className="text-sm font-medium text-ink">
 							{state.name || "Product name"}
 						</p>
-						<p className="mt-1 text-xs capitalize text-[#817d72]">
+						<p className="mt-1 text-xs capitalize text-ink-3">
 							{state.type} / {state.unitName || "unit"}
 						</p>
-						<p className="mt-3 text-lg font-semibold text-[#f2efe7]">
+						<p className="mt-3 text-lg font-semibold text-ink">
 							{Number.isFinite(parsedUnitPrice)
 								? formatMoney(parsedUnitPrice, "NGN")
 								: "₦0.00"}
 						</p>
 						{state.sku ? (
-							<p className="mt-1 text-xs text-[#817d72]">SKU {state.sku}</p>
+							<p className="mt-1 text-xs text-ink-3">SKU {state.sku}</p>
 						) : null}
 					</div>
 					<div className="mt-4 grid grid-cols-2 gap-4">
-						<div className="rounded-md border border-[#30352f] bg-[#0f1111] p-3">
-							<p className="text-xs text-[#817d72]">Created</p>
-							<p className="mt-1 text-sm font-medium text-[#f2efe7]">
+						<div className="rounded-md border border-rule bg-paper p-3">
+							<p className="text-xs text-ink-3">Created</p>
+							<p className="mt-1 text-sm font-medium text-ink">
 								{new Date(product.createdAt).toLocaleDateString()}
 							</p>
 						</div>
-						<div className="rounded-md border border-[#30352f] bg-[#0f1111] p-3">
-							<p className="text-xs text-[#817d72]">Last updated</p>
-							<p className="mt-1 text-sm font-medium text-[#f2efe7]">
+						<div className="rounded-md border border-rule bg-paper p-3">
+							<p className="text-xs text-ink-3">Last updated</p>
+							<p className="mt-1 text-sm font-medium text-ink">
 								{new Date(product.updatedAt).toLocaleDateString()}
 							</p>
 						</div>

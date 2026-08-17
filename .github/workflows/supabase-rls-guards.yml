@@ -1,0 +1,162 @@
+name: Supabase RLS guards
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  anon-privileges-guard:
+    name: No anon privileges in the public schema
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Every migration applied in order, against a plain Postgres 17. The
+      # auth schema + jwt() and the remote-only rls_auto_enable() stub are
+      # required so the A4 helper and the revoke migrations can apply.
+      - name: Bootstrap roles and helpers
+        env:
+          PGURL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: |
+          docker run --rm -i --network host -e PGPASSWORD=postgres postgres:17 \
+            psql "$PGURL" -v ON_ERROR_STOP=1 -q <<'SQL'
+          create role anon nologin;
+          create role authenticated nologin;
+          create role service_role nologin bypassrls;
+          create role supabase_auth_admin nologin; # granted execute on the A9 access-token hook
+          create schema if not exists auth;
+          create or replace function auth.jwt() returns jsonb language sql stable
+          as $$ select nullif(current_setting('request.jwt.claims', true), '')::jsonb $$;
+          create or replace function public.rls_auto_enable() returns void language sql
+          as $$ select 1 $$;
+          SQL
+
+      - name: Apply migrations
+        env:
+          PGURL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: |
+          for f in supabase/migrations/*.sql; do
+            echo "== $(basename "$f")"
+            docker run --rm --network host -e PGPASSWORD=postgres \
+              -v "$PWD/$f":/m.sql:ro postgres:17 \
+              psql "$PGURL" -v ON_ERROR_STOP=1 -q -f /m.sql
+          done
+
+      # The guard must pass: no public-schema relation grants privileges to
+      # anon. This is the migration-history landmine check.
+      - name: Run anon-privileges guard
+        env:
+          SUPABASE_DB_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: pnpm run guard:anon-privileges --local
+
+      # Self-test: prove the guard bites. A table granted to anon (or to
+      # PUBLIC, which anon inherits) must fail the guard.
+      - name: Guard must fail on a leaked table
+        env:
+          PGURL: postgresql://postgres:postgres@localhost:5432/postgres
+          SUPABASE_DB_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: |
+          docker run --rm --network host -e PGPASSWORD=postgres postgres:17 \
+            psql "$PGURL" -v ON_ERROR_STOP=1 -q -c \
+            "create table public.leak_self_test (id int); grant select on table public.leak_self_test to anon;"
+          if pnpm run guard:anon-privileges --local >/tmp/guard.out 2>&1; then
+            echo "guard did not fail on the leaked table:"
+            cat /tmp/guard.out
+            exit 1
+          fi
+          grep -q "leak_self_test" /tmp/guard.out || { echo "guard failed for the wrong reason:"; cat /tmp/guard.out; exit 1; }
+          echo "guard correctly failed on public.leak_self_test"
+
+      # Identity continuity (local): every user-bearing public column must
+      # hold a Convex-era id (k5...) — never a GoTrue uuid — and no user id
+      # may be an orphan. Runs against the same migration-applied Postgres,
+      # unconditionally (no project secret needed), so a migration that
+      # injects a bad id (seed row, trigger, default) fails CI immediately.
+      - name: Run identity-continuity data guard
+        env:
+          SUPABASE_DB_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: pnpm run guard:identity-continuity --local
+
+      # Self-test: prove the guard bites against the real database. A row
+      # with a GoTrue-style uuid in workspaces.owner_id must fail the guard
+      # naming the exact offender. (The remote failure path was proven
+      # manually against velure-cc 2026-08-17; this keeps it in CI.)
+      - name: Guard must fail on a leaked uuid
+        env:
+          PGURL: postgresql://postgres:postgres@localhost:5432/postgres
+          SUPABASE_DB_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: |
+          docker run --rm --network host -e PGPASSWORD=postgres postgres:17 \
+            psql "$PGURL" -v ON_ERROR_STOP=1 -q -c \
+            "insert into public.workspaces (owner_id, name, country_code, base_currency, reminders_enabled) values ('fcdcc972-efdd-48c9-95c1-3d5fc59dde09', 'Bite Self Test', 'NG', 'NGN', false);"
+          if pnpm run guard:identity-continuity --local >/tmp/guard-id.out 2>&1; then
+            echo "guard did not fail on the leaked uuid:"
+            cat /tmp/guard-id.out
+            exit 1
+          fi
+          grep -q "workspaces.owner_id" /tmp/guard-id.out || { echo "guard failed for the wrong reason:"; cat /tmp/guard-id.out; exit 1; }
+          echo "guard correctly failed on workspaces.owner_id"
+
+  # A8 -> A9/A10 identity continuity: every user-bearing public column must
+  # hold a Convex-era id (k5...) — never a GoTrue uuid — and no user id may
+  # be an orphan. Runs against the LINKED project via the management API
+  # (needs SUPABASE_ACCESS_TOKEN); the full live OIDC proof is a manual
+  # pre-flip gate (scripts/bridge-proof/identity-continuity.mjs).
+  identity-continuity-guard:
+    name: No leaked id formats in user-bearing columns
+    runs-on: ubuntu-latest
+    if: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run identity-continuity data guard
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: pnpm run guard:identity-continuity --check-data
+
+      # Self-test: prove the guard bites WITHOUT touching the project. The
+      # k5-shape predicate must reject a GoTrue-style uuid and accept real
+      # Convex ids; the live failure path (injected uuid -> exit 1 with the
+      # exact offender) was proven manually against velure-cc 2026-08-17.
+      - name: Guard must fail on a leaked uuid (offline self-test)
+        run: pnpm run guard:identity-continuity --self-test

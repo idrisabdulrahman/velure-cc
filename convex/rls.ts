@@ -1,7 +1,6 @@
 import type { Id } from "./_generated/dataModel";
 import { requireAuthUser } from "./auth";
 import {
-	ensureWorkspaceForUser,
 	getWorkspaceForUserReadOnly,
 	setActiveWorkspaceForUser,
 	type WorkspaceRole,
@@ -19,19 +18,19 @@ const WRITE_ROLES = new Set<WorkspaceRole>(["owner", "member"]);
 
 export async function requireWorkspace(ctx: AnyCtx): Promise<WorkspaceScope> {
 	const viewer = await requireAuthUser(ctx as any);
-	return await ensureWorkspaceForUser(ctx, viewer._id);
+	const scope = await getWorkspaceForUserReadOnly(ctx, viewer._id);
+	if (!scope) {
+		throw new Error("Workspace not found.");
+	}
+	return { userId: viewer._id, ...scope };
 }
 
 export async function requireWorkspaceForRead(
 	ctx: AnyCtx,
 ): Promise<WorkspaceScope | null> {
-	try {
-		const viewer = await requireAuthUser(ctx as any);
-		const scope = await getWorkspaceForUserReadOnly(ctx, viewer._id);
-		return scope ? { userId: viewer._id, ...scope } : null;
-	} catch {
-		return null;
-	}
+	const viewer = await requireAuthUser(ctx as any);
+	const scope = await getWorkspaceForUserReadOnly(ctx, viewer._id);
+	return scope ? { userId: viewer._id, ...scope } : null;
 }
 
 export async function requireWritableWorkspace(

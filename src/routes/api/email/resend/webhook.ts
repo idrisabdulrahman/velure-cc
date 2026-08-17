@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getServerConvexClient } from "#/server/convex";
-import { api } from "../../../../../convex/_generated/api";
+import { api } from "#convex/_generated/api";
 
 type ResendWebhookPayload = {
 	type?: string;

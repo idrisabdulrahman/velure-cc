@@ -7,7 +7,7 @@ function deploymentUrl() {
 	return (
 		process.env.CONVEX_URL ??
 		process.env.VITE_CONVEX_URL ??
-		process.env.NUXT_CONVEX_URL ??
+		process.env.CONVEX_SITE_URL ??
 		""
 	);
 }

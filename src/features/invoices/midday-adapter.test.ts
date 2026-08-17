@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toMiddayInvoice } from "./midday-adapter";
+import { mergeDocBlocks, toEditorDoc, toMiddayInvoice } from "./midday-adapter";
 import type { InvoiceRecord } from "./types";
 
 function buildInvoice(overrides: Partial<InvoiceRecord> = {}): InvoiceRecord {
@@ -70,6 +70,49 @@ function buildInvoice(overrides: Partial<InvoiceRecord> = {}): InvoiceRecord {
 }
 
 describe("toMiddayInvoice", () => {
+	it("uses persisted template labels, units, discount, and QR preferences", () => {
+		const invoice = toMiddayInvoice(
+			buildInvoice({
+				lineItems: [
+					{
+						id: "line-1",
+						name: "Hosting",
+						quantity: 1,
+						price: 100,
+						unit: "month",
+					},
+				],
+				templateSettings: {
+					title: "Tax Invoice",
+					descriptionLabel: "Service",
+					includeUnits: true,
+					includeDiscount: true,
+					includeQr: true,
+					discount: 10,
+				},
+			}),
+		);
+
+		expect(invoice.template.title).toBe("Tax Invoice");
+		expect(invoice.template.descriptionLabel).toBe("Service");
+		expect(invoice.template.includeUnits).toBe(true);
+		expect(invoice.template.includeQr).toBe(true);
+		expect(invoice.discount).toBe(10);
+		expect(invoice.lineItems[0]?.unit).toBe("month");
+	});
+
+	it("passes inline top and bottom blocks to both renderers", () => {
+		const topBlock = toEditorDoc("Project overview");
+		const bottomBlock = toEditorDoc("Payment is due as agreed");
+		const invoice = toMiddayInvoice(
+			buildInvoice({
+				topBlock: topBlock ?? undefined,
+				bottomBlock: bottomBlock ?? undefined,
+			}),
+		);
+		expect(invoice.topBlock).toEqual(topBlock);
+		expect(invoice.bottomBlock).toEqual(bottomBlock);
+	});
 	it("passes customer PO numbers through to invoice templates", () => {
 		expect(toMiddayInvoice(buildInvoice()).customerPoNumber).toBe("PO-ACME-42");
 	});
@@ -78,6 +121,69 @@ describe("toMiddayInvoice", () => {
 		expect(
 			toMiddayInvoice(buildInvoice({ customerPoNumber: undefined }))
 				.customerPoNumber,
+		).toBeNull();
+	});
+
+	it("preserves the rounded Nigerian compliance grand total", () => {
+		const baseCompliance = buildInvoice().compliance;
+		if (!baseCompliance) throw new Error("Expected compliance fixture.");
+		const invoice = buildInvoice({
+			lineItems: [{ id: "line-1", name: "Decimal", quantity: 1, price: 0.1 }],
+			compliance: {
+				...baseCompliance,
+				subtotal: 0.1,
+				totalTax: 0.01,
+				grandTotal: 0.11,
+				netPayable: 0.11,
+			},
+		});
+
+		expect(toMiddayInvoice(invoice).amount).toBe(0.11);
+	});
+});
+
+describe("toEditorDoc", () => {
+	it("coerces a legacy string into a single paragraph doc", () => {
+		expect(toEditorDoc("Hello")).toEqual({
+			type: "doc",
+			content: [
+				{ type: "paragraph", content: [{ type: "text", text: "Hello" }] },
+			],
+		});
+	});
+
+	it("returns null for an empty legacy string", () => {
+		expect(toEditorDoc("")).toBeNull();
+		expect(toEditorDoc(undefined)).toBeNull();
+	});
+
+	it("passes editor docs through unchanged", () => {
+		const doc = {
+			type: "doc" as const,
+			content: [{ type: "paragraph", content: [{ type: "text", text: "a" }] }],
+		};
+		expect(toEditorDoc(doc)).toBe(doc);
+	});
+});
+
+describe("mergeDocBlocks", () => {
+	const paragraph = (text: string) => ({
+		type: "doc" as const,
+		content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+	});
+
+	it("merges blocks from each doc in order", () => {
+		const doc = mergeDocBlocks([paragraph("a"), paragraph("b")]);
+		expect(doc?.type).toBe("doc");
+		expect(doc?.content).toHaveLength(2);
+		expect(doc?.content?.[1]).toMatchObject({
+			content: [{ type: "text", text: "b" }],
+		});
+	});
+
+	it("returns null when there are no blocks", () => {
+		expect(
+			mergeDocBlocks([null, { type: "doc" as const, content: [] }, undefined]),
 		).toBeNull();
 	});
 });

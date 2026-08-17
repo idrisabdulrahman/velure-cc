@@ -16,15 +16,30 @@ import {
 } from "lucide-react";
 import type React from "react";
 import { useMemo, useState } from "react";
+import { DatePicker } from "#/components/navigation/DatePicker";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
+import { Checkbox } from "#/components/ui/checkbox";
 import { Input } from "#/components/ui/input";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "#/components/ui/select";
+import { Sheet, SheetContent } from "#/components/ui/sheet";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-
 export const Route = createFileRoute("/settings/recurring")({
+	beforeLoad: ({ context }) => {
+		// Fire-and-forget: warm the cache without blocking the transition.
+		void context.queryClient
+			.prefetchQuery(convexQuery(api.compliance.getWorkspaceSettings, {}))
+			.catch(() => undefined);
+	},
 	component: RecurringBillingSettingsPage,
 });
 
@@ -56,7 +71,11 @@ type ScheduleForm = {
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
-const initialForm = (): ScheduleForm => ({
+const initialForm = (workspace?: {
+	baseCurrency?: string;
+	defaultPaymentTermsDays?: number;
+	paymentDetails?: string;
+}): ScheduleForm => ({
 	name: "",
 	customerName: "",
 	frequency: "monthly",
@@ -64,9 +83,9 @@ const initialForm = (): ScheduleForm => ({
 	startDate: todayIso(),
 	endDate: "",
 	autoSend: false,
-	currency: "NGN",
-	paymentTermsDays: 14,
-	paymentDetails: "",
+	currency: workspace?.baseCurrency ?? "NGN",
+	paymentTermsDays: workspace?.defaultPaymentTermsDays ?? 14,
+	paymentDetails: workspace?.paymentDetails ?? "",
 	notes: "",
 	lineItemName: "Monthly service",
 	lineItemQuantity: 1,
@@ -74,6 +93,9 @@ const initialForm = (): ScheduleForm => ({
 });
 
 function RecurringBillingSettingsPage() {
+	const { data: workspace } = useQuery(
+		convexQuery(api.compliance.getWorkspaceSettings, {}),
+	);
 	const { data: schedulesRaw } = useQuery(
 		convexQuery(api.recurring.listSchedules, { status: "all" }),
 	);
@@ -88,6 +110,7 @@ function RecurringBillingSettingsPage() {
 	const [form, setForm] = useState<ScheduleForm>(() => initialForm());
 	const [editingScheduleId, setEditingScheduleId] =
 		useState<Id<"recurring_invoice_schedules"> | null>(null);
+	const [editorOpen, setEditorOpen] = useState(false);
 	const [busyAction, setBusyAction] = useState<BusyAction>(null);
 
 	const stats = useMemo(() => {
@@ -138,8 +161,9 @@ function RecurringBillingSettingsPage() {
 			} else {
 				await createSchedule(schedulePayload());
 			}
-			setForm(initialForm());
+			setForm(initialForm(workspace));
 			setEditingScheduleId(null);
+			setEditorOpen(false);
 			toast({
 				title: editingScheduleId
 					? "Recurring invoice schedule updated"
@@ -177,6 +201,7 @@ function RecurringBillingSettingsPage() {
 			lineItemQuantity: firstLineItem?.quantity ?? 1,
 			lineItemPrice: firstLineItem?.price ?? 0,
 		});
+		setEditorOpen(true);
 	}
 
 	async function handleDeleteSchedule(
@@ -187,7 +212,7 @@ function RecurringBillingSettingsPage() {
 			const result = await deleteSchedule({ scheduleId });
 			if (editingScheduleId === scheduleId) {
 				setEditingScheduleId(null);
-				setForm(initialForm());
+				setForm(initialForm(workspace));
 			}
 			toast({
 				title: result.deleted ? "Schedule deleted" : "Schedule ended",
@@ -254,27 +279,38 @@ function RecurringBillingSettingsPage() {
 		<div className="mx-auto max-w-6xl space-y-6">
 			<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
 				<div>
-					<h1 className="text-3xl font-semibold text-[#f2efe7]">
-						Recurring billing
-					</h1>
-					<p className="mt-2 max-w-2xl text-sm text-[#aaa294]">
+					<h1 className="text-3xl font-semibold text-ink">Recurring billing</h1>
+					<p className="mt-2 max-w-2xl text-sm text-ink-3">
 						Schedule repeat invoices for retainers, monthly services, and
 						maintenance billing. Generated invoices stay in the normal Velure
 						invoice flow.
 					</p>
 				</div>
-				<Button
-					className="h-10 rounded-none bg-[#c8ff62] px-4 text-sm font-medium text-[#0f1111] hover:bg-[#d7ff82]"
-					disabled={busyAction === "run"}
-					onClick={handleRunDueSchedules}
-				>
-					{busyAction === "run" ? (
-						<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-					) : (
-						<RefreshCcw className="mr-2 h-4 w-4" />
-					)}
-					Run due scan
-				</Button>
+				<div className="flex flex-wrap gap-2">
+					<Button
+						variant="outline"
+						className="border-rule bg-paper"
+						disabled={busyAction === "run"}
+						onClick={handleRunDueSchedules}
+					>
+						{busyAction === "run" ? (
+							<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+						) : (
+							<RefreshCcw className="mr-2 h-4 w-4" />
+						)}
+						Run due scan
+					</Button>
+					<Button
+						className="bg-brand text-brand-ink hover:bg-brand-hi"
+						onClick={() => {
+							setEditingScheduleId(null);
+							setForm(initialForm(workspace));
+							setEditorOpen(true);
+						}}
+					>
+						<Repeat2 className="mr-2 h-4 w-4" /> New schedule
+					</Button>
+				</div>
 			</div>
 
 			<section className="grid gap-3 md:grid-cols-3">
@@ -295,13 +331,16 @@ function RecurringBillingSettingsPage() {
 				/>
 			</section>
 
-			<section className="grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-				<div className="border border-[#30352f] bg-[#151817] p-5">
+			<Sheet open={editorOpen} onOpenChange={setEditorOpen}>
+				<SheetContent
+					title={editingScheduleId ? "Edit schedule" : "New schedule"}
+					className="overflow-y-auto p-5 sm:p-7"
+				>
 					<div className="mb-5">
-						<h2 className="text-lg font-semibold text-[#f2efe7]">
+						<h2 className="text-lg font-semibold text-ink">
 							{editingScheduleId ? "Edit schedule" : "New schedule"}
 						</h2>
-						<p className="mt-1 text-sm text-[#aaa294]">
+						<p className="mt-1 text-sm text-ink-3">
 							{editingScheduleId
 								? "Update the reusable invoice template for future runs."
 								: "Create one reusable invoice template for repeat billing."}
@@ -335,19 +374,23 @@ function RecurringBillingSettingsPage() {
 						</Field>
 						<div className="grid gap-3 sm:grid-cols-2">
 							<Field label="Frequency">
-								<select
-									className="h-9 w-full border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none focus:border-[#c8ff62]"
+								<Select
 									value={form.frequency}
-									onChange={(event) =>
+									onValueChange={(value) =>
 										setForm((current) => ({
 											...current,
-											frequency: event.target.value as Frequency,
+											frequency: value as Frequency,
 										}))
 									}
 								>
-									<option value="monthly">Monthly</option>
-									<option value="quarterly">Quarterly</option>
-								</select>
+									<SelectTrigger>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="monthly">Monthly</SelectItem>
+										<SelectItem value="quarterly">Quarterly</SelectItem>
+									</SelectContent>
+								</Select>
 							</Field>
 							<Field label="Every">
 								<Input
@@ -365,30 +408,20 @@ function RecurringBillingSettingsPage() {
 							</Field>
 						</div>
 						<div className="grid gap-3 sm:grid-cols-2">
-							<Field label="Start date">
-								<Input
-									type="date"
-									value={form.startDate}
-									onChange={(event) =>
-										setForm((current) => ({
-											...current,
-											startDate: event.target.value,
-										}))
-									}
-								/>
-							</Field>
-							<Field label="End date">
-								<Input
-									type="date"
-									value={form.endDate}
-									onChange={(event) =>
-										setForm((current) => ({
-											...current,
-											endDate: event.target.value,
-										}))
-									}
-								/>
-							</Field>
+							<DatePicker
+								label="Start date"
+								value={form.startDate}
+								onChange={(v) =>
+									setForm((current) => ({ ...current, startDate: v }))
+								}
+							/>
+							<DatePicker
+								label="End date"
+								value={form.endDate}
+								onChange={(v) =>
+									setForm((current) => ({ ...current, endDate: v }))
+								}
+							/>
 						</div>
 						<div className="grid gap-3 sm:grid-cols-3">
 							<Field label="Currency">
@@ -466,7 +499,12 @@ function RecurringBillingSettingsPage() {
 										paymentDetails: event.target.value,
 									}))
 								}
+								placeholder="Uses the payment details saved in General settings"
 							/>
+							<p className="text-xs text-ink-3">
+								Prefilled from General settings. Edit here only to override this
+								schedule.
+							</p>
 						</Field>
 						<Field label="Notes">
 							<Textarea
@@ -480,30 +518,30 @@ function RecurringBillingSettingsPage() {
 								}
 							/>
 						</Field>
-						<label className="flex items-start gap-3 rounded-md border border-[#30352f] bg-[#0f1111] p-3 text-sm text-[#d8d1c4]">
-							<input
-								type="checkbox"
+						<div className="flex items-start gap-3 rounded-md border border-rule bg-paper p-3 text-sm text-ink-2">
+							<Checkbox
+								id="recurring-auto-send"
 								checked={form.autoSend}
-								onChange={(event) =>
+								onCheckedChange={(checked) =>
 									setForm((current) => ({
 										...current,
-										autoSend: event.target.checked,
+										autoSend: checked === true,
 									}))
 								}
 								className="mt-1"
 							/>
-							<span>
-								<span className="block font-medium text-[#f2efe7]">
+							<label htmlFor="recurring-auto-send">
+								<span className="block font-medium text-ink">
 									Auto-send generated invoices
 								</span>
-								<span className="mt-1 block text-xs leading-5 text-[#817d72]">
+								<span className="mt-1 block text-xs leading-5 text-ink-3">
 									Store the preference for recurring invoices. Delivery still
 									uses the normal invoice email flow.
 								</span>
-							</span>
-						</label>
+							</label>
+						</div>
 						<Button
-							className="h-10 w-full rounded-none bg-[#c8ff62] text-sm font-medium text-[#0f1111] hover:bg-[#d7ff82]"
+							className="h-10 w-full bg-brand text-sm font-medium text-brand-ink hover:bg-brand-hi"
 							disabled={busyAction === "create" || busyAction === "update"}
 							onClick={handleSaveSchedule}
 						>
@@ -516,10 +554,10 @@ function RecurringBillingSettingsPage() {
 						</Button>
 						{editingScheduleId ? (
 							<Button
-								className="h-10 w-full rounded-none border-[#30352f] bg-[#0f1111] text-sm text-[#f2efe7] hover:bg-[#1a2117]"
+								className="h-10 w-full border-rule bg-paper text-sm text-ink hover:bg-brand-soft"
 								onClick={() => {
 									setEditingScheduleId(null);
-									setForm(initialForm());
+									setForm(initialForm(workspace));
 								}}
 								type="button"
 								variant="outline"
@@ -528,107 +566,106 @@ function RecurringBillingSettingsPage() {
 							</Button>
 						) : null}
 					</div>
+				</SheetContent>
+			</Sheet>
+
+			<section className="space-y-3 border-t border-rule pt-2">
+				<div className="flex items-center justify-between py-3">
+					<div>
+						<h2 className="text-base font-medium text-ink">Schedules</h2>
+						<p className="text-sm text-ink-3">
+							Reusable invoice plans and their next run.
+						</p>
+					</div>
+					<span className="text-sm text-ink-3">{schedules.length} total</span>
 				</div>
-
-				<div className="space-y-3">
-					{schedules.length === 0 ? (
-						<div className="border border-dashed border-[#30352f] bg-[#151817] p-6 text-sm text-[#aaa294]">
-							No recurring schedules yet.
-						</div>
-					) : (
-						schedules.map((schedule) => (
-							<div
-								className="border border-[#30352f] bg-[#151817] p-5"
-								key={schedule._id}
-							>
-								<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-									<div>
-										<div className="flex flex-wrap items-center gap-2">
-											<h2 className="text-lg font-semibold text-[#f2efe7]">
-												{schedule.name}
-											</h2>
-											<StatusBadge status={schedule.status} />
-										</div>
-										<p className="mt-1 text-sm text-[#aaa294]">
-											{schedule.customerName} · {schedule.frequency} · every{" "}
-											{schedule.interval}
-										</p>
+				{schedules.length === 0 ? (
+					<div className="border border-dashed border-rule bg-paper-2 p-6 text-sm text-ink-3">
+						No recurring schedules yet.
+					</div>
+				) : (
+					schedules.map((schedule) => (
+						<div
+							className="border border-rule bg-paper-2 p-5"
+							key={schedule._id}
+						>
+							<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+								<div>
+									<div className="flex flex-wrap items-center gap-2">
+										<h2 className="text-lg font-semibold text-ink">
+											{schedule.name}
+										</h2>
+										<StatusBadge status={schedule.status} />
 									</div>
-									<div className="flex flex-wrap gap-2">
+									<p className="mt-1 text-sm text-ink-3">
+										{schedule.customerName} · {schedule.frequency} · every{" "}
+										{schedule.interval}
+									</p>
+								</div>
+								<div className="flex flex-wrap gap-2">
+									<ScheduleButton
+										busy={busyAction === `status:${schedule._id}`}
+										icon={Pencil}
+										label="Edit"
+										onClick={() => handleEditSchedule(schedule)}
+									/>
+									{schedule.status === "paused" ? (
 										<ScheduleButton
 											busy={busyAction === `status:${schedule._id}`}
-											icon={Pencil}
-											label="Edit"
-											onClick={() => handleEditSchedule(schedule)}
+											icon={PlayCircle}
+											label="Resume"
+											onClick={() => handleStatusChange(schedule._id, "active")}
 										/>
-										{schedule.status === "paused" ? (
-											<ScheduleButton
-												busy={busyAction === `status:${schedule._id}`}
-												icon={PlayCircle}
-												label="Resume"
-												onClick={() =>
-													handleStatusChange(schedule._id, "active")
-												}
-											/>
-										) : (
-											<ScheduleButton
-												busy={busyAction === `status:${schedule._id}`}
-												icon={PauseCircle}
-												label="Pause"
-												onClick={() =>
-													handleStatusChange(schedule._id, "paused")
-												}
-											/>
-										)}
+									) : (
 										<ScheduleButton
 											busy={busyAction === `status:${schedule._id}`}
-											icon={StopCircle}
-											label="End"
-											onClick={() => handleStatusChange(schedule._id, "ended")}
+											icon={PauseCircle}
+											label="Pause"
+											onClick={() => handleStatusChange(schedule._id, "paused")}
 										/>
-										<ScheduleButton
-											busy={busyAction === `delete:${schedule._id}`}
-											icon={Trash2}
-											label="Delete"
-											onClick={() => {
-												void handleDeleteSchedule(schedule._id);
-											}}
-										/>
-									</div>
-								</div>
-
-								<div className="mt-4 grid gap-3 sm:grid-cols-3">
-									<ScheduleDatum
-										label="Next run"
-										value={schedule.nextRunDate}
+									)}
+									<ScheduleButton
+										busy={busyAction === `status:${schedule._id}`}
+										icon={StopCircle}
+										label="End"
+										onClick={() => handleStatusChange(schedule._id, "ended")}
 									/>
-									<ScheduleDatum
-										label="Generated"
-										value={String(schedule.generatedCount)}
+									<ScheduleButton
+										busy={busyAction === `delete:${schedule._id}`}
+										icon={Trash2}
+										label="Delete"
+										onClick={() => {
+											void handleDeleteSchedule(schedule._id);
+										}}
 									/>
-									<ScheduleDatum
-										label="Last period"
-										value={schedule.lastGeneratedPeriod ?? "None"}
-									/>
-								</div>
-								<div className="mt-4 border-t border-[#30352f] pt-4">
-									<p className="text-sm text-[#f2efe7]">
-										{schedule.currency}{" "}
-										{schedule.lineItems
-											.reduce(
-												(sum, item) => sum + item.quantity * item.price,
-												0,
-											)
-											.toLocaleString()}
-									</p>
-									<p className="mt-1 text-xs text-[#817d72]">
-										{schedule.lineItems.map((item) => item.name).join(", ")}
-									</p>
 								</div>
 							</div>
-						))
-					)}
-				</div>
+
+							<div className="mt-4 grid gap-3 sm:grid-cols-3">
+								<ScheduleDatum label="Next run" value={schedule.nextRunDate} />
+								<ScheduleDatum
+									label="Generated"
+									value={String(schedule.generatedCount)}
+								/>
+								<ScheduleDatum
+									label="Last period"
+									value={schedule.lastGeneratedPeriod ?? "None"}
+								/>
+							</div>
+							<div className="mt-4 border-t border-rule pt-4">
+								<p className="text-sm text-ink">
+									{schedule.currency}{" "}
+									{schedule.lineItems
+										.reduce((sum, item) => sum + item.quantity * item.price, 0)
+										.toLocaleString()}
+								</p>
+								<p className="mt-1 text-xs text-ink-3">
+									{schedule.lineItems.map((item) => item.name).join(", ")}
+								</p>
+							</div>
+						</div>
+					))
+				)}
 			</section>
 		</div>
 	);
@@ -643,7 +680,7 @@ function Field({
 }) {
 	return (
 		<div className="block space-y-1.5">
-			<span className="text-xs font-medium uppercase tracking-[0.08em] text-[#817d72]">
+			<span className="text-xs font-medium uppercase tracking-[0.08em] text-ink-3">
 				{label}
 			</span>
 			{children}
@@ -661,12 +698,12 @@ function Metric({
 	value: number;
 }) {
 	return (
-		<div className="border border-[#30352f] bg-[#151817] p-4">
-			<div className="flex items-center gap-2 text-xs uppercase tracking-[0.08em] text-[#817d72]">
+		<div className="border border-rule bg-paper-2 p-4">
+			<div className="flex items-center gap-2 text-xs uppercase tracking-[0.08em] text-ink-3">
 				<Icon className="h-4 w-4" />
 				{label}
 			</div>
-			<p className="mt-3 text-2xl font-semibold text-[#f2efe7]">{value}</p>
+			<p className="mt-3 text-2xl font-semibold text-ink">{value}</p>
 		</div>
 	);
 }
@@ -674,13 +711,13 @@ function Metric({
 function StatusBadge({ status }: { status: "active" | "paused" | "ended" }) {
 	const className =
 		status === "active"
-			? "border-[#c8ff62]/40 bg-[#c8ff62]/10 text-[#d7ff82]"
+			? "border-ok-line bg-ok-soft text-ok"
 			: status === "paused"
-				? "border-[#f0c36a]/40 bg-[#f0c36a]/10 text-[#f0c36a]"
-				: "border-[#817d72]/40 bg-[#1f2220] text-[#aaa294]";
+				? "border-warn-line/40 bg-warn-soft/10 text-warn"
+				: "border-ink-3/40 bg-paper-3 text-ink-3";
 
 	return (
-		<Badge className={`rounded-none border ${className}`} variant="outline">
+		<Badge className={`border ${className}`} variant="outline">
 			{status}
 		</Badge>
 	);
@@ -699,7 +736,7 @@ function ScheduleButton({
 }) {
 	return (
 		<Button
-			className="h-9 rounded-none border-[#30352f] bg-[#0f1111] px-3 text-xs text-[#f2efe7] hover:bg-[#1a2117]"
+			className="h-9 border-rule bg-paper px-3 text-xs text-ink hover:bg-brand-soft"
 			disabled={busy}
 			onClick={onClick}
 			variant="outline"
@@ -716,11 +753,9 @@ function ScheduleButton({
 
 function ScheduleDatum({ label, value }: { label: string; value: string }) {
 	return (
-		<div className="border border-[#30352f] bg-[#0f1111] p-3">
-			<p className="text-xs uppercase tracking-[0.08em] text-[#817d72]">
-				{label}
-			</p>
-			<p className="mt-1 text-sm font-medium text-[#f2efe7]">{value}</p>
+		<div className="border border-rule bg-paper p-3">
+			<p className="text-xs uppercase tracking-[0.08em] text-ink-3">{label}</p>
+			<p className="mt-1 text-sm font-medium text-ink">{value}</p>
 		</div>
 	);
 }

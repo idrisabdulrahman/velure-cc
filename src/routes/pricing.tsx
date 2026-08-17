@@ -35,7 +35,7 @@ const plans = [
 			"Unlimited invoices",
 			"Automatic payment reminders",
 			"Tax summary and customer ledger exports",
-			"QuickBooks, Xero, and Slack sync",
+			"QuickBooks and Xero connection points",
 		],
 		featured: true,
 	},
@@ -66,21 +66,21 @@ function PricingPage() {
 			<MarketingHero
 				kicker="Pricing"
 				title="Naira pricing for serious billing work."
-				description="Start with clean invoices. Upgrade when reminders, compliance exports, and accounting sync become daily operations."
+				description="Start with clean invoices. Upgrade when reminders, compliance exports, and accounting exports become daily operations."
+				secondaryTo="/features"
+				secondaryLabel="See the system"
 			>
 				<div className="space-y-5">
-					<div className="border border-[#2a2a2a] bg-[#101010] p-4">
-						<p className="text-xs uppercase tracking-[0.22em] text-[#8fa078]">
+					<div className="rounded-[var(--hm-r-card)] border border-rule bg-paper-2 p-4">
+						<p className="text-xs uppercase tracking-[0.22em] text-ink-3">
 							Billing cycle
 						</p>
-						<div className="mt-4 grid grid-cols-2 border border-[#2a2a2a]">
+						<div className="mt-4 grid grid-cols-2 overflow-hidden rounded-[var(--hm-r-card)] border border-rule">
 							<button
 								type="button"
 								onClick={() => setAnnual(false)}
-								className={`px-4 py-3 text-sm font-black ${
-									annual
-										? "bg-[#101010] text-[#9daa90]"
-										: "bg-[#c8ff00] text-[#0f0f0f]"
+								className={`px-4 py-3 text-sm font-black transition-colors duration-150 ease-out ${
+									annual ? "bg-paper text-ink-3" : "bg-brand text-accent-ink"
 								}`}
 							>
 								Monthly
@@ -88,20 +88,18 @@ function PricingPage() {
 							<button
 								type="button"
 								onClick={() => setAnnual(true)}
-								className={`px-4 py-3 text-sm font-black ${
-									annual
-										? "bg-[#c8ff00] text-[#0f0f0f]"
-										: "bg-[#101010] text-[#9daa90]"
+								className={`px-4 py-3 text-sm font-black transition-colors duration-150 ease-out ${
+									annual ? "bg-brand text-accent-ink" : "bg-paper text-ink-3"
 								}`}
 							>
 								Annual
 							</button>
 						</div>
-						<p className="mt-3 text-sm text-[#c9d2bf]">Annual saves 20%.</p>
+						<p className="mt-3 text-sm text-ink-2">Annual saves 20%.</p>
 					</div>
 					<div className="grid grid-cols-3 gap-2">
 						{plans.map((plan) => (
-							<div key={plan.name} className="bg-[#c8ff00] p-3 text-[#0f0f0f]">
+							<div key={plan.name} className="bg-brand p-3 text-accent-ink">
 								<p className="text-xs font-black uppercase">{plan.name}</p>
 								<p className="mt-2 text-lg font-black">
 									{money(annual ? plan.annual : plan.monthly)}
@@ -112,34 +110,34 @@ function PricingPage() {
 				</div>
 			</MarketingHero>
 
-			<section className="border-b border-[#2a2a2a]">
+			<section className="border-b border-rule">
 				<div className="mx-auto grid max-w-7xl gap-4 px-5 py-14 lg:grid-cols-3 lg:px-8">
 					{plans.map((plan) => (
 						<article
 							key={plan.name}
-							className={`border p-6 ${
+							className={`rounded-[var(--hm-r-card)] border p-6 ${
 								plan.featured
-									? "border-[#c8ff00] bg-[#1d240f]"
-									: "border-[#2a2a2a] bg-[#1a1a1a]"
+									? "border-brand bg-accent-soft"
+									: "border-rule bg-paper-2"
 							}`}
 						>
-							<p className="text-sm font-black uppercase tracking-[0.18em] text-[#c8ff00]">
+							<p className="text-sm font-black uppercase tracking-[0.18em] text-brand">
 								{plan.name}
 							</p>
-							<p className="mt-5 text-5xl font-black text-white">
+							<p className="mt-5 text-5xl font-black text-ink">
 								{money(annual ? plan.annual : plan.monthly)}
 							</p>
-							<p className="mt-2 text-sm text-[#9daa90]">per month</p>
-							<p className="mt-5 min-h-14 text-sm leading-7 text-[#c9d2bf]">
+							<p className="mt-2 text-sm text-ink-3">per month</p>
+							<p className="mt-5 min-h-14 text-sm leading-7 text-ink-2">
 								{plan.blurb}
 							</p>
-							<Button className="mt-6 h-11 w-full bg-[#c8ff00] font-black text-[#0f0f0f] hover:bg-[#d7ff3d]">
+							<Button className="mt-6 h-11 w-full bg-brand font-black text-accent-ink hover:bg-brand-hi">
 								Start {plan.name}
 							</Button>
 							<div className="mt-6 space-y-3">
 								{plan.features.map((feature) => (
-									<div key={feature} className="flex gap-3 text-sm text-white">
-										<Check className="mt-0.5 h-4 w-4 shrink-0 text-[#c8ff00]" />
+									<div key={feature} className="flex gap-3 text-sm text-ink-2">
+										<Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
 										<span>{feature}</span>
 									</div>
 								))}
@@ -151,10 +149,10 @@ function PricingPage() {
 			<SplitSection
 				kicker="Plan fit"
 				title="Pay for operational weight, not decoration."
-				body="Velure pricing maps to actual finance work: invoice volume, reminders, exports, integrations, and team control."
+				body="Velure pricing maps to actual finance work: invoice volume, reminders, exports, accounting connection points, and team control."
 				points={[
 					"Starter handles professional invoice creation and client records.",
-					"Growth adds reminders, exports, and accounting sync.",
+					"Growth adds reminders, exports, and accounting connection points.",
 					"Enterprise adds roles, onboarding, and custom workflows.",
 					"All plans keep Velure's dark, focused billing workspace.",
 				]}

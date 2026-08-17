@@ -5,8 +5,8 @@
 		"**/dist": true,
 		"**/build": true,
 		"**/.mimocode": true,
-		"**/.codex": true,
-		"**/.agents": true
+		"**/.codex": true
+		// "**/.agents": true
 	},
 	"search.exclude": {
 		"**/node_modules": true,
@@ -14,8 +14,8 @@
 		"**/dist": true,
 		"**/build": true,
 		"**/.mimocode": true,
-		"**/.codex": true,
-		"**/.agents": true
+		"**/.codex": true
+		// "**/.agents": true
 	},
 	"files.exclude": {
 		"**/node_modules": true,

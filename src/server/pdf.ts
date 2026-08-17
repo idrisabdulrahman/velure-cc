@@ -1,7 +1,18 @@
-import { renderToBuffer } from "@react-pdf/renderer";
+import { Document, Page, renderToBuffer, Text } from "@react-pdf/renderer";
+import { createElement } from "react";
 import { toMiddayInvoice } from "#/features/invoices/midday-adapter";
 import { PdfTemplate } from "#/lib/midday-invoice/templates/pdf";
 import type { Invoice } from "./invoice-repository";
+
+// Eagerly warm up the PDF renderer (yoga-layout + font engine) at module load
+// so the first real request doesn't pay the cold-start cost.
+renderToBuffer(
+	createElement(
+		Document,
+		null,
+		createElement(Page, { size: "A4" }, createElement(Text, null, "warmup")),
+	),
+).catch(() => {});
 
 function escapePdfText(value: string) {
 	return value

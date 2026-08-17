@@ -4,7 +4,6 @@ import {
 	useLocation,
 	useNavigate,
 } from "@tanstack/react-router";
-import { useMutation } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ThemeToggle } from "#/components/theme/theme-toggle";
@@ -12,7 +11,7 @@ import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Input } from "#/components/ui/input";
 import { authClient } from "#/lib/auth-client";
-import { api } from "../../convex/_generated/api";
+import { useWorkspaceActions } from "#/lib/auth-hook";
 
 export const Route = createLazyFileRoute("/auth")({
 	component: AuthPage,
@@ -54,6 +53,25 @@ function authErrorStatus(error: unknown) {
 
 	const numericStatus = Number.parseInt(status, 10);
 	return Number.isFinite(numericStatus) ? numericStatus : undefined;
+}
+
+function isNetworkError(error: unknown) {
+	if (error instanceof TypeError) {
+		const msg = error.message.toLowerCase();
+		return (
+			msg.includes("failed to fetch") ||
+			msg.includes("networkerror") ||
+			msg.includes("network request failed") ||
+			msg.includes("load failed")
+		);
+	}
+	if (error instanceof Error) {
+		const msg = error.message.toLowerCase();
+		if (msg === "httperror" || msg.includes("network") || msg.includes("fetch"))
+			return true;
+	}
+	if (typeof navigator !== "undefined" && !navigator.onLine) return true;
+	return false;
 }
 
 function isUserActionAuthError(error: unknown) {
@@ -107,6 +125,7 @@ async function retryAuthSubmit<T extends AuthResultWithError>(
 		}
 	}
 
+	if (lastError instanceof Error) throw lastError;
 	throw new Error(
 		authErrorMessage(lastError, "The auth service is temporarily unavailable."),
 	);
@@ -142,9 +161,7 @@ function AuthPage() {
 	const navigate = useNavigate();
 	const location = useLocation();
 	const { data: session, isPending: sessionPending } = authClient.useSession();
-	const ensureWorkspaceContext = useMutation(
-		api.account.ensureWorkspaceContext,
-	);
+	const { ensure: ensureWorkspaceContext } = useWorkspaceActions();
 
 	const search = useMemo(() => {
 		const rawMode = searchStringValue(location.search, "mode");
@@ -359,7 +376,11 @@ function AuthPage() {
 			await navigate({ to: "/invoices", replace: true });
 		} catch (error) {
 			setErrorMessage(
-				error instanceof Error ? error.message : "Authentication failed.",
+				isNetworkError(error)
+					? "You appear to be offline. Please check your connection and try again."
+					: error instanceof Error
+						? error.message
+						: "Authentication failed.",
 			);
 		} finally {
 			setSubmitting(false);
@@ -389,9 +410,11 @@ function AuthPage() {
 			}
 		} catch (error) {
 			setErrorMessage(
-				error instanceof Error
-					? error.message
-					: "Could not start Google sign-in.",
+				isNetworkError(error)
+					? "You appear to be offline. Please check your connection and try again."
+					: error instanceof Error
+						? error.message
+						: "Could not start Google sign-in.",
 			);
 		} finally {
 			setGoogleSubmitting(false);
@@ -418,41 +441,59 @@ function AuthPage() {
 
 	if (!hydrated || sessionPending || session?.user) {
 		return (
-			<div className="flex min-h-screen items-center justify-center bg-[#0f1111]">
-				<Loader2 className="h-8 w-8 animate-spin text-[#d8b865]" />
+			<div className="hm-app flex min-h-screen items-center justify-center bg-paper">
+				<Loader2 className="h-8 w-8 animate-spin text-accent" />
 			</div>
 		);
 	}
 
 	return (
-		<div className="min-h-screen bg-[#0f1111] text-[#f2efe7] bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:32px_32px]">
+		<div className="hm-app min-h-screen bg-paper text-ink">
 			<div className="fixed right-4 top-4 z-50">
-				<ThemeToggle className="fixed right-4 top-4 z-50 h-9 w-9 border border-[#30352f] bg-[#161918] text-[#d8d1c4]- hover:bg-[#20241f] hover:text-[#f2efe7]" />
+				<ThemeToggle className="fixed right-4 top-4 z-50 h-9 w-9 rounded-md border border-rule bg-paper-2 text-ink-2 hover:bg-paper-3 hover:text-ink" />
 			</div>
 			<div className="flex min-h-screen items-center justify-center p-6">
-				<div className="ui-panel grid w-full max-w-245 overflow-hidden border border-[#2a2d31] bg-[#141715] lg:grid-cols-[0.95fr_1.05fr]">
-					<section className="hidden border-r border-[#2a2d31] bg-[linear-gradient(180deg,#181a1d_0%,#141715_100%)] lg:flex lg:flex-col lg:justify-between">
+				<div className="ui-panel hm-reveal grid w-full max-w-245 overflow-hidden rounded-[var(--hm-r-card)] border border-rule bg-paper lg:grid-cols-[0.95fr_1.05fr]">
+					<section className="hidden border-r border-rule bg-paper-2 lg:flex lg:flex-col lg:justify-between">
 						<div className="p-7">
 							<Link
 								to="/"
-								className="inline-flex items-center gap-2 text-sm font-medium text-[#f2efe7]"
+								className="inline-flex items-center gap-2.5 text-sm font-medium text-ink"
 							>
-								<span className="h-3 w-3 bg-[#d8b865]" />
-								Velure
+								<span
+									className="flex h-7 w-7 items-center justify-center text-[13px] font-extrabold text-accent-ink"
+									style={{
+										borderRadius: "8px",
+										background: "var(--hm-accent)",
+										fontFamily: "var(--hm-font-display)",
+									}}
+									aria-hidden
+								>
+									V
+								</span>
+								<span style={{ fontFamily: "var(--hm-font-display)" }}>
+									Velure
+								</span>
 							</Link>
 						</div>
 
 						<div className="px-7 pb-7">
-							<h1 className="text-5xl font-semibold tracking-[-0.04em] text-[#f2efe7]">
+							<h1
+								className="text-5xl font-extrabold tracking-[-0.032em] text-ink"
+								style={{
+									fontFamily: "var(--hm-font-display)",
+									lineHeight: 1.02,
+								}}
+							>
 								Welcome
 							</h1>
-							<p className="mt-5 max-w-sm text-sm leading-7 text-[#aaa294]">
+							<p className="mt-5 max-w-sm text-sm leading-7 text-ink-3">
 								Velure keeps sign-in direct: dense spacing, clear fields, and a
 								quieter visual system that matches the product instead of
 								breaking away from it.
 							</p>
 
-							<div className="mt-10 border-t border-[#2a2d31] pt-3">
+							<div className="hm-ts-tape mt-10 pt-5">
 								<InfoRow label="Environment" value="Private workspace" />
 								<InfoRow
 									label="Security"
@@ -463,35 +504,63 @@ function AuthPage() {
 						</div>
 					</section>
 
-					<section className="bg-[#121514] p-6 sm:p-8 lg:p-10">
+					<section className="bg-paper p-6 sm:p-8 lg:p-10">
 						<div className="mx-auto max-w-[420px]">
-							<div className="mb-8">
-								<p className="text-[30px] font-semibold tracking-[-0.03em] text-[#f2efe7]">
+							<div className="mb-7">
+								<p
+									className="hm-label mb-2 text-accent"
+									style={{ letterSpacing: "0.005em" }}
+								>
 									{pageTitle}
 								</p>
-								<p className="mt-2 text-sm text-[#9f988d]">{pageDescription}</p>
+								<h2
+									className="text-[34px] font-extrabold tracking-[-0.028em] text-ink"
+									style={{
+										fontFamily: "var(--hm-font-display)",
+										lineHeight: 1.05,
+									}}
+								>
+									{mode === "sign-up"
+										? "Open your workspace"
+										: mode === "forgot"
+											? "Reset your password"
+											: mode === "reset"
+												? "Choose a new password"
+												: "Sign in to Velure"}
+								</h2>
+								<p className="mt-2 text-sm leading-6 text-ink-3">
+									{pageDescription}
+								</p>
 							</div>
 
 							{mode !== "forgot" && mode !== "reset" ? (
-								<div className="mb-5 inline-flex border border-[#2a2d31] bg-[#0f1111] p-1 text-sm">
+								<div
+									className="mb-5 inline-flex items-center gap-1 rounded-full border border-rule bg-paper-2 p-1 text-sm"
+									role="tablist"
+									aria-label="Authentication mode"
+								>
 									<button
 										type="button"
+										role="tab"
+										aria-selected={mode === "sign-in"}
 										onClick={() => setMode("sign-in")}
-										className={`px-4 py-2 transition-colors duration-150 ${
+										className={`rounded-full px-4 py-1.5 transition-colors duration-150 ${
 											mode === "sign-in"
-												? "bg-[#1c2118] text-[#d8e0c2]"
-												: "text-[#8e877c] hover:text-[#f2efe7]"
+												? "bg-accent text-accent-ink shadow-(--hm-shadow-soft)"
+												: "text-ink-3 hover:text-ink"
 										}`}
 									>
 										Sign in
 									</button>
 									<button
 										type="button"
+										role="tab"
+										aria-selected={mode === "sign-up"}
 										onClick={() => setMode("sign-up")}
-										className={`px-4 py-2 transition-colors duration-150 ${
+										className={`rounded-full px-4 py-1.5 transition-colors duration-150 ${
 											mode === "sign-up"
-												? "bg-[#1c2118] text-[#d8e0c2]"
-												: "text-[#8e877c] hover:text-[#f2efe7]"
+												? "bg-accent text-accent-ink shadow-(--hm-shadow-soft)"
+												: "text-ink-3 hover:text-ink"
 										}`}
 									>
 										Sign up
@@ -508,7 +577,7 @@ function AuthPage() {
 											void onGoogleSignIn();
 										}}
 										disabled={googleSubmitting || submitting}
-										className="h-10 w-full rounded-none border-[#2a2d31] bg-[#151817] text-sm font-semibold text-[#f2efe7] hover:border-[#3f5130] hover:bg-[#1c2118]"
+										className="hm-btn hm-btn--ghost h-11 w-full"
 									>
 										{googleSubmitting ? (
 											<>
@@ -519,14 +588,17 @@ function AuthPage() {
 											"Continue with Google"
 										)}
 									</Button>
-									<p className="text-xs leading-5 text-[#8e877c]">
+									<p className="text-xs leading-5 text-ink-3">
 										Google sign-in only works after you link Google from
 										Security.
 									</p>
-									<div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.12em] text-[#6f6a62]">
-										<span className="h-px flex-1 bg-[#2a2d31]" />
+									<div
+										className="hm-label flex items-center gap-3 text-ink-3"
+										style={{ letterSpacing: "0.005em" }}
+									>
+										<span className="h-px flex-1 bg-rule" />
 										<span>Email sign-in</span>
-										<span className="h-px flex-1 bg-[#2a2d31]" />
+										<span className="h-px flex-1 bg-rule" />
 									</div>
 								</div>
 							) : null}
@@ -539,7 +611,7 @@ function AuthPage() {
 											value={name}
 											onChange={(event) => setName(event.target.value)}
 											placeholder="Jane Doe"
-											className="h-10 border-[#2a2d31] bg-[#151817] text-[#f2efe7] placeholder:text-[#6f6a62] focus-visible:border-[#4c5435]"
+											className="h-10 rounded-(--hm-r-input) border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-accent-line"
 										/>
 									</Field>
 								) : null}
@@ -551,7 +623,7 @@ function AuthPage() {
 											value={businessName}
 											onChange={(event) => setBusinessName(event.target.value)}
 											placeholder="Acme Ventures Ltd"
-											className="h-10 border-[#2a2d31] bg-[#151817] text-[#f2efe7] placeholder:text-[#6f6a62] focus-visible:border-[#4c5435]"
+											className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-accent-line"
 										/>
 									</Field>
 								) : null}
@@ -564,7 +636,7 @@ function AuthPage() {
 											value={email}
 											onChange={(event) => setEmail(event.target.value)}
 											placeholder="name@domain.com"
-											className="h-10 border-[#2a2d31] bg-[#151817] text-[#f2efe7] placeholder:text-[#6f6a62] focus-visible:border-[#4c5435]"
+											className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-accent-line"
 										/>
 									</Field>
 								) : null}
@@ -581,7 +653,7 @@ function AuthPage() {
 													? "Enter a new password"
 													: "Enter your password"
 											}
-											className="h-10 border-[#2a2d31] bg-[#151817] text-[#f2efe7] placeholder:text-[#6f6a62] focus-visible:border-[#4c5435]"
+											className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-accent-line"
 										/>
 									</Field>
 								) : null}
@@ -596,16 +668,16 @@ function AuthPage() {
 												setConfirmPassword(event.target.value)
 											}
 											placeholder="Confirm your password"
-											className="h-10 border-[#2a2d31] bg-[#151817] text-[#f2efe7] placeholder:text-[#6f6a62] focus-visible:border-[#4c5435]"
+											className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-accent-line"
 										/>
 									</Field>
 								) : null}
 
 								{mode === "sign-in" ? (
-									<div className="flex items-center justify-between gap-3 text-xs text-[#aaa294]">
+									<div className="flex items-center justify-between gap-3 text-xs text-ink-3">
 										<label
 											htmlFor="rememberMe"
-											className="inline-flex items-center gap-2 text-[#aaa395]"
+											className="inline-flex items-center gap-2 text-ink-3"
 										>
 											<Checkbox
 												id="rememberMe"
@@ -613,7 +685,7 @@ function AuthPage() {
 												onCheckedChange={(checked) =>
 													setRememberMe(checked === true)
 												}
-												className="h-3.5 w-3.5 border-[#3f5130] bg-[#121416] text-[#0f1111] data-[state=checked]:border-[#c8ff62] data-[state=checked]:bg-[#c8ff62]"
+												className="h-3.5 w-3.5 border-accent-line bg-paper text-accent-ink data-[state=checked]:border-accent data-[state=checked]:bg-accent"
 											/>
 											Keep me signed in
 										</label>
@@ -624,7 +696,7 @@ function AuthPage() {
 												setErrorMessage(null);
 												setSuccessMessage(null);
 											}}
-											className="text-[#c8ff62] transition-colors duration-150 hover:text-[#d5ff7a]"
+											className="text-accent transition-colors duration-150 hover:text-accent-hi"
 										>
 											Forgot password?
 										</button>
@@ -632,13 +704,13 @@ function AuthPage() {
 								) : null}
 
 								{errorMessage ? (
-									<p className="border border-[#5a4141] bg-[#241919] px-3 py-2 text-sm text-[#f0c0c0]">
+									<p className="rounded-[var(--hm-r-input)] border border-danger-line bg-danger-soft px-3 py-2 text-sm text-danger">
 										{errorMessage}
 									</p>
 								) : null}
 
 								{successMessage ? (
-									<p className="border border-[#6b613f] bg-[#231f14] px-3 py-2 text-sm text-[#e3c97d]">
+									<p className="rounded-[var(--hm-r-input)] border border-warn-line bg-warn-soft px-3 py-2 text-sm text-warn">
 										{successMessage}
 									</p>
 								) : null}
@@ -646,7 +718,7 @@ function AuthPage() {
 								<Button
 									type="submit"
 									disabled={!canSubmit || submitting}
-									className="h-10 w-full border border-[#c8ff62] bg-[#c8ff62] text-sm font-semibold text-[#0f1111] hover:bg-[#d5ff7a]"
+									className="hm-btn hm-btn--primary h-11 w-full"
 								>
 									{submitting ? (
 										<>
@@ -672,14 +744,14 @@ function AuthPage() {
 											setErrorMessage(null);
 											setSuccessMessage(null);
 										}}
-										className="block w-full text-center text-sm text-[#8e877c] transition-colors duration-150 hover:text-[#c8ff62]"
+										className="block w-full text-center text-sm text-ink-3 transition-colors duration-150 hover:text-accent"
 									>
 										Back to sign in
 									</button>
 								) : null}
 							</form>
 
-							<div className="mt-8 border-t border-[#2a2d31] pt-4 text-xs text-[#8e877c]">
+							<div className="hm-ts-tape mt-8 pt-5 text-xs text-ink-3">
 								{mode === "sign-in" ? (
 									<p>
 										Need an account?{" "}
@@ -690,7 +762,7 @@ function AuthPage() {
 												setErrorMessage(null);
 												setSuccessMessage(null);
 											}}
-											className="text-[#c8ff62] transition-colors duration-150 hover:text-[#d5ff7a]"
+											className="text-accent transition-colors duration-150 hover:text-accent-hi"
 										>
 											Request access
 										</button>
@@ -700,14 +772,14 @@ function AuthPage() {
 										By continuing you agree to our{" "}
 										<a
 											href="/terms"
-											className="text-[#c8ff62] transition-colors duration-150 hover:text-[#d5ff7a]"
+											className="text-accent transition-colors duration-150 hover:text-accent-hi"
 										>
 											Terms
 										</a>{" "}
 										and{" "}
 										<a
 											href="/privacy"
-											className="text-[#c8ff62] transition-colors duration-150 hover:text-[#d5ff7a]"
+											className="text-accent transition-colors duration-150 hover:text-accent-hi"
 										>
 											Privacy
 										</a>
@@ -734,7 +806,7 @@ function Field({
 }) {
 	return (
 		<label htmlFor={htmlFor} className="block">
-			<span className="mb-2 block text-sm text-[#c9c2b7]">{label}</span>
+			<span className="mb-2 block text-sm text-ink-2">{label}</span>
 			{children}
 		</label>
 	);
@@ -742,9 +814,9 @@ function Field({
 
 function InfoRow({ label, value }: { label: string; value: string }) {
 	return (
-		<div className="grid grid-cols-[64px_1fr] gap-4 border-b border-[#2a2d31] py-4 last:border-b-0">
-			<span className="text-xs text-[#8e877c]">{label}</span>
-			<span className="text-xs font-medium text-[#f2efe7]">{value}</span>
+		<div className="grid grid-cols-[64px_1fr] gap-4 border-b border-rule py-4 last:border-b-0">
+			<span className="text-xs text-ink-3">{label}</span>
+			<span className="text-xs font-medium text-ink">{value}</span>
 		</div>
 	);
 }

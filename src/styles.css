@@ -5,16 +5,25 @@
 @import "@fontsource/ibm-plex-sans-condensed/500.css";
 @import "@fontsource/ibm-plex-sans-condensed/600.css";
 @import "@fontsource/ibm-plex-sans-condensed/700.css";
+@import "@fontsource/plus-jakarta-sans/400.css";
+@import "@fontsource/plus-jakarta-sans/500.css";
+@import "@fontsource/plus-jakarta-sans/700.css";
+@import "@fontsource/plus-jakarta-sans/800.css";
+@import "@fontsource/space-grotesk/500.css";
 
 @custom-variant dark (&:is(.dark *));
 
 html {
   scroll-behavior: smooth;
+  /* zoom: ; */
 }
 
 body {
   @apply m-0;
+  /* zoom: 0.95;
+  height: 100%; */
   font-family:
+    var(--hm-font-body),
     "IBM Plex Sans Condensed",
     "Nimbus Sans Narrow",
     "Arial Narrow",
@@ -27,8 +36,9 @@ body {
   font-feature-settings: "cv05" 1;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #0f1111;
-  color: #f2efe7;
+
+  background: var(--hm-paper);
+  color: var(--hm-ink);
 }
 
 button,
@@ -43,130 +53,139 @@ code {
 }
 
 :root {
-  --background: hsl(180 6% 6%);
-  --foreground: hsl(41 33% 93%);
-  --card: hsl(150 5% 10%);
-  --card-foreground: hsl(41 33% 93%);
-  --popover: hsl(150 5% 10%);
-  --popover-foreground: hsl(41 33% 93%);
-  --primary: hsl(82 100% 69%);
-  --primary-foreground: hsl(180 6% 6%);
-  --secondary: hsl(140 7% 13%);
-  --secondary-foreground: hsl(41 18% 84%);
-  --muted: hsl(140 7% 13%);
-  --muted-foreground: hsl(37 10% 62%);
-  --accent: hsl(82 38% 16%);
-  --accent-foreground: hsl(82 100% 69%);
-  --destructive: hsl(5 52% 44%);
-  --destructive-foreground: hsl(41 33% 93%);
-  --border: hsl(120 6% 20%);
-  --input: hsl(120 6% 20%);
-  --ring: hsl(82 100% 69%);
-  --chart-1: hsl(82 100% 69%);
-  --chart-2: hsl(169 50% 58%);
-  --chart-3: hsl(42 78% 69%);
-  --chart-4: hsl(355 54% 74%);
-  --chart-5: hsl(37 10% 62%);
-  --radius: 0px;
-  --sidebar: hsl(150 5% 10%);
-  --sidebar-foreground: hsl(41 33% 93%);
-  --sidebar-primary: hsl(82 100% 69%);
-  --sidebar-primary-foreground: hsl(180 6% 6%);
-  --sidebar-accent: hsl(82 38% 16%);
-  --sidebar-accent-foreground: hsl(82 100% 69%);
-  --sidebar-border: hsl(120 6% 20%);
-  --sidebar-ring: hsl(82 100% 69%);
-  --vl-bg: #0f1111;
-  --vl-surface: #171a18;
-  --vl-surface-2: #121514;
-  --vl-border: #30352f;
-  --vl-accent: #c8ff62;
-  --vl-accent-soft: #1a2117;
-  --vl-text: #f2efe7;
-  --vl-muted: #aaa294;
+  height: 100%;
+  /* shadcn redirects — every legacy `--background` / `--foreground` /
+   * `--primary` etc. points at the editorial `--hm-*` token. Primitives
+   * (Dialog, Select, Sheet, Tooltip) consume these via `bg-background`,
+   * `text-foreground`, etc.; one edit to a token re-points the whole
+   * primitive library. */
+  --background: var(--hm-paper);
+  --foreground: var(--hm-ink);
+  --card: var(--hm-paper);
+  --card-foreground: var(--hm-ink);
+  --popover: var(--hm-paper);
+  --popover-foreground: var(--hm-ink);
+  --primary: var(--hm-accent);
+  --primary-foreground: var(--hm-accent-ink);
+  --secondary: var(--hm-paper-2);
+  --secondary-foreground: var(--hm-ink);
+  --muted: var(--hm-paper-3);
+  --muted-foreground: var(--hm-ink-3);
+  --accent: var(--hm-accent-soft);
+  --accent-foreground: var(--hm-accent);
+  --destructive: var(--hm-danger);
+  --destructive-foreground: var(--hm-accent-ink);
+  --border: var(--hm-rule);
+  --input: var(--hm-rule);
+  --ring: var(--hm-focus);
+  --chart-1: var(--hm-accent);
+  --chart-2: var(--hm-info);
+  --chart-3: var(--hm-warn);
+  --chart-4: var(--hm-danger);
+  --chart-5: var(--hm-ink-3);
+  --radius: 8px;
+  --sidebar: var(--hm-paper);
+  --sidebar-foreground: var(--hm-ink);
+  --sidebar-primary: var(--hm-accent);
+  --sidebar-primary-foreground: var(--hm-accent-ink);
+  --sidebar-accent: var(--hm-accent-soft);
+  --sidebar-accent-foreground: var(--hm-accent);
+  --sidebar-border: var(--hm-rule);
+  --sidebar-ring: var(--hm-focus);
+  --vl-bg: var(--hm-paper);
+  --vl-surface: var(--hm-paper-2);
+  --vl-surface-2: var(--hm-paper-3);
+  --vl-border: var(--hm-rule);
+  --vl-accent: var(--hm-accent);
+  --vl-accent-soft: var(--hm-accent-soft);
+  --vl-text: var(--hm-ink);
+  --vl-muted: var(--hm-ink-3);
 }
 
 .dark {
-  --background: hsl(180 6% 6%);
-  --foreground: hsl(41 33% 93%);
-  --card: hsl(150 5% 10%);
-  --card-foreground: hsl(41 33% 93%);
-  --popover: hsl(150 5% 10%);
-  --popover-foreground: hsl(41 33% 93%);
-  --primary: hsl(82 100% 69%);
-  --primary-foreground: hsl(180 6% 6%);
-  --secondary: hsl(140 7% 13%);
-  --secondary-foreground: hsl(41 18% 84%);
-  --muted: hsl(140 7% 13%);
-  --muted-foreground: hsl(37 10% 62%);
-  --accent: hsl(82 38% 16%);
-  --accent-foreground: hsl(82 100% 69%);
-  --destructive: hsl(6 45% 49%);
-  --destructive-foreground: hsl(41 33% 93%);
-  --border: hsl(120 6% 20%);
-  --input: hsl(120 6% 20%);
-  --ring: hsl(82 100% 69%);
-  --chart-1: hsl(82 100% 69%);
-  --chart-2: hsl(169 50% 58%);
-  --chart-3: hsl(42 78% 69%);
-  --chart-4: hsl(355 54% 74%);
-  --chart-5: hsl(37 10% 62%);
-  --sidebar: hsl(150 5% 10%);
-  --sidebar-foreground: hsl(41 33% 93%);
-  --sidebar-primary: hsl(82 100% 69%);
-  --sidebar-primary-foreground: hsl(180 6% 6%);
-  --sidebar-accent: hsl(82 38% 16%);
-  --sidebar-accent-foreground: hsl(82 100% 69%);
-  --sidebar-border: hsl(120 6% 20%);
-  --sidebar-ring: hsl(82 100% 69%);
+  /* Same redirects — the dark block exists so shadcn primitives that
+   * explicitly read `var(--background)` inside `.dark` resolve to the
+   * dark editorial paper, not the light one. Tokens themselves are
+   * re-pointed in the `.dark .hm-app` block below. */
+  --background: var(--hm-paper);
+  --foreground: var(--hm-ink);
+  --card: var(--hm-paper);
+  --card-foreground: var(--hm-ink);
+  --popover: var(--hm-paper);
+  --popover-foreground: var(--hm-ink);
+  --primary: var(--hm-accent);
+  --primary-foreground: var(--hm-accent-ink);
+  --secondary: var(--hm-paper-2);
+  --secondary-foreground: var(--hm-ink);
+  --muted: var(--hm-paper-3);
+  --muted-foreground: var(--hm-ink-3);
+  --accent: var(--hm-accent-soft);
+  --accent-foreground: var(--hm-accent);
+  --destructive: var(--hm-danger);
+  --destructive-foreground: var(--hm-accent-ink);
+  --border: var(--hm-rule);
+  --input: var(--hm-rule);
+  --ring: var(--hm-focus);
+  --chart-1: var(--hm-accent);
+  --chart-2: var(--hm-info);
+  --chart-3: var(--hm-warn);
+  --chart-4: var(--hm-danger);
+  --chart-5: var(--hm-ink-3);
+  --sidebar: var(--hm-paper);
+  --sidebar-foreground: var(--hm-ink);
+  --sidebar-primary: var(--hm-accent);
+  --sidebar-primary-foreground: var(--hm-accent-ink);
+  --sidebar-accent: var(--hm-accent-soft);
+  --sidebar-accent-foreground: var(--hm-accent);
+  --sidebar-border: var(--hm-rule);
+  --sidebar-ring: var(--hm-focus);
 }
 
 .light {
-  --background: hsl(76 19% 92%);
-  --foreground: hsl(120 12% 11%);
-  --card: hsl(72 18% 96%);
-  --card-foreground: hsl(120 12% 11%);
-  --popover: hsl(72 18% 96%);
-  --popover-foreground: hsl(120 12% 11%);
-  --primary: hsl(82 58% 52%);
-  --primary-foreground: hsl(120 12% 9%);
-  --secondary: hsl(80 15% 88%);
-  --secondary-foreground: hsl(120 10% 18%);
-  --muted: hsl(78 14% 88%);
-  --muted-foreground: hsl(84 8% 40%);
-  --accent: hsl(82 28% 83%);
-  --accent-foreground: hsl(86 42% 30%);
-  --destructive: hsl(5 58% 43%);
-  --destructive-foreground: hsl(76 24% 96%);
-  --border: hsl(78 10% 69%);
-  --input: hsl(78 10% 69%);
-  --ring: hsl(82 58% 42%);
-  --chart-1: hsl(82 58% 42%);
-  --chart-2: hsl(170 45% 38%);
-  --chart-3: hsl(42 62% 45%);
-  --chart-4: hsl(355 48% 52%);
-  --chart-5: hsl(84 8% 40%);
-  --sidebar: hsl(76 16% 90%);
-  --sidebar-foreground: hsl(120 12% 11%);
-  --sidebar-primary: hsl(82 58% 52%);
-  --sidebar-primary-foreground: hsl(120 12% 9%);
-  --sidebar-accent: hsl(82 28% 83%);
-  --sidebar-accent-foreground: hsl(86 42% 30%);
-  --sidebar-border: hsl(78 10% 69%);
-  --sidebar-ring: hsl(82 58% 42%);
-  --vl-bg: #eef1e8;
-  --vl-surface: #f6f7f1;
-  --vl-surface-2: #e9ede3;
-  --vl-border: #b6beaa;
-  --vl-accent: #6f8f1d;
-  --vl-accent-soft: #e4ead7;
-  --vl-accent-panel: #d9e4c6;
-  --vl-text: #171b14;
-  --vl-muted: #68705f;
-  --vl-table-head: #d5dccb;
-  --vl-danger: #9e514f;
-  --vl-warning: #7a6428;
-  --vl-info: #3d6c82;
+  /* Marketing and public surfaces scope under `.hm`, which re-declares
+   * every `--hm-*` token. This block exists only for primitives that
+   * explicitly read `var(--background)` inside `.light`; keep them
+   * pointed at the editorial light palette. */
+  --background: var(--hm-paper);
+  --foreground: var(--hm-ink);
+  --card: var(--hm-paper);
+  --card-foreground: var(--hm-ink);
+  --popover: var(--hm-paper);
+  --popover-foreground: var(--hm-ink);
+  --primary: var(--hm-accent);
+  --primary-foreground: var(--hm-accent-ink);
+  --secondary: var(--hm-paper-2);
+  --secondary-foreground: var(--hm-ink);
+  --muted: var(--hm-paper-3);
+  --muted-foreground: var(--hm-ink-3);
+  --accent: var(--hm-accent-soft);
+  --accent-foreground: var(--hm-accent);
+  --destructive: var(--hm-danger);
+  --destructive-foreground: var(--hm-accent-ink);
+  --border: var(--hm-rule);
+  --input: var(--hm-rule);
+  --ring: var(--hm-focus);
+  --chart-1: var(--hm-accent);
+  --chart-2: var(--hm-info);
+  --chart-3: var(--hm-warn);
+  --chart-4: var(--hm-danger);
+  --chart-5: var(--hm-ink-3);
+  --sidebar: var(--hm-paper);
+  --sidebar-foreground: var(--hm-ink);
+  --sidebar-primary: var(--hm-accent);
+  --sidebar-primary-foreground: var(--hm-accent-ink);
+  --sidebar-accent: var(--hm-accent-soft);
+  --sidebar-accent-foreground: var(--hm-accent);
+  --sidebar-border: var(--hm-rule);
+  --sidebar-ring: var(--hm-focus);
+  --vl-bg: var(--hm-paper);
+  --vl-surface: var(--hm-paper-2);
+  --vl-surface-2: var(--hm-paper-3);
+  --vl-border: var(--hm-rule);
+  --vl-accent: var(--hm-accent);
+  --vl-accent-soft: var(--hm-accent-soft);
+  --vl-text: var(--hm-ink);
+  --vl-muted: var(--hm-ink-3);
 }
 
 @theme inline {
@@ -206,6 +225,43 @@ code {
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* ── Hallmark bridge ──────────────────────────────────────────────────────
+   * Exposes the design.md tokens as ordinary Tailwind colour utilities, so the
+   * conversion is `bg-[#171a18]` -> `bg-paper-2` rather than a new class
+   * vocabulary. `inline` keeps them as var() references, so one utility resolves
+   * light on marketing and dark inside `.dark .hm-app` with no variant needed.
+   * The accent is `brand-*`, not `accent-*` — `--color-accent` is already taken
+   * by the shadcn scale above and must not be repointed. */
+  --color-paper: var(--hm-paper);
+  --color-paper-2: var(--hm-paper-2);
+  --color-paper-3: var(--hm-paper-3);
+  --color-ink: var(--hm-ink);
+  --color-ink-2: var(--hm-ink-2);
+  --color-ink-3: var(--hm-ink-3);
+  --color-rule: var(--hm-rule);
+  --color-brand: var(--hm-accent);
+  --color-brand-hi: var(--hm-accent-hi);
+  --color-brand-ink: var(--hm-accent-ink);
+  --color-brand-soft: var(--hm-accent-soft);
+  --color-brand-line: var(--hm-accent-line);
+  --color-focus: var(--hm-focus);
+  --color-ok: var(--hm-ok);
+  --color-ok-soft: var(--hm-ok-soft);
+  --color-ok-line: var(--hm-ok-line);
+  --color-warn: var(--hm-warn);
+  --color-warn-soft: var(--hm-warn-soft);
+  --color-warn-line: var(--hm-warn-line);
+  --color-danger: var(--hm-danger);
+  --color-danger-soft: var(--hm-danger-soft);
+  --color-danger-line: var(--hm-danger-line);
+  --color-info: var(--hm-info);
+  --color-info-soft: var(--hm-info-soft);
+  --color-info-line: var(--hm-info-line);
+
+  --font-display: var(--hm-font-display);
+  --font-label: var(--hm-font-label);
+  --font-num: var(--hm-font-num);
 }
 
 @layer base {
@@ -226,7 +282,7 @@ code {
   a[href]:active,
   [role="button"]:not(tr):not([aria-disabled="true"]):active,
   summary:active {
-    transform: scale(0.94);
+    transform: translateY(1px);
   }
 
   textarea,
@@ -245,38 +301,14 @@ code {
   textarea:focus-visible,
   select:focus-visible,
   [role="button"]:not(tr):focus-visible {
-    box-shadow: 0 0 0 2px rgba(200, 255, 98, 0.38);
+    box-shadow: 0 0 0 2px var(--hm-focus);
   }
 }
 
 @layer utilities {
-  .rounded,
-  .rounded-sm,
-  .rounded-md,
-  .rounded-lg,
-  .rounded-xl,
-  .rounded-2xl,
-  .rounded-3xl,
-  .rounded-s,
-  .rounded-e,
-  .rounded-t,
-  .rounded-r,
-  .rounded-b,
-  .rounded-l,
-  .rounded-ss,
-  .rounded-se,
-  .rounded-ee,
-  .rounded-es,
-  .rounded-tl,
-  .rounded-tr,
-  .rounded-br,
-  .rounded-bl {
-    border-radius: 0 !important;
-  }
-
-  [class*="rounded-["] {
-    border-radius: 0 !important;
-  }
+  /* Radius is now governed by the editorial token set
+   * (`--hm-r-card`, `--hm-r-input`, `--hm-r-pill`). The previous
+   * zero-radius migration debt has been cleared. */
 
   .ui-panel {
     animation: panel-enter 220ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -300,7 +332,7 @@ code {
 
   .vl-kicker {
     display: inline-flex;
-    border: 1px solid rgba(200, 255, 98, 0.35);
+    border: 1px solid var(--hm-accent-line);
     background: var(--vl-accent-soft);
     padding: 0.45rem 0.7rem;
     color: var(--vl-accent);
@@ -329,21 +361,21 @@ code {
   }
 
   .ui-secondary-action:not(:disabled):active {
-    transform: scale(0.94);
+    transform: translateY(1px);
   }
 
   .ui-primary-action {
     transition-property: transform, opacity, background-color, border-color, color;
     transition-duration: 150ms;
-    transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition-timing-function: ease-out;
   }
 
   .ui-primary-action:not(:disabled):active {
-    transform: scale(0.96);
+    transform: translateY(1px);
   }
 
   .client-favorite-star {
-    filter: drop-shadow(0 0 5px rgba(200, 255, 98, 0.32));
+    filter: drop-shadow(0 0 5px var(--hm-accent));
     transform-origin: center;
   }
 }
@@ -352,151 +384,6 @@ code {
   --vl-grid-line: rgba(46, 59, 35, 0.055);
 }
 
-.light [class*="bg-[#0f1111]"],
-.light [class*="bg-[#101211]"],
-.light [class*="bg-[#11140f]"] {
-  background-color: var(--vl-bg) !important;
-}
-
-.light [class*="bg-[#121514]"],
-.light [class*="bg-[#141715]"],
-.light [class*="bg-[#151817]"],
-.light [class*="bg-[#161918]"],
-.light [class*="bg-[#171a18]"],
-.light [class*="bg-[#181a1d]"] {
-  background-color: var(--vl-surface) !important;
-}
-
-.light [class*="bg-[#1a2117]"],
-.light [class*="bg-[#1b2019]"],
-.light [class*="bg-[#1c2118]"],
-.light [class*="bg-[#1f2618]"],
-.light [class*="bg-[#20241f]"] {
-  background-color: var(--vl-accent-soft) !important;
-}
-
-.light [class*="bg-[#c8ff62]"],
-.light [class*="bg-[#d5ff7a]"],
-.light [class*="bg-[#d7ff82]"] {
-  background-color: #b7d766 !important;
-}
-
-.light [class*="bg-[#0b1320]"],
-.light [class*="bg-[#0c1115]"],
-.light [class*="bg-[#151b23]"],
-.light [class*="bg-[#15171a]"] {
-  background-color: var(--vl-table-head) !important;
-}
-
-.light [class*="bg-[#241f0a]"] {
-  background-color: #eadfac !important;
-}
-
-.light [class*="bg-[#5b1515]"],
-.light [class*="bg-[#2a1f1f]"] {
-  background-color: #eed6d1 !important;
-}
-
-.light [class*="text-[#f2efe7]"],
-.light [class*="text-[#d8e0c2]"] {
-  color: var(--vl-text) !important;
-}
-
-.light [class*="text-[#d8d1c4]"],
-.light [class*="text-[#beb6a8]"] {
-  color: #30382b !important;
-}
-
-.light [class*="text-[#aaa294]"],
-.light [class*="text-[#a7a095]"],
-.light [class*="text-[#9f988d]"],
-.light [class*="text-[#8e877c]"],
-.light [class*="text-[#8d867a]"],
-.light [class*="text-[#817d72]"],
-.light [class*="text-[#77726b]"],
-.light [class*="text-[#6f6a62]"] {
-  color: var(--vl-muted) !important;
-}
-
-.light [class*="text-[#c8ff62]"] {
-  color: var(--vl-accent) !important;
-}
-
-.light [class*="text-[#0f1111]"],
-.light [class*="text-[#11140f]"] {
-  color: #14190f !important;
-}
-
-.light [class*="text-[#d48f8f]"],
-.light [class*="text-[#efb1b1]"] {
-  color: var(--vl-danger) !important;
-}
-
-.light [class*="text-[#d7ff82]"],
-.light [class*="text-[#d5ff7a]"] {
-  color: #52700f !important;
-}
-
-.light [class*="border-[#30352f]"],
-.light [class*="border-[#2a2d31]"],
-.light [class*="border-[#2b302b]"],
-.light [class*="border-[#343832]"],
-.light [class*="border-[#3f5130]"] {
-  border-color: var(--vl-border) !important;
-}
-
-.light [class*="border-[#c8ff62]"] {
-  border-color: #94b83d !important;
-}
-
-.light [class*="border-[#554b32]"] {
-  border-color: #cabb82 !important;
-}
-
-.light [class*="border-[#5d4747]"] {
-  border-color: #d4aaa1 !important;
-}
-
-.light [class*="shadow-[inset_3px_0_0_#c8ff62]"] {
-  box-shadow: inset 3px 0 0 #94b83d !important;
-}
-
-.light [class*="shadow-[12px_12px_0_#c8ff62]"] {
-  box-shadow: 12px 12px 0 #b7d766 !important;
-}
-
-.light [class*="focus:bg-[#1a2117]"]:focus,
-.light [class*="data-[state=open]:bg-[#1a2117]"][data-state="open"] {
-  background-color: var(--vl-accent-panel) !important;
-}
-
-.light [class*="hover:bg-[#1a2117]"]:hover,
-.light [class*="hover:bg-[#1b2019]"]:hover,
-.light [class*="hover:bg-[#20241f]"]:hover {
-  background-color: var(--vl-accent-panel) !important;
-}
-
-.light [class*="hover:text-[#f2efe7]"]:hover,
-.light [class*="focus:text-[#c8ff62]"]:focus,
-.light [class*="data-[state=open]:text-[#c8ff62]"][data-state="open"] {
-  color: var(--vl-text) !important;
-}
-
-.light table thead,
-.light [role="table"] [role="rowgroup"]:first-child,
-.light [class*="Invoice list"] {
-  color: var(--vl-text);
-}
-
-.light [class*="bg-[linear-gradient(180deg,#181a1d_0%,#141715_100%)]"] {
-  background-image: linear-gradient(180deg, #f6f7f1 0%, #e7ecdf 100%) !important;
-}
-
-.light [class*="[background-image:linear-gradient"] {
-  background-image:
-    linear-gradient(rgba(46, 59, 35, 0.075) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(46, 59, 35, 0.075) 1px, transparent 1px) !important;
-}
 
 .dark .dotted-bg {
   background-image: radial-gradient(circle at 1px 1px, #232323 0.5px, transparent 0);
@@ -677,4 +564,950 @@ code {
   .ui-stagger-3 {
     animation: none !important;
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Hallmark · genre: playful · macrostructure: Split Studio · design-system: design.md · designed-as-app
+ * theme: custom (tuned) · theme_axes: light / geometric-sans / cool
+ * vibe: soft ledger — pure-white paper, cool-blue accent, magenta only in the wash
+ * hero: H2 split diptych (ratio 7/5 · right=product card · divider=negative space)
+ * features: F1 bento (tiles=4 · spans=regular · border=hairline)
+ * steps: F4 step sequence (01/02/03 · vertical · connector=none)
+ * proof: T4 numbered stat strip (3-up · under) · cta: C1 outlined chip (pill · spacious · arrow)
+ * nav: N1b SaaS three-section (centre links=6 · dropdowns=none · frost-on-scroll)
+ * footer: Ft5 Statement (38ch · wordmark under sentence · hairline above meta)
+ * enrichment: Tier-A pure-CSS watercolour blobs
+ * pre-emit critique: P5 H5 E4 S5 R4 V5
+ *
+ * Scoped to `.hm`. The app/dashboard keeps its dark zero-radius system untouched —
+ * nothing below leaks outside the marketing tree.
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+html,
+body {
+  overflow-x: clip;
+}
+
+/* Single source of truth — the editorial palette. Declared at :root so the
+ * Tailwind `@theme inline` bridge (bg-paper, text-ink-2, border-rule,
+ * text-brand …) resolves everywhere, and so both surfaces — `.hm` marketing
+ * (light) and `.hm-app` workbench (dark by default) — inherit one palette
+ * instead of two drifting ones. Genre: editorial (Wayfare-inspired). The
+ * accent is warm red `#EA373E` re-encoded; status colours are a separate
+ * muted palette (gold / rose / cyan / paper-3 / paper-2). */
+:root {
+  /* paper — warm cream */
+  --hm-paper: oklch(98.2% 0.006 70);
+  --hm-paper-2: oklch(95.8% 0.008 70);
+  --hm-paper-3: oklch(92% 0.012 70);
+  /* ink — near-black */
+  --hm-ink: oklch(18% 0.018 50);
+  --hm-ink-2: oklch(38% 0.022 50);
+  --hm-ink-3: oklch(50% 0.018 50); /* 4.7:1 on paper — the de-emphasis floor */
+  --hm-rule: oklch(86% 0.014 60);
+  /* accent — warm red, the only functional accent */
+  --hm-accent: oklch(62% 0.21 27);
+  --hm-accent-hi: oklch(56% 0.22 27);
+  --hm-accent-ink: oklch(98.5% 0.005 70);
+  --hm-accent-soft: oklch(94% 0.04 27);
+  --hm-accent-line: oklch(78% 0.08 27);
+  /* wash stops — used only as radial-gradient stops inside .hm-ts-wash */
+  --hm-wash-2: oklch(78% 0.12 75);
+  --hm-wash-3: oklch(72% 0.1 215);
+  --hm-focus: oklch(62% 0.21 27);
+
+  /* status triples — fill / tint / hairline. `soft` takes type; the bare
+   * token needs --hm-accent-ink type on it. */
+  --hm-ok: oklch(50% 0.1 162);
+  --hm-ok-soft: oklch(94% 0.03 162);
+  --hm-ok-line: oklch(80% 0.06 162);
+  --hm-warn: oklch(62% 0.12 75);
+  --hm-warn-soft: oklch(95% 0.04 78);
+  --hm-warn-line: oklch(82% 0.07 76);
+  --hm-danger: oklch(55% 0.16 22);
+  --hm-danger-soft: oklch(94% 0.03 22);
+  --hm-danger-line: oklch(80% 0.07 22);
+  --hm-info: oklch(55% 0.1 215);
+  --hm-info-soft: oklch(94% 0.03 215);
+  --hm-info-line: oklch(80% 0.06 215);
+
+  --hm-font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --hm-font-body: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --hm-font-label: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --hm-font-num: "IBM Plex Sans Condensed", ui-sans-serif, system-ui, sans-serif;
+
+  --hm-r-card: 8px;
+  --hm-r-input: 6px;
+  --hm-r-pill: 999px;
+
+  /* Modal scrim — light-mode first. Warm gray at low opacity so the backdrop
+   * reads as a dim wash over cream paper rather than an opaque sheet. The dark
+   * block below overrides this to a true near-black with no warm tint — a
+   * single-value definition here reads as a gray-warm wash when applied over
+   * dark glass, which makes the overlay look like a light-mode scrim leaking
+   * into dark mode. */
+  --hm-scrim: oklch(28% 0.008 50 / 0.52);
+
+  --hm-space-2xs: 0.5rem;
+  --hm-space-xs: 0.75rem;
+  --hm-space-sm: 1rem;
+  --hm-space-md: 1.5rem;
+  --hm-space-lg: 2rem;
+  --hm-space-xl: 3rem;
+  --hm-space-2xl: 4.5rem;
+  --hm-space-3xl: 7rem;
+
+  --hm-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --hm-dur: 260ms;
+  --hm-dur-fast: 150ms;
+  --hm-shadow: 0 8px 24px -10px oklch(18% 0.018 50 / 0.18);
+  --hm-shadow-lift: 0 14px 34px -12px oklch(18% 0.018 50 / 0.26);
+}
+
+/* The workbench honours the app's existing dark/light toggle. `.dark` is the
+ * global scope so Radix-portaled content (sheets, dialogs, popovers) outside
+ * `.hm-app` also inherits the dark palette. Marketing stays light because the
+ * `.hm` scope below re-declares the :root values — design.md's "marketing
+ * default light, app default dark" rule. */
+.dark,
+.dark .hm-app,
+.hm-app.dark {
+  --hm-paper: oklch(16% 0.012 50);
+  --hm-paper-2: oklch(12% 0.012 50);
+  --hm-paper-3: oklch(20% 0.014 50);
+  --hm-ink: oklch(95% 0.008 70);
+  --hm-ink-2: oklch(82% 0.014 70);
+  --hm-ink-3: oklch(66% 0.014 60); /* 4.6:1 on dark paper */
+  --hm-rule: oklch(28% 0.014 50);
+  --hm-accent: oklch(65% 0.2 27);
+  --hm-accent-hi: oklch(72% 0.18 27);
+  --hm-accent-ink: oklch(16% 0.012 50);
+  --hm-accent-soft: oklch(26% 0.08 27);
+  --hm-accent-line: oklch(42% 0.13 27);
+  --hm-focus: oklch(72% 0.2 27);
+
+  --hm-ok: oklch(74% 0.13 162);
+  --hm-ok-soft: oklch(24% 0.06 162);
+  --hm-ok-line: oklch(40% 0.1 162);
+  --hm-warn: oklch(78% 0.12 75);
+  --hm-warn-soft: oklch(26% 0.06 75);
+  --hm-warn-line: oklch(42% 0.09 75);
+  --hm-danger: oklch(72% 0.14 22);
+  --hm-danger-soft: oklch(26% 0.08 22);
+  --hm-danger-line: oklch(42% 0.12 22);
+  --hm-info: oklch(74% 0.1 215);
+  --hm-info-soft: oklch(24% 0.06 215);
+  --hm-info-line: oklch(40% 0.09 215);
+
+  --hm-wash-2: oklch(70% 0.13 75);
+  --hm-wash-3: oklch(64% 0.1 215);
+
+  --hm-shadow: 0 8px 24px -10px oklch(0% 0 0 / 0.6);
+  --hm-shadow-lift: 0 14px 34px -12px oklch(0% 0 0 / 0.72);
+
+  /* Dark-mode scrim — true near-black, no warm tint, high enough opacity that
+   * the underlying content reads as background instead of bleeding through as
+   * a milky gray wash. Sheet/Dialog consume this via bg-[var(--hm-scrim)].
+   * The thin backdrop-blur on the overlay (1px) still softens the edge so
+   * the modal doesn't feel pasted-on, but anything larger leaks the
+   * content's brightness through the scrim and undoes the dim. */
+  --hm-scrim: oklch(8% 0.005 50 / 0.78);
+}
+
+/* Marketing `.hm` must never go dark — restore the :root light palette so
+ * `.dark` on `<html>` doesn't cascade into the marketing surface. */
+.hm {
+  background-color: var(--hm-paper);
+  color: var(--hm-ink);
+  --hm-paper: oklch(98.2% 0.006 70);
+  --hm-paper-2: oklch(95.8% 0.008 70);
+  --hm-paper-3: oklch(92% 0.012 70);
+  --hm-ink: oklch(18% 0.018 50);
+  --hm-ink-2: oklch(38% 0.022 50);
+  --hm-ink-3: oklch(50% 0.018 50);
+  --hm-rule: oklch(86% 0.014 60);
+  --hm-accent: oklch(62% 0.21 27);
+  --hm-accent-hi: oklch(56% 0.22 27);
+  --hm-accent-ink: oklch(98.5% 0.005 70);
+  --hm-accent-soft: oklch(94% 0.04 27);
+  --hm-accent-line: oklch(78% 0.08 27);
+  --hm-wash-2: oklch(78% 0.12 75);
+  --hm-wash-3: oklch(72% 0.1 215);
+  --hm-focus: oklch(62% 0.21 27);
+  --hm-ok: oklch(50% 0.1 162);
+  --hm-ok-soft: oklch(94% 0.03 162);
+  --hm-ok-line: oklch(80% 0.06 162);
+  --hm-warn: oklch(62% 0.12 75);
+  --hm-warn-soft: oklch(95% 0.04 78);
+  --hm-warn-line: oklch(82% 0.07 76);
+  --hm-danger: oklch(55% 0.16 22);
+  --hm-danger-soft: oklch(94% 0.03 22);
+  --hm-danger-line: oklch(80% 0.07 22);
+  --hm-info: oklch(55% 0.1 215);
+  --hm-info-soft: oklch(94% 0.03 215);
+  --hm-info-line: oklch(80% 0.06 215);
+  --hm-shadow: 0 8px 24px -10px oklch(18% 0.018 50 / 0.18);
+  --hm-shadow-lift: 0 14px 34px -12px oklch(18% 0.018 50 / 0.26);
+}
+
+/* ScrollSmoother transforms this layer out of normal flow; paint it so
+ * transparent landing bands never expose the dark document canvas. */
+.hm #smooth-content {
+  background-color: var(--hm-paper);
+}
+
+/* ── Editorial utility classes (Hallmark gates 48: token-only, no inline hex) */
+
+/* Departure-board table treatment — sticky grotesque head, mono numerals,
+ * paper-rule rows, status column left-bordered in the row's status line. */
+.hm-ts-board {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--hm-font-label);
+  color: var(--hm-ink-2);
+  background-color: var(--hm-paper);
+  border-top: 1px solid var(--hm-rule);
+  border-bottom: 1px solid var(--hm-rule);
+}
+.hm-ts-board__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: var(--hm-paper-2);
+  font-family: var(--hm-font-label);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--hm-ink-3);
+  font-size: 0.78rem;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--hm-rule);
+  text-align: left;
+}
+.hm-ts-board th,
+.hm-ts-board td {
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid var(--hm-rule);
+  vertical-align: middle;
+}
+.hm-num-cell {
+  font-family: var(--hm-font-num);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+.hm-ts-board tr[data-status="draft"] td:first-child,
+.hm-ts-board tr.is-draft td:first-child {
+  box-shadow: inset 3px 0 0 0 var(--hm-paper-3);
+}
+.hm-ts-board tr[data-status="sent"] td:first-child,
+.hm-ts-board tr.is-sent td:first-child {
+  box-shadow: inset 3px 0 0 0 var(--hm-info-line);
+}
+.hm-ts-board tr[data-status="partial"] td:first-child,
+.hm-ts-board tr.is-partial td:first-child {
+  box-shadow: inset 3px 0 0 0 var(--hm-info);
+}
+.hm-ts-board tr[data-status="paid"] td:first-child,
+.hm-ts-board tr.is-paid td:first-child {
+  box-shadow: inset 3px 0 0 0 var(--hm-ok-line);
+}
+.hm-ts-board tr[data-status="overdue"] td:first-child,
+.hm-ts-board tr.is-overdue td:first-child {
+  box-shadow: inset 3px 0 0 0 var(--hm-danger);
+}
+.hm-ts-board tr[data-status="canceled"] td:first-child,
+.hm-ts-board tr.is-canceled td:first-child {
+  box-shadow: inset 3px 0 0 0 var(--hm-paper-2);
+}
+.hm-ts-board tr:hover td {
+  background-color: var(--hm-paper-2);
+}
+
+/* Ticket-stamp chip — hard 2px border in --hm-accent-line, accent-soft fill,
+ * mono caps, no rotation. Status variants sit on the soft / line triple. */
+.hm-ts-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.18rem 0.55rem;
+  font-family: var(--hm-font-label);
+  font-weight: 500;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 2px solid var(--hm-accent-line);
+  background-color: var(--hm-accent-soft);
+  color: var(--hm-accent);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.hm-ts-stamp.is-ok {
+  border-color: var(--hm-ok-line);
+  background-color: var(--hm-ok-soft);
+  color: var(--hm-ok);
+}
+.hm-ts-stamp.is-warn {
+  border-color: var(--hm-warn-line);
+  background-color: var(--hm-warn-soft);
+  color: var(--hm-warn);
+}
+.hm-ts-stamp.is-danger {
+  border-color: var(--hm-danger-line);
+  background-color: var(--hm-danger-soft);
+  color: var(--hm-danger);
+}
+.hm-ts-stamp.is-info {
+  border-color: var(--hm-info-line);
+  background-color: var(--hm-info-soft);
+  color: var(--hm-info);
+}
+.hm-ts-stamp.is-paper {
+  border-color: var(--hm-rule);
+  background-color: var(--hm-paper-3);
+  color: var(--hm-ink-2);
+}
+
+/* Header ticker bar — full-bleed paper-2 band, mono numerals, paper-rule
+ * column dividers, horizontal scroll-snap on mobile. */
+.hm-ts-ticker {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  background-color: var(--hm-paper-2);
+  border-top: 1px solid var(--hm-rule);
+  border-bottom: 1px solid var(--hm-rule);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  font-family: var(--hm-font-label);
+}
+.hm-ts-ticker > * {
+  flex: 0 0 auto;
+  padding: 0.5rem 1rem;
+  border-right: 1px solid var(--hm-rule);
+  scroll-snap-align: start;
+}
+.hm-ts-ticker > :last-child {
+  border-right: none;
+}
+.hm-ts-ticker .hm-ts-ticker__num {
+  font-family: var(--hm-font-num);
+  font-variant-numeric: tabular-nums;
+  color: var(--hm-ink);
+}
+
+/* Paper-tape divider — 1px rule with a 3px accent underscore, used between
+ * major page sections on marketing pages. */
+.hm-ts-tape {
+  display: block;
+  width: 100%;
+  height: 1px;
+  background-color: var(--hm-rule);
+  position: relative;
+  margin: var(--hm-space-lg) 0;
+  border: 0;
+}
+.hm-ts-tape::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -1px;
+  width: 56px;
+  height: 3px;
+  background-color: var(--hm-accent);
+}
+
+/* Editorial wash — radial-gradient using the two wash stops. Decoration only,
+ * never under type. */
+.hm-ts-wash {
+  background-image: radial-gradient(
+    ellipse at 20% 0%,
+    color-mix(in oklab, var(--hm-wash-2) 22%, transparent) 0%,
+    transparent 55%
+  ),
+  radial-gradient(
+    ellipse at 85% 100%,
+    color-mix(in oklab, var(--hm-wash-3) 18%, transparent) 0%,
+    transparent 60%
+  );
+}
+
+.hm,
+.hm-app {
+  background-color: var(--hm-paper);
+  color: var(--hm-ink);
+  font-family: var(--hm-font-body);
+  font-weight: 400;
+  font-feature-settings: normal;
+  letter-spacing: 0;
+}
+
+/* Workbench canvas sits one step back so panels read as paper on a desk. */
+.hm-app {
+  background-color: var(--hm-paper-2);
+}
+
+/* Radius — `.hm` and `.hm-app` both round legacy utilities to the editorial
+ * vocabulary (8 px card / 6 px input / 999 px pill). The previous
+ * `border-radius: 0 !important` block has been deleted.
+ *
+ * ponytail: `!important` is load-bearing here — collapsing it requires
+ * rewriting every `rounded`/`rounded-md` usage across the app to explicit
+ * `rounded-[var(--hm-r-input)]` tokens, which is out of scope for the
+ * app-surface sweep. Upgrade path: rename shimmed utilities to token names
+ * file-by-file, then drop `!important`. */
+.hm [class*="rounded-"],
+.hm-app [class*="rounded-"] {
+  border-radius: var(--hm-r-card) !important;
+}
+
+/* `rounded-sm`/`rounded`/`rounded-md` are control-sized in this tree — inputs,
+ * chips, icon buttons — so they take the 6 px input radius, not the card's 8. */
+.hm-app .rounded,
+.hm-app .rounded-sm,
+.hm-app .rounded-md {
+  border-radius: var(--hm-r-input) !important;
+}
+
+.hm [class*="rounded-full"],
+.hm [class*="rounded-pill"],
+.hm-app [class*="rounded-full"],
+.hm-app [class*="rounded-pill"] {
+  border-radius: var(--hm-r-pill) !important;
+}
+
+/* ── Type roles ─────────────────────────────────────────────────────────── */
+
+.hm-display {
+  font-family: var(--hm-font-display);
+  font-weight: 800;
+  font-style: normal;
+  line-height: 1.02;
+  letter-spacing: -0.032em;
+  color: var(--hm-ink);
+  overflow-wrap: anywhere;
+  min-width: 0;
+  text-wrap: balance;
+}
+
+.hm-title {
+  font-family: var(--hm-font-display);
+  font-weight: 700;
+  font-style: normal;
+  line-height: 1.16;
+  letter-spacing: -0.02em;
+  color: var(--hm-ink);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* label role — grotesque, sentence case (never uppercase, never tracked out) */
+.hm-label {
+  font-family: var(--hm-font-label);
+  font-weight: 500;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+  letter-spacing: 0.005em;
+  text-transform: none;
+  color: var(--hm-ink-2);
+}
+
+.hm-label--accent {
+  color: var(--hm-accent);
+}
+
+.hm-lede {
+  color: var(--hm-ink-2);
+  line-height: 1.65;
+}
+
+.hm-num {
+  font-family: var(--hm-font-num);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "cv05" 1;
+}
+
+/* ── Surfaces ───────────────────────────────────────────────────────────── */
+
+.hm-band {
+  background: var(--hm-paper-2);
+}
+
+.hm-rule-t {
+  border-top: 1px solid var(--hm-rule);
+}
+
+.hm-card {
+  border: 1px solid var(--hm-rule);
+  border-radius: var(--hm-r-card);
+  background: var(--hm-paper);
+  color: var(--hm-ink);
+}
+
+.hm-card--soft {
+  background: var(--hm-paper-2);
+}
+
+.hm-card--raised {
+  box-shadow: var(--hm-shadow);
+}
+
+.hm-card--lift {
+  transition:
+    transform var(--hm-dur) var(--hm-ease),
+    box-shadow var(--hm-dur) var(--hm-ease),
+    border-color var(--hm-dur) var(--hm-ease);
+}
+
+.hm-card--lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--hm-shadow-lift);
+  border-color: var(--hm-accent-soft);
+}
+
+.hm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--hm-r-pill);
+  background: var(--hm-accent-soft);
+  color: var(--hm-accent-hi);
+  padding: 0.4rem 0.85rem;
+  font-family: var(--hm-font-label);
+  font-weight: 500;
+  font-size: 0.8125rem;
+}
+
+.hm-input {
+  border-radius: var(--hm-r-input) !important;
+  border: 1px solid var(--hm-rule);
+  background: var(--hm-paper);
+  color: var(--hm-ink);
+}
+
+/* ── CTA voice — C1 outlined chip, pill shape ───────────────────────────── */
+
+.hm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: var(--hm-r-pill) !important;
+  padding-inline: 1.25rem;
+  min-height: 2.75rem;
+  font-family: var(--hm-font-display);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  white-space: nowrap;
+  transition:
+    background-color var(--hm-dur-fast) var(--hm-ease),
+    border-color var(--hm-dur-fast) var(--hm-ease),
+    color var(--hm-dur-fast) var(--hm-ease),
+    transform var(--hm-dur-fast) var(--hm-ease);
+}
+
+.hm-btn--primary {
+  background: var(--hm-accent);
+  color: var(--hm-accent-ink);
+  border: 1px solid var(--hm-accent);
+}
+
+.hm-btn--primary:hover {
+  background: var(--hm-accent-hi);
+  border-color: var(--hm-accent-hi);
+}
+
+.hm-btn--ghost {
+  background: transparent;
+  color: var(--hm-ink);
+  border: 1px solid var(--hm-rule);
+}
+
+.hm-btn--ghost:hover {
+  background: var(--hm-paper-2);
+  border-color: var(--hm-ink-3);
+}
+
+/* softer press than the app's scale(0.94) brutalist punch */
+.hm .hm-btn:not(:disabled):active,
+.hm a[href]:active,
+.hm button:not(:disabled):active {
+  transform: translateY(1px) scale(1);
+}
+
+.hm :is(button, a[href], [role="button"], input, textarea, select):focus-visible {
+  outline: 2px solid var(--hm-focus);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+.hm-link {
+  color: var(--hm-accent);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+.hm-link:hover {
+  text-decoration-line: underline;
+}
+
+/* ── Enrichment · Tier-A watercolour wash (blue + magenta, art only) ────── */
+
+.hm-wash {
+  position: absolute;
+  inset: -8% -4% auto -4%;
+  height: 112%;
+  z-index: 0;
+  pointer-events: none;
+  /* Three tight blobs that overlap each other, not the copy column. The paper
+   * stays pure white on the left two-fifths — the wash lives behind the card. */
+  background-image:
+    radial-gradient(24% 28% at 87% 10%, var(--hm-wash-2) 0%, transparent 62%),
+    radial-gradient(28% 32% at 68% 40%, oklch(62% 0.16 258 / 0.55) 0%, transparent 64%),
+    radial-gradient(20% 24% at 10% 76%, var(--hm-wash-3) 0%, transparent 58%);
+  opacity: 0.24;
+  filter: blur(36px) saturate(108%);
+}
+
+.hm-wash--footer {
+  inset: auto -4% -34% -4%;
+  height: 72%;
+  opacity: 0.16;
+}
+
+/* ── Motion · one reveal, fade + 8px, no overshoot ──────────────────────── */
+
+@keyframes hm-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hm-reveal {
+  animation: hm-reveal var(--hm-dur) var(--hm-ease) both;
+  animation-delay: calc(var(--hm-i, 0) * 70ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hm-reveal {
+    animation: none;
+  }
+
+  .hm-card--lift:hover {
+    transform: none;
+  }
+
+  .hm-wash {
+    filter: blur(30px);
+  }
+}
+
+/* ── Landing choreography (GSAP-driven, no-preference only) ──────────────────
+ * The pinned horizontal Solutions track. Default is a readable vertical stack
+ * so the reduced-motion path — where useLandingMotion never runs — still shows
+ * every panel. Only no-preference turns it into the wide row GSAP translates. */
+.hm-h-viewport {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hm-space-md);
+}
+
+.hm-h-panel {
+  width: 100%;
+}
+
+/* SplitText masks each line; words animate up from behind the mask edge. */
+.hm-split-line {
+  overflow: hidden;
+  padding-bottom: 0.08em; /* room for descenders inside the clip */
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hm-h-viewport {
+    flex-direction: row;
+    gap: 0;
+    align-items: stretch;
+    will-change: transform;
+  }
+
+  .hm-h-panel {
+    flex: 0 0 100vw;
+    width: 100vw;
+  }
+}
+
+@media (max-width: 767px) {
+  .hm-h-viewport {
+    flex-direction: column;
+    gap: var(--hm-space-md);
+  }
+
+  .hm-h-panel {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+}
+
+/* ── Workbench primitives (app surface) ─────────────────────────────────────
+ * Structure only. Colour comes from the tokens above, so these are identical in
+ * light and dark. Anything a route needs more than twice belongs here, not in a
+ * one-off arbitrary value. */
+
+.hm-panel {
+  border: 1px solid var(--hm-rule);
+  border-radius: var(--hm-r-card);
+  background: var(--hm-paper);
+  color: var(--hm-ink);
+}
+
+.hm-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--hm-space-sm);
+  border-bottom: 1px solid var(--hm-rule);
+  padding: var(--hm-space-sm) var(--hm-space-md);
+}
+
+/* Page header: display heading + lede + actions. */
+.hm-page-title {
+  font-family: var(--hm-font-display);
+  font-weight: 800;
+  font-size: clamp(1.75rem, 3.2vw, 2.25rem);
+  line-height: 1.1;
+  letter-spacing: -0.024em;
+  color: var(--hm-ink);
+}
+
+/* ── Data table ──────────────────────────────────────────────────────────── */
+
+.hm-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.hm-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--hm-paper-2);
+  border-bottom: 1px solid var(--hm-rule);
+  padding: 0.625rem var(--hm-space-xs);
+  text-align: left;
+  font-family: var(--hm-font-label);
+  font-weight: 500;
+  font-size: 0.8125rem;
+  color: var(--hm-ink-2);
+  white-space: nowrap;
+}
+
+.hm-table tbody td {
+  border-bottom: 1px solid var(--hm-rule);
+  padding: 0.75rem var(--hm-space-xs);
+  color: var(--hm-ink);
+  vertical-align: middle;
+}
+
+.hm-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.hm-table tbody tr {
+  transition: background-color var(--hm-dur-fast) var(--hm-ease);
+}
+
+.hm-table tbody tr:hover {
+  background: var(--hm-paper-2);
+}
+
+.hm-table tbody tr[data-selected="true"] {
+  background: var(--hm-accent-soft);
+}
+
+.hm-num-cell {
+  font-family: var(--hm-font-num);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "cv05" 1;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ── Status pill ─────────────────────────────────────────────────────────── */
+
+.hm-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: var(--hm-r-pill);
+  border: 1px solid var(--hm-rule);
+  background: var(--hm-paper-2);
+  color: var(--hm-ink-2);
+  padding: 0.1875rem 0.625rem;
+  font-family: var(--hm-font-label);
+  font-weight: 500;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.hm-pill--ok {
+  background: var(--hm-ok-soft);
+  border-color: var(--hm-ok-line);
+  color: var(--hm-ok);
+}
+
+.hm-pill--warn {
+  background: var(--hm-warn-soft);
+  border-color: var(--hm-warn-line);
+  color: var(--hm-warn);
+}
+
+.hm-pill--danger {
+  background: var(--hm-danger-soft);
+  border-color: var(--hm-danger-line);
+  color: var(--hm-danger);
+}
+
+.hm-pill--info {
+  background: var(--hm-info-soft);
+  border-color: var(--hm-info-line);
+  color: var(--hm-info);
+}
+
+.hm-pill--accent {
+  background: var(--hm-accent-soft);
+  border-color: var(--hm-accent-line);
+  color: var(--hm-accent-hi);
+}
+
+/* ── Stat tile — the Open / Overdue / Paid row ───────────────────────────── */
+
+.hm-stat {
+  border: 1px solid var(--hm-rule);
+  border-left: 3px solid var(--hm-accent);
+  border-radius: var(--hm-r-card);
+  background: var(--hm-paper);
+  padding: var(--hm-space-sm);
+}
+
+.hm-stat--ok {
+  border-left-color: var(--hm-ok);
+}
+.hm-stat--warn {
+  border-left-color: var(--hm-warn);
+}
+.hm-stat--danger {
+  border-left-color: var(--hm-danger);
+}
+
+.hm-stat-value {
+  font-family: var(--hm-font-num);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "cv05" 1;
+  font-size: clamp(1.375rem, 2.4vw, 1.625rem);
+  line-height: 1.1;
+  color: var(--hm-ink);
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+
+.hm-side {
+  border-right: 1px solid var(--hm-rule);
+  background: var(--hm-paper);
+}
+
+.hm-side-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--hm-space-xs);
+  border: 1px solid transparent;
+  border-radius: var(--hm-r-input);
+  padding: 0.625rem var(--hm-space-xs);
+  color: var(--hm-ink-2);
+  transition:
+    background-color var(--hm-dur-fast) var(--hm-ease),
+    border-color var(--hm-dur-fast) var(--hm-ease),
+    color var(--hm-dur-fast) var(--hm-ease);
+}
+
+.hm-side-item:hover {
+  background: var(--hm-paper-2);
+  color: var(--hm-ink);
+}
+
+.hm-side-item--active {
+  background: var(--hm-accent-soft);
+  border-color: var(--hm-accent-line);
+  color: var(--hm-accent-hi);
+}
+
+/* ── Form controls ───────────────────────────────────────────────────────── */
+
+.hm-input,
+.hm-field {
+  border-radius: var(--hm-r-input) !important;
+  border: 1px solid var(--hm-rule);
+  background: var(--hm-paper);
+  color: var(--hm-ink);
+  transition:
+    border-color var(--hm-dur-fast) var(--hm-ease),
+    background-color var(--hm-dur-fast) var(--hm-ease);
+}
+
+.hm-field::placeholder {
+  color: var(--hm-ink-3);
+}
+
+.hm-field:hover:not(:disabled) {
+  border-color: var(--hm-ink-3);
+}
+
+.hm-field:disabled {
+  background: var(--hm-paper-2);
+  color: var(--hm-ink-3);
+  cursor: not-allowed;
+}
+
+.hm-btn--danger {
+  background: var(--hm-danger);
+  color: var(--hm-accent-ink);
+  border: 1px solid var(--hm-danger);
+}
+
+.hm-btn--danger:hover {
+  filter: brightness(1.08);
+}
+
+.hm-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Empty state — a labelled grey block, per design.md's honest-copy rule. */
+.hm-empty {
+  border: 1px dashed var(--hm-rule);
+  border-radius: var(--hm-r-card);
+  background: var(--hm-paper-2);
+  color: var(--hm-ink-2);
+  padding: var(--hm-space-xl) var(--hm-space-md);
+  text-align: center;
+}
+
+/* Legacy uppercase-tracked labels re-voiced as the grotesque sentence-case role. */
+.hm [class*="uppercase"],
+.hm-app [class*="uppercase"] {
+  font-family: var(--hm-font-label);
+  font-weight: 500;
+  text-transform: none !important;
+  letter-spacing: 0.005em !important;
 }

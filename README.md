@@ -92,6 +92,19 @@ accountant review and billing records, not direct tax filing.
 
 ![Velure compliance settings and exports screen with business identity, VAT profile, WHT deduction context, invoice CSV, and customer ledger exports](public/compliance-2.png)
 
+## Accounting Integration Status
+
+QuickBooks and Xero are connection points, not live accounting integrations yet:
+
+- OAuth connect and token refresh are implemented server-side for both
+  providers, and push-sync actions exist for invoices and clients.
+- Sync is push-only and manual. There is no pull or webhook reconciliation
+  from QuickBooks or Xero back into Velure.
+- Invoices with manual VAT or WHT overrides are rejected before accounting
+  sync so system-of-record integrity is preserved.
+- The product UI does not expose connect or sync flows yet. The accountant-
+  ready path today is PDF and CSV export (see Compliance).
+
 ## Product Boundaries
 
 Velure focuses on billing and collections:
@@ -295,8 +308,8 @@ Set these on the deployment platform:
   enabled
 - `PAYSTACK_PUBLIC_KEY` and `PAYSTACK_SECRET_KEY`, if payment collection is
   enabled
-- Accounting integration credentials only when QuickBooks or Xero sync is
-  enabled
+- Accounting integration credentials only when QuickBooks or Xero OAuth
+  connections are configured
 
 > [!IMPORTANT]
 > The container defaults to `PORT=3000` and `HOST=0.0.0.0`. If your platform

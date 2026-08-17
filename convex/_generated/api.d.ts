@@ -36,6 +36,7 @@ import type * as reminders from "../reminders.js";
 import type * as reports from "../reports.js";
 import type * as revenueReporting from "../revenueReporting.js";
 import type * as rls from "../rls.js";
+import type * as tokenEncryption from "../tokenEncryption.js";
 import type * as validators from "../validators.js";
 import type * as workspaces from "../workspaces.js";
 
@@ -74,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   reports: typeof reports;
   revenueReporting: typeof revenueReporting;
   rls: typeof rls;
+  tokenEncryption: typeof tokenEncryption;
   validators: typeof validators;
   workspaces: typeof workspaces;
 }>;

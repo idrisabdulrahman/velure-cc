@@ -198,3 +198,16 @@ export const exportKindValidator = v.union(
 	v.literal("customer_ledger_csv"),
 	v.literal("normalized_accounting"),
 );
+
+export const editorDocValidator = v.object({
+	type: v.literal("doc"),
+	content: v.array(
+		v.object({
+			type: v.string(),
+			text: v.optional(v.string()),
+			attrs: v.optional(v.any()),
+			marks: v.optional(v.array(v.any())),
+			content: v.optional(v.array(v.any())),
+		}),
+	),
+});

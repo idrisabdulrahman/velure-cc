@@ -1,0 +1,12 @@
+# Caddy reverse proxy for the Velure OIDC issuer.
+#
+# Automatic HTTPS: Caddy provisions a Let's Encrypt certificate for the
+# hostname via HTTP-01 — the A record must point at this VM's public IP and
+# TCP 80 must be open (OCI security list + OS firewall). Replace
+# velure-auth.example.duckdns.org with your real hostname (e.g. the DuckDNS
+# subdomain you create in the setup script).
+
+velure-auth.example.duckdns.org {
+	reverse_proxy 127.0.0.1:8788
+	encode zstd gzip
+}

@@ -15,6 +15,7 @@ import {
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
+import { RowsEmptyGuard } from "#/components/ui/rows-empty-guard";
 import {
 	Select,
 	SelectContent,
@@ -26,10 +27,14 @@ import { Skeleton } from "#/components/ui/skeleton";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
 import {
+	classifyNigeriaRuleSetVersion,
+	formatNigerianDate,
 	NIGERIA_AUTHORITY_LABEL,
 	NIGERIA_TAX_RULE_SET_VERSION,
 	NIGERIA_VAT_RATE,
+	resolveNigeriaRuleSet,
 	SELLER_TAX_STATUS_OPTIONS,
+	WITHHOLDING_CATEGORY_OPTIONS,
 } from "#/features/compliance/nigeria";
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import type { PeriodPreset } from "#/utils/date";
@@ -121,10 +126,10 @@ function validateTaxProfile(form: {
 	}
 	return errors;
 }
-
 export const Route = createFileRoute("/settings/compliance")({
-	beforeLoad: async ({ context }) => {
-		await Promise.all([
+	beforeLoad: ({ context }) => {
+		// Fire-and-forget: warm the cache without blocking the transition.
+		void Promise.all([
 			context.queryClient.prefetchQuery(
 				convexQuery(api.compliance.getWorkspaceSettings, {}),
 			),
@@ -134,7 +139,7 @@ export const Route = createFileRoute("/settings/compliance")({
 			context.queryClient.prefetchQuery(
 				convexQuery(api.compliance.listExportHistory, {}),
 			),
-		]);
+		]).catch(() => undefined);
 	},
 	component: ComplianceSettingsPage,
 });
@@ -219,6 +224,8 @@ function ComplianceSettingsPage() {
 		notes: "Default VAT profile for domestic invoices.",
 	});
 	const [errors, setErrors] = useState<ComplianceFormErrors>({});
+	const ruleSetStatus = classifyNigeriaRuleSetVersion(form.taxRuleSetVersion);
+	const effectiveRuleSet = resolveNigeriaRuleSet(form.taxRuleSetVersion);
 
 	const visibleExports = exportsHistory.filter(
 		(record) => record.kind !== "normalized_accounting",
@@ -288,25 +295,25 @@ function ComplianceSettingsPage() {
 	return (
 		<div className="mx-auto max-w-6xl space-y-6">
 			<div>
-				<h1 className="text-3xl font-semibold tracking-[-0.02em] text-[#f2efe7]">
+				<h1 className="text-3xl font-semibold tracking-[-0.02em] text-ink">
 					Compliance
 				</h1>
-				<p className="mt-2 text-sm text-[#aaa294]">
+				<p className="mt-2 text-sm text-ink-3">
 					Keep business identity, Nigeria VAT settings, WHT notes, and
 					accountant-ready exports in one place.
 				</p>
 			</div>
 
-			<section className="rounded-md border border-[#30352f] bg-[#171a18] p-5">
-				<div className="flex flex-col gap-4 border-b border-[#30352f] pb-5 lg:flex-row lg:items-end lg:justify-between">
+			<section className="rounded-md border border-rule bg-paper-2 p-5">
+				<div className="flex flex-col gap-4 border-b border-rule pb-5 lg:flex-row lg:items-end lg:justify-between">
 					<div>
-						<p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#c8ff62]">
+						<p className="text-[11px] font-bold uppercase tracking-[0.22em] text-brand">
 							Nigerian compliance dashboard
 						</p>
-						<h2 className="mt-2 text-2xl font-semibold tracking-normal text-[#f2efe7]">
+						<h2 className="mt-2 text-2xl font-semibold tracking-normal text-ink">
 							VAT, WHT, and review visibility
 						</h2>
-						<p className="mt-2 max-w-3xl text-sm leading-6 text-[#aaa294]">
+						<p className="mt-2 max-w-3xl text-sm leading-6 text-ink-3">
 							Informational summary from workspace invoices and exports. Use it
 							to prepare accountant review, not to file taxes directly.
 						</p>
@@ -319,10 +326,10 @@ function ComplianceSettingsPage() {
 								setDashboardPeriod(value as PeriodPreset)
 							}
 						>
-							<SelectTrigger className="h-10 w-full rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] sm:w-[170px]">
+							<SelectTrigger className="h-10 w-full rounded-md border-rule bg-paper text-ink sm:w-[170px]">
 								<SelectValue />
 							</SelectTrigger>
-							<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
+							<SelectContent className="border-rule bg-paper-2 text-ink">
 								{PERIOD_OPTIONS.map((item) => (
 									<SelectItem key={item.value} value={item.value}>
 										{item.label}
@@ -335,10 +342,10 @@ function ComplianceSettingsPage() {
 							onValueChange={(value) => setSelectedDashboardCurrency(value)}
 							disabled={dashboardCurrencies.length <= 1}
 						>
-							<SelectTrigger className="h-10 w-full rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] sm:w-[120px]">
+							<SelectTrigger className="h-10 w-full rounded-md border-rule bg-paper text-ink sm:w-[120px]">
 								<SelectValue />
 							</SelectTrigger>
-							<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
+							<SelectContent className="border-rule bg-paper-2 text-ink">
 								{(dashboardCurrencies.length > 0
 									? dashboardCurrencies
 									: [dashboardCurrency]
@@ -365,7 +372,7 @@ function ComplianceSettingsPage() {
 									dashboardCurrency,
 								)}
 								detail={`${formatCount(dashboardSummary.taxableInvoiceCount)} taxable invoices`}
-								tone="lime"
+								tone="brand"
 							/>
 							<DashboardMetric
 								icon={BanknoteArrowDown}
@@ -405,7 +412,7 @@ function ComplianceSettingsPage() {
 								<RowsEmptyGuard show={dashboardMonthly.length === 0}>
 									<div className="overflow-x-auto">
 										<table className="w-full min-w-[620px] text-left text-sm">
-											<thead className="border-b border-[#30352f] text-xs uppercase tracking-[0.08em] text-[#817d72]">
+											<thead className="border-b border-rule text-xs uppercase tracking-[0.08em] text-ink-3">
 												<tr>
 													<th className="py-3 pr-4 font-medium">Month</th>
 													<th className="py-3 pr-4 text-right font-medium">
@@ -420,13 +427,13 @@ function ComplianceSettingsPage() {
 													<th className="py-3 text-right font-medium">Flags</th>
 												</tr>
 											</thead>
-											<tbody className="divide-y divide-[#30352f]">
+											<tbody className="divide-y divide-rule">
 												{dashboardMonthly.map((month) => (
 													<tr
 														key={`${month.currency}:${month.key}`}
-														className="text-[#d8d1c4]"
+														className="text-ink-2"
 													>
-														<td className="py-3 pr-4 font-medium text-[#f2efe7]">
+														<td className="py-3 pr-4 font-medium text-ink">
 															{month.label}
 														</td>
 														<td className="py-3 pr-4 text-right">
@@ -453,7 +460,7 @@ function ComplianceSettingsPage() {
 								<RowsEmptyGuard
 									show={(complianceDashboard?.warnings.length ?? 0) === 0}
 								>
-									<div className="divide-y divide-[#30352f]">
+									<div className="divide-y divide-rule">
 										{(complianceDashboard?.warnings ?? []).map((warning) => (
 											<DashboardRow
 												key={warning.code}
@@ -472,7 +479,7 @@ function ComplianceSettingsPage() {
 						<div className="grid gap-4 xl:grid-cols-3">
 							<DashboardPanel title="Client context" label={dashboardCurrency}>
 								<RowsEmptyGuard show={dashboardCustomers.length === 0}>
-									<div className="divide-y divide-[#30352f]">
+									<div className="divide-y divide-rule">
 										{dashboardCustomers.map((customer) => (
 											<DashboardRow
 												key={`${customer.currency}:${customer.customerName}`}
@@ -484,7 +491,7 @@ function ComplianceSettingsPage() {
 												)}
 												secondary={`${formatCount(customer.warningCount)} flags`}
 												meta={`${formatCount(customer.invoiceCount)} invoices`}
-												tone="lime"
+												tone="brand"
 											/>
 										))}
 									</div>
@@ -493,7 +500,7 @@ function ComplianceSettingsPage() {
 
 							<DashboardPanel title="Needs review" label="Invoices">
 								<RowsEmptyGuard show={dashboardReviewInvoices.length === 0}>
-									<div className="divide-y divide-[#30352f]">
+									<div className="divide-y divide-rule">
 										{dashboardReviewInvoices.map((invoice) => (
 											<DashboardRow
 												key={invoice.id}
@@ -513,7 +520,7 @@ function ComplianceSettingsPage() {
 								<RowsEmptyGuard
 									show={(complianceDashboard?.exports.recent.length ?? 0) === 0}
 								>
-									<div className="divide-y divide-[#30352f]">
+									<div className="divide-y divide-rule">
 										{(complianceDashboard?.exports.recent ?? []).map(
 											(record) => (
 												<DashboardRow
@@ -535,13 +542,11 @@ function ComplianceSettingsPage() {
 				)}
 			</section>
 
-			<section className="rounded-md border border-[#30352f] bg-[#171a18] p-5">
+			<section className="rounded-md border border-rule bg-paper-2 p-5">
 				<div className="flex flex-wrap items-start justify-between gap-3">
 					<div>
-						<h2 className="text-sm font-medium text-[#f2efe7]">
-							Business identity
-						</h2>
-						<p className="mt-1 max-w-2xl text-xs leading-5 text-[#aaa294]">
+						<h2 className="text-sm font-medium text-ink">Business identity</h2>
+						<p className="mt-1 max-w-2xl text-xs leading-5 text-ink-3">
 							Read-only here. Edit business identity, invoice defaults, and
 							payment details from General Settings.
 						</p>
@@ -550,7 +555,7 @@ function ComplianceSettingsPage() {
 						asChild
 						type="button"
 						variant="outline"
-						className="h-9 rounded-md border-[#30352f] bg-transparent px-3 text-xs text-[#d8d1c4] hover:bg-[#20241f]"
+						className="h-9 rounded-md border-rule bg-transparent px-3 text-xs text-ink-2 hover:bg-paper-3"
 					>
 						<Link to="/settings">Edit in General Settings</Link>
 					</Button>
@@ -594,43 +599,73 @@ function ComplianceSettingsPage() {
 						className="lg:col-span-3"
 					/>
 				</div>
-				<p className="mt-3 text-xs text-[#8f8a81]">
+				<p className="mt-3 text-xs text-ink-3">
 					CSV exports are for spreadsheets and accountants. Connected accounting
 					apps will be added later.
 				</p>
-				<p className="mt-1 text-xs text-[#8f8a81]">
+				<p className="mt-1 text-xs text-ink-3">
 					Velure helps structure invoice data for Nigerian finance workflows.
 					Confirm VAT, WHT, and filing treatment with your accountant or tax
 					advisor.
 				</p>
-				<p className="mt-1 text-xs text-[#c8ff62]">
+				<p className="mt-1 text-xs text-brand">
 					{NIGERIA_AUTHORITY_LABEL} is now the federal revenue authority.
 					Standard VAT remains {NIGERIA_VAT_RATE}% for taxable supplies where
 					VAT applies.
 				</p>
 			</section>
 
-			<section className="rounded-md border border-[#30352f] bg-[#171a18] p-5">
+			<section className="rounded-md border border-rule bg-paper-2 p-5">
 				<div>
-					<h2 className="text-sm font-medium text-[#f2efe7]">Tax settings</h2>
-					<p className="mt-1 max-w-2xl text-xs leading-5 text-[#aaa294]">
+					<h2 className="text-sm font-medium text-ink">Tax settings</h2>
+					<p className="mt-1 max-w-2xl text-xs leading-5 text-ink-3">
 						Use VAT settings for invoice display. Use WHT fields only when a
 						customer deducts tax at source or your accountant asks you to show
 						expected deductions.
 					</p>
 				</div>
+				{ruleSetStatus !== "current" ? (
+					<div
+						className={`mt-3 rounded-md border px-4 py-3 text-xs leading-5 ${
+							ruleSetStatus === "unknown"
+								? "border-danger-line/35 bg-danger-soft text-danger"
+								: "border-warn-line/35 bg-warn-soft text-warn"
+						}`}
+					>
+						{ruleSetStatus === "legacy_alias" ? (
+							<p>
+								This workspace still stores the legacy rule-set id{" "}
+								<span className="font-medium">{form.taxRuleSetVersion}</span>.
+								It resolves to the current rules and is normalized on the next
+								settings save.
+							</p>
+						) : ruleSetStatus === "superseded" ? (
+							<p>
+								This workspace is pinned to the superseded rule set{" "}
+								<span className="font-medium">{form.taxRuleSetVersion}</span>.
+								Review whether new invoices should use the current rules.
+							</p>
+						) : (
+							<p>
+								This workspace stores the unrecognized rule-set version{" "}
+								<span className="font-medium">{form.taxRuleSetVersion}</span>.
+								Verify it in General Settings before relying on computed taxes.
+							</p>
+						)}
+					</div>
+				) : null}
 				<div className="mt-4 grid gap-3 md:grid-cols-2">
-					<div className="rounded-md border border-[#30352f] bg-[#0f1111] px-4 py-3">
-						<p className="text-sm font-medium text-[#f2efe7]">VAT profile</p>
-						<p className="mt-1 text-xs text-[#aaa294]">
+					<div className="rounded-md border border-rule bg-paper px-4 py-3">
+						<p className="text-sm font-medium text-ink">VAT profile</p>
+						<p className="mt-1 text-xs text-ink-3">
 							Nigeria standard VAT is {NIGERIA_VAT_RATE}% for taxable supplies.
 							Businesses below registration threshold or exempt supplies should
 							not charge VAT by default.
 						</p>
 					</div>
-					<div className="rounded-md border border-[#30352f] bg-[#0f1111] px-4 py-3">
-						<p className="text-sm font-medium text-[#f2efe7]">WHT deduction</p>
-						<p className="mt-1 text-xs text-[#aaa294]">
+					<div className="rounded-md border border-rule bg-paper px-4 py-3">
+						<p className="text-sm font-medium text-ink">WHT deduction</p>
+						<p className="mt-1 text-xs text-ink-3">
 							WHT is not an extra charge. It is usually deducted by the paying
 							customer and remitted to the tax authority under category-based
 							deduction rules.
@@ -649,7 +684,7 @@ function ComplianceSettingsPage() {
 						}}
 						placeholder="Profile name"
 						aria-invalid={Boolean(errors.profileName)}
-						className={`${errors.profileName ? "border-[#c76f5b]" : "border-[#30352f]"} bg-[#0f1111]`}
+						className={`${errors.profileName ? "border-danger" : "border-rule"} bg-paper`}
 					/>
 					<Input
 						value={profileForm.label}
@@ -662,7 +697,7 @@ function ComplianceSettingsPage() {
 						}}
 						placeholder="Tax label"
 						aria-invalid={Boolean(errors.profileLabel)}
-						className={`${errors.profileLabel ? "border-[#c76f5b]" : "border-[#30352f]"} bg-[#0f1111]`}
+						className={`${errors.profileLabel ? "border-danger" : "border-rule"} bg-paper`}
 					/>
 					<Input
 						type="number"
@@ -677,11 +712,11 @@ function ComplianceSettingsPage() {
 						}}
 						placeholder="Rate"
 						aria-invalid={Boolean(errors.profileRate)}
-						className={`${errors.profileRate ? "border-[#c76f5b]" : "border-[#30352f]"} bg-[#0f1111]`}
+						className={`${errors.profileRate ? "border-danger" : "border-rule"} bg-paper`}
 					/>
 				</div>
 				{errors.profileName || errors.profileLabel || errors.profileRate ? (
-					<div className="mt-3 space-y-1 text-xs text-[#c76f5b]">
+					<div className="mt-3 space-y-1 text-xs text-danger">
 						{errors.profileName ? <p>{errors.profileName}</p> : null}
 						{errors.profileLabel ? <p>{errors.profileLabel}</p> : null}
 						{errors.profileRate ? <p>{errors.profileRate}</p> : null}
@@ -696,7 +731,7 @@ function ComplianceSettingsPage() {
 						}))
 					}
 					placeholder="Notes"
-					className="mt-4 border-[#30352f] bg-[#0f1111]"
+					className="mt-4 border-rule bg-paper"
 				/>
 				<div className="mt-4 flex flex-wrap gap-3">
 					<Button
@@ -732,14 +767,14 @@ function ComplianceSettingsPage() {
 							});
 							toast({ title: "Tax profile saved", variant: "success" });
 						}}
-						className="bg-[#c8ff62] text-[#0f1111] hover:bg-[#d5ff7a]"
+						className="bg-brand text-brand-ink hover:bg-brand-hi"
 					>
 						Save VAT profile
 					</Button>
 					<Button
 						type="button"
 						variant="outline"
-						className="border-[#30352f] bg-transparent"
+						className="border-rule bg-transparent"
 						onClick={async () => {
 							const result = await createExport({ kind: "tax_summary_csv" });
 							downloadExportContent(result);
@@ -758,31 +793,89 @@ function ComplianceSettingsPage() {
 					{(taxProfiles ?? []).map((profile) => (
 						<div
 							key={profile._id}
-							className="rounded-md border border-[#30352f] bg-[#0f1111] px-4 py-3"
+							className="rounded-md border border-rule bg-paper px-4 py-3"
 						>
 							<div className="flex items-center justify-between gap-3">
 								<div>
-									<p className="text-sm font-medium text-[#f2efe7]">
-										{profile.name}
-									</p>
-									<p className="text-xs text-[#aaa294]">
+									<p className="text-sm font-medium text-ink">{profile.name}</p>
+									<p className="text-xs text-ink-3">
 										{profile.label} • {profile.taxTreatment} • {profile.rate}%
 									</p>
 								</div>
 								{profile.isDefault ? (
-									<span className="text-xs text-[#c8ff62]">Default</span>
+									<span className="text-xs text-brand">Default</span>
 								) : null}
 							</div>
 						</div>
 					))}
 				</div>
+
+				<div className="mt-6">
+					<div className="rounded-md border border-rule bg-paper px-4 py-3">
+						<div className="flex flex-wrap items-baseline justify-between gap-2">
+							<p className="text-sm font-medium text-ink">
+								{effectiveRuleSet.label}
+							</p>
+							<span className="text-xs text-ink-3">{effectiveRuleSet.id}</span>
+						</div>
+						<p className="mt-1 text-xs text-ink-3">
+							{effectiveRuleSet.authority} • effective{" "}
+							{formatNigerianDate(effectiveRuleSet.effectiveFrom)}
+						</p>
+						<p className="mt-1 text-xs text-ink-3">
+							Standard VAT is {effectiveRuleSet.vatRate}% for taxable supplies.
+							WHT rates below are deducted at source by the paying customer.
+						</p>
+					</div>
+					<div className="mt-3 overflow-x-auto rounded-md border border-rule bg-paper">
+						<table className="w-full min-w-[560px] text-left text-sm">
+							<thead className="border-b border-rule text-xs uppercase tracking-[0.08em] text-ink-3">
+								<tr>
+									<th className="py-2.5 pl-4 pr-4 font-medium">WHT category</th>
+									<th className="py-2.5 pr-4 text-right font-medium">
+										Resident
+									</th>
+									<th className="py-2.5 pr-4 text-right font-medium">
+										Non-resident
+									</th>
+								</tr>
+							</thead>
+							<tbody className="divide-y divide-rule">
+								{WITHHOLDING_CATEGORY_OPTIONS.map((option) => {
+									const table = effectiveRuleSet.withholdingRates[option.value];
+									return (
+										<tr key={option.value} className="text-ink-2">
+											<td className="py-2.5 pl-4 pr-4">
+												<p className="font-medium text-ink">{option.label}</p>
+												<p className="mt-0.5 text-xs text-ink-3">
+													{option.description}
+												</p>
+											</td>
+											<td className="py-2.5 pr-4 text-right">
+												{table.resident}%
+											</td>
+											<td className="py-2.5 pr-4 text-right">
+												{table.nonResident}%
+											</td>
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
+					</div>
+					<p className="mt-3 text-xs text-ink-3">
+						Rule sets are versioned. {NIGERIA_AUTHORITY_LABEL} changes are
+						applied by adding a new rule set; invoices keep the rule set they
+						were computed under.
+					</p>
+				</div>
 			</section>
 
-			<section className="rounded-md border border-[#30352f] bg-[#171a18] p-5">
+			<section className="rounded-md border border-rule bg-paper-2 p-5">
 				<div className="grid gap-4 xl:grid-cols-[1fr_auto] xl:items-start">
 					<div>
-						<h2 className="text-sm font-medium text-[#f2efe7]">Exports</h2>
-						<p className="mt-1 text-sm text-[#aaa294]">
+						<h2 className="text-sm font-medium text-ink">Exports</h2>
+						<p className="mt-1 text-sm text-ink-3">
 							Your data is yours. Export invoices as PDF or CSV anytime.
 							Downloadable CSV reports cover invoicing, customer balances, and
 							tax review.
@@ -792,7 +885,7 @@ function ComplianceSettingsPage() {
 						<Button
 							type="button"
 							variant="outline"
-							className="h-10 min-w-[190px] rounded-md border-[#30352f] bg-[#0f1111] px-3 text-xs font-semibold tracking-[0.02em] text-[#d8d1c4] hover:bg-[#20241f] hover:text-[#f2efe7]"
+							className="h-10 min-w-[190px] rounded-md border-rule bg-paper px-3 text-xs font-semibold tracking-[0.02em] text-ink-2 hover:bg-paper-3 hover:text-ink"
 							onClick={async () => {
 								const result = await createExport({ kind: "invoices_csv" });
 								downloadExportContent(result);
@@ -808,7 +901,7 @@ function ComplianceSettingsPage() {
 						<Button
 							type="button"
 							variant="outline"
-							className="h-10 min-w-[190px] rounded-md border-[#30352f] bg-[#0f1111] px-3 text-xs font-semibold tracking-[0.02em] text-[#d8d1c4] hover:bg-[#20241f] hover:text-[#f2efe7]"
+							className="h-10 min-w-[190px] rounded-md border-rule bg-paper px-3 text-xs font-semibold tracking-[0.02em] text-ink-2 hover:bg-paper-3 hover:text-ink"
 							onClick={async () => {
 								const result = await createExport({
 									kind: "customer_ledger_csv",
@@ -826,20 +919,16 @@ function ComplianceSettingsPage() {
 					</div>
 				</div>
 				<div className="mt-3 grid gap-3 md:grid-cols-2">
-					<div className="rounded-md border border-[#30352f] bg-[#0f1111] px-4 py-3">
-						<p className="text-sm font-medium text-[#f2efe7]">
-							Invoice list CSV
-						</p>
-						<p className="mt-1 text-xs text-[#aaa294]">
+					<div className="rounded-md border border-rule bg-paper px-4 py-3">
+						<p className="text-sm font-medium text-ink">Invoice list CSV</p>
+						<p className="mt-1 text-xs text-ink-3">
 							One row per invoice with totals, due dates, status, and tax
 							amounts.
 						</p>
 					</div>
-					<div className="rounded-md border border-[#30352f] bg-[#0f1111] px-4 py-3">
-						<p className="text-sm font-medium text-[#f2efe7]">
-							Customer balance CSV
-						</p>
-						<p className="mt-1 text-xs text-[#aaa294]">
+					<div className="rounded-md border border-rule bg-paper px-4 py-3">
+						<p className="text-sm font-medium text-ink">Customer balance CSV</p>
+						<p className="mt-1 text-xs text-ink-3">
 							A customer-focused ledger showing invoice history and outstanding
 							amounts.
 						</p>
@@ -850,13 +939,13 @@ function ComplianceSettingsPage() {
 					{visibleExports.map((record) => (
 						<div
 							key={record._id}
-							className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[#30352f] bg-[#0f1111] px-4 py-3"
+							className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-rule bg-paper px-4 py-3"
 						>
 							<div>
-								<p className="text-sm font-medium text-[#f2efe7]">
+								<p className="text-sm font-medium text-ink">
 									{formatExportDisplayName(record)}
 								</p>
-								<p className="text-xs text-[#aaa294]">
+								<p className="text-xs text-ink-3">
 									{formatExportKind(record.kind)} • {record.status} •{" "}
 									{record.fileName}
 								</p>
@@ -865,7 +954,7 @@ function ComplianceSettingsPage() {
 								<Button
 									type="button"
 									variant="outline"
-									className="border-[#30352f] bg-transparent"
+									className="border-rule bg-transparent"
 									onClick={() => downloadExportContent(record)}
 								>
 									Download
@@ -873,7 +962,7 @@ function ComplianceSettingsPage() {
 								<Button
 									type="button"
 									variant="outline"
-									className="border-[#30352f] bg-transparent"
+									className="border-rule bg-transparent"
 									onClick={async () => {
 										await retryExport({ id: record._id });
 										toast({ title: "Export marked ready", variant: "success" });
@@ -885,7 +974,7 @@ function ComplianceSettingsPage() {
 						</div>
 					))}
 					{visibleExports.length === 0 ? (
-						<div className="rounded-md border border-dashed border-[#30352f] bg-[#0f1111] px-4 py-6 text-sm text-[#aaa294]">
+						<div className="rounded-md border border-dashed border-rule bg-paper px-4 py-6 text-sm text-ink-3">
 							No downloadable exports yet. Generate an invoice list, customer
 							balance report, or tax summary.
 						</div>
@@ -928,12 +1017,12 @@ function ReadOnlyComplianceItem({
 
 	return (
 		<div
-			className={`rounded-md border border-[#30352f] bg-[#0f1111] px-4 py-3 ${className}`}
+			className={`rounded-md border border-rule bg-paper px-4 py-3 ${className}`}
 		>
-			<p className="text-xs font-medium uppercase tracking-[0.08em] text-[#817d72]">
+			<p className="text-xs font-medium uppercase tracking-[0.08em] text-ink-3">
 				{label}
 			</p>
-			<p className="mt-2 whitespace-pre-wrap text-sm text-[#f2efe7]">
+			<p className="mt-2 whitespace-pre-wrap text-sm text-ink">
 				{displayValue}
 			</p>
 		</div>
@@ -945,25 +1034,25 @@ function DashboardMetric({
 	label,
 	value,
 	detail,
-	tone = "lime",
+	tone = "brand",
 }: {
 	icon: LucideIcon;
 	label: string;
 	value: string;
 	detail: string;
-	tone?: "lime" | "amber" | "rose" | "cyan";
+	tone?: "brand" | "amber" | "rose" | "cyan";
 }) {
 	const toneClass = {
-		lime: "border-[#c8ff62]/35 bg-[#1a2117] text-[#c8ff62]",
-		amber: "border-[#ffd166]/35 bg-[#2a2414] text-[#ffd166]",
-		rose: "border-[#ff8a8a]/35 bg-[#2a1717] text-[#ff8a8a]",
-		cyan: "border-[#8bd5ff]/35 bg-[#14202a] text-[#8bd5ff]",
+		brand: "border-brand/35 bg-brand-soft text-brand",
+		amber: "border-warn-line/35 bg-warn-soft text-warn",
+		rose: "border-danger-line/35 bg-danger-soft text-danger",
+		cyan: "border-info-line/35 bg-info-soft text-info",
 	}[tone];
 
 	return (
-		<div className="rounded-md border border-[#30352f] bg-[#0f1111] p-4">
+		<div className="rounded-md border border-rule bg-paper p-4">
 			<div className="flex items-center justify-between gap-3">
-				<p className="text-xs font-medium uppercase tracking-[0.1em] text-[#817d72]">
+				<p className="text-xs font-medium uppercase tracking-[0.1em] text-ink-3">
 					{label}
 				</p>
 				<span
@@ -972,10 +1061,10 @@ function DashboardMetric({
 					<Icon className="h-4 w-4" />
 				</span>
 			</div>
-			<p className="mt-4 truncate text-2xl font-semibold tracking-normal text-[#f2efe7]">
+			<p className="mt-4 truncate text-2xl font-semibold tracking-normal text-ink">
 				{value}
 			</p>
-			<p className="mt-2 text-sm text-[#a7a095]">{detail}</p>
+			<p className="mt-2 text-sm text-ink-3">{detail}</p>
 		</div>
 	);
 }
@@ -990,10 +1079,10 @@ function DashboardPanel({
 	children: ReactNode;
 }) {
 	return (
-		<section className="rounded-md border border-[#30352f] bg-[#0f1111]">
-			<div className="flex items-center justify-between gap-3 border-b border-[#30352f] px-4 py-3">
-				<h3 className="text-sm font-semibold text-[#f2efe7]">{title}</h3>
-				<span className="text-xs font-medium uppercase tracking-[0.08em] text-[#817d72]">
+		<section className="rounded-md border border-rule bg-paper">
+			<div className="flex items-center justify-between gap-3 border-b border-rule px-4 py-3">
+				<h3 className="text-sm font-semibold text-ink">{title}</h3>
+				<span className="text-xs font-medium uppercase tracking-[0.08em] text-ink-3">
 					{label}
 				</span>
 			</div>
@@ -1008,20 +1097,20 @@ function DashboardRow({
 	primary,
 	secondary,
 	meta,
-	tone = "lime",
+	tone = "brand",
 }: {
 	icon: LucideIcon;
 	name: string;
 	primary: string;
 	secondary: string;
 	meta?: string;
-	tone?: "lime" | "amber" | "rose" | "cyan";
+	tone?: "brand" | "amber" | "rose" | "cyan";
 }) {
 	const toneClass = {
-		lime: "border-[#c8ff62]/35 bg-[#1a2117] text-[#c8ff62]",
-		amber: "border-[#ffd166]/35 bg-[#2a2414] text-[#ffd166]",
-		rose: "border-[#ff8a8a]/35 bg-[#2a1717] text-[#ff8a8a]",
-		cyan: "border-[#8bd5ff]/35 bg-[#14202a] text-[#8bd5ff]",
+		brand: "border-brand/35 bg-brand-soft text-brand",
+		amber: "border-warn-line/35 bg-warn-soft text-warn",
+		rose: "border-danger-line/35 bg-danger-soft text-danger",
+		cyan: "border-info-line/35 bg-info-soft text-info",
 	}[tone];
 
 	return (
@@ -1032,31 +1121,13 @@ function DashboardRow({
 				<Icon className="h-4 w-4" />
 			</span>
 			<div className="min-w-0 flex-1">
-				<p className="truncate text-sm font-medium text-[#f2efe7]">{name}</p>
-				{meta ? <p className="mt-1 text-xs text-[#817d72]">{meta}</p> : null}
+				<p className="truncate text-sm font-medium text-ink">{name}</p>
+				{meta ? <p className="mt-1 text-xs text-ink-3">{meta}</p> : null}
 			</div>
 			<div className="max-w-[48%] text-right">
-				<p className="truncate text-sm font-semibold text-[#f2efe7]">
-					{primary}
-				</p>
-				<p className="mt-1 truncate text-xs text-[#a7a095]">{secondary}</p>
+				<p className="truncate text-sm font-semibold text-ink">{primary}</p>
+				<p className="mt-1 truncate text-xs text-ink-3">{secondary}</p>
 			</div>
-		</div>
-	);
-}
-
-function RowsEmptyGuard({
-	show,
-	children,
-}: {
-	show: boolean;
-	children: ReactNode;
-}) {
-	if (!show) return <>{children}</>;
-
-	return (
-		<div className="flex min-h-36 items-center justify-center rounded-md border border-dashed border-[#30352f] px-4 text-center text-sm text-[#817d72]">
-			No records for this period
 		</div>
 	);
 }
@@ -1066,12 +1137,12 @@ function ComplianceDashboardSkeleton() {
 		<div className="mt-5 space-y-4">
 			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
 				{DASHBOARD_SKELETON_KEYS.map((key) => (
-					<Skeleton key={key} className="h-32 rounded-md bg-[#1b2019]" />
+					<Skeleton key={key} className="h-32 rounded-md bg-paper-3" />
 				))}
 			</div>
 			<div className="grid gap-4 xl:grid-cols-2">
-				<Skeleton className="h-72 rounded-md bg-[#1b2019]" />
-				<Skeleton className="h-72 rounded-md bg-[#1b2019]" />
+				<Skeleton className="h-72 rounded-md bg-paper-3" />
+				<Skeleton className="h-72 rounded-md bg-paper-3" />
 			</div>
 		</div>
 	);

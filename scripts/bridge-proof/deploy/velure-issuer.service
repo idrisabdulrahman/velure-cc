@@ -1,0 +1,24 @@
+[Unit]
+Description=Velure better-auth OIDC issuer
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=velure
+Group=velure
+WorkingDirectory=/opt/velure-issuer
+EnvironmentFile=/etc/velure-issuer.env
+ExecStart=/opt/node/bin/node production-issuer.mjs
+Restart=always
+RestartSec=5
+# harden
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+# the issuer only talks out (Supabase pooler, Resend) and listens on 8788
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

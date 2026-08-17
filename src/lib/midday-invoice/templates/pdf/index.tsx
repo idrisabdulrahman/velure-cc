@@ -34,10 +34,15 @@ export async function PdfTemplate({
 	let qrCode = null;
 
 	if (template.includeQr) {
-		qrCode = await QRCodeUtil.toDataURL(`https://app.midday.ai/i/${token}`, {
-			margin: 0,
-			width: 40 * 3,
-		});
+		const origin =
+			process.env.SITE_URL ?? process.env.VITE_SITE_URL ?? "https://velure.app";
+		qrCode = await QRCodeUtil.toDataURL(
+			`${origin.replace(/\/$/, "")}/i/${token}`,
+			{
+				margin: 0,
+				width: 40 * 3,
+			},
+		);
 	}
 
 	return (
@@ -122,9 +127,7 @@ export async function PdfTemplate({
 
 				<View
 					style={{
-						flex: 1,
 						flexDirection: "column",
-						justifyContent: "flex-end",
 					}}
 				>
 					<Summary

@@ -51,9 +51,9 @@ function FeaturesPage() {
 							"Store client contacts, billing terms, tax IDs, currency, internal notes, and invoice history together.",
 					},
 					{
-						title: "Sync accounting context.",
+						title: "Accounting connection points.",
 						description:
-							"Push cleaned invoice and client records to QuickBooks or Xero when finance needs system-of-record continuity.",
+							"Prepare cleaned invoice and client records for QuickBooks or Xero import when finance needs system-of-record continuity.",
 					},
 				]}
 			/>

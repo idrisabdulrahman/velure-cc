@@ -602,6 +602,27 @@ export const recordPaystackPaymentInternal = internalMutation({
 	},
 });
 
+/**
+ * Constant-time string comparison for secret verification.
+ *
+ * Uses a pure-JS XOR accumulation rather than `node:crypto.timingSafeEqual`,
+ * which is unavailable in Convex's default V8 runtime. The length check is
+ * deliberately combined into the accumulator (length mismatch forces a
+ * non-zero result) and every byte of the longer input is still visited so the
+ * loop does not short-circuit on the first differing byte.
+ */
+function constantTimeEqual(a: string, b: string): boolean {
+	const aBytes = new TextEncoder().encode(a);
+	const bBytes = new TextEncoder().encode(b);
+	const length = Math.max(aBytes.length, bBytes.length);
+
+	let mismatch = aBytes.length ^ bBytes.length;
+	for (let i = 0; i < length; i++) {
+		mismatch |= (aBytes[i] ?? 0) ^ (bBytes[i] ?? 0);
+	}
+	return mismatch === 0;
+}
+
 export const confirmPaystackWebhookPayment = mutation({
 	args: {
 		webhookSecret: v.string(),
@@ -615,10 +636,11 @@ export const confirmPaystackWebhookPayment = mutation({
 		rawEvent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		if (
-			!env.PAYSTACK_SECRET_KEY ||
-			args.webhookSecret !== env.PAYSTACK_SECRET_KEY
-		) {
+		if (!env.PAYSTACK_SECRET_KEY) {
+			throw new Error("Unauthorized webhook confirmation.");
+		}
+
+		if (!constantTimeEqual(env.PAYSTACK_SECRET_KEY, args.webhookSecret)) {
 			throw new Error("Unauthorized webhook confirmation.");
 		}
 

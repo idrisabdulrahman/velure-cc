@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getServerConvexClient } from "#/server/convex";
-import { api } from "../../../../../convex/_generated/api";
+import { api } from "#convex/_generated/api";
 
 async function handle({ request }: { request: Request }) {
 	const url = new URL(request.url);

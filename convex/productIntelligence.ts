@@ -179,15 +179,17 @@ export function buildProductIntelligence({
 			if (!item.productId) continue;
 			const metric = metrics.get(item.productId);
 			if (!metric) continue;
+			const invoiceId = invoiceIdFor(invoice);
+			const firstProductUseOnInvoice = !metric._invoiceIds.has(invoiceId);
 
 			const lineRevenue = item.quantity * item.price;
 			const customerName = invoice.customerName.trim() || "Unknown customer";
 			const normalizedCustomer = normalizeCustomerName(customerName);
 
-			metric.usageCount += 1;
+			if (firstProductUseOnInvoice) metric.usageCount += 1;
 			metric.quantitySold += item.quantity;
 			metric.revenue += lineRevenue;
-			metric._invoiceIds.add(invoiceIdFor(invoice));
+			metric._invoiceIds.add(invoiceId);
 			if (normalizedCustomer) metric._customerNames.add(normalizedCustomer);
 
 			if (invoiceTime >= recentStart) {

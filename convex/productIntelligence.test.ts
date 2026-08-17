@@ -118,6 +118,45 @@ describe("product intelligence", () => {
 		).toBe(0);
 	});
 
+	it("counts one product usage per invoice while preserving all line revenue", () => {
+		const result = buildProductIntelligence({
+			products,
+			now: new Date("2026-06-23T00:00:00.000Z"),
+			invoices: [
+				{
+					_id: "inv-split",
+					invoiceNumber: "INV-SPLIT",
+					customerName: "Acme Ltd",
+					currency: "NGN",
+					issueDate: "2026-06-01",
+					lineItems: [
+						{
+							name: "Retainer A",
+							quantity: 1,
+							price: 100_000,
+							productId: "retainer",
+						},
+						{
+							name: "Retainer B",
+							quantity: 2,
+							price: 50_000,
+							productId: "retainer",
+						},
+					],
+				},
+			],
+		});
+
+		expect(
+			result.products.find((item) => item.productId === "retainer"),
+		).toMatchObject({
+			usageCount: 1,
+			invoiceCount: 1,
+			quantitySold: 3,
+			revenue: 200_000,
+		});
+	});
+
 	it("flags declining products by comparing recent and previous revenue windows", () => {
 		const result = buildProductIntelligence({
 			products,

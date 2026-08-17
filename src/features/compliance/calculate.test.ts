@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateInvoiceCompliance } from "./calculate";
+import { calculateInvoiceCompliance, roundCurrency } from "./calculate";
 
 describe("calculateInvoiceCompliance", () => {
 	const lineItems = [{ quantity: 2, price: 100_000 }];
@@ -62,5 +62,33 @@ describe("calculateInvoiceCompliance", () => {
 		expect(result.warnings).toContain("legacy_wht_mapping");
 		expect(result.warnings).toContain("manual_wht_override");
 		expect(result.withholding.rate).toBe(10);
+	});
+
+	it("rounds decimal VAT and WHT through the same currency boundary", () => {
+		const result = calculateInvoiceCompliance({
+			seller: { legalName: "Acme", countryCode: "NG", taxId: "1234567890" },
+			buyer: { legalName: "Client", countryCode: "NG" },
+			sellerTaxStatus: "vat_registered",
+			withholding: {
+				category: "professional_fees",
+				recipientEntityType: "corporate",
+				recipientResidency: "resident",
+			},
+			lineItems: [{ quantity: 1, price: 1.005 }],
+		});
+
+		expect(result.subtotal).toBe(1.01);
+		expect(result.totalTax).toBe(0.08);
+		expect(result.grandTotal).toBe(1.09);
+		expect(result.withholdingTaxAmount).toBe(0.05);
+		expect(result.netPayable).toBe(1.04);
+	});
+});
+
+describe("roundCurrency", () => {
+	it("rounds positive and negative half-cent values", () => {
+		expect(roundCurrency(1.005)).toBe(1.01);
+		expect(roundCurrency(-1.005)).toBe(-1.01);
+		expect(roundCurrency(Number.NaN)).toBe(0);
 	});
 });

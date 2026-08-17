@@ -1,4 +1,3 @@
-export const NIGERIA_VAT_RATE = 7.5;
 export const NIGERIA_AUTHORITY_LABEL = "Nigeria Revenue Service (NRS)";
 export const NIGERIA_TAX_RULE_SET_VERSION = "ng-2026-q1";
 export const NIGERIA_FOREIGN_CURRENCY_WARNING =
@@ -49,6 +48,144 @@ export type WithholdingSnapshot = {
 	legacyPreset?: LegacyWithholdingTaxPreset;
 };
 
+/**
+ * Versioned Nigeria tax rules. Rates are expressed as percentages and belong
+ * to an explicit rule set with an effective window and the issuing authority.
+ * Changing a rate means adding a new rule set and moving the current pointer
+ * (`NIGERIA_TAX_RULE_SET_VERSION`) — never editing a row in place.
+ */
+export type NigeriaWithholdingRateTable = {
+	resident: number;
+	nonResident: number;
+};
+
+export type NigeriaTaxRuleSet = {
+	id: string;
+	label: string;
+	authority: string;
+	/** ISO date the rule set became the effective source of truth. */
+	effectiveFrom: string;
+	/** ISO date the rule set stopped being effective. Absent while current. */
+	effectiveTo?: string;
+	/** Standard VAT percentage for taxable supplies. */
+	vatRate: number;
+	withholdingRates: Record<WithholdingCategory, NigeriaWithholdingRateTable>;
+};
+
+const WHT_RATES: Record<WithholdingCategory, NigeriaWithholdingRateTable> = {
+	none: { resident: 0, nonResident: 0 },
+	goods_materials: { resident: 2, nonResident: 0 },
+	general_services: { resident: 2, nonResident: 5 },
+	major_construction: { resident: 2, nonResident: 5 },
+	telecom_colocation: { resident: 2, nonResident: 5 },
+	professional_fees: { resident: 5, nonResident: 10 },
+	other_construction: { resident: 5, nonResident: 10 },
+	brokerage: { resident: 5, nonResident: 10 },
+	rent_hire_lease: { resident: 10, nonResident: 10 },
+};
+
+/**
+ * The full Nigeria rule-set history. Append-only: a rule set is added when the
+ * authority changes a rate, and `effectiveTo` is set on the retired set.
+ */
+const currentNigeriaRuleSet: NigeriaTaxRuleSet = {
+	id: NIGERIA_TAX_RULE_SET_VERSION,
+	label: "Nigeria 2026 Q1 tax rules",
+	authority: NIGERIA_AUTHORITY_LABEL,
+	effectiveFrom: "2026-01-01",
+	vatRate: 7.5,
+	withholdingRates: WHT_RATES,
+};
+
+export const NIGERIA_TAX_RULE_SETS: readonly NigeriaTaxRuleSet[] = [
+	currentNigeriaRuleSet,
+];
+
+/**
+ * Rule-set ids earlier Velure versions wrote into workspaces before rule sets
+ * were versioned. They all represented the same Nigeria rules; the read path
+ * resolves them and the write path normalizes them to the canonical id.
+ */
+const LEGACY_RULE_SET_ALIASES: Readonly<Record<string, string>> = {
+	"ng-nrs-2026.1": NIGERIA_TAX_RULE_SET_VERSION,
+	"NG-2026-v1": NIGERIA_TAX_RULE_SET_VERSION,
+};
+
+export type NigeriaRuleSetStatus =
+	| "current"
+	| "legacy_alias"
+	| "superseded"
+	| "unknown";
+
+export function getNigeriaRuleSet(
+	versionId: string | null | undefined,
+): NigeriaTaxRuleSet | undefined {
+	if (!versionId) return undefined;
+	return NIGERIA_TAX_RULE_SETS.find((ruleSet) => ruleSet.id === versionId);
+}
+
+/** Maps legacy ids and the canonical id to a canonical rule-set id. */
+export function resolveNigeriaRuleSetId(
+	versionId: string | null | undefined,
+): string {
+	if (!versionId) return NIGERIA_TAX_RULE_SET_VERSION;
+	return LEGACY_RULE_SET_ALIASES[versionId] ?? versionId;
+}
+
+/**
+ * Resolves any stored version string to a real rule set. Unknown versions fall
+ * back to the current rule set so tax calculation never silently zeroes out.
+ */
+export function resolveNigeriaRuleSet(
+	versionId: string | null | undefined,
+): NigeriaTaxRuleSet {
+	const canonical = resolveNigeriaRuleSetId(versionId);
+	return getNigeriaRuleSet(canonical) ?? currentNigeriaRuleSet;
+}
+
+export function isKnownNigeriaRuleSetVersion(
+	versionId: string | null | undefined,
+): boolean {
+	if (!versionId) return false;
+	return getNigeriaRuleSet(resolveNigeriaRuleSetId(versionId)) !== undefined;
+}
+
+/**
+ * Classifies a stored version string for display. `legacy_alias` means an old
+ * Velure default id that resolves to the current rules; `superseded` means a
+ * known rule set that is no longer current; `unknown` needs review.
+ */
+export function classifyNigeriaRuleSetVersion(
+	versionId: string | null | undefined,
+): NigeriaRuleSetStatus {
+	if (!versionId) return "unknown";
+	if (versionId === NIGERIA_TAX_RULE_SET_VERSION) return "current";
+	if (LEGACY_RULE_SET_ALIASES[versionId]) return "legacy_alias";
+	return getNigeriaRuleSet(versionId) ? "superseded" : "unknown";
+}
+
+/**
+ * Write-boundary guard for workspace rule-set versions. Accepts the canonical
+ * id and known legacy aliases (normalizing them to the canonical id) and
+ * rejects anything else so stale or typo'd versions cannot be stored.
+ */
+export function normalizeRuleSetVersionForWrite(
+	versionId: string | null | undefined,
+): string {
+	if (!versionId) {
+		throw new Error("A Nigeria tax rule set version is required.");
+	}
+	const canonical = resolveNigeriaRuleSetId(versionId);
+	if (!getNigeriaRuleSet(canonical)) {
+		throw new Error(
+			`Unknown Nigeria tax rule set "${versionId}". Update the workspace to a known rule set.`,
+		);
+	}
+	return canonical;
+}
+
+export const NIGERIA_VAT_RATE = currentNigeriaRuleSet.vatRate;
+
 export function defaultTaxTreatmentForSellerTaxStatus(
 	status?: SellerTaxStatus,
 ) {
@@ -75,29 +212,17 @@ export function resolveWithholdingRate(input: {
 	recipientResidency: WithholdingRecipientResidency;
 	manualOverride?: boolean;
 	rate?: number;
+	ruleSetVersion?: string;
 }) {
 	if (input.manualOverride && typeof input.rate === "number") {
 		return input.rate;
 	}
 
-	switch (input.category) {
-		case "none":
-			return 0;
-		case "goods_materials":
-			return input.recipientResidency === "resident" ? 2 : 0;
-		case "general_services":
-		case "major_construction":
-		case "telecom_colocation":
-			return input.recipientResidency === "resident" ? 2 : 5;
-		case "professional_fees":
-		case "other_construction":
-		case "brokerage":
-			return input.recipientResidency === "resident" ? 5 : 10;
-		case "rent_hire_lease":
-			return 10;
-		default:
-			return 0;
-	}
+	const ruleSet = resolveNigeriaRuleSet(input.ruleSetVersion);
+	const table = ruleSet.withholdingRates[input.category];
+	return input.recipientResidency === "resident"
+		? table.resident
+		: table.nonResident;
 }
 
 export function withholdingLabelForCategory(category: WithholdingCategory) {

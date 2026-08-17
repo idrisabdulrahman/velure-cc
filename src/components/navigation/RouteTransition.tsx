@@ -1,4 +1,4 @@
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import type { ReactNode } from "react";
 import { cn } from "#/utils/cn";
 
@@ -13,20 +13,14 @@ export function RouteTransition({
 	children,
 	className,
 }: RouteTransitionProps) {
-	const shouldReduceMotion = useReducedMotion();
-
-	if (shouldReduceMotion) {
-		return <div className={className}>{children}</div>;
-	}
-
 	return (
 		<AnimatePresence mode="popLayout" initial={false}>
 			<motion.div
 				key={routeKey}
 				className={cn("w-full", className)}
-				initial={{ opacity: 0, y: 8, filter: "blur(2px)" }}
-				animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-				exit={{ opacity: 0, y: -4, filter: "blur(1px)" }}
+				initial={{ opacity: 0, y: 8 }}
+				animate={{ opacity: 1, y: 0 }}
+				exit={{ opacity: 0 }}
 				transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
 			>
 				{children}

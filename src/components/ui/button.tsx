@@ -4,20 +4,19 @@ import * as React from "react";
 import { cn } from "../../utils";
 
 const buttonVariants = cva(
-	"inline-flex items-center justify-center text-sm font-medium transition-[transform,opacity,background-color,border-color,color] duration-[110ms] ease-out focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_rgba(200,255,98,0.38)] disabled:pointer-events-none disabled:opacity-50",
+	"inline-flex items-center justify-center rounded-[var(--hm-r-input)] text-sm font-medium transition-[transform,opacity,background-color,border-color,color] duration-[110ms] ease-out focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus)] disabled:pointer-events-none disabled:opacity-50",
 	{
 		variants: {
 			variant: {
 				default:
-					"border border-[#c8ff62] bg-[#c8ff62] font-bold text-[#0f1111] hover:bg-[#d5ff7a]",
+					"border border-brand bg-brand font-bold text-brand-ink hover:bg-brand-hi",
 				destructive:
 					"bg-destructive text-destructive-foreground hover:bg-destructive/90",
 				outline:
-					"border border-[#30352f] bg-[#171a18] text-[#d8d1c4] hover:border-[#c8ff62]/50 hover:bg-[#1a2117] hover:text-[#f2efe7]",
-				secondary:
-					"border border-[#30352f] bg-[#121514] text-[#d8d1c4] hover:bg-[#20241f]",
-				ghost: "text-[#d8d1c4] hover:bg-[#1a2117] hover:text-[#f2efe7]",
-				link: "text-[#c8ff62] underline-offset-4 hover:underline",
+					"border border-rule bg-paper-2 text-ink-2 hover:border-brand/50 hover:bg-brand-soft hover:text-ink",
+				secondary: "border border-rule bg-paper-3 text-ink-2 hover:bg-paper-3",
+				ghost: "text-ink-2 hover:bg-brand-soft hover:text-ink",
+				link: "text-brand underline-offset-4 hover:underline",
 			},
 			size: {
 				default: "h-9 px-4 py-2",
@@ -44,8 +43,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 		const Comp = asChild ? Slot : "button";
 		const isPrimaryVariant = variant === "default";
 		const motionClass = isPrimaryVariant
-			? "duration-[150ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] active:scale-[0.96]"
-			: "duration-[110ms] ease-out active:scale-[0.94]";
+			? "duration-[200ms] ease-out active:translate-y-px"
+			: "duration-[110ms] ease-out active:translate-y-px";
 		return (
 			<Comp
 				className={cn(

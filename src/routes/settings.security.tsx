@@ -111,14 +111,14 @@ function SecuritySettingsPage() {
 	if (sessionPending || loading) {
 		return (
 			<div className="flex min-h-[50vh] items-center justify-center">
-				<Loader2 className="h-6 w-6 animate-spin text-[#c8ff62]" />
+				<Loader2 className="h-6 w-6 animate-spin text-brand" />
 			</div>
 		);
 	}
 
 	if (!session?.user) {
 		return (
-			<div className="rounded-md border border-[#30352f] bg-[#171a18] p-6 text-sm text-[#aaa294]">
+			<div className="rounded-md border border-rule bg-paper-2 p-6 text-sm text-ink-3">
 				Sign in to manage security settings.
 			</div>
 		);
@@ -127,17 +127,17 @@ function SecuritySettingsPage() {
 	return (
 		<div className="mx-auto w-full max-w-3xl space-y-6">
 			<div>
-				<h1 className="text-3xl font-semibold tracking-[-0.02em] text-[#f2efe7]">
+				<h1 className="text-3xl font-semibold tracking-[-0.02em] text-ink">
 					Security
 				</h1>
-				<p className="mt-2 text-sm text-[#aaa294]">
+				<p className="mt-2 text-sm text-ink-3">
 					Manage the sign-in providers attached to this account.
 				</p>
 			</div>
 
-			<section className="ui-panel rounded-md border border-[#30352f] bg-[#171a18]">
-				<div className="flex items-center justify-between gap-3 border-b border-[#30352f] px-5 py-4">
-					<p className="text-sm font-medium text-[#f2efe7]">
+			<section className="ui-panel rounded-md border border-rule bg-paper-2">
+				<div className="flex items-center justify-between gap-3 border-b border-rule px-5 py-4">
+					<p className="text-sm font-medium text-ink">
 						Linked sign-in providers
 					</p>
 					<Button
@@ -146,14 +146,14 @@ function SecuritySettingsPage() {
 							void refreshData();
 						}}
 						variant="outline"
-						className="h-9 rounded-md border-[#30352f] bg-transparent text-sm text-[#d8d1c4] hover:bg-[#20241f]"
+						className="h-9 rounded-md border-rule bg-transparent text-sm text-ink-2 hover:bg-paper-3"
 					>
 						Refresh
 					</Button>
 				</div>
 
 				<div className="space-y-3 px-5 py-5">
-					<p className="text-sm leading-6 text-[#aaa294]">
+					<p className="text-sm leading-6 text-ink-3">
 						Velure uses provider records internally to keep password and Google
 						sign-in attached to the same account. Users do not need those
 						internal identifiers.
@@ -161,18 +161,18 @@ function SecuritySettingsPage() {
 					{accounts.map((account) => (
 						<div
 							key={account.id}
-							className="flex flex-col gap-3 rounded-md border border-[#30352f] bg-[#0f1111] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+							className="flex flex-col gap-3 rounded-md border border-rule bg-paper px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
 						>
 							<div>
-								<p className="text-sm font-medium capitalize text-[#f2efe7]">
+								<p className="text-sm font-medium capitalize text-ink">
 									{providerLabel(account.providerId)}
 								</p>
-								<p className="mt-1 max-w-md text-sm leading-6 text-[#aaa294]">
+								<p className="mt-1 max-w-md text-sm leading-6 text-ink-3">
 									{providerDescription(account.providerId)}
 								</p>
 							</div>
 							<div className="flex items-center gap-2">
-								<span className="inline-flex h-8 items-center rounded-md border border-[#30352f] px-3 text-xs font-medium text-[#aaa294]">
+								<span className="inline-flex h-8 items-center rounded-md border border-rule px-3 text-xs font-medium text-ink-3">
 									Linked
 								</span>
 								{account.providerId !== "credential" && linkedCredential ? (
@@ -182,7 +182,7 @@ function SecuritySettingsPage() {
 											void unlinkAccount(account.providerId, account.accountId);
 										}}
 										variant="outline"
-										className="h-9 rounded-md border-[#5d4747] bg-transparent text-sm text-[#d48f8f] hover:bg-[#2a1f1f]"
+										className="h-9 rounded-md border-danger-line bg-transparent text-sm text-danger hover:bg-danger-soft"
 									>
 										Unlink
 									</Button>
@@ -192,13 +192,13 @@ function SecuritySettingsPage() {
 					))}
 
 					{accounts.length === 0 ? (
-						<div className="flex items-start gap-3 rounded-md border border-[#30352f] bg-[#0f1111] p-4">
-							<ShieldCheck className="mt-0.5 h-5 w-5 text-[#c8ff62]" />
+						<div className="flex items-start gap-3 rounded-md border border-rule bg-paper p-4">
+							<ShieldCheck className="mt-0.5 h-5 w-5 text-brand" />
 							<div>
-								<p className="text-sm font-medium text-[#f2efe7]">
+								<p className="text-sm font-medium text-ink">
 									No linked providers yet
 								</p>
-								<p className="mt-1 text-sm text-[#aaa294]">
+								<p className="mt-1 text-sm text-ink-3">
 									Add Google or keep using your password credential to access
 									this workspace.
 								</p>
@@ -207,11 +207,11 @@ function SecuritySettingsPage() {
 					) : null}
 
 					{!linkedGoogle ? (
-						<div className="rounded-md border border-[#30352f] bg-[#0f1111] p-4">
-							<p className="text-sm font-medium text-[#f2efe7]">
+						<div className="rounded-md border border-rule bg-paper p-4">
+							<p className="text-sm font-medium text-ink">
 								Link your Google account
 							</p>
-							<p className="mt-1 text-sm text-[#aaa294]">
+							<p className="mt-1 text-sm text-ink-3">
 								Add Google as another way to access this account.
 							</p>
 							<Button
@@ -220,13 +220,13 @@ function SecuritySettingsPage() {
 									void linkGoogle();
 								}}
 								disabled={linkingGoogle}
-								className="mt-4 h-10 rounded-md bg-[#c8ff62] px-4 text-sm font-medium text-[#0f1111] hover:bg-[#d5ff7a]"
+								className="mt-4 h-10 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi"
 							>
 								{linkingGoogle ? "Redirecting..." : "Link Google account"}
 							</Button>
 						</div>
 					) : (
-						<p className="text-sm text-[#c8ff62]">
+						<p className="text-sm text-brand">
 							Google is already linked to this account.
 						</p>
 					)}
@@ -234,7 +234,7 @@ function SecuritySettingsPage() {
 			</section>
 
 			{errorMessage ? (
-				<p className="rounded-md border border-[#5d4747] bg-[#2a1f1f] px-4 py-3 text-sm text-[#efb1b1]">
+				<p className="rounded-md border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger">
 					{errorMessage}
 				</p>
 			) : null}

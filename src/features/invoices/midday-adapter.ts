@@ -1,22 +1,22 @@
 import { calculateInvoiceCompliance } from "#/features/compliance/calculate";
 import { NIGERIA_AUTHORITY_LABEL } from "#/features/compliance/nigeria";
 import type {
+	EditorDoc,
+	EditorNode,
 	Invoice as MiddayInvoice,
 	Template,
 } from "#/lib/midday-invoice/types";
 import { normalizeCurrencyCode, resolveCurrencyLocale } from "./format";
 import type { InvoiceRecord } from "./types";
 
-type EditorDoc = {
-	type: "doc";
-	content: Array<{
-		type: "paragraph";
-		content: Array<{ type: "text"; text: string }>;
-	}>;
-};
-
-function toEditorDoc(text: string | null | undefined): EditorDoc | null {
-	if (!text || text.trim().length === 0) return null;
+export function toEditorDoc(
+	text: string | EditorDoc | null | undefined,
+): EditorDoc | null {
+	if (!text) return null;
+	if (typeof text === "object") {
+		return text.content?.length ? text : null;
+	}
+	if (text.trim().length === 0) return null;
 
 	const paragraphs = text
 		.split("\n")
@@ -32,6 +32,14 @@ function toEditorDoc(text: string | null | undefined): EditorDoc | null {
 			content: [{ type: "text", text: line }],
 		})),
 	};
+}
+
+export function mergeDocBlocks(docs: Array<EditorDoc | null | undefined>) {
+	const blocks: EditorNode[] = [];
+	for (const doc of docs) {
+		if (doc) blocks.push(...doc.content);
+	}
+	return blocks.length ? { type: "doc" as const, content: blocks } : null;
 }
 
 function amountFromLineItems(invoice: InvoiceRecord) {
@@ -72,30 +80,34 @@ function buildTemplate(invoice: InvoiceRecord): Template {
 			lineItems: invoice.lineItems,
 		});
 
+	const settings = invoice.templateSettings ?? {};
 	return {
-		customerLabel: "To",
-		title: isProforma ? "Pro-forma Invoice" : "Invoice",
-		fromLabel: "From",
-		invoiceNoLabel: isProforma ? "Pro-forma No" : "Invoice No",
-		issueDateLabel: "Issue Date",
-		dueDateLabel: "Due Date",
-		descriptionLabel: "Description",
-		priceLabel: "Price",
-		quantityLabel: "Quantity",
-		totalLabel: "Total",
-		totalSummaryLabel: "Total",
+		customerLabel: settings.customerLabel ?? "To",
+		title: settings.title ?? (isProforma ? "Pro-forma Invoice" : "Invoice"),
+		fromLabel: settings.fromLabel ?? "From",
+		invoiceNoLabel:
+			settings.invoiceNoLabel ?? (isProforma ? "Pro-forma No" : "Invoice No"),
+		issueDateLabel: settings.issueDateLabel ?? "Issue Date",
+		dueDateLabel: settings.dueDateLabel ?? "Due Date",
+		descriptionLabel: settings.descriptionLabel ?? "Description",
+		priceLabel: settings.priceLabel ?? "Price",
+		quantityLabel: settings.quantityLabel ?? "Quantity",
+		totalLabel: settings.totalLabel ?? "Total",
+		totalSummaryLabel: settings.totalSummaryLabel ?? "Total",
 		vatLabel: "VAT",
-		subtotalLabel: "Subtotal",
+		subtotalLabel: settings.subtotalLabel ?? "Subtotal",
 		taxLabel: "Tax",
-		discountLabel: "Discount",
+		discountLabel: settings.discountLabel ?? "Discount",
 		withholdingTaxLabel: compliance.withholdingTaxLabel,
 		netAmountLabel:
 			compliance.withholding.category === "none"
 				? "Amount Payable"
 				: "Net Amount Payable",
 		timezone: "UTC",
-		paymentLabel: isProforma ? "Deposit / Payment Details" : "Payment Details",
-		noteLabel: "Note",
+		paymentLabel:
+			settings.paymentLabel ??
+			(isProforma ? "Deposit / Payment Details" : "Payment Details"),
+		noteLabel: settings.noteLabel ?? "Note",
 		logoUrl: invoice.logoUrl?.trim() ? invoice.logoUrl.trim() : null,
 		currency,
 		paymentDetails: toEditorDoc(invoice.paymentDetails),
@@ -118,10 +130,10 @@ function buildTemplate(invoice: InvoiceRecord): Template {
 		includeTax:
 			compliance.taxLabel.toUpperCase() !== "VAT" &&
 			compliance.taxLines.length > 0,
-		includeDiscount: false,
-		includeDecimals: true,
-		includeUnits: false,
-		includeQr: false,
+		includeDiscount: settings.includeDiscount ?? false,
+		includeDecimals: settings.includeDecimals ?? true,
+		includeUnits: settings.includeUnits ?? false,
+		includeQr: settings.includeQr ?? false,
 		taxRate:
 			compliance.taxLabel.toUpperCase() === "VAT" ? 0 : compliance.taxRate,
 		vatRate:
@@ -226,25 +238,29 @@ export function toMiddayInvoice(invoice: InvoiceRecord): MiddayInvoice {
 		issueDate: invoice.issueDate,
 		sentAt: null,
 		template,
-		noteDetails: toEditorDoc(
-			[
-				invoice.documentType === "proforma"
-					? "Pro-forma invoice - not a final tax invoice until converted."
-					: null,
-				depositLine,
-				shipmentLines.length > 0 ? shipmentLines.join("\n") : null,
-				invoice.notes,
-				compliance.regulatoryNotice,
-			]
-				.filter(Boolean)
-				.join("\n\n"),
-		),
+		noteDetails: mergeDocBlocks([
+			toEditorDoc(
+				[
+					invoice.documentType === "proforma"
+						? "Pro-forma invoice - not a final tax invoice until converted."
+						: null,
+					depositLine,
+					shipmentLines.length > 0 ? shipmentLines.join("\n") : null,
+				]
+					.filter(Boolean)
+					.join("\n\n"),
+			),
+			typeof invoice.notes === "string"
+				? toEditorDoc(invoice.notes)
+				: invoice.notes,
+			toEditorDoc(compliance.regulatoryNotice),
+		]),
 		customerName,
 		token: invoice.token,
 		sentTo: null,
-		discount: null,
-		topBlock: null,
-		bottomBlock: null,
+		discount: invoice.templateSettings?.discount ?? null,
+		topBlock: invoice.topBlock ?? null,
+		bottomBlock: invoice.bottomBlock ?? null,
 		customer: {
 			name: customerName,
 			website: null,

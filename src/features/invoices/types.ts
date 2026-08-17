@@ -1,4 +1,5 @@
 import type { Id } from "../../../convex/_generated/dataModel";
+import type { EditorDoc } from "../../lib/midday-invoice/types";
 import type {
 	FiscalizationSnapshot,
 	InvoiceComplianceSnapshot,
@@ -12,7 +13,8 @@ export type InvoiceStatus =
 	| "partially-paid"
 	| "paid"
 	| "overdue"
-	| "canceled";
+	| "canceled"
+	| "scheduled";
 
 export type InvoiceLineItem = {
 	id: string;
@@ -20,6 +22,30 @@ export type InvoiceLineItem = {
 	quantity: number;
 	price: number;
 	productId?: Id<"products">;
+	unit?: string;
+};
+
+export type InvoiceTemplateSettings = {
+	title?: string;
+	customerLabel?: string;
+	fromLabel?: string;
+	invoiceNoLabel?: string;
+	issueDateLabel?: string;
+	dueDateLabel?: string;
+	descriptionLabel?: string;
+	quantityLabel?: string;
+	priceLabel?: string;
+	totalLabel?: string;
+	totalSummaryLabel?: string;
+	subtotalLabel?: string;
+	discountLabel?: string;
+	paymentLabel?: string;
+	noteLabel?: string;
+	includeDecimals?: boolean;
+	includeDiscount?: boolean;
+	includeUnits?: boolean;
+	includeQr?: boolean;
+	discount?: number;
 };
 
 export type InvoiceType = "one-time" | "recurring";
@@ -52,11 +78,13 @@ export type LifecycleSnapshot = {
 export type InvoiceRecord = {
 	id: string;
 	token: string;
+	tokenRevokedAt?: number;
 	documentType?: InvoiceDocumentType;
 	convertedToInvoiceId?: Id<"invoices">;
 	shipmentDetails?: InvoiceShipmentDetails;
 	depositRequest?: InvoiceDepositRequest;
 	invoiceNumber: string;
+	customerId?: Id<"clients">;
 	customerName: string;
 	logoUrl?: string;
 	customerPoNumber?: string;
@@ -66,6 +94,9 @@ export type InvoiceRecord = {
 	dateFormat: InvoiceDateFormat;
 	paymentTermsDays: number;
 	template: string;
+	templateSettings?: InvoiceTemplateSettings;
+	topBlock?: EditorDoc;
+	bottomBlock?: EditorDoc;
 	issueDate: string;
 	dueDate: string;
 	status: InvoiceStatus;
@@ -77,10 +108,13 @@ export type InvoiceRecord = {
 	paymentProvider?: "manual" | "paystack";
 	paidAt?: number;
 	paymentReference?: string;
+	finalizedAt?: number;
+	scheduledAt?: number;
 	deliveredAt?: number;
 	canceledAt?: number;
 	deletedAt?: number;
-	notes?: string;
+	notes?: string | EditorDoc;
+	internalNotes?: string;
 	lineItems: InvoiceLineItem[];
 	compliance?: InvoiceComplianceSnapshot;
 	fiscalization?: FiscalizationSnapshot;

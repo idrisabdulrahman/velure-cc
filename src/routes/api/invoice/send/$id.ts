@@ -9,7 +9,7 @@ import {
 	recordInvoiceDeliveryEvent,
 } from "#/server/invoice-repository";
 import { renderInvoicePdf } from "#/server/pdf";
-import { api } from "../../../../../convex/_generated/api";
+import { api } from "#convex/_generated/api";
 
 function isValidEmail(value: string) {
 	return /^\S+@\S+\.\S+$/.test(value);

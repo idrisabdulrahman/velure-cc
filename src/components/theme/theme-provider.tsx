@@ -22,10 +22,16 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 function readStoredTheme(): Theme {
 	if (typeof window === "undefined") return "dark";
 
-	const storedTheme = window.localStorage.getItem(themeStorageKey);
-	return storedTheme === "light" || storedTheme === "dark"
-		? storedTheme
-		: "dark";
+	try {
+		const storedTheme = window.localStorage.getItem(themeStorageKey);
+		return storedTheme === "light" || storedTheme === "dark"
+			? storedTheme
+			: "dark";
+	} catch {
+		// Storage unavailable (private mode, blocked cookies) — keep the
+		// default. The inline head script already guards with try/catch too.
+		return "dark";
+	}
 }
 
 function applyTheme(theme: Theme) {
@@ -48,7 +54,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 	useEffect(() => {
 		applyTheme(theme);
-		window.localStorage.setItem(themeStorageKey, theme);
+		try {
+			window.localStorage.setItem(themeStorageKey, theme);
+		} catch {
+			// Storage unavailable — theme still applies for this session.
+		}
 	}, [theme]);
 
 	const changeTheme = useCallback(

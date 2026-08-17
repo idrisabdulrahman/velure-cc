@@ -19,7 +19,7 @@ const DialogOverlay = React.forwardRef<
 	<DialogPrimitive.Overlay
 		ref={ref}
 		className={cn(
-			"fixed inset-0 z-50 bg-[#050606]/82 backdrop-blur-[3px] transition-[opacity,background-color] data-[state=open]:opacity-100 data-[state=closed]:opacity-0 data-[state=open]:duration-[220ms] data-[state=closed]:duration-[180ms] data-[state=open]:ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:ease-out",
+			"fixed inset-0 z-50 bg-[var(--hm-scrim)] transition-[opacity,background-color] data-[state=open]:opacity-100 data-[state=closed]:opacity-0 data-[state=open]:duration-[220ms] data-[state=closed]:duration-[180ms] data-[state=open]:ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:ease-out",
 			className,
 		)}
 		{...props}
@@ -38,7 +38,7 @@ const DialogContent = React.forwardRef<
 		<DialogPrimitive.Content
 			ref={ref}
 			className={cn(
-				"vl-ledger-bg fixed left-1/2 top-1/2 z-50 max-h-[calc(100svh-10vw)] w-[90vw] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto border border-[#30352f] bg-[#0f1111] text-[#f2efe7] shadow-[0_24px_80px_rgba(0,0,0,0.42)] transition-[transform,opacity,background-color,border-color,color] data-[state=open]:translate-x-[-50%] data-[state=open]:translate-y-[-50%] data-[state=open]:opacity-100 data-[state=closed]:translate-x-[-50%] data-[state=closed]:translate-y-[calc(-50%+8px)] data-[state=closed]:opacity-0 data-[state=open]:duration-[220ms] data-[state=closed]:duration-[180ms] data-[state=open]:ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:ease-out dark:p-px",
+				"vl-ledger-bg fixed left-1/2 top-1/2 z-50 max-h-[calc(100svh-10vw)] w-[90vw] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto border border-rule bg-paper text-ink shadow-[0_24px_80px_rgba(0,0,0,0.42)] transition-[transform,opacity,background-color,border-color,color] data-[state=open]:translate-x-[-50%] data-[state=open]:translate-y-[-50%] data-[state=open]:opacity-100 data-[state=closed]:translate-x-[-50%] data-[state=closed]:translate-y-[calc(-50%+8px)] data-[state=closed]:opacity-0 data-[state=open]:duration-[220ms] data-[state=closed]:duration-[180ms] data-[state=open]:ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:ease-out dark:p-px",
 				className,
 			)}
 			{...props}
@@ -46,7 +46,7 @@ const DialogContent = React.forwardRef<
 			{children}
 
 			{!hideClose && (
-				<DialogPrimitive.Close className="absolute right-6 top-6 inline-flex h-8 w-8 items-center justify-center border border-transparent bg-transparent text-current opacity-70 transition-[transform,opacity,background-color,border-color,color] duration-[110ms] ease-out hover:border-[#30352f] hover:bg-[#1a2117] hover:opacity-100 active:scale-[0.94] focus:outline-none focus-visible:shadow-[0_0_0_2px_rgba(200,255,98,0.24)] disabled:pointer-events-none">
+				<DialogPrimitive.Close className="absolute right-6 top-6 inline-flex h-8 w-8 items-center justify-center border border-transparent bg-transparent text-current opacity-70 transition-[transform,opacity,background-color,border-color,color] duration-[110ms] ease-out hover:border-rule hover:bg-paper-2 hover:opacity-100 active:translate-y-px focus:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus)] disabled:pointer-events-none">
 					<Cross2Icon className="h-4 w-4" />
 					<span className="sr-only">Close</span>
 				</DialogPrimitive.Close>
@@ -65,7 +65,7 @@ const DialogContentFrameless = React.forwardRef<
 		<DialogPrimitive.Content
 			ref={ref}
 			className={cn(
-				"vl-ledger-bg fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-xl -translate-x-1/2 -translate-y-1/2 border border-[#30352f] bg-[#0f1111] text-[#f2efe7] transition-[transform,opacity,background-color,border-color,color] data-[state=open]:translate-x-[-50%] data-[state=open]:translate-y-[-50%] data-[state=open]:opacity-100 data-[state=closed]:translate-x-[-50%] data-[state=closed]:translate-y-[calc(-50%+8px)] data-[state=closed]:opacity-0 data-[state=open]:duration-[220ms] data-[state=closed]:duration-[180ms] data-[state=open]:ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:ease-out dark:border-none dark:p-px",
+				"vl-ledger-bg fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-xl -translate-x-1/2 -translate-y-1/2 border border-rule bg-paper text-ink transition-[transform,opacity,background-color,border-color,color] data-[state=open]:translate-x-[-50%] data-[state=open]:translate-y-[-50%] data-[state=open]:opacity-100 data-[state=closed]:translate-x-[-50%] data-[state=closed]:translate-y-[calc(-50%+8px)] data-[state=closed]:opacity-0 data-[state=open]:duration-[220ms] data-[state=closed]:duration-[180ms] data-[state=open]:ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:ease-out dark:border-none dark:p-px",
 				className,
 			)}
 			{...props}
@@ -121,7 +121,7 @@ const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
 	<DialogPrimitive.Description
 		ref={ref}
-		className={cn("text-sm text-[#817d72]", className)}
+		className={cn("text-sm text-ink-3", className)}
 		{...props}
 	/>
 ));

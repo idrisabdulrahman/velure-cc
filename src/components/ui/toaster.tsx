@@ -37,19 +37,19 @@ export function Toaster() {
 											{props?.variant && (
 												<div className="w-[20px] h-[20px] flex items-center">
 													{props.variant === "ai" && (
-														<Icons.AI className="text-[#7fd5c8]" />
+														<Icons.AI className="text-info" />
 													)}
 													{props?.variant === "success" && (
-														<Icons.Check className="text-[#c8ff62]" />
+														<Icons.Check className="text-brand" />
 													)}
 													{props?.variant === "error" && (
-														<Icons.Error className="text-[#ef7777]" />
+														<Icons.Error className="text-danger" />
 													)}
 													{props?.variant === "progress" && (
-														<Spinner className="h-4 w-4 animate-spin !stroke-[#817d72]" />
+														<Spinner className="h-4 w-4 animate-spin !stroke-ink-3" />
 													)}
 													{props?.variant === "spinner" && (
-														<Spinner className="h-4 w-4 animate-spin !stroke-[#817d72]" />
+														<Spinner className="h-4 w-4 animate-spin !stroke-ink-3" />
 													)}
 												</div>
 											)}
@@ -58,9 +58,7 @@ export function Toaster() {
 
 										<div>
 											{props?.variant === "progress" && (
-												<span className="text-sm text-[#817d72]">
-													{progress}%
-												</span>
+												<span className="text-sm text-ink-3">{progress}%</span>
 											)}
 										</div>
 									</div>
@@ -68,7 +66,7 @@ export function Toaster() {
 									{props.variant === "progress" && (
 										<Progress
 											value={progress}
-											className="h-[3px] w-full rounded-none bg-[#30352f] [&>div]:bg-[#c8ff62] [&>div]:transition-transform [&>div]:duration-500 [&>div]:ease-out"
+											className="h-[3px] w-full rounded-none bg-rule [&>div]:bg-brand [&>div]:transition-transform [&>div]:duration-500 [&>div]:ease-out"
 										/>
 									)}
 

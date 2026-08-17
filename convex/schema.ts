@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { auditActionValidator, auditResultValidator } from "./auditActions";
+import { editorDocValidator } from "./validators";
 
 const jurisdictionValidator = v.union(
 	v.literal("NG"),
@@ -280,6 +281,29 @@ const depositRequestValidator = v.object({
 	dueDate: v.optional(v.string()),
 });
 
+const invoiceTemplateSettingsValidator = v.object({
+	title: v.optional(v.string()),
+	customerLabel: v.optional(v.string()),
+	fromLabel: v.optional(v.string()),
+	invoiceNoLabel: v.optional(v.string()),
+	issueDateLabel: v.optional(v.string()),
+	dueDateLabel: v.optional(v.string()),
+	descriptionLabel: v.optional(v.string()),
+	quantityLabel: v.optional(v.string()),
+	priceLabel: v.optional(v.string()),
+	totalLabel: v.optional(v.string()),
+	totalSummaryLabel: v.optional(v.string()),
+	subtotalLabel: v.optional(v.string()),
+	discountLabel: v.optional(v.string()),
+	paymentLabel: v.optional(v.string()),
+	noteLabel: v.optional(v.string()),
+	includeDecimals: v.optional(v.boolean()),
+	includeDiscount: v.optional(v.boolean()),
+	includeUnits: v.optional(v.boolean()),
+	includeQr: v.optional(v.boolean()),
+	discount: v.optional(v.number()),
+});
+
 export default defineSchema({
 	workspaces: defineTable({
 		ownerId: v.string(),
@@ -313,6 +337,7 @@ export default defineSchema({
 		invoiceNumberPrefix: v.optional(v.string()),
 		nextInvoiceSequence: v.optional(v.number()),
 		defaultTaxProfileId: v.optional(v.id("tax_profiles")),
+		invoiceTemplateDefaults: v.optional(invoiceTemplateSettingsValidator),
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	}).index("by_ownerId", ["ownerId"]),
@@ -431,11 +456,13 @@ export default defineSchema({
 		workspaceId: v.id("workspaces"),
 		userId: v.optional(v.string()),
 		token: v.string(),
+		tokenRevokedAt: v.optional(v.number()),
 		documentType: v.optional(invoiceDocumentTypeValidator),
 		convertedToInvoiceId: v.optional(v.id("invoices")),
 		shipmentDetails: v.optional(shipmentDetailsValidator),
 		depositRequest: v.optional(depositRequestValidator),
 		invoiceNumber: v.string(),
+		customerId: v.optional(v.id("clients")),
 		customerName: v.string(),
 		logoUrl: v.optional(v.string()),
 		customerPoNumber: v.optional(v.string()),
@@ -460,7 +487,11 @@ export default defineSchema({
 		),
 		paidAt: v.optional(v.number()),
 		paymentReference: v.optional(v.string()),
-		notes: v.optional(v.string()),
+		finalizedAt: v.optional(v.number()),
+		scheduledAt: v.optional(v.number()),
+		scheduleVersion: v.optional(v.string()),
+		notes: v.optional(v.union(v.string(), editorDocValidator)),
+		internalNotes: v.optional(v.string()),
 		deletedAt: v.optional(v.number()),
 		lineItems: v.array(
 			v.object({
@@ -469,8 +500,12 @@ export default defineSchema({
 				quantity: v.number(),
 				price: v.number(),
 				productId: v.optional(v.id("products")),
+				unit: v.optional(v.string()),
 			}),
 		),
+		templateSettings: v.optional(invoiceTemplateSettingsValidator),
+		topBlock: v.optional(editorDocValidator),
+		bottomBlock: v.optional(editorDocValidator),
 		compliance: v.optional(complianceSnapshotValidator),
 		fiscalization: v.optional(fiscalizationSnapshotValidator),
 		reminder: v.optional(reminderSnapshotValidator),

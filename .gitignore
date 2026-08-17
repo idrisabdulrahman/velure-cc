@@ -1,5 +1,5 @@
 node_modules/
-.agents/
+ .agents/
 .agent/
 .DS_Store
 dist
@@ -24,3 +24,16 @@ DATAFLOW_TEMPLATE.MD
 ProductStrategy.md
 skills-outsource/
 .mcp.json
+
+# Agent tool state / build output (not project artifacts)
+@/
+.next/
+firstmate/
+prompts/
+.agents/
+.claude/
+.codestudio/
+.commandcode/
+.freebuff/
+.hallmark/
+.zcode/

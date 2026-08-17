@@ -1,0 +1,30 @@
+.ProseMirror-focused {
+	outline: none;
+}
+
+.tiptap {
+	font-size: 0.75rem;
+	line-height: 1.625;
+}
+
+.tiptap h2 {
+	font-size: 1.5rem;
+	margin-bottom: 1.5rem;
+}
+
+.tiptap a {
+	text-decoration: underline;
+}
+
+.tiptap .bubble-menu {
+	display: flex;
+	gap: 0.5rem;
+}
+
+.tiptap p.is-empty::before {
+	color: var(--color-ink-3);
+	content: attr(data-placeholder);
+	float: left;
+	height: 0;
+	pointer-events: none;
+}

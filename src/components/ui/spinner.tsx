@@ -27,7 +27,7 @@ export const Spinner = ({
 			strokeLinecap="round"
 			strokeLinejoin="round"
 			xmlns="http://www.w3.org/2000/svg"
-			className={cn("animate-spin stroke-[#817d72]", className)}
+			className={cn("animate-spin stroke-ink-3", className)}
 			style={{ width: size, height: size, ...style }}
 			{...props}
 		>

@@ -5,6 +5,7 @@ import {
 	Scripts,
 } from "@tanstack/react-router";
 import { MotionConfig } from "framer-motion";
+import { TextSizeProvider } from "#/components/text-size/text-size-provider";
 import { ThemeProvider } from "#/components/theme/theme-provider";
 import { Toaster } from "../components/ui/toaster";
 import ConvexProvider from "../integrations/convex/provider";
@@ -47,7 +48,13 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 		],
 		scripts: [
 			{
-				children: `(function(){try{var e=localStorage.getItem("velure.theme");if(e==="light"){document.documentElement.classList.remove("dark");document.documentElement.classList.add("light")}}catch(e){}})();`,
+				// Applies the persisted theme to <html> before first paint: the CSS
+				// :root default is light, so an unhandled dark preference (also the
+				// app default) would flash white on every reload until hydration.
+				children: `(function(){try{var e=localStorage.getItem("velure.theme");var t=e==="light"?"light":"dark";var r=document.documentElement;r.classList.remove("light","dark");r.classList.add(t);r.style.colorScheme=t}catch(e){}})();`,
+			},
+			{
+				children: `(function(){try{var s=localStorage.getItem("velure.textSize");if(s==="sm"||s==="lg"){document.documentElement.classList.add("text-"+s)}}catch(e){}})();`,
 			},
 		],
 	}),
@@ -56,20 +63,22 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 
 function RootDocument({ children }: { children: React.ReactNode }) {
 	return (
-		<html lang="en">
+		<html lang="en" suppressHydrationWarning>
 			<head>
 				<HeadContent />
 			</head>
 			<body className="bg-background text-foreground antialiased">
 				<ThemeProvider>
-					<ConvexProvider>
-						<TanStackQueryProvider>
-							<MotionConfig reducedMotion="user">
-								{children}
-								<Toaster />
-							</MotionConfig>
-						</TanStackQueryProvider>
-					</ConvexProvider>
+					<TextSizeProvider>
+						<ConvexProvider>
+							<TanStackQueryProvider>
+								<MotionConfig reducedMotion="user">
+									{children}
+									<Toaster />
+								</MotionConfig>
+							</TanStackQueryProvider>
+						</ConvexProvider>
+					</TextSizeProvider>
 				</ThemeProvider>
 				<Scripts />
 			</body>

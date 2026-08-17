@@ -19,6 +19,8 @@ const schema = z.object({
 	XERO_CLIENT_SECRET: z.string().min(1).optional(),
 	PAYSTACK_SECRET_KEY: z.string().min(1).optional(),
 	PAYSTACK_PUBLIC_KEY: z.string().min(1).optional(),
+	/** 32-byte encryption key for encrypting sensitive integration tokens at rest */
+	INTEGRATION_ENCRYPTION_KEY: z.string().min(64).max(64).optional(),
 	NODE_ENV: z
 		.enum(["development", "production", "test"])
 		.default("development"),

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
+import { NIGERIA_TAX_RULE_SET_VERSION } from "./nigeria";
 
 export type WorkspaceRole = "owner" | "member" | "viewer";
 
@@ -42,7 +43,7 @@ function workspaceDefaults(userId: string, name: string) {
 		countryCode: "NG" as const,
 		baseCurrency: "NGN",
 		sellerTaxStatus: "vat_registered" as const,
-		taxRuleSetVersion: "ng-nrs-2026.1",
+		taxRuleSetVersion: NIGERIA_TAX_RULE_SET_VERSION,
 		atrs: {
 			environment: "sandbox" as const,
 			credentialsConfigured: false,

@@ -1,0 +1,15 @@
+{
+  "name": "velure-issuer",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Velure better-auth OIDC issuer — standalone runtime for the velure-cc identity bridge (A9 production shape)",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node production-issuer.mjs"
+  },
+  "dependencies": {
+    "better-auth": "1.4.9",
+    "pg": "^8.13.0"
+  }
+}

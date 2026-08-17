@@ -89,7 +89,7 @@ function NewClient() {
 	}, [state.company, state.name]);
 
 	const inputClass =
-		"h-11 rounded-[10px] border-[#30352f] bg-[#0f1111] text-sm text-[#f2efe7] placeholder:text-[#817d72] focus-visible:ring-0 focus-visible:border-[#c8ff62]";
+		"h-11 rounded-[10px] border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:ring-0 focus-visible:border-brand";
 
 	const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
@@ -139,24 +139,24 @@ function NewClient() {
 		<div className="flex h-full w-full flex-col gap-5">
 			<div className="flex items-start justify-between gap-4">
 				<div>
-					<h1 className="font-serif text-4xl font-medium italic text-[#f2efe7] md:text-5xl">
+					<h1 className="font-serif text-4xl font-medium italic text-ink md:text-5xl">
 						Create Client
 					</h1>
-					<p className="mt-2 text-sm text-[#817d72]">
+					<p className="mt-2 text-sm text-ink-3">
 						Add a new client to your CRM
 					</p>
 				</div>
 				<Button
 					type="button"
 					variant="outline"
-					className="h-9 rounded-md border border-[#30352f] bg-[#151817] px-4 text-xs font-medium text-[#d8d1c4] transition-colors hover:bg-[#30352f] hover:text-[#f2efe7] hover:border-[#3f5130]"
+					className="h-9 rounded-md border border-rule bg-paper-2 px-4 text-xs font-medium text-ink-2 transition-colors hover:bg-rule hover:text-ink hover:border-brand-line"
 				>
 					Import
 				</Button>
 			</div>
 
 			<div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-				<Card className="rounded-[10px] border-[#30352f] bg-[#151817]">
+				<Card className="rounded-[10px] border-rule bg-paper-2">
 					<CardContent className="p-4 md:p-5">
 						<form onSubmit={onSubmit} className="space-y-4">
 							<div className="grid gap-3 md:grid-cols-2">
@@ -197,7 +197,7 @@ function NewClient() {
 											}));
 											setTouched((prev) => ({ ...prev, email: true }));
 										}}
-										className={`${inputClass} ${emailError ? "border-[#B75555]" : ""}`}
+										className={`${inputClass} ${emailError ? "border-danger" : ""}`}
 										placeholder="Email *"
 									/>
 								</Field>
@@ -250,7 +250,7 @@ function NewClient() {
 										<SelectTrigger className={`${inputClass} w-full`}>
 											<SelectValue placeholder="Currency" />
 										</SelectTrigger>
-										<SelectContent className="border-[#30352f] bg-[#151817] text-[#f2efe7]">
+										<SelectContent className="border-rule bg-paper-2 text-ink">
 											<SelectItem value="USD">USD</SelectItem>
 											<SelectItem value="GBP">GBP</SelectItem>
 										</SelectContent>
@@ -266,7 +266,7 @@ function NewClient() {
 										<SelectTrigger className={`${inputClass} w-full`}>
 											<SelectValue placeholder="Payment Terms" />
 										</SelectTrigger>
-										<SelectContent className="border-[#30352f] bg-[#151817] text-[#f2efe7]">
+										<SelectContent className="border-rule bg-paper-2 text-ink">
 											<SelectItem value="Due on receipt">
 												Due on receipt
 											</SelectItem>
@@ -288,7 +288,7 @@ function NewClient() {
 											billingAddress: event.target.value,
 										}))
 									}
-									className="resize-none rounded-[10px] border-[#30352f] bg-[#0f1111] text-sm text-[#f2efe7] placeholder:text-[#817d72] focus-visible:ring-0 focus-visible:border-[#c8ff62]"
+									className="resize-none rounded-[10px] border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:ring-0 focus-visible:border-brand"
 									placeholder="Billing Address"
 								/>
 							</Field>
@@ -303,14 +303,14 @@ function NewClient() {
 											internalNotes: event.target.value,
 										}))
 									}
-									className="resize-none rounded-[10px] border-[#30352f] bg-[#0f1111] text-sm text-[#f2efe7] placeholder:text-[#817d72] focus-visible:ring-0 focus-visible:border-[#c8ff62]"
+									className="resize-none rounded-[10px] border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:ring-0 focus-visible:border-brand"
 									placeholder="Internal Notes"
 								/>
 							</Field>
 
-							<Card className="rounded-[10px] border-[#30352f] bg-[#0f1111]">
+							<Card className="rounded-[10px] border-rule bg-paper">
 								<CardContent className="p-3 md:p-4">
-									<h2 className="mb-3 text-sm font-semibold text-[#c8ff62]">
+									<h2 className="mb-3 text-sm font-semibold text-brand">
 										Contact Person
 									</h2>
 									<div className="grid gap-3 md:grid-cols-2">
@@ -363,58 +363,56 @@ function NewClient() {
 							</Card>
 
 							{/** biome-ignore lint/a11y/noLabelWithoutControl: Switch renders the interactive control inside this text label */}
-							<label className="inline-flex items-center gap-2 text-sm text-[#d8d1c4]">
+							<label className="inline-flex items-center gap-2 text-sm text-ink-2">
 								<Switch
 									checked={state.favorite}
 									onCheckedChange={(checked) =>
 										setState((prev) => ({ ...prev, favorite: checked }))
 									}
-									className="data-[state=checked]:bg-[#c8ff62] data-[state=unchecked]:bg-[#30352f]"
+									className="data-[state=checked]:bg-brand data-[state=unchecked]:bg-rule"
 								/>
 								Save as favorite client
 							</label>
 
-							<div className="flex items-center justify-between border-t border-[#30352f] pt-4">
+							<div className="flex items-center justify-between border-t border-rule pt-4">
 								<Button
 									type="button"
 									variant="outline"
 									onClick={() => navigate({ to: "/clients" })}
-									className="h-10 rounded-[10px] border-[#30352f] bg-transparent text-sm font-semibold text-[#d8d1c4] hover:bg-[#1a2117]"
+									className="h-10 rounded-[10px] border-rule bg-transparent text-sm font-semibold text-ink-2 hover:bg-brand-soft"
 								>
 									Cancel
 								</Button>
 								<Button
 									type="submit"
 									disabled={!isValid || submitting}
-									className="h-10 rounded-[10px] bg-[#c8ff62] text-sm font-bold text-[#0f1111] hover:bg-[#d5ff7a] disabled:bg-[#c8ff6266] disabled:text-[#0f1111]"
+									className="h-10 rounded-[10px] bg-brand text-sm font-bold text-brand-ink hover:bg-brand-hi disabled:bg-brand/40 disabled:text-brand-ink"
 								>
 									{submitting ? "Creating..." : "Create Client"}
 								</Button>
 							</div>
-							<p className="text-xs text-[#817d72]">* Required fields</p>
+							<p className="text-xs text-ink-3">* Required fields</p>
 						</form>
 					</CardContent>
 				</Card>
 
-				<Card className="h-fit rounded-[10px] border-[#30352f] bg-[#151817]">
+				<Card className="h-fit rounded-[10px] border-rule bg-paper-2">
 					<CardContent className="p-4">
-						<h2 className="text-sm font-semibold text-[#c8ff62]">
-							Client Preview
-						</h2>
+						<h2 className="text-sm font-semibold text-brand">Client Preview</h2>
 						<div className="mt-3 flex items-center gap-3">
-							<span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#141B24] text-xs font-semibold text-[#d8d1c4]">
+							<span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-paper text-xs font-semibold text-ink-2">
 								{initials || "VC"}
 							</span>
 							<div>
-								<p className="text-sm font-medium text-[#f2efe7]">
+								<p className="text-sm font-medium text-ink">
 									{state.name || "Client Name"}
 								</p>
-								<p className="text-xs text-[#817d72]">
+								<p className="text-xs text-ink-3">
 									{state.company || "Company"}
 								</p>
 							</div>
 						</div>
-						<div className="mt-3 rounded-[10px] border border-[#30352f] bg-[#0f1111] p-3 text-xs text-[#d8d1c4]">
+						<div className="mt-3 rounded-[10px] border border-rule bg-paper p-3 text-xs text-ink-2">
 							<p>Contact: {state.email || "—"}</p>
 							<p>Payment Terms: {state.paymentTerms}</p>
 							<p>Currency: {state.currency}</p>
@@ -438,9 +436,9 @@ function Field({
 }) {
 	return (
 		<div className="space-y-1.5">
-			<Label className="text-xs text-[#817d72]">{label}</Label>
+			<Label className="text-xs text-ink-3">{label}</Label>
 			{children}
-			{error ? <p className="text-xs text-[#C77A7A]">{error}</p> : null}
+			{error ? <p className="text-xs text-danger">{error}</p> : null}
 		</div>
 	);
 }

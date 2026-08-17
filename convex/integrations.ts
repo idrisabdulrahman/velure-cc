@@ -12,6 +12,12 @@ import { recordAuditLog } from "./audit";
 import { requireAuthUser } from "./auth";
 import { env } from "./env";
 import { requireWorkspaceForRead, requireWritableInvoice } from "./rls";
+import {
+	decryptSensitiveFields,
+	encryptSensitiveFields,
+} from "./tokenEncryption";
+
+const TOKEN_FIELDS = ["accessToken", "refreshToken"] as const;
 
 const providerValidator = v.union(
 	v.literal("quickbooks"),
@@ -124,44 +130,70 @@ async function ensureConnectionAccess(
 	ctx: any,
 	connection: any,
 ): Promise<{ accessToken: string; connection: any }> {
+	// Tokens are bound to the connection owner at encryption time, so decrypt
+	// (and later re-encrypt) with the same identifier.
+	const bindingId = connection?.ownerId;
+
+	// Decrypt any encrypted tokens from the connection
+	const decryptedConnection = await decryptSensitiveFields(
+		connection,
+		TOKEN_FIELDS,
+		bindingId,
+	);
+
 	if (
-		connection.expiresAt &&
-		connection.expiresAt > now() + 60_000 &&
-		connection.accessToken
+		decryptedConnection.expiresAt &&
+		decryptedConnection.expiresAt > now() + 60_000 &&
+		decryptedConnection.accessToken
 	) {
-		return { accessToken: connection.accessToken, connection };
+		return {
+			accessToken: decryptedConnection.accessToken,
+			connection: decryptedConnection,
+		};
 	}
 
-	if (!connection.refreshToken) {
-		if (!connection.accessToken) {
-			throw new Error(`No access token stored for ${connection.provider}.`);
+	if (!decryptedConnection.refreshToken) {
+		if (!decryptedConnection.accessToken) {
+			throw new Error(
+				`No access token stored for ${decryptedConnection.provider}.`,
+			);
 		}
-		return { accessToken: connection.accessToken, connection };
+		return {
+			accessToken: decryptedConnection.accessToken,
+			connection: decryptedConnection,
+		};
 	}
 
 	const refreshed =
-		connection.provider === "quickbooks"
-			? await quickbooksTokenRefresh(connection.refreshToken)
-			: await xeroTokenRefresh(connection.refreshToken);
+		decryptedConnection.provider === "quickbooks"
+			? await quickbooksTokenRefresh(decryptedConnection.refreshToken)
+			: await xeroTokenRefresh(decryptedConnection.refreshToken);
 
 	const updated = {
 		accessToken: refreshed.access_token,
-		refreshToken: refreshed.refresh_token ?? connection.refreshToken,
+		refreshToken: refreshed.refresh_token ?? decryptedConnection.refreshToken,
 		expiresAt: refreshed.expires_in
 			? now() + refreshed.expires_in * 1000
-			: connection.expiresAt,
+			: decryptedConnection.expiresAt,
 	};
 
+	// Encrypt the new tokens before storing
+	const encryptedUpdated = await encryptSensitiveFields(
+		{ ...updated, provider: decryptedConnection.provider },
+		TOKEN_FIELDS,
+		bindingId,
+	);
+
 	await ctx.runMutation(api.integrations.updateConnectionTokens, {
-		provider: connection.provider,
-		accessToken: updated.accessToken,
-		refreshToken: updated.refreshToken,
+		provider: decryptedConnection.provider,
+		accessToken: encryptedUpdated.accessToken,
+		refreshToken: encryptedUpdated.refreshToken,
 		expiresAt: updated.expiresAt,
 	});
 
 	return {
 		accessToken: updated.accessToken,
-		connection: { ...connection, ...updated },
+		connection: { ...decryptedConnection, ...updated },
 	};
 }
 
@@ -381,12 +413,17 @@ export const getConnectionSecret = query({
 	args: { provider: providerValidator },
 	handler: async (ctx, args) => {
 		const viewer = await requireViewer(ctx);
-		return await ctx.db
+		const connection = await ctx.db
 			.query("integration_connections")
 			.withIndex("by_ownerId_and_provider", (q) =>
 				q.eq("ownerId", viewer._id).eq("provider", args.provider),
 			)
 			.first();
+
+		// Decrypt tokens if they are encrypted
+		return connection
+			? await decryptSensitiveFields(connection, TOKEN_FIELDS, viewer._id)
+			: connection;
 	},
 });
 
@@ -409,14 +446,24 @@ export const completeOAuthConnection = internalMutation({
 			.first();
 		const timestamp = now();
 
+		// Encrypt tokens before storing
+		const encryptedTokens = await encryptSensitiveFields(
+			{
+				accessToken: args.accessToken,
+				refreshToken: args.refreshToken,
+			},
+			TOKEN_FIELDS,
+			args.ownerId,
+		);
+
 		let connectionId: Id<"integration_connections">;
 		if (existing) {
 			await ctx.db.patch(existing._id, {
 				status: "connected",
 				authType: "oauth",
 				externalAccountId: args.externalAccountId,
-				accessToken: args.accessToken,
-				refreshToken: args.refreshToken,
+				accessToken: encryptedTokens.accessToken,
+				refreshToken: encryptedTokens.refreshToken,
 				expiresAt: args.expiresAt,
 				configJson: args.configJson,
 				updatedAt: timestamp,
@@ -429,8 +476,8 @@ export const completeOAuthConnection = internalMutation({
 				status: "connected",
 				authType: "oauth",
 				externalAccountId: args.externalAccountId,
-				accessToken: args.accessToken,
-				refreshToken: args.refreshToken,
+				accessToken: encryptedTokens.accessToken,
+				refreshToken: encryptedTokens.refreshToken,
 				expiresAt: args.expiresAt,
 				configJson: args.configJson,
 				createdAt: timestamp,
@@ -517,9 +564,16 @@ export const updateConnectionTokens = mutation({
 			throw new Error("Integration connection not found.");
 		}
 
+		// Encrypt tokens before storing
+		const encryptedTokens = await encryptSensitiveFields(
+			{ accessToken: args.accessToken, refreshToken: args.refreshToken },
+			TOKEN_FIELDS,
+			viewer._id,
+		);
+
 		await ctx.db.patch(connection._id, {
-			accessToken: args.accessToken,
-			refreshToken: args.refreshToken,
+			accessToken: encryptedTokens.accessToken,
+			refreshToken: encryptedTokens.refreshToken,
 			expiresAt: args.expiresAt,
 			status: "connected",
 			updatedAt: now(),
@@ -556,18 +610,26 @@ export const upsertConnection = mutation({
 			)
 			.first();
 		const timestamp = now();
+
+		// Encrypt tokens if present
+		const encryptedArgs = await encryptSensitiveFields(
+			args,
+			TOKEN_FIELDS,
+			viewer._id,
+		);
+
 		const status =
 			args.provider === "slack"
 				? args.webhookUrl
 					? "connected"
 					: "disconnected"
-				: args.accessToken
+				: encryptedArgs.accessToken
 					? "connected"
 					: "disconnected";
 
 		if (existing) {
 			await ctx.db.patch(existing._id, {
-				...args,
+				...encryptedArgs,
 				status,
 				updatedAt: timestamp,
 			});
@@ -576,7 +638,7 @@ export const upsertConnection = mutation({
 
 		return await ctx.db.insert("integration_connections", {
 			ownerId: viewer._id,
-			...args,
+			...encryptedArgs,
 			status,
 			createdAt: timestamp,
 			updatedAt: timestamp,

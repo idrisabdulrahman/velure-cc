@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
+import { PanelLoader } from "#/components/ui/panel-loader";
 import {
 	Select,
 	SelectContent,
@@ -29,7 +30,6 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select";
-import { Spinner } from "#/components/ui/spinner";
 import {
 	Tooltip,
 	TooltipContent,
@@ -40,10 +40,10 @@ import { toast } from "#/components/ui/use-toast";
 import { formatCompactMoney, formatMoney } from "#/features/invoices/format";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-
 export const Route = createFileRoute("/invoices/products")({
-	beforeLoad: async ({ context }) => {
-		await Promise.all([
+	beforeLoad: ({ context }) => {
+		// Fire-and-forget: warm the cache without blocking the transition.
+		void Promise.all([
 			context.queryClient.prefetchQuery(
 				convexQuery(api.products.list, {
 					q: "",
@@ -54,7 +54,7 @@ export const Route = createFileRoute("/invoices/products")({
 			context.queryClient.prefetchQuery(
 				convexQuery(api.products.getAnalytics, {}),
 			),
-		]);
+		]).catch(() => undefined);
 	},
 	component: ProductsPage,
 });
@@ -181,21 +181,21 @@ function ProductCatalogPage() {
 		>
 			<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 				<div>
-					<h1 className="text-3xl font-semibold tracking-[-0.02em] text-[#f2efe7]">
+					<h1 className="text-3xl font-semibold tracking-[-0.02em] text-ink">
 						Products & Services
 					</h1>
-					<p className="mt-2 text-sm text-[#aaa294]">
+					<p className="mt-2 text-sm text-ink-3">
 						Manage your product catalog and view sales analytics.
 					</p>
 				</div>
 				<div className="flex flex-wrap items-center gap-3">
-					<div className="flex h-10 w-full min-w-[260px] items-center gap-2 rounded-md border border-[#30352f] bg-[#171a18] px-3 lg:w-[320px]">
-						<Search className="h-4 w-4 text-[#817d72]" />
+					<div className="flex h-10 w-full min-w-[260px] items-center gap-2 rounded-md border border-rule bg-paper-2 px-3 lg:w-[320px]">
+						<Search className="h-4 w-4 text-ink-3" />
 						<input
 							value={search}
 							onChange={(event) => setSearch(event.target.value)}
 							placeholder="Search products..."
-							className="h-full w-full bg-transparent text-sm text-[#f2efe7] outline-none placeholder:text-[#817d72]"
+							className="h-full w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
 						/>
 					</div>
 					{activeTab === "catalog" && (
@@ -206,10 +206,10 @@ function ProductCatalogPage() {
 									setTypeFilter(value as "all" | "product" | "service")
 								}
 							>
-								<SelectTrigger className="h-10 w-[140px] rounded-md border border-[#30352f] bg-[#171a18] text-sm text-[#d8d1c4]">
+								<SelectTrigger className="h-10 w-[140px] rounded-md border border-rule bg-paper-2 text-sm text-ink-2">
 									<SelectValue placeholder="Type" />
 								</SelectTrigger>
-								<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
+								<SelectContent className="border-rule bg-paper-2 text-ink">
 									<SelectItem value="all">All Types</SelectItem>
 									<SelectItem value="product">Products</SelectItem>
 									<SelectItem value="service">Services</SelectItem>
@@ -221,10 +221,10 @@ function ProductCatalogPage() {
 									setStatusFilter(value as "all" | "active" | "archived")
 								}
 							>
-								<SelectTrigger className="h-10 w-[140px] rounded-md border border-[#30352f] bg-[#171a18] text-sm text-[#d8d1c4]">
+								<SelectTrigger className="h-10 w-[140px] rounded-md border border-rule bg-paper-2 text-sm text-ink-2">
 									<SelectValue placeholder="Status" />
 								</SelectTrigger>
-								<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
+								<SelectContent className="border-rule bg-paper-2 text-ink">
 									<SelectItem value="all">All Status</SelectItem>
 									<SelectItem value="active">Active</SelectItem>
 									<SelectItem value="archived">Archived</SelectItem>
@@ -235,26 +235,26 @@ function ProductCatalogPage() {
 				</div>
 			</div>
 
-			<div className="flex gap-1 border-b border-[#30352f]">
+			<div className="flex gap-2 border-b border-rule pb-3">
 				<button
 					type="button"
 					onClick={() => setActiveTab("catalog")}
-					className={`px-4 py-2 text-sm font-medium transition-colors ${
+					className={
 						activeTab === "catalog"
-							? "border-b-2 border-[#c8ff62] text-[#c8ff62]"
-							: "text-[#817d72] hover:text-[#f2efe7]"
-					}`}
+							? "hm-ts-stamp is-warn"
+							: "text-ink-2 transition-colors hover:text-ink"
+					}
 				>
 					Catalog
 				</button>
 				<button
 					type="button"
 					onClick={() => setActiveTab("analytics")}
-					className={`px-4 py-2 text-sm font-medium transition-colors ${
+					className={
 						activeTab === "analytics"
-							? "border-b-2 border-[#c8ff62] text-[#c8ff62]"
-							: "text-[#817d72] hover:text-[#f2efe7]"
-					}`}
+							? "hm-ts-stamp is-warn"
+							: "text-ink-2 transition-colors hover:text-ink"
+					}
 				>
 					Analytics
 				</button>
@@ -327,13 +327,13 @@ function CatalogTab({
 	};
 
 	return (
-		<div className="ui-panel overflow-hidden rounded-md border border-[#30352f] bg-[#171a18]">
-			<div className="flex items-center justify-between border-b border-[#30352f] px-4 py-3">
-				<p className="text-sm font-medium text-[#f2efe7]">Product catalog</p>
+		<div className="ui-panel overflow-hidden rounded-md border border-rule bg-paper-2">
+			<div className="flex items-center justify-between border-b border-rule px-4 py-3">
+				<p className="text-sm font-medium text-ink">Product catalog</p>
 				<Button
 					type="button"
 					onClick={onCreate}
-					className="h-9 rounded-md bg-[#c8ff62] px-3 text-sm font-medium text-[#0f1111] hover:bg-[#d5ff7a]"
+					className="h-9 rounded-md bg-brand px-3 text-sm font-medium text-brand-ink hover:bg-brand-hi"
 				>
 					<Plus className="mr-1.5 h-4 w-4" />
 					New Product
@@ -342,8 +342,8 @@ function CatalogTab({
 
 			<div className="overflow-x-auto">
 				<table className="w-full min-w-[800px] text-sm">
-					<thead className="bg-[#15171a]">
-						<tr className="border-b border-[#30352f] text-left text-[#817d72]">
+					<thead className="bg-paper-3">
+						<tr className="border-b border-rule text-left text-ink-3">
 							<th className="px-4 py-3 font-medium">Name</th>
 							<th className="px-4 py-3 font-medium">Type</th>
 							<th className="px-4 py-3 font-medium">Unit Price</th>
@@ -358,32 +358,22 @@ function CatalogTab({
 							return (
 								<tr
 									key={product.id}
-									className="border-b border-[#30352f] text-[#d8d1c4] hover:bg-[#1c1f22]"
+									className="border-b border-rule text-ink-2 hover:bg-paper-3"
 								>
-									<td className="px-4 py-3 font-medium text-[#f2efe7]">
+									<td className="px-4 py-3 font-medium text-ink">
 										{product.name}
 									</td>
 									<td className="px-4 py-3">
-										<span
-											className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium capitalize ${
-												product.type === "product"
-													? "border-[#2b313b] bg-[#151b23] text-[#d8dde7]"
-													: "border-[#3c4740] bg-[#1a1f1c] text-[#b9c3b8]"
-											}`}
-										>
-											{product.type}
-										</span>
+										<span className="hm-ts-stamp is-paper">{product.type}</span>
 									</td>
-									<td className="px-4 py-3 text-[#beb6a8]">
+									<td className="hm-num-cell px-4 py-3 text-ink-3">
 										{formatMoney(product.defaultUnitPrice, "NGN")}
 									</td>
-									<td className="px-4 py-3 text-[#beb6a8]">
+									<td className="hm-num-cell px-4 py-3 text-ink-3">
 										{insight && insight.usageCount > 0 ? (
 											<div>
-												<p className="text-[#f2efe7]">
-													{insight.usageCount} uses
-												</p>
-												<p className="mt-0.5 text-xs text-[#817d72]">
+												<p className="text-ink">{insight.usageCount} uses</p>
+												<p className="mt-0.5 text-xs text-ink-3">
 													{formatCompactMoney(insight.revenue, "NGN")}
 												</p>
 											</div>
@@ -393,11 +383,11 @@ function CatalogTab({
 									</td>
 									<td className="px-4 py-3">
 										<span
-											className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${
+											className={
 												product.isActive
-													? "border-[#425033] bg-[#1e2418] text-[#b7ca7c]"
-													: "border-[#5d4747] bg-[#261c1c] text-[#d4a0a0]"
-											}`}
+													? "hm-ts-stamp is-ok"
+													: "hm-ts-stamp is-paper"
+											}
 										>
 											{product.isActive ? "Active" : "Archived"}
 										</span>
@@ -447,9 +437,9 @@ function CatalogTab({
 			{isLoading ? (
 				<PanelLoader label="Loading products" />
 			) : products.length === 0 ? (
-				<div className="flex min-h-[156px] flex-col items-center justify-center gap-3 px-4 py-10 text-center text-sm text-[#aaa294]">
+				<div className="flex min-h-[156px] flex-col items-center justify-center gap-3 px-4 py-10 text-center text-sm text-ink-3">
 					<div>
-						<p className="font-medium text-[#f2efe7]">No products yet.</p>
+						<p className="font-medium text-ink">No products yet.</p>
 						<p className="mt-1">
 							Create products and services to speed up invoice creation.
 						</p>
@@ -457,7 +447,7 @@ function CatalogTab({
 					<Button
 						type="button"
 						onClick={onCreate}
-						className="h-9 rounded-md bg-[#c8ff62] px-3 text-sm font-medium text-[#0f1111] hover:bg-[#d5ff7a]"
+						className="h-9 rounded-md bg-brand px-3 text-sm font-medium text-brand-ink hover:bg-brand-hi"
 					>
 						<Plus className="mr-1.5 h-4 w-4" />
 						New Product
@@ -488,15 +478,15 @@ function ProductAction({
 					<button
 						type="button"
 						onClick={onClick}
-						className={`inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#30352f] bg-[#171a18] text-[#beb6a8] transition-colors hover:bg-[#1a2117] ${
-							danger ? "hover:text-[#d48f8f]" : "hover:text-[#f2efe7]"
+						className={`inline-flex h-9 w-9 items-center justify-center rounded-md border border-rule bg-paper-2 text-ink-3 transition-colors hover:bg-brand-soft ${
+							danger ? "hover:text-danger" : "hover:text-ink"
 						}`}
 						aria-label={label}
 					>
 						{children}
 					</button>
 				</TooltipTrigger>
-				<TooltipContent className="rounded-md border-[#30352f] bg-[#101211]/95 px-3 py-2 text-xs text-[#f2efe7] shadow-[0_18px_44px_rgba(0,0,0,0.42)]">
+				<TooltipContent className="rounded-md border-rule bg-paper/95 px-3 py-2 text-xs text-ink shadow-[0_18px_44px_rgba(0,0,0,0.42)]">
 					{tooltip}
 				</TooltipContent>
 			</Tooltip>
@@ -542,20 +532,18 @@ function AnalyticsTab({
 				/>
 			</div>
 
-			<div className="ui-panel overflow-hidden rounded-md border border-[#30352f] bg-[#171a18]">
-				<div className="border-b border-[#30352f] px-4 py-3">
-					<p className="text-sm font-medium text-[#f2efe7]">
-						Product intelligence
-					</p>
-					<p className="mt-1 text-xs text-[#817d72]">
+			<div className="ui-panel overflow-hidden rounded-md border border-rule bg-paper-2">
+				<div className="border-b border-rule px-4 py-3">
+					<p className="text-sm font-medium text-ink">Product intelligence</p>
+					<p className="mt-1 text-xs text-ink-3">
 						Generated from invoice line items.
 					</p>
 				</div>
 
 				<div className="overflow-x-auto">
-					<table className="w-full min-w-[1080px] text-sm">
-						<thead className="bg-[#15171a]">
-							<tr className="border-b border-[#30352f] text-left text-[#817d72]">
+					<table className="hm-ts-board w-full min-w-[1080px] text-sm">
+						<thead className="bg-paper-3">
+							<tr className="border-b border-rule text-left text-ink-3">
 								<th className="px-4 py-3 font-medium">Name</th>
 								<th className="px-4 py-3 font-medium">Usage</th>
 								<th className="px-4 py-3 font-medium">Clients</th>
@@ -570,39 +558,39 @@ function AnalyticsTab({
 							{analytics.map((item) => (
 								<tr
 									key={item.productId}
-									className="border-b border-[#30352f] text-[#d8d1c4] hover:bg-[#1c1f22]"
+									className="border-b border-rule text-ink-2 hover:bg-paper-3"
 								>
 									<td className="px-4 py-3">
-										<p className="font-medium text-[#f2efe7]">{item.name}</p>
-										<p className="mt-0.5 text-xs capitalize text-[#817d72]">
+										<p className="font-medium text-ink">{item.name}</p>
+										<p className="mt-0.5 text-xs capitalize text-ink-3">
 											{item.type ?? "catalog item"}
 											{item.sku ? ` / SKU ${item.sku}` : ""}
 										</p>
 									</td>
-									<td className="px-4 py-3 text-[#beb6a8]">
+									<td className="px-4 py-3 text-ink-3">
 										{item.usageCount} uses
-										<span className="ml-1 text-[#817d72]">
+										<span className="ml-1 text-ink-3">
 											/ {item.quantitySold} sold
 										</span>
 									</td>
-									<td className="px-4 py-3 text-[#beb6a8]">
+									<td className="px-4 py-3 text-ink-3">
 										{item.customerCount ?? "-"}
 									</td>
-									<td className="px-4 py-3 text-right font-medium text-[#f2efe7]">
+									<td className="hm-num-cell px-4 py-3 text-right font-medium text-ink">
 										<span title={formatMoney(item.revenue, "NGN")}>
 											{formatCompactMoney(item.revenue, "NGN")}
 										</span>
 									</td>
-									<td className="px-4 py-3 text-right text-[#beb6a8]">
+									<td className="hm-num-cell px-4 py-3 text-right text-ink-3">
 										{formatMoney(item.averagePrice, "NGN")}
 									</td>
-									<td className="px-4 py-3 text-[#beb6a8]">
+									<td className="px-4 py-3 text-ink-3">
 										{item.topClients?.[0]?.customerName ?? "-"}
 									</td>
 									<td className="px-4 py-3">
 										<TrendBadge trend={item.trend ?? "steady"} />
 									</td>
-									<td className="px-4 py-3 text-[#beb6a8]">
+									<td className="px-4 py-3 text-ink-3">
 										{item.lastSoldAt
 											? new Date(item.lastSoldAt).toLocaleDateString()
 											: "-"}
@@ -616,9 +604,9 @@ function AnalyticsTab({
 				{isLoading ? (
 					<PanelLoader label="Loading product intelligence" />
 				) : analytics.length === 0 ? (
-					<div className="flex min-h-[156px] flex-col items-center justify-center gap-3 px-4 py-10 text-center text-sm text-[#aaa294]">
+					<div className="flex min-h-[156px] flex-col items-center justify-center gap-3 px-4 py-10 text-center text-sm text-ink-3">
 						<div>
-							<p className="font-medium text-[#f2efe7]">
+							<p className="font-medium text-ink">
 								No product intelligence yet.
 							</p>
 							<p className="mt-1">
@@ -644,15 +632,17 @@ function InsightCard({
 	detail: string;
 }) {
 	return (
-		<div className="rounded-md border border-[#30352f] bg-[#171a18] p-4">
+		<div className="hm-stat border-l-info-line rounded-md border border-rule bg-paper-2 p-4">
 			<div className="flex items-center justify-between gap-3">
-				<p className="text-xs uppercase tracking-[0.12em] text-[#817d72]">
+				<p className="text-xs uppercase tracking-[0.12em] text-ink-3">
 					{label}
 				</p>
-				<Icon className="h-4 w-4 text-[#c8ff62]" />
+				<Icon className="h-4 w-4 text-brand" />
 			</div>
-			<p className="mt-3 text-2xl font-semibold text-[#f2efe7]">{value}</p>
-			<p className="mt-1 text-xs text-[#aaa294]">{detail}</p>
+			<p className="mt-3 hm-num-cell text-2xl font-semibold text-ink">
+				{value}
+			</p>
+			<p className="mt-1 text-xs text-ink-3">{detail}</p>
 		</div>
 	);
 }
@@ -660,18 +650,12 @@ function InsightCard({
 function TrendBadge({ trend }: { trend: AnalyticsRow["trend"] }) {
 	const classes =
 		trend === "declining"
-			? "border-[#5d4747] bg-[#261c1c] text-[#d4a0a0]"
+			? "hm-ts-stamp is-danger"
 			: trend === "rising" || trend === "new"
-				? "border-[#425033] bg-[#1e2418] text-[#b7ca7c]"
-				: "border-[#30352f] bg-[#15171a] text-[#beb6a8]";
+				? "hm-ts-stamp is-ok"
+				: "hm-ts-stamp is-paper";
 
-	return (
-		<span
-			className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium capitalize ${classes}`}
-		>
-			{trend}
-		</span>
-	);
+	return <span className={classes}>{trend}</span>;
 }
 
 function buildProductSummary(
@@ -690,19 +674,4 @@ function buildProductSummary(
 			(item) => item.trend === "declining",
 		).length,
 	};
-}
-
-function PanelLoader({ label }: { label: string }) {
-	return (
-		<motion.div
-			className="flex min-h-[156px] flex-col items-center justify-center gap-3 px-4 py-10 text-sm text-[#aaa294]"
-			initial={{ opacity: 0 }}
-			animate={{ opacity: 1 }}
-			exit={{ opacity: 0 }}
-			transition={{ duration: 0.18 }}
-		>
-			<Spinner size={24} className="text-[#c8ff62] !stroke-[#c8ff62]" />
-			<span>{label}</span>
-		</motion.div>
-	);
 }

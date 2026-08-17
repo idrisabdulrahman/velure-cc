@@ -20,14 +20,15 @@ import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
+import { NIGERIA_TAX_RULE_SET_VERSION } from "#/features/compliance/nigeria";
 import { authClient } from "#/lib/auth-client";
 import { api } from "../../convex/_generated/api";
-
 export const Route = createFileRoute("/settings/")({
-	beforeLoad: async ({ context }) => {
-		await context.queryClient.prefetchQuery(
-			convexQuery(api.compliance.getWorkspaceSettings, {}),
-		);
+	beforeLoad: ({ context }) => {
+		// Fire-and-forget: warm the cache without blocking the transition.
+		void context.queryClient
+			.prefetchQuery(convexQuery(api.compliance.getWorkspaceSettings, {}))
+			.catch(() => undefined);
 	},
 	component: SettingsPage,
 });
@@ -247,7 +248,7 @@ function SettingsPage() {
 					).sellerTaxStatus ?? "vat_registered",
 				taxRuleSetVersion:
 					(workspace as { taxRuleSetVersion?: string }).taxRuleSetVersion ??
-					"NG-2026-v1",
+					NIGERIA_TAX_RULE_SET_VERSION,
 				atrs: (
 					workspace as {
 						atrs?: {
@@ -311,13 +312,13 @@ function SettingsPage() {
 	};
 
 	return (
-		<div className="mx-auto w-full max-w-5xl space-y-6">
+		<div className="mx-auto w-full max-w-7xl space-y-8">
 			<div className="flex items-start gap-3">
-				<div className="mt-1 flex h-10 w-10 items-center justify-center rounded-md border border-[#30352f] bg-[#151817] text-[#c8ff62]">
+				<div className="mt-1 flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper-2 text-brand">
 					<Settings className="h-5 w-5" />
 				</div>
 				<div>
-					<h1 className="text-3xl font-bold tracking-[-0.02em] text-[#f2efe7]">
+					<h1 className="text-3xl font-bold tracking-[-0.02em] text-ink">
 						Settings
 					</h1>
 					<p className="mt-2 text-sm text-white/55">
@@ -326,19 +327,17 @@ function SettingsPage() {
 				</div>
 			</div>
 
-			<section className="rounded-md border border-[#30352f] bg-[#101211]/95 shadow-[0_20px_80px_rgba(0,0,0,0.28)] backdrop-blur-md">
-				<div className="border-b border-[#30352f] px-5 py-4">
-					<h2 className="text-sm font-medium text-[#f2efe7]">
-						Business profile
-					</h2>
+			<section className="rounded-md border border-rule bg-paper/95">
+				<div className="border-b border-rule px-5 py-4">
+					<h2 className="text-sm font-medium text-ink">Business profile</h2>
 				</div>
 
-				<div className="grid gap-6 px-5 py-5 lg:grid-cols-[220px_1fr]">
+				<div className="grid gap-8 px-5 py-6 lg:grid-cols-[200px_1fr] xl:gap-12 xl:px-8">
 					<div className="flex flex-col items-center">
 						<button
 							type="button"
 							onClick={() => fileInputRef.current?.click()}
-							className="flex h-36 w-36 items-center justify-center overflow-hidden rounded-full border border-dashed border-[#30352f] bg-[#101211] text-center text-sm text-[#aaa294] transition-[border-color,background-color] hover:border-[#c8ff62] hover:bg-[#1a2117] focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_rgba(200,255,98,0.24)]"
+							className="flex h-36 w-36 items-center justify-center overflow-hidden rounded-full border border-dashed border-rule bg-paper text-center text-sm text-ink-3 transition-[border-color,background-color] hover:border-brand hover:bg-brand-soft focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus)]"
 						>
 							{logoPreview ? (
 								<img
@@ -361,27 +360,27 @@ function SettingsPage() {
 							type="button"
 							variant="outline"
 							onClick={() => fileInputRef.current?.click()}
-							className="mt-4 h-10 rounded-md border-[#30352f] bg-transparent text-sm text-[#d8d1c4] hover:bg-[#20241f]"
+							className="mt-4 h-10 rounded-md border-rule bg-transparent text-sm text-ink-2 hover:bg-paper-3"
 						>
 							<Upload className="mr-2 h-4 w-4" />
 							Upload Logo
 						</Button>
-						<p className="mt-2 text-center text-xs text-[#817d72]">
+						<p className="mt-2 text-center text-xs text-ink-3">
 							Max 2MB, square crop.
 						</p>
 						{errors.logo ? (
-							<p className="mt-2 text-center text-xs text-[#ef9a9a]">
+							<p className="mt-2 text-center text-xs text-danger">
 								{errors.logo}
 							</p>
 						) : null}
 					</div>
 
-					<div className="grid gap-4 md:grid-cols-2">
+					<div className="grid gap-x-5 gap-y-5 md:grid-cols-2">
 						<Field label="Workspace Name*" error={errors.name}>
 							<Input
 								value={form.name}
 								onChange={(event) => updateField("name", event.target.value)}
-								className="rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62]"
+								className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
 							/>
 						</Field>
 						<Field label="Registered Business Name" error={errors.legalName}>
@@ -391,7 +390,7 @@ function SettingsPage() {
 									updateField("legalName", event.target.value)
 								}
 								placeholder="Shown on invoices when different"
-								className="rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62]"
+								className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
 							/>
 						</Field>
 						<Field label="Business Email*" error={errors.email}>
@@ -399,7 +398,7 @@ function SettingsPage() {
 								type="email"
 								value={form.email}
 								onChange={(event) => updateField("email", event.target.value)}
-								className="rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62]"
+								className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
 							/>
 						</Field>
 						<Field label="Business Phone" error={errors.phone}>
@@ -409,7 +408,7 @@ function SettingsPage() {
 								onChange={(event) =>
 									updateField("phone", formatPhone(event.target.value))
 								}
-								className="rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62]"
+								className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
 							/>
 						</Field>
 						<Field label="TIN" error={errors.taxId}>
@@ -423,8 +422,8 @@ function SettingsPage() {
 								}
 								placeholder="10-digit TIN"
 								aria-invalid={Boolean(errors.taxId)}
-								className={`rounded-md bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62] ${
-									errors.taxId ? "border-[#c76f5b]" : "border-[#30352f]"
+								className={`rounded-md bg-paper text-ink focus-visible:border-brand ${
+									errors.taxId ? "border-danger" : "border-rule"
 								}`}
 							/>
 						</Field>
@@ -442,8 +441,8 @@ function SettingsPage() {
 								}
 								placeholder="RC-1234567"
 								aria-invalid={Boolean(errors.rcNumber)}
-								className={`rounded-md bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62] ${
-									errors.rcNumber ? "border-[#c76f5b]" : "border-[#30352f]"
+								className={`rounded-md bg-paper text-ink focus-visible:border-brand ${
+									errors.rcNumber ? "border-danger" : "border-rule"
 								}`}
 							/>
 						</Field>
@@ -457,10 +456,8 @@ function SettingsPage() {
 									)
 								}
 								aria-invalid={Boolean(errors.defaultCurrency)}
-								className={`rounded-md bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62] ${
-									errors.defaultCurrency
-										? "border-[#c76f5b]"
-										: "border-[#30352f]"
+								className={`rounded-md bg-paper text-ink focus-visible:border-brand ${
+									errors.defaultCurrency ? "border-danger" : "border-rule"
 								}`}
 							/>
 						</Field>
@@ -472,7 +469,7 @@ function SettingsPage() {
 								onChange={(event) =>
 									updateField("defaultPaymentTermsDays", event.target.value)
 								}
-								className="rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62]"
+								className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
 							/>
 						</Field>
 						<Field label="Invoice Naming" className="md:col-span-2">
@@ -482,12 +479,12 @@ function SettingsPage() {
 									onClick={() => updateField("invoiceNumberMode", "prefix")}
 									className={`rounded-md border px-3 py-3 text-left text-sm transition-colors ${
 										form.invoiceNumberMode === "prefix"
-											? "border-[#c8ff62] bg-[#1a2117] text-[#f2efe7]"
-											: "border-[#30352f] bg-[#101211] text-[#aaa294] hover:bg-[#151817]"
+											? "border-brand bg-brand-soft text-ink"
+											: "border-rule bg-paper text-ink-3 hover:bg-paper-2"
 									}`}
 								>
 									<span className="block font-medium">Use invoice prefix</span>
-									<span className="mt-1 block text-xs text-[#817d72]">
+									<span className="mt-1 block text-xs text-ink-3">
 										Keep generated numbers like INV-2026-000001.
 									</span>
 								</button>
@@ -498,12 +495,12 @@ function SettingsPage() {
 									}
 									className={`rounded-md border px-3 py-3 text-left text-sm transition-colors ${
 										form.invoiceNumberMode === "business_name"
-											? "border-[#c8ff62] bg-[#1a2117] text-[#f2efe7]"
-											: "border-[#30352f] bg-[#101211] text-[#aaa294] hover:bg-[#151817]"
+											? "border-brand bg-brand-soft text-ink"
+											: "border-rule bg-paper text-ink-3 hover:bg-paper-2"
 									}`}
 								>
 									<span className="block font-medium">Use business name</span>
-									<span className="mt-1 block text-xs text-[#817d72]">
+									<span className="mt-1 block text-xs text-ink-3">
 										Build generated numbers from the business name.
 									</span>
 								</button>
@@ -522,7 +519,7 @@ function SettingsPage() {
 											.slice(0, 12),
 									)
 								}
-								className="rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62]"
+								className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
 							/>
 						</Field>
 						<Field
@@ -536,15 +533,15 @@ function SettingsPage() {
 								onChange={(event) =>
 									updateField("nextInvoiceSequence", event.target.value)
 								}
-								className="rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62]"
+								className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
 							/>
 						</Field>
 						<div className="md:col-span-2">
-							<div className="rounded-md border border-[#c8ff62] bg-[#1a2117] px-4 py-3">
-								<p className="text-xs font-medium uppercase tracking-[0.14em] text-[#c8ff62]">
+							<div className="rounded-md border border-brand bg-brand-soft px-4 py-3">
+								<p className="text-xs font-medium uppercase tracking-[0.14em] text-brand">
 									Next invoice number preview
 								</p>
-								<p className="mt-2 font-mono text-lg font-semibold text-[#f2efe7]">
+								<p className="mt-2 font-mono text-lg font-semibold text-ink">
 									{invoicePreviewPrefix(form)}-{new Date().getFullYear()}-
 									{String(Number(form.nextInvoiceSequence) || 1).padStart(
 										4,
@@ -561,7 +558,7 @@ function SettingsPage() {
 							<Textarea
 								value={form.address}
 								onChange={(event) => updateField("address", event.target.value)}
-								className="min-h-28 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62]"
+								className="min-h-28 rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
 							/>
 						</Field>
 						<Field
@@ -577,18 +574,18 @@ function SettingsPage() {
 								placeholder={
 									"Bank Name: Zenith Bank\nAccount Name: Velure Studio\nAccount Number: 0123456789"
 								}
-								className="min-h-28 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7] focus-visible:border-[#c8ff62]"
+								className="min-h-28 rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
 							/>
 						</Field>
 					</div>
 				</div>
 
-				<div className="flex flex-wrap justify-end gap-3 border-t border-[#30352f] px-5 py-4">
+				<div className="flex flex-wrap justify-end gap-3 border-t border-rule px-5 py-4">
 					<Button
 						type="button"
 						variant="outline"
 						onClick={resetForm}
-						className="h-10 rounded-md border-[#30352f] bg-transparent px-4 text-sm text-[#d8d1c4] hover:bg-[#20241f]"
+						className="h-10 rounded-md border-rule bg-transparent px-4 text-sm text-ink-2 hover:bg-paper-3"
 					>
 						Cancel
 					</Button>
@@ -598,30 +595,30 @@ function SettingsPage() {
 						onClick={() => {
 							void saveChanges();
 						}}
-						className="h-10 rounded-md bg-[#c8ff62] px-4 text-sm font-medium text-[#0f1111] hover:bg-[#d5ff7a]"
+						className="h-10 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi"
 					>
 						{saving ? "Saving..." : "Save Changes"}
 					</Button>
 				</div>
 			</section>
 
-			<section className="ui-panel rounded-md border border-[#30352f] bg-[#151817]">
-				<div className="border-b border-[#30352f] px-5 py-4">
-					<h2 className="text-sm font-medium text-[#f2efe7]">Account info</h2>
+			<section className="ui-panel rounded-md border border-rule bg-paper-2">
+				<div className="border-b border-rule px-5 py-4">
+					<h2 className="text-sm font-medium text-ink">Account info</h2>
 				</div>
 				<div className="grid gap-3 px-5 py-5 md:grid-cols-2">
 					<ReadOnlyItem label="Member Since" value={memberSince} />
-					<div className="rounded-md border border-[#30352f] bg-[#101211] px-4 py-3">
-						<p className="text-xs text-[#aaa294]">Plan</p>
+					<div className="rounded-md border border-rule bg-paper px-4 py-3">
+						<p className="text-xs text-ink-3">Plan</p>
 						<div className="mt-2 flex items-center justify-between gap-3">
-							<span className="rounded-sm border border-[#c8ff62] bg-[#1a2117] px-2 py-1 text-xs font-medium text-[#c8ff62]">
+							<span className="rounded-sm border border-brand bg-brand-soft px-2 py-1 text-xs font-medium text-brand">
 								Free Plan
 							</span>
 							<Button
 								asChild
 								type="button"
 								variant="outline"
-								className="h-8 rounded-md border-[#30352f] bg-transparent px-3 text-xs text-[#d8d1c4] hover:bg-[#20241f]"
+								className="h-8 rounded-md border-rule bg-transparent px-3 text-xs text-ink-2 hover:bg-paper-3"
 							>
 								<Link to="/pricing">PRO</Link>
 							</Button>
@@ -630,25 +627,21 @@ function SettingsPage() {
 				</div>
 			</section>
 
-			<section className="rounded-md border border-[#30352f] bg-[#151817]">
-				<div className="border-b border-[#30352f] px-5 py-4">
-					<h2 className="text-sm font-medium text-[#f2efe7]">
-						Backup and tax notes
-					</h2>
+			<section className="rounded-md border border-rule bg-paper-2">
+				<div className="border-b border-rule px-5 py-4">
+					<h2 className="text-sm font-medium text-ink">Backup and tax notes</h2>
 				</div>
 				<div className="grid gap-3 px-5 py-5 md:grid-cols-2">
-					<div className="rounded-md border border-[#30352f] bg-[#101211] px-4 py-3">
-						<p className="text-sm font-medium text-[#f2efe7]">
-							Your data is yours.
-						</p>
-						<p className="mt-1 text-sm text-[#aaa294]">
+					<div className="rounded-md border border-rule bg-paper px-4 py-3">
+						<p className="text-sm font-medium text-ink">Your data is yours.</p>
+						<p className="mt-1 text-sm text-ink-3">
 							Export invoices as PDF or CSV anytime. Use Compliance exports for
 							invoice CSV, tax summary CSV, and customer ledger CSV.
 						</p>
 					</div>
-					<div className="rounded-md border border-[#30352f] bg-[#101211] px-4 py-3">
-						<p className="text-sm font-medium text-[#f2efe7]">Tax disclaimer</p>
-						<p className="mt-1 text-sm text-[#aaa294]">
+					<div className="rounded-md border border-rule bg-paper px-4 py-3">
+						<p className="text-sm font-medium text-ink">Tax disclaimer</p>
+						<p className="mt-1 text-sm text-ink-3">
 							Velure helps structure invoice data for Nigerian finance
 							workflows. Confirm VAT, WHT, and filing treatment with your
 							accountant or tax advisor.
@@ -657,11 +650,11 @@ function SettingsPage() {
 				</div>
 			</section>
 
-			<section className="rounded-md border border-[#5d4747] bg-[#151817]">
+			<section className="rounded-md border border-danger-line bg-paper-2">
 				<div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5">
 					<div>
-						<h2 className="text-sm font-medium text-[#efb1b1]">Danger Zone</h2>
-						<p className="mt-1 text-sm text-[#aaa294]">
+						<h2 className="text-sm font-medium text-danger">Danger Zone</h2>
+						<p className="mt-1 text-sm text-ink-3">
 							Permanently remove this account.
 						</p>
 					</div>
@@ -670,18 +663,18 @@ function SettingsPage() {
 							<Button
 								type="button"
 								variant="outline"
-								className="h-10 rounded-md border-[#5d4747] bg-transparent px-4 text-sm text-[#d48f8f] hover:bg-[#2a1f1f]"
+								className="h-10 rounded-md border-danger-line bg-transparent px-4 text-sm text-danger hover:bg-danger-soft"
 							>
 								<Trash2 className="mr-2 h-4 w-4" />
 								Delete Account
 							</Button>
 						</AlertDialogTrigger>
-						<AlertDialogContent className="border-[#5d4747] bg-[#151817] text-[#f2efe7]">
+						<AlertDialogContent className="border-danger-line bg-paper-2 text-ink">
 							<AlertDialogHeader>
-								<AlertDialogTitle className="text-[#efb1b1]">
+								<AlertDialogTitle className="text-danger">
 									Delete account?
 								</AlertDialogTitle>
-								<AlertDialogDescription className="text-[#aaa294]">
+								<AlertDialogDescription className="text-ink-3">
 									This cannot be undone. Your workspace, invoices, clients,
 									exports, reminders, sessions, and sign-in records will be
 									permanently deleted. Type DELETE to confirm.
@@ -691,13 +684,13 @@ function SettingsPage() {
 								value={deleteConfirm}
 								onChange={(event) => setDeleteConfirm(event.target.value)}
 								placeholder="DELETE"
-								className="rounded-md border-[#5d4747] bg-[#101211] text-[#f2efe7] placeholder:text-[#817d72] focus-visible:border-[#8a5a5a]"
+								className="rounded-md border-danger-line bg-paper text-ink placeholder:text-ink-3 focus-visible:border-danger-line"
 							/>
 							<AlertDialogFooter>
 								<AlertDialogCancel
 									disabled={deletingAccount}
 									onClick={() => setDeleteConfirm("")}
-									className="border-[#30352f] bg-transparent text-[#d8d1c4] hover:bg-[#20241f]"
+									className="border-rule bg-transparent text-ink-2 hover:bg-paper-3"
 								>
 									Cancel
 								</AlertDialogCancel>
@@ -707,7 +700,7 @@ function SettingsPage() {
 										event.preventDefault();
 										void handleDeleteAccount();
 									}}
-									className="bg-[#7f1d1d] text-[#fee2e2] hover:bg-[#991b1b] disabled:bg-[#3a2323] disabled:text-[#8a6a6a]"
+									className="bg-danger text-paper hover:bg-danger disabled:bg-paper-3 disabled:text-ink-3"
 								>
 									{deletingAccount ? "Deleting..." : "Delete Account"}
 								</AlertDialogAction>
@@ -733,12 +726,10 @@ function Field({
 }) {
 	return (
 		<div className={className}>
-			<span className="mb-2 block text-xs font-medium text-[#aaa294]">
-				{label}
-			</span>
+			<span className="mb-2 block text-xs font-medium text-ink-3">{label}</span>
 			{children}
 			{error ? (
-				<span className="mt-2 block text-xs text-[#ef9a9a]">{error}</span>
+				<span className="mt-2 block text-xs text-danger">{error}</span>
 			) : null}
 		</div>
 	);
@@ -746,9 +737,9 @@ function Field({
 
 function ReadOnlyItem({ label, value }: { label: string; value: string }) {
 	return (
-		<div className="rounded-md border border-[#30352f] bg-[#101211] px-4 py-3">
-			<p className="text-xs text-[#aaa294]">{label}</p>
-			<p className="mt-2 truncate text-sm text-[#817d72]">{value}</p>
+		<div className="rounded-md border border-rule bg-paper px-4 py-3">
+			<p className="text-xs text-ink-3">{label}</p>
+			<p className="mt-2 truncate text-sm text-ink-3">{value}</p>
 		</div>
 	);
 }

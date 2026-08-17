@@ -75,9 +75,9 @@ export function Field({
 }) {
 	return (
 		<div className="space-y-1.5">
-			<Label className="text-xs text-[#8d938f]">{label}</Label>
+			<Label className="text-xs text-ink-3">{label}</Label>
 			{children}
-			{error ? <p className="text-xs text-[#c76f5b]">{error}</p> : null}
+			{error ? <p className="text-xs text-danger">{error}</p> : null}
 		</div>
 	);
 }

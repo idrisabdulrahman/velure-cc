@@ -10,6 +10,7 @@ import {
 	NIGERIA_TAX_RULE_SET_VERSION,
 	NIGERIA_VAT_RATE,
 	normalizeNigeriaPhone,
+	normalizeRuleSetVersionForWrite,
 } from "./nigeria";
 import { requireWorkspaceForRead, requireWritableWorkspace } from "./rls";
 
@@ -268,13 +269,24 @@ export const upsertWorkspaceSettings = mutation({
 		assertValidTin(args.taxId);
 		assertValidRcNumber(args.rcNumber);
 		assertValidInvoiceDefaults(args);
+		// Staleness guard at the write boundary: only known rule sets (including
+		// legacy ids normalized to the canonical id) may be stored. Unknown
+		// versions are rejected instead of silently persisting stale rules.
+		const taxRuleSetVersion = normalizeRuleSetVersionForWrite(
+			args.taxRuleSetVersion,
+		);
 		const existing = await ctx.db.get(scope.workspaceId);
 		const now = Date.now();
-		const { defaultPaymentLink: _defaultPaymentLink, ...workspaceArgs } = args;
+		const {
+			defaultPaymentLink: _defaultPaymentLink,
+			taxRuleSetVersion: _taxRuleSetVersion,
+			...workspaceArgs
+		} = args;
 
 		if (existing) {
 			await ctx.db.patch(existing._id, {
 				...workspaceArgs,
+				taxRuleSetVersion,
 				phone: normalizeNigeriaPhone(args.phone),
 				updatedAt: now,
 			});
@@ -291,6 +303,7 @@ export const upsertWorkspaceSettings = mutation({
 		const workspaceId = await ctx.db.insert("workspaces", {
 			ownerId: viewer._id,
 			...workspaceArgs,
+			taxRuleSetVersion,
 			phone: normalizeNigeriaPhone(args.phone),
 			createdAt: now,
 			updatedAt: now,
@@ -360,6 +373,10 @@ export const saveTaxProfile = mutation({
 		}
 
 		if (args.id) {
+			const existing = await ctx.db.get(args.id);
+			if (!existing || existing.ownerId !== viewer._id) {
+				throw new Error("Tax profile not found.");
+			}
 			await ctx.db.patch(args.id, {
 				name: args.name,
 				jurisdictionCode: args.jurisdictionCode,

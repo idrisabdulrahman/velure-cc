@@ -9,7 +9,7 @@ function getConvexClient() {
 	const deploymentUrl = firstServerEnv(
 		"CONVEX_URL",
 		"VITE_CONVEX_URL",
-		"NUXT_CONVEX_URL",
+		"CONVEX_SITE_URL",
 	);
 
 	if (!deploymentUrl) {

@@ -59,6 +59,19 @@ describe("calculateTotal", () => {
 		expect(result.vat).toBe(0);
 		expect(result.tax).toBe(0);
 	});
+
+	it("rounds decimal money consistently for HTML and PDF consumers", () => {
+		expect(
+			calculateTotal({
+				lineItems: [
+					{ price: 0.1, quantity: 1 },
+					{ price: 0.2, quantity: 1 },
+				],
+				includeVat: true,
+				vatRate: 7.5,
+			}),
+		).toEqual({ subTotal: 0.3, vat: 0.02, tax: 0, total: 0.32 });
+	});
 });
 
 describe("calculateLineItemTotal", () => {
@@ -81,5 +94,9 @@ describe("calculateLineItemTotal", () => {
 			quantity: undefined,
 		});
 		expect(result).toBe(0);
+	});
+
+	it("rounds a line total to currency precision", () => {
+		expect(calculateLineItemTotal({ price: 10.005, quantity: 1 })).toBe(10.01);
 	});
 });

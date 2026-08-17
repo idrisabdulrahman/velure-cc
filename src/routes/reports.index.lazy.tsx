@@ -23,6 +23,7 @@ import {
 	XAxis,
 	YAxis,
 } from "recharts";
+import { RowsEmptyGuard } from "#/components/ui/rows-empty-guard";
 import {
 	Select,
 	SelectContent,
@@ -117,16 +118,16 @@ function ReportsIndex() {
 
 	return (
 		<div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 lg:px-8">
-			<header className="flex flex-col gap-4 border-b border-[#30352f] pb-5 lg:flex-row lg:items-end lg:justify-between">
+			<header className="flex flex-col gap-4 border-b border-rule pb-5 lg:flex-row lg:items-end lg:justify-between">
 				<div>
-					<div className="mb-3 inline-flex items-center gap-2 rounded-md border border-[#3f5130] bg-[#1a2117] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#c8ff62]">
+					<div className="mb-3 inline-flex items-center gap-2 rounded-md border border-brand-line bg-brand-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand">
 						<LineChartIcon className="h-3.5 w-3.5" />
 						Reports
 					</div>
-					<h1 className="text-3xl font-semibold tracking-[-0.02em] text-[#f2efe7]">
+					<h1 className="text-3xl font-semibold tracking-[-0.02em] text-ink">
 						Revenue and cash flow
 					</h1>
-					<p className="mt-2 max-w-xl text-sm text-[#aaa294]">
+					<p className="mt-2 max-w-xl text-sm text-ink-3">
 						Track billed revenue, collections, open balances, and product
 						concentration from invoice activity.
 					</p>
@@ -139,10 +140,10 @@ function ReportsIndex() {
 							startTransition(() => setPeriod(value as PeriodPreset))
 						}
 					>
-						<SelectTrigger className="h-10 w-full rounded-md border-[#30352f] bg-[#171a18] text-[#f2efe7] sm:w-[170px]">
+						<SelectTrigger className="h-10 w-full rounded-md border-rule bg-paper-2 text-ink sm:w-[170px]">
 							<SelectValue />
 						</SelectTrigger>
-						<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
+						<SelectContent className="border-rule bg-paper-2 text-ink">
 							{PERIOD_OPTIONS.map((item) => (
 								<SelectItem key={item.value} value={item.value}>
 									{item.label}
@@ -155,10 +156,10 @@ function ReportsIndex() {
 						onValueChange={(value) => setSelectedCurrency(value)}
 						disabled={currencies.length <= 1}
 					>
-						<SelectTrigger className="h-10 w-full rounded-md border-[#30352f] bg-[#171a18] text-[#f2efe7] sm:w-[120px]">
+						<SelectTrigger className="h-10 w-full rounded-md border-rule bg-paper-2 text-ink sm:w-[120px]">
 							<SelectValue />
 						</SelectTrigger>
-						<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
+						<SelectContent className="border-rule bg-paper-2 text-ink">
 							{(currencies.length > 0 ? currencies : [currency]).map((item) => (
 								<SelectItem key={item} value={item}>
 									{item}
@@ -185,7 +186,7 @@ function ReportsIndex() {
 							label="Collected"
 							value={formatMoney(summary.collectedAmount, currency)}
 							detail={`${formatPercent(summary.collectionRate)} collection rate`}
-							tone="lime"
+							tone="brand"
 						/>
 						<MetricPanel
 							icon={ArrowDownRight}
@@ -214,16 +215,19 @@ function ReportsIndex() {
 										data={timeline}
 										margin={{ left: 0, right: 16, top: 10 }}
 									>
-										<CartesianGrid stroke="#30352f" strokeDasharray="4 4" />
+										<CartesianGrid
+											stroke="var(--color-rule)"
+											strokeDasharray="4 4"
+										/>
 										<XAxis
 											dataKey="label"
-											stroke="#817d72"
+											stroke="var(--color-ink-3)"
 											fontSize={12}
 											tickLine={false}
 											axisLine={false}
 										/>
 										<YAxis
-											stroke="#817d72"
+											stroke="var(--color-ink-3)"
 											fontSize={12}
 											tickLine={false}
 											axisLine={false}
@@ -232,7 +236,7 @@ function ReportsIndex() {
 											}
 										/>
 										<Tooltip
-											cursor={{ stroke: "#c8ff62", strokeWidth: 1 }}
+											cursor={{ stroke: "var(--color-brand)", strokeWidth: 1 }}
 											content={<MovementTooltip currency={currency} />}
 										/>
 										<Line
@@ -245,7 +249,7 @@ function ReportsIndex() {
 										<Line
 											type="monotone"
 											dataKey="collectedAmount"
-											stroke="#c8ff62"
+											stroke="var(--color-brand)"
 											strokeWidth={2}
 											dot={false}
 										/>
@@ -258,10 +262,13 @@ function ReportsIndex() {
 							<div className="h-[320px]">
 								<ResponsiveContainer width="100%" height="100%">
 									<BarChart data={topCustomers.slice(0, 5)} layout="vertical">
-										<CartesianGrid stroke="#30352f" strokeDasharray="4 4" />
+										<CartesianGrid
+											stroke="var(--color-rule)"
+											strokeDasharray="4 4"
+										/>
 										<XAxis
 											type="number"
-											stroke="#817d72"
+											stroke="var(--color-ink-3)"
 											fontSize={12}
 											tickLine={false}
 											axisLine={false}
@@ -272,19 +279,25 @@ function ReportsIndex() {
 										<YAxis
 											type="category"
 											dataKey="customerName"
-											stroke="#817d72"
+											stroke="var(--color-ink-3)"
 											fontSize={12}
 											tickLine={false}
 											axisLine={false}
 											width={112}
 										/>
 										<Tooltip
-											cursor={{ fill: "rgba(200,255,98,0.08)" }}
+											cursor={{
+												fill: "color-mix(in srgb, var(--color-brand) 8%, transparent)",
+											}}
 											content={
 												<CustomerConcentrationTooltip currency={currency} />
 											}
 										/>
-										<Bar dataKey="billedAmount" fill="#8bd5ff" radius={2} />
+										<Bar
+											dataKey="billedAmount"
+											fill="var(--color-info)"
+											radius={2}
+										/>
 									</BarChart>
 								</ResponsiveContainer>
 							</div>
@@ -294,7 +307,7 @@ function ReportsIndex() {
 					<section className="grid gap-4 xl:grid-cols-3">
 						<ReportPanel title="Top customers" label="Billed">
 							<RowsEmptyGuard show={topCustomers.length === 0}>
-								<div className="divide-y divide-[#30352f]">
+								<div className="divide-y divide-rule">
 									{topCustomers.map((customer) => (
 										<CustomerRow
 											key={`${customer.currency}:${customer.customerName}`}
@@ -310,7 +323,7 @@ function ReportsIndex() {
 
 						<ReportPanel title="Late payers" label="Overdue">
 							<RowsEmptyGuard show={latePayers.length === 0}>
-								<div className="divide-y divide-[#30352f]">
+								<div className="divide-y divide-rule">
 									{latePayers.map((customer) => (
 										<CustomerRow
 											key={`${customer.currency}:${customer.customerName}`}
@@ -327,7 +340,7 @@ function ReportsIndex() {
 
 						<ReportPanel title="Product revenue" label="Line items">
 							<RowsEmptyGuard show={topProducts.length === 0}>
-								<div className="divide-y divide-[#30352f]">
+								<div className="divide-y divide-rule">
 									{topProducts.map((product) => (
 										<CustomerRow
 											key={`${product.currency}:${product.productId ?? product.name}`}
@@ -347,7 +360,7 @@ function ReportsIndex() {
 						<RowsEmptyGuard show={openInvoices.length === 0}>
 							<div className="overflow-x-auto">
 								<table className="w-full min-w-[760px] text-left text-sm">
-									<thead className="border-b border-[#30352f] text-xs uppercase tracking-[0.08em] text-[#817d72]">
+									<thead className="border-b border-rule text-xs uppercase tracking-[0.08em] text-ink-3">
 										<tr>
 											<th className="py-3 pr-4 font-medium">Invoice</th>
 											<th className="py-3 pr-4 font-medium">Customer</th>
@@ -358,25 +371,25 @@ function ReportsIndex() {
 											<th className="py-3 text-right font-medium">Status</th>
 										</tr>
 									</thead>
-									<tbody className="divide-y divide-[#30352f]">
+									<tbody className="divide-y divide-rule">
 										{openInvoices.map((invoice) => (
-											<tr key={invoice.id} className="text-[#d8d1c4]">
-												<td className="py-3 pr-4 font-medium text-[#f2efe7]">
+											<tr key={invoice.id} className="text-ink-2">
+												<td className="py-3 pr-4 font-medium text-ink">
 													{invoice.invoiceNumber}
 												</td>
 												<td className="py-3 pr-4">{invoice.customerName}</td>
 												<td className="py-3 pr-4">
 													{formatInvoiceDate(invoice.dueDate)}
 												</td>
-												<td className="py-3 pr-4 text-right font-medium text-[#f2efe7]">
+												<td className="py-3 pr-4 text-right font-medium text-ink">
 													{formatMoney(invoice.balance, currency)}
 												</td>
 												<td className="py-3 text-right">
 													<span
 														className={`inline-flex border px-2 py-1 text-xs font-medium ${
 															invoice.daysOverdue > 0
-																? "border-[#ff8a8a]/40 bg-[#2a1717] text-[#ffb1b1]"
-																: "border-[#3f5130] bg-[#1a2117] text-[#c8ff62]"
+																? "border-danger-line/40 bg-danger-soft text-danger"
+																: "border-brand-line bg-brand-soft text-brand"
 														}`}
 													>
 														{invoice.daysOverdue > 0
@@ -427,8 +440,8 @@ function MovementTooltip({
 	if (!active || !payload?.length) return null;
 
 	return (
-		<div className="min-w-[210px] rounded-md border border-[#30352f] bg-[#0f1111]/95 px-3 py-3 text-xs shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-md">
-			<p className="mb-2 font-medium text-[#f2efe7]">{label}</p>
+		<div className="min-w-[210px] rounded-md border border-rule bg-paper/95 px-3 py-3 text-xs shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-md">
+			<p className="mb-2 font-medium text-ink">{label}</p>
 			<div className="space-y-2">
 				{payload.map((entry) => {
 					const isCollected = entry.dataKey === "collectedAmount";
@@ -437,15 +450,15 @@ function MovementTooltip({
 							key={String(entry.dataKey)}
 							className="flex items-center justify-between gap-4"
 						>
-							<span className="inline-flex items-center gap-2 text-[#aaa294]">
+							<span className="inline-flex items-center gap-2 text-ink-3">
 								<span
 									className={`h-2 w-2 rounded-full ${
-										isCollected ? "bg-[#c8ff62]" : "bg-[#8bd5ff]"
+										isCollected ? "bg-brand" : "bg-info"
 									}`}
 								/>
 								{isCollected ? "Collected" : "Billed"}
 							</span>
-							<span className="font-medium text-[#f2efe7]">
+							<span className="font-medium text-ink">
 								{formatMoney(Number(entry.value ?? 0), currency)}
 							</span>
 						</div>
@@ -474,24 +487,24 @@ function CustomerConcentrationTooltip({
 	const invoiceCount = Number(point.invoiceCount ?? 0);
 
 	return (
-		<div className="min-w-[230px] rounded-md border border-[#30352f] bg-[#0f1111]/95 px-3 py-3 text-xs shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-md">
-			<p className="font-medium text-[#f2efe7]">{customerName}</p>
+		<div className="min-w-[230px] rounded-md border border-rule bg-paper/95 px-3 py-3 text-xs shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-md">
+			<p className="font-medium text-ink">{customerName}</p>
 			<div className="mt-2 space-y-2">
 				<div className="flex items-center justify-between gap-4">
-					<span className="text-[#aaa294]">Billed</span>
-					<span className="font-medium text-[#8bd5ff]">
+					<span className="text-ink-3">Billed</span>
+					<span className="font-medium text-info">
 						{formatMoney(billedAmount, currency)}
 					</span>
 				</div>
 				<div className="flex items-center justify-between gap-4">
-					<span className="text-[#aaa294]">Open</span>
-					<span className="font-medium text-[#f2efe7]">
+					<span className="text-ink-3">Open</span>
+					<span className="font-medium text-ink">
 						{formatMoney(outstandingAmount, currency)}
 					</span>
 				</div>
 				<div className="flex items-center justify-between gap-4">
-					<span className="text-[#817d72]">Invoices</span>
-					<span className="text-[#d8d1c4]">{invoiceCount}</span>
+					<span className="text-ink-3">Invoices</span>
+					<span className="text-ink-2">{invoiceCount}</span>
 				</div>
 			</div>
 		</div>
@@ -509,19 +522,19 @@ function MetricPanel({
 	label: string;
 	value: string;
 	detail: string;
-	tone?: "neutral" | "lime" | "amber" | "rose";
+	tone?: "neutral" | "brand" | "amber" | "rose";
 }) {
 	const toneClass = {
-		neutral: "text-[#8bd5ff] border-[#8bd5ff]/35 bg-[#14202a]",
-		lime: "text-[#c8ff62] border-[#c8ff62]/35 bg-[#1a2117]",
-		amber: "text-[#ffd166] border-[#ffd166]/35 bg-[#2a2414]",
-		rose: "text-[#ff8a8a] border-[#ff8a8a]/35 bg-[#2a1717]",
+		neutral: "text-info border-info-line/35 bg-info-soft",
+		brand: "text-brand border-brand/35 bg-brand-soft",
+		amber: "text-warn border-warn-line/35 bg-warn-soft",
+		rose: "text-danger border-danger-line/35 bg-danger-soft",
 	}[tone];
 
 	return (
-		<div className="ui-panel rounded-md border border-[#30352f] bg-[#171a18] p-4">
+		<div className="ui-panel rounded-md border border-rule bg-paper-2 p-4">
 			<div className="flex items-center justify-between gap-3">
-				<p className="text-xs font-medium uppercase tracking-[0.1em] text-[#817d72]">
+				<p className="text-xs font-medium uppercase tracking-[0.1em] text-ink-3">
 					{label}
 				</p>
 				<span
@@ -530,10 +543,10 @@ function MetricPanel({
 					<Icon className="h-4 w-4" />
 				</span>
 			</div>
-			<p className="mt-4 truncate text-2xl font-semibold tracking-normal text-[#f2efe7]">
+			<p className="mt-4 truncate text-2xl font-semibold tracking-normal text-ink">
 				{value}
 			</p>
-			<p className="mt-2 text-sm text-[#a7a095]">{detail}</p>
+			<p className="mt-2 text-sm text-ink-3">{detail}</p>
 		</div>
 	);
 }
@@ -548,10 +561,10 @@ function ReportPanel({
 	children: ReactNode;
 }) {
 	return (
-		<section className="ui-panel rounded-md border border-[#30352f] bg-[#171a18]">
-			<div className="flex items-center justify-between gap-3 border-b border-[#30352f] px-4 py-3">
-				<h2 className="text-sm font-semibold text-[#f2efe7]">{title}</h2>
-				<span className="text-xs font-medium uppercase tracking-[0.08em] text-[#817d72]">
+		<section className="ui-panel rounded-md border border-rule bg-paper-2">
+			<div className="flex items-center justify-between gap-3 border-b border-rule px-4 py-3">
+				<h2 className="text-sm font-semibold text-ink">{title}</h2>
+				<span className="text-xs font-medium uppercase tracking-[0.08em] text-ink-3">
 					{label}
 				</span>
 			</div>
@@ -565,22 +578,22 @@ function CustomerRow({
 	primary,
 	secondary,
 	meta,
-	tone = "lime",
+	tone = "brand",
 }: {
 	name: string;
 	primary: string;
 	secondary: string;
 	meta: string;
-	tone?: "lime" | "rose" | "cyan";
+	tone?: "brand" | "rose" | "cyan";
 }) {
 	const Icon =
 		tone === "rose" ? ArrowDownRight : tone === "cyan" ? ReceiptText : Users;
 	const iconClass =
 		tone === "rose"
-			? "border-[#ff8a8a]/35 bg-[#2a1717] text-[#ff8a8a]"
+			? "border-danger-line/35 bg-danger-soft text-danger"
 			: tone === "cyan"
-				? "border-[#8bd5ff]/35 bg-[#14202a] text-[#8bd5ff]"
-				: "border-[#c8ff62]/35 bg-[#1a2117] text-[#c8ff62]";
+				? "border-info-line/35 bg-info-soft text-info"
+				: "border-brand/35 bg-brand-soft text-brand";
 
 	return (
 		<div className="flex items-center gap-3 py-3">
@@ -590,29 +603,13 @@ function CustomerRow({
 				<Icon className="h-4 w-4" />
 			</span>
 			<div className="min-w-0 flex-1">
-				<p className="truncate text-sm font-medium text-[#f2efe7]">{name}</p>
-				<p className="mt-1 text-xs text-[#817d72]">{meta}</p>
+				<p className="truncate text-sm font-medium text-ink">{name}</p>
+				<p className="mt-1 text-xs text-ink-3">{meta}</p>
 			</div>
 			<div className="text-right">
-				<p className="text-sm font-semibold text-[#f2efe7]">{primary}</p>
-				<p className="mt-1 text-xs text-[#a7a095]">{secondary}</p>
+				<p className="text-sm font-semibold text-ink">{primary}</p>
+				<p className="mt-1 text-xs text-ink-3">{secondary}</p>
 			</div>
-		</div>
-	);
-}
-
-function RowsEmptyGuard({
-	show,
-	children,
-}: {
-	show: boolean;
-	children: ReactNode;
-}) {
-	if (!show) return <>{children}</>;
-
-	return (
-		<div className="flex min-h-36 items-center justify-center border border-dashed border-[#30352f] text-sm text-[#817d72]">
-			No records for this period
 		</div>
 	);
 }
@@ -622,13 +619,13 @@ function ReportsSkeleton() {
 		<div className="space-y-4">
 			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
 				{METRIC_SKELETON_KEYS.map((key) => (
-					<Skeleton key={key} className="h-32 rounded-md bg-[#1b2019]" />
+					<Skeleton key={key} className="h-32 rounded-md bg-paper-3" />
 				))}
 			</div>
-			<Skeleton className="h-[380px] rounded-md bg-[#1b2019]" />
+			<Skeleton className="h-[380px] rounded-md bg-paper-3" />
 			<div className="grid gap-4 xl:grid-cols-3">
 				{TABLE_SKELETON_KEYS.map((key) => (
-					<Skeleton key={key} className="h-72 rounded-md bg-[#1b2019]" />
+					<Skeleton key={key} className="h-72 rounded-md bg-paper-3" />
 				))}
 			</div>
 		</div>

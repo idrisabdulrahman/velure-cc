@@ -10,6 +10,8 @@ export const auditActionLiterals = [
 	"invoice.sent",
 	"invoice.viewed",
 	"invoice.converted",
+	"invoice.schedule_canceled",
+	"invoice.rescheduled",
 	"collection.session.created",
 	"collection.session.expired",
 	"payment.initiated",

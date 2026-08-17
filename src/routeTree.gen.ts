@@ -38,6 +38,7 @@ import { Route as ITokenRouteImport } from './routes/i.$token'
 import { Route as ClientsNewRouteImport } from './routes/clients.new'
 import { Route as InvoicesProductsNewRouteImport } from './routes/invoices.products.new'
 import { Route as InvoicesProductsIdRouteImport } from './routes/invoices.products.$id'
+import { Route as ApiAuthSupabaseSessionRouteImport } from './routes/api/auth/supabase-session'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiSecurityLinkStepupVerifyRouteImport } from './routes/api/security/link-stepup/verify'
 import { Route as ApiSecurityLinkStepupStatusRouteImport } from './routes/api/security/link-stepup/status'
@@ -200,6 +201,11 @@ const InvoicesProductsIdRoute = InvoicesProductsIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => InvoicesProductsRoute,
 } as any)
+const ApiAuthSupabaseSessionRoute = ApiAuthSupabaseSessionRouteImport.update({
+  id: '/api/auth/supabase-session',
+  path: '/api/auth/supabase-session',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -309,6 +315,7 @@ export interface FileRoutesByFullPath {
   '/reports/': typeof ReportsIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/auth/supabase-session': typeof ApiAuthSupabaseSessionRoute
   '/invoices/products/$id': typeof InvoicesProductsIdRoute
   '/invoices/products/new': typeof InvoicesProductsNewRoute
   '/api/auth/$first/$second': typeof ApiAuthFirstSecondRoute
@@ -350,6 +357,7 @@ export interface FileRoutesByTo {
   '/reports': typeof ReportsIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/auth/supabase-session': typeof ApiAuthSupabaseSessionRoute
   '/invoices/products/$id': typeof InvoicesProductsIdRoute
   '/invoices/products/new': typeof InvoicesProductsNewRoute
   '/api/auth/$first/$second': typeof ApiAuthFirstSecondRoute
@@ -396,6 +404,7 @@ export interface FileRoutesById {
   '/reports/': typeof ReportsIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/auth/supabase-session': typeof ApiAuthSupabaseSessionRoute
   '/invoices/products/$id': typeof InvoicesProductsIdRoute
   '/invoices/products/new': typeof InvoicesProductsNewRoute
   '/api/auth/$first/$second': typeof ApiAuthFirstSecondRoute
@@ -443,6 +452,7 @@ export interface FileRouteTypes {
     | '/reports/'
     | '/settings/'
     | '/api/auth/$'
+    | '/api/auth/supabase-session'
     | '/invoices/products/$id'
     | '/invoices/products/new'
     | '/api/auth/$first/$second'
@@ -484,6 +494,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/settings'
     | '/api/auth/$'
+    | '/api/auth/supabase-session'
     | '/invoices/products/$id'
     | '/invoices/products/new'
     | '/api/auth/$first/$second'
@@ -529,6 +540,7 @@ export interface FileRouteTypes {
     | '/reports/'
     | '/settings/'
     | '/api/auth/$'
+    | '/api/auth/supabase-session'
     | '/invoices/products/$id'
     | '/invoices/products/new'
     | '/api/auth/$first/$second'
@@ -563,6 +575,7 @@ export interface RootRouteChildren {
   SolutionsEnterpriseRoute: typeof SolutionsEnterpriseRoute
   SolutionsSmallBusinessRoute: typeof SolutionsSmallBusinessRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiAuthSupabaseSessionRoute: typeof ApiAuthSupabaseSessionRoute
   ApiAuthFirstSecondRoute: typeof ApiAuthFirstSecondRoute
   ApiEmailResendWebhookRoute: typeof ApiEmailResendWebhookRoute
   ApiIntegrationsQuickbooksCallbackRoute: typeof ApiIntegrationsQuickbooksCallbackRoute
@@ -783,6 +796,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InvoicesProductsIdRouteImport
       parentRoute: typeof InvoicesProductsRoute
     }
+    '/api/auth/supabase-session': {
+      id: '/api/auth/supabase-session'
+      path: '/api/auth/supabase-session'
+      fullPath: '/api/auth/supabase-session'
+      preLoaderRoute: typeof ApiAuthSupabaseSessionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -976,6 +996,7 @@ const rootRouteChildren: RootRouteChildren = {
   SolutionsEnterpriseRoute: SolutionsEnterpriseRoute,
   SolutionsSmallBusinessRoute: SolutionsSmallBusinessRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiAuthSupabaseSessionRoute: ApiAuthSupabaseSessionRoute,
   ApiAuthFirstSecondRoute: ApiAuthFirstSecondRoute,
   ApiEmailResendWebhookRoute: ApiEmailResendWebhookRoute,
   ApiIntegrationsQuickbooksCallbackRoute:

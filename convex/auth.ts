@@ -62,7 +62,7 @@ async function sendEmail(params: {
 		throw new Error("RESEND_API_KEY is missing for transactional emails.");
 	}
 
-	const from = env.RESEND_FROM ?? "Invoice Gen <onboarding@resend.dev>";
+	const from = env.RESEND_FROM ?? "Velure <onboarding@resend.dev>";
 
 	const response = await fetch("https://api.resend.com/emails", {
 		method: "POST",

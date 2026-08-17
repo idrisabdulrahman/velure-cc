@@ -27,6 +27,7 @@ import {
 	requireWritableInvoice,
 	requireWritableWorkspace,
 } from "./rls";
+import { editorDocValidator } from "./validators";
 
 const statusValidator = v.union(
 	v.literal("draft"),
@@ -35,6 +36,12 @@ const statusValidator = v.union(
 	v.literal("paid"),
 	v.literal("overdue"),
 	v.literal("canceled"),
+	v.literal("scheduled"),
+);
+const deliveryTypeValidator = v.union(
+	v.literal("create"),
+	v.literal("create_and_send"),
+	v.literal("scheduled"),
 );
 
 const typeValidator = v.union(v.literal("one-time"), v.literal("recurring"));
@@ -141,6 +148,30 @@ const lineItemValidator = v.object({
 	quantity: v.number(),
 	price: v.number(),
 	productId: v.optional(v.id("products")),
+	unit: v.optional(v.string()),
+});
+
+const invoiceTemplateSettingsValidator = v.object({
+	title: v.optional(v.string()),
+	customerLabel: v.optional(v.string()),
+	fromLabel: v.optional(v.string()),
+	invoiceNoLabel: v.optional(v.string()),
+	issueDateLabel: v.optional(v.string()),
+	dueDateLabel: v.optional(v.string()),
+	descriptionLabel: v.optional(v.string()),
+	quantityLabel: v.optional(v.string()),
+	priceLabel: v.optional(v.string()),
+	totalLabel: v.optional(v.string()),
+	totalSummaryLabel: v.optional(v.string()),
+	subtotalLabel: v.optional(v.string()),
+	discountLabel: v.optional(v.string()),
+	paymentLabel: v.optional(v.string()),
+	noteLabel: v.optional(v.string()),
+	includeDecimals: v.optional(v.boolean()),
+	includeDiscount: v.optional(v.boolean()),
+	includeUnits: v.optional(v.boolean()),
+	includeQr: v.optional(v.boolean()),
+	discount: v.optional(v.number()),
 });
 
 const shipmentDetailsValidator = v.object({
@@ -305,11 +336,13 @@ const paymentProviderValidator = v.union(
 const invoiceValidator = v.object({
 	id: v.id("invoices"),
 	token: v.string(),
+	tokenRevokedAt: v.optional(v.number()),
 	documentType: v.optional(documentTypeValidator),
 	convertedToInvoiceId: v.optional(v.id("invoices")),
 	shipmentDetails: v.optional(shipmentDetailsValidator),
 	depositRequest: v.optional(depositRequestValidator),
 	invoiceNumber: v.string(),
+	customerId: v.optional(v.id("clients")),
 	customerName: v.string(),
 	logoUrl: v.optional(v.string()),
 	customerPoNumber: v.optional(v.string()),
@@ -319,6 +352,9 @@ const invoiceValidator = v.object({
 	dateFormat: dateFormatValidator,
 	paymentTermsDays: v.number(),
 	template: v.string(),
+	templateSettings: v.optional(invoiceTemplateSettingsValidator),
+	topBlock: v.optional(editorDocValidator),
+	bottomBlock: v.optional(editorDocValidator),
 	issueDate: v.string(),
 	dueDate: v.string(),
 	status: statusValidator,
@@ -330,10 +366,14 @@ const invoiceValidator = v.object({
 	paymentProvider: v.optional(paymentProviderValidator),
 	paidAt: v.optional(v.number()),
 	paymentReference: v.optional(v.string()),
+	finalizedAt: v.optional(v.number()),
+	scheduledAt: v.optional(v.number()),
+	scheduleVersion: v.optional(v.string()),
 	deliveredAt: v.optional(v.number()),
 	canceledAt: v.optional(v.number()),
 	deletedAt: v.optional(v.number()),
-	notes: v.optional(v.string()),
+	notes: v.optional(v.union(v.string(), editorDocValidator)),
+	internalNotes: v.optional(v.string()),
 	lineItems: v.array(lineItemValidator),
 	compliance: v.optional(complianceValidator),
 	fiscalization: v.optional(fiscalizationValidator),
@@ -441,10 +481,11 @@ function invoiceAmount(invoice: {
 	const complianceAmount = netPayableFromCompliance(invoice.compliance);
 	if (complianceAmount !== undefined) return complianceAmount;
 
-	return invoice.lineItems.reduce(
+	const value = invoice.lineItems.reduce(
 		(sum, item) => sum + item.quantity * item.price,
 		0,
 	);
+	return Math.round((value + Math.sign(value) * Number.EPSILON) * 100) / 100;
 }
 
 function legacyPaymentAmount(invoice: any, total: number) {
@@ -471,12 +512,14 @@ function getDerivedInvoiceStatus(invoice: any) {
 
 	if (invoice.canceledAt || invoice.status === "canceled")
 		return "canceled" as const;
+	if (invoice.scheduledAt && invoice.scheduleVersion)
+		return "scheduled" as const;
 	if (total > 0 && paymentAmount >= total) return "paid" as const;
 	if (paymentAmount > 0 && paymentAmount < total)
 		return "partially-paid" as const;
 
 	const deliveredAt = deliveredAtForInvoice(invoice);
-	if (!deliveredAt) return "draft" as const;
+	if (!deliveredAt && !invoice.finalizedAt) return "draft" as const;
 
 	const dueDate = new Date(`${invoice.dueDate}T00:00:00`);
 	if (!Number.isNaN(dueDate.getTime())) {
@@ -496,6 +539,25 @@ function patchWithDerivedStatus(current: any, patch: Record<string, unknown>) {
 	};
 }
 
+export function customerBelongsToWorkspace(
+	customer: Pick<Doc<"clients">, "workspaceId"> | null,
+	workspaceId: Id<"workspaces">,
+) {
+	return customer?.workspaceId === workspaceId;
+}
+
+async function assertWorkspaceCustomer(
+	ctx: MutationCtx,
+	workspaceId: Id<"workspaces">,
+	customerId?: Id<"clients">,
+) {
+	if (!customerId) return;
+	const customer = await ctx.db.get(customerId);
+	if (!customerBelongsToWorkspace(customer, workspaceId)) {
+		throw new Error("Customer not found.");
+	}
+}
+
 const mapInvoice = (invoice: any) => {
 	const total = invoiceAmount(invoice);
 	const paymentAmount = legacyPaymentAmount(invoice, total);
@@ -505,11 +567,13 @@ const mapInvoice = (invoice: any) => {
 	return {
 		id: invoice._id,
 		token: invoice.token,
+		tokenRevokedAt: invoice.tokenRevokedAt,
 		documentType: invoice.documentType ?? "standard",
 		convertedToInvoiceId: invoice.convertedToInvoiceId,
 		shipmentDetails: invoice.shipmentDetails,
 		depositRequest: invoice.depositRequest,
 		invoiceNumber: invoice.invoiceNumber,
+		customerId: invoice.customerId,
 		customerName: invoice.customerName,
 		logoUrl: invoice.logoUrl,
 		customerPoNumber: invoice.customerPoNumber,
@@ -519,23 +583,32 @@ const mapInvoice = (invoice: any) => {
 		dateFormat: invoice.dateFormat ?? "ng",
 		paymentTermsDays: invoice.paymentTermsDays ?? 14,
 		template: invoice.template ?? "Default",
+		templateSettings: invoice.templateSettings,
+		topBlock: invoice.topBlock,
+		bottomBlock: invoice.bottomBlock,
 		issueDate: invoice.issueDate,
 		dueDate: invoice.dueDate,
 		status,
 		total,
-		balance: Math.max(0, total - paymentAmount),
+		balance: (() => {
+			const value = Math.max(0, total - paymentAmount);
+			return Math.round((value + Number.EPSILON) * 100) / 100;
+		})(),
 		paymentAmount,
 		paymentDetails: invoice.paymentDetails,
 		paymentLink: invoice.paymentLink,
 		paymentProvider: invoice.paymentProvider,
 		paidAt: invoice.paidAt,
 		paymentReference: invoice.paymentReference,
+		finalizedAt: invoice.finalizedAt,
+		scheduledAt: invoice.scheduledAt,
 		deliveredAt,
 		canceledAt:
 			invoice.canceledAt ??
 			(invoice.status === "canceled" ? invoice.updatedAt : undefined),
 		deletedAt: invoice.deletedAt,
 		notes: invoice.notes,
+		internalNotes: invoice.internalNotes,
 		lineItems: invoice.lineItems,
 		compliance: invoice.compliance ?? defaultCompliance(invoice),
 		fiscalization: invoice.fiscalization ??
@@ -548,7 +621,83 @@ const mapInvoice = (invoice: any) => {
 	};
 };
 
-function assertInvoiceInput(args: {
+export function mapPublicInvoice(invoice: Parameters<typeof mapInvoice>[0]) {
+	const mapped = mapInvoice(invoice);
+
+	return {
+		id: mapped.id,
+		token: mapped.token,
+		documentType: mapped.documentType,
+		shipmentDetails: mapped.shipmentDetails,
+		depositRequest: mapped.depositRequest,
+		invoiceNumber: mapped.invoiceNumber,
+		customerName: mapped.customerName,
+		logoUrl: mapped.logoUrl,
+		customerPoNumber: mapped.customerPoNumber,
+		currency: mapped.currency,
+		type: mapped.type,
+		invoiceSize: mapped.invoiceSize,
+		dateFormat: mapped.dateFormat,
+		paymentTermsDays: mapped.paymentTermsDays,
+		template: mapped.template,
+		templateSettings: mapped.templateSettings,
+		topBlock: mapped.topBlock,
+		bottomBlock: mapped.bottomBlock,
+		issueDate: mapped.issueDate,
+		dueDate: mapped.dueDate,
+		status: mapped.status,
+		total: mapped.total,
+		balance: mapped.balance,
+		paymentAmount: mapped.paymentAmount,
+		paymentDetails: mapped.paymentDetails,
+		paidAt: mapped.paidAt,
+		deliveredAt: mapped.deliveredAt,
+		canceledAt: mapped.canceledAt,
+		notes: mapped.notes,
+		lineItems: mapped.lineItems,
+		compliance: mapped.compliance,
+		fiscalization: mapped.fiscalization,
+		lifecycle: mapped.lifecycle,
+		createdAt: mapped.createdAt,
+		updatedAt: mapped.updatedAt,
+	};
+}
+
+export function isPublicInvoiceAvailable(invoice: {
+	deletedAt?: number;
+	canceledAt?: number;
+	tokenRevokedAt?: number;
+}) {
+	return !invoice.deletedAt && !invoice.canceledAt && !invoice.tokenRevokedAt;
+}
+
+export function parseFutureSchedule(value: string | undefined, now: number) {
+	if (!value)
+		throw new Error("scheduledAt is required for scheduled delivery.");
+	const scheduledAt = Date.parse(value);
+	if (!Number.isFinite(scheduledAt) || scheduledAt <= now) {
+		throw new Error("scheduledAt must be a valid future date.");
+	}
+	return scheduledAt;
+}
+
+export function canRunScheduledDelivery(
+	invoice: Pick<
+		Doc<"invoices">,
+		"deletedAt" | "canceledAt" | "scheduledAt" | "scheduleVersion"
+	> | null,
+	version: string,
+) {
+	return Boolean(
+		invoice &&
+			!invoice.deletedAt &&
+			!invoice.canceledAt &&
+			invoice.scheduledAt &&
+			invoice.scheduleVersion === version,
+	);
+}
+
+export function assertInvoiceInput(args: {
 	invoiceNumber: string;
 	currency: string;
 	lineItems: Array<{
@@ -557,6 +706,7 @@ function assertInvoiceInput(args: {
 		quantity: number;
 		price: number;
 	}>;
+	templateSettings?: { includeDiscount?: boolean; discount?: number };
 	compliance?: {
 		seller?: { taxId?: string; rcNumber?: string; phone?: string };
 		buyer?: { taxId?: string; phone?: string };
@@ -575,6 +725,14 @@ function assertInvoiceInput(args: {
 		throw new Error(
 			"Invoices support a maximum of 50 line items for safe rendering.",
 		);
+	}
+
+	const discount = args.templateSettings?.includeDiscount
+		? (args.templateSettings.discount ?? 0)
+		: 0;
+	const subtotal = invoiceAmount({ lineItems: args.lineItems });
+	if (discount < 0 || discount > subtotal) {
+		throw new Error("Discount must be between zero and the invoice subtotal.");
 	}
 
 	assertValidTin(args.compliance?.seller?.taxId);
@@ -836,7 +994,8 @@ type InvoiceListArgs = {
 		| "partially-paid"
 		| "paid"
 		| "overdue"
-		| "canceled";
+		| "canceled"
+		| "scheduled";
 	type?: "all" | "one-time" | "recurring";
 	documentType?: "all" | "standard" | "proforma";
 	customer?: string;
@@ -1145,6 +1304,53 @@ function buildInvoiceListSummary(rows: any[]) {
 	return {
 		currencySummaries: summaries,
 		chartDataByCurrency: chartData,
+		paymentScore: buildInvoicePaymentScore(rows),
+	};
+}
+
+export function buildInvoicePaymentScore(rows: any[]) {
+	const dayMs = 24 * 60 * 60 * 1000;
+	const paid = rows.filter((invoice) => {
+		if ((invoice.documentType ?? "standard") === "proforma") return false;
+		return invoice.status === "paid" && Number(invoice.paidAt ?? 0) > 0;
+	});
+
+	if (paid.length === 0) {
+		return {
+			score: 0,
+			status: "no_data" as const,
+			paidInvoiceCount: 0,
+			onTimeCount: 0,
+			averageDaysToPay: null,
+		};
+	}
+
+	let onTimeCount = 0;
+	let totalDaysToPay = 0;
+	for (const invoice of paid) {
+		const paidAt = Number(invoice.paidAt);
+		const issueAt = Date.parse(`${invoice.issueDate}T00:00:00Z`);
+		const dueAt = Date.parse(`${invoice.dueDate}T23:59:59Z`);
+		if (Number.isFinite(dueAt) && paidAt <= dueAt) onTimeCount += 1;
+		if (Number.isFinite(issueAt)) {
+			totalDaysToPay += Math.max(0, Math.ceil((paidAt - issueAt) / dayMs));
+		}
+	}
+
+	const score = Math.round((onTimeCount / paid.length) * 100);
+	return {
+		score,
+		status:
+			score >= 90
+				? ("excellent" as const)
+				: score >= 70
+					? ("good" as const)
+					: score >= 50
+						? ("fair" as const)
+						: ("slow" as const),
+		paidInvoiceCount: paid.length,
+		onTimeCount,
+		averageDaysToPay: Math.round(totalDaysToPay / paid.length),
 	};
 }
 
@@ -1155,6 +1361,36 @@ export const list = query({
 		if (!scope) return [];
 
 		return listInvoicesForWorkspace(ctx, scope.workspaceId, args);
+	},
+});
+
+export const getTemplateDefaults = query({
+	args: {},
+	handler: async (ctx) => {
+		const scope = await requireWorkspaceForRead(ctx);
+		if (!scope) return null;
+		const workspace = await ctx.db.get(scope.workspaceId);
+		return workspace?.invoiceTemplateDefaults ?? null;
+	},
+});
+
+export const saveTemplateDefaults = mutation({
+	args: { settings: invoiceTemplateSettingsValidator },
+	handler: async (ctx, args) => {
+		const scope = await requireWritableWorkspace(ctx);
+		const settings = Object.fromEntries(
+			Object.entries(args.settings).map(([key, value]) => [
+				key,
+				typeof value === "string" ? value.trim().slice(0, 80) : value,
+			]),
+		) as typeof args.settings;
+		if ((settings.discount ?? 0) < 0)
+			throw new Error("Discount must be non-negative.");
+		await ctx.db.patch(scope.workspaceId, {
+			invoiceTemplateDefaults: settings,
+			updatedAt: Date.now(),
+		});
+		return { ok: true };
 	},
 });
 
@@ -1281,18 +1517,9 @@ export const getPublicByToken = query({
 			.withIndex("by_token", (q) => q.eq("token", args.token))
 			.first();
 
-		if (
-			!invoice ||
-			invoice.deletedAt ||
-			getDerivedInvoiceStatus(invoice) === "canceled"
-		)
-			return null;
+		if (!invoice || !isPublicInvoiceAvailable(invoice)) return null;
 
-		return {
-			...mapInvoice(invoice),
-			paymentLink: undefined,
-			paymentProvider: undefined,
-		};
+		return mapPublicInvoice(invoice);
 	},
 });
 
@@ -1304,6 +1531,7 @@ export const createDraft = mutation({
 		shipmentDetails: v.optional(shipmentDetailsValidator),
 		depositRequest: v.optional(depositRequestValidator),
 		invoiceNumber: v.string(),
+		customerId: v.optional(v.id("clients")),
 		customerName: v.string(),
 		logoUrl: v.optional(v.string()),
 		customerPoNumber: v.optional(v.string()),
@@ -1313,18 +1541,22 @@ export const createDraft = mutation({
 		dateFormat: v.optional(dateFormatValidator),
 		paymentTermsDays: v.optional(v.number()),
 		template: v.optional(v.string()),
+		templateSettings: v.optional(invoiceTemplateSettingsValidator),
+		topBlock: v.optional(editorDocValidator),
+		bottomBlock: v.optional(editorDocValidator),
 		issueDate: v.string(),
 		dueDate: v.string(),
 		paymentDetails: v.optional(v.string()),
 		paymentLink: v.optional(v.string()),
 		paymentProvider: v.optional(paymentProviderValidator),
-		notes: v.optional(v.string()),
+		notes: v.optional(v.union(v.string(), editorDocValidator)),
 		lineItems: v.array(lineItemValidator),
 		compliance: v.optional(complianceValidator),
 		fiscalization: v.optional(fiscalizationValidator),
 		reminder: v.optional(reminderValidator),
 		sync: v.optional(syncValidator),
-		autoSendEmail: v.optional(v.boolean()),
+		deliveryType: v.optional(deliveryTypeValidator),
+		scheduledAt: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const scope = await requireWritableWorkspace(ctx);
@@ -1340,6 +1572,7 @@ export const createDraft = mutation({
 				throw new Error("Only draft invoices can be finalized.");
 			}
 		}
+		await assertWorkspaceCustomer(ctx, scope.workspaceId, args.customerId);
 		const preparedNumber =
 			existingDraft && !args.invoiceNumber.trim()
 				? {
@@ -1358,6 +1591,7 @@ export const createDraft = mutation({
 			invoiceNumber,
 			currency: args.currency,
 			lineItems: args.lineItems,
+			templateSettings: args.templateSettings,
 			compliance: normalizedCompliance,
 		});
 		const reminder = args.reminder ?? defaultReminder();
@@ -1372,6 +1606,19 @@ export const createDraft = mutation({
 			documentType,
 		);
 
+		const deliveryType = args.deliveryType ?? "create";
+		const scheduledAt =
+			deliveryType === "scheduled"
+				? parseFutureSchedule(args.scheduledAt, now)
+				: undefined;
+		const scheduleVersion = scheduledAt ? crypto.randomUUID() : undefined;
+		if (
+			(deliveryType === "create_and_send" || deliveryType === "scheduled") &&
+			!normalizedCompliance?.buyer?.email?.trim()
+		) {
+			throw new Error("Customer email is required to send this invoice.");
+		}
+
 		const invoiceDoc = {
 			workspaceId: scope.workspaceId,
 			userId: existingDraft?.userId ?? scope.userId,
@@ -1380,6 +1627,7 @@ export const createDraft = mutation({
 			shipmentDetails,
 			depositRequest,
 			invoiceNumber,
+			customerId: args.customerId,
 			customerName: args.customerName,
 			logoUrl: args.logoUrl,
 			customerPoNumber,
@@ -1389,9 +1637,15 @@ export const createDraft = mutation({
 			dateFormat: args.dateFormat ?? "ng",
 			paymentTermsDays: args.paymentTermsDays ?? 14,
 			template: args.template ?? "Default",
+			templateSettings: args.templateSettings,
+			topBlock: args.topBlock,
+			bottomBlock: args.bottomBlock,
 			issueDate: args.issueDate,
 			dueDate: args.dueDate,
 			paymentAmount: 0,
+			finalizedAt: scheduledAt ? undefined : now,
+			scheduledAt,
+			scheduleVersion,
 			paymentDetails: args.paymentDetails,
 			notes: args.notes,
 			lineItems: args.lineItems,
@@ -1438,9 +1692,7 @@ export const createDraft = mutation({
 			},
 		});
 
-		const shouldAutoSend =
-			args.autoSendEmail !== false &&
-			normalizedCompliance?.buyer?.email?.trim();
+		const shouldAutoSend = deliveryType === "create_and_send";
 
 		if (shouldAutoSend) {
 			await ctx.scheduler.runAfter(
@@ -1449,6 +1701,13 @@ export const createDraft = mutation({
 				{
 					invoiceId: id,
 				},
+			);
+		}
+		if (scheduledAt && scheduleVersion) {
+			await ctx.scheduler.runAt(
+				scheduledAt,
+				internal.invoices.runScheduledInvoiceDelivery,
+				{ invoiceId: id, scheduleVersion },
 			);
 		}
 
@@ -1461,6 +1720,7 @@ export const createDraft = mutation({
 			shipmentDetails,
 			depositRequest,
 			invoiceNumber,
+			customerId: args.customerId,
 			customerName: args.customerName,
 			logoUrl: args.logoUrl,
 			customerPoNumber,
@@ -1473,6 +1733,9 @@ export const createDraft = mutation({
 			issueDate: args.issueDate,
 			dueDate: args.dueDate,
 			paymentAmount: 0,
+			finalizedAt: scheduledAt ? undefined : now,
+			scheduledAt,
+			scheduleVersion,
 			deliveredAt: undefined,
 			paymentDetails: args.paymentDetails,
 			notes: args.notes,
@@ -1489,6 +1752,117 @@ export const createDraft = mutation({
 	},
 });
 
+export const cancelSchedule = mutation({
+	args: { invoiceId: v.id("invoices") },
+	handler: async (ctx, args) => {
+		const scope = await requireWritableWorkspace(ctx);
+		const invoice = await ctx.db.get(args.invoiceId);
+		if (!invoice || invoice.workspaceId !== scope.workspaceId)
+			throw new Error("Scheduled invoice not found.");
+		if (!invoice.scheduledAt || !invoice.scheduleVersion)
+			throw new Error("Invoice is not scheduled.");
+		const now = Date.now();
+		await ctx.db.patch(args.invoiceId, {
+			finalizedAt: undefined,
+			scheduledAt: undefined,
+			scheduleVersion: undefined,
+			status: "draft",
+			updatedAt: now,
+		});
+		await recordAuditLog(ctx, {
+			workspaceId: scope.workspaceId,
+			actorId: scope.userId,
+			action: "invoice.schedule_canceled",
+			resourceType: "invoice",
+			resourceId: String(args.invoiceId),
+		});
+		return { ok: true };
+	},
+});
+
+export const reschedule = mutation({
+	args: { invoiceId: v.id("invoices"), scheduledAt: v.string() },
+	handler: async (ctx, args) => {
+		const scope = await requireWritableWorkspace(ctx);
+		const invoice = await ctx.db.get(args.invoiceId);
+		if (!invoice || invoice.workspaceId !== scope.workspaceId)
+			throw new Error("Scheduled invoice not found.");
+		if (!invoice.scheduledAt || !invoice.scheduleVersion)
+			throw new Error("Invoice is not scheduled.");
+		const now = Date.now();
+		const scheduledAt = parseFutureSchedule(args.scheduledAt, now);
+		const scheduleVersion = crypto.randomUUID();
+		await ctx.db.patch(args.invoiceId, {
+			scheduledAt,
+			scheduleVersion,
+			status: "scheduled",
+			updatedAt: now,
+		});
+		await ctx.scheduler.runAt(
+			scheduledAt,
+			internal.invoices.runScheduledInvoiceDelivery,
+			{ invoiceId: args.invoiceId, scheduleVersion },
+		);
+		await recordAuditLog(ctx, {
+			workspaceId: scope.workspaceId,
+			actorId: scope.userId,
+			action: "invoice.rescheduled",
+			resourceType: "invoice",
+			resourceId: String(args.invoiceId),
+			metadata: { scheduledAt },
+		});
+		return { ok: true, scheduledAt };
+	},
+});
+
+export const rotatePublicToken = mutation({
+	args: { id: v.id("invoices") },
+	handler: async (ctx, args) => {
+		const { scope, invoice } = await requireWritableInvoice(ctx, args.id);
+		const now = Date.now();
+		const token = `pub-${crypto.randomUUID()}`;
+		await ctx.db.patch(args.id, {
+			token,
+			tokenRevokedAt: undefined,
+			lifecycle: { ...(invoice.lifecycle ?? {}), firstViewedAt: undefined },
+			updatedAt: now,
+		});
+		await recordAuditLog(ctx, {
+			workspaceId: scope.workspaceId,
+			actorId: scope.userId,
+			action: "invoice.edited",
+			resourceType: "invoice",
+			resourceId: String(args.id),
+			metadata: {
+				invoiceNumber: invoice.invoiceNumber,
+				change: "public_token_rotated",
+			},
+		});
+		return { token };
+	},
+});
+
+export const revokePublicToken = mutation({
+	args: { id: v.id("invoices") },
+	handler: async (ctx, args) => {
+		const { scope, invoice } = await requireWritableInvoice(ctx, args.id);
+		const now = Date.now();
+		await ctx.db.patch(args.id, { tokenRevokedAt: now, updatedAt: now });
+		await recordAuditLog(ctx, {
+			workspaceId: scope.workspaceId,
+			actorId: scope.userId,
+			action: "invoice.edited",
+			resourceType: "invoice",
+			resourceId: String(args.id),
+			metadata: {
+				invoiceNumber: invoice.invoiceNumber,
+				change: "public_token_revoked",
+			},
+		});
+		return { ok: true };
+	},
+});
+
 export const autosaveDraft = mutation({
 	args: {
 		id: v.optional(v.id("invoices")),
@@ -1497,6 +1871,7 @@ export const autosaveDraft = mutation({
 		shipmentDetails: v.optional(shipmentDetailsValidator),
 		depositRequest: v.optional(depositRequestValidator),
 		invoiceNumber: v.string(),
+		customerId: v.optional(v.id("clients")),
 		customerName: v.string(),
 		logoUrl: v.optional(v.string()),
 		customerPoNumber: v.optional(v.string()),
@@ -1506,10 +1881,13 @@ export const autosaveDraft = mutation({
 		dateFormat: v.optional(dateFormatValidator),
 		paymentTermsDays: v.optional(v.number()),
 		template: v.optional(v.string()),
+		templateSettings: v.optional(invoiceTemplateSettingsValidator),
+		topBlock: v.optional(editorDocValidator),
+		bottomBlock: v.optional(editorDocValidator),
 		issueDate: v.string(),
 		dueDate: v.string(),
 		paymentDetails: v.optional(v.string()),
-		notes: v.optional(v.string()),
+		notes: v.optional(v.union(v.string(), editorDocValidator)),
 		lineItems: v.array(lineItemValidator),
 		compliance: v.optional(complianceValidator),
 		fiscalization: v.optional(fiscalizationValidator),
@@ -1532,6 +1910,7 @@ export const autosaveDraft = mutation({
 		const normalizedCompliance = normalizeComplianceSnapshot(compliance);
 		const documentType = args.documentType ?? "standard";
 		const current = args.id ? await ctx.db.get(args.id) : null;
+		await assertWorkspaceCustomer(ctx, scope.workspaceId, args.customerId);
 		const preparedNumber =
 			current && !args.invoiceNumber.trim()
 				? {
@@ -1558,6 +1937,7 @@ export const autosaveDraft = mutation({
 			invoiceNumber,
 			currency: args.currency,
 			lineItems,
+			templateSettings: args.templateSettings,
 			compliance: normalizedCompliance,
 		});
 
@@ -1567,6 +1947,7 @@ export const autosaveDraft = mutation({
 			shipmentDetails,
 			depositRequest,
 			invoiceNumber,
+			customerId: args.customerId,
 			customerName: args.customerName,
 			logoUrl: args.logoUrl,
 			customerPoNumber: normalizeCustomerPoNumber(args.customerPoNumber),
@@ -1576,6 +1957,9 @@ export const autosaveDraft = mutation({
 			dateFormat: args.dateFormat ?? "ng",
 			paymentTermsDays: args.paymentTermsDays ?? 14,
 			template: args.template ?? "Default",
+			templateSettings: args.templateSettings,
+			topBlock: args.topBlock,
+			bottomBlock: args.bottomBlock,
 			issueDate: args.issueDate,
 			dueDate: args.dueDate,
 			status: "draft" as const,
@@ -1651,6 +2035,7 @@ export const save = mutation({
 	args: invoiceValidator,
 	handler: async (ctx, args) => {
 		const { invoice: current } = await requireWritableInvoice(ctx, args.id);
+		await assertWorkspaceCustomer(ctx, current.workspaceId, args.customerId);
 
 		const compliance = args.compliance ?? defaultCompliance(args);
 		const normalizedCompliance = normalizeComplianceSnapshot(compliance);
@@ -1667,6 +2052,7 @@ export const save = mutation({
 			invoiceNumber: args.invoiceNumber,
 			currency: args.currency,
 			lineItems: args.lineItems,
+			templateSettings: args.templateSettings,
 			compliance: normalizedCompliance,
 		});
 		await assertUniqueInvoiceNumber(ctx, {
@@ -1683,6 +2069,7 @@ export const save = mutation({
 				shipmentDetails,
 				depositRequest,
 				invoiceNumber: args.invoiceNumber,
+				customerId: args.customerId,
 				customerName: args.customerName,
 				logoUrl: args.logoUrl,
 				customerPoNumber: normalizeCustomerPoNumber(args.customerPoNumber),
@@ -1692,6 +2079,7 @@ export const save = mutation({
 				dateFormat: args.dateFormat,
 				paymentTermsDays: args.paymentTermsDays,
 				template: args.template,
+				templateSettings: args.templateSettings,
 				issueDate: args.issueDate,
 				dueDate: args.dueDate,
 				paymentDetails: args.paymentDetails,
@@ -2121,6 +2509,7 @@ export const duplicate = mutation({
 			shipmentDetails: source.shipmentDetails,
 			depositRequest: source.depositRequest,
 			invoiceNumber: generated.invoiceNumber,
+			customerId: source.customerId,
 			customerName: source.customerName,
 			logoUrl: source.logoUrl,
 			customerPoNumber: source.customerPoNumber,
@@ -2192,6 +2581,7 @@ export const convertProformaToInvoice = mutation({
 			token: `pub-${crypto.randomUUID()}`,
 			documentType: "standard" as const,
 			invoiceNumber: generated.invoiceNumber,
+			customerId: source.customerId,
 			customerName: source.customerName,
 			logoUrl: source.logoUrl,
 			customerPoNumber: source.customerPoNumber,
@@ -2341,7 +2731,8 @@ export const importCsv = mutation({
 					| "partially-paid"
 					| "paid"
 					| "overdue"
-					| "canceled";
+					| "canceled"
+					| "scheduled";
 				issueDate: string;
 				dueDate: string;
 				notes?: string;
@@ -2537,7 +2928,13 @@ export const summary = query({
 
 		const totalForStatuses = (
 			statuses: Array<
-				"draft" | "unpaid" | "partially-paid" | "paid" | "overdue" | "canceled"
+				| "draft"
+				| "unpaid"
+				| "partially-paid"
+				| "paid"
+				| "overdue"
+				| "canceled"
+				| "scheduled"
 			>,
 		) => {
 			return invoices
@@ -2669,13 +3066,6 @@ function documentLabel(documentType: "standard" | "proforma" = "standard") {
 	return documentType === "proforma" ? "Pro-forma invoice" : "Invoice";
 }
 
-function buildInvoiceEmailSubject(
-	invoiceNumber: string,
-	documentType: "standard" | "proforma" = "standard",
-) {
-	return `${documentLabel(documentType)} ${invoiceNumber}`;
-}
-
 function escapeHtml(value: string) {
 	return value
 		.replace(/&/g, "&amp;")
@@ -2746,7 +3136,7 @@ export const recordInvoiceViewed = mutation({
 			.withIndex("by_token", (q) => q.eq("token", args.token))
 			.first();
 
-		if (!invoice || getDerivedInvoiceStatus(invoice) === "canceled") {
+		if (!invoice || !isPublicInvoiceAvailable(invoice)) {
 			return { ok: false };
 		}
 
@@ -2772,7 +3162,6 @@ export const recordInvoiceViewed = mutation({
 			resourceId: String(invoice._id),
 			metadata: {
 				invoiceNumber: invoice.invoiceNumber,
-				token: args.token,
 				firstView: !alreadyTracked,
 			},
 		});
@@ -2872,11 +3261,11 @@ export const recordDeliveryEvent = mutation({
 export const getInvoiceForSendingInternal = internalMutation({
 	args: { invoiceId: v.id("invoices") },
 	handler: async (ctx, args) => {
-		const { scope, invoice } = await requireWritableInvoice(
-			ctx,
-			args.invoiceId,
-		);
-		return { scope, invoice };
+		const invoice = await ctx.db.get(args.invoiceId);
+		if (!invoice || invoice.deletedAt || invoice.canceledAt) {
+			throw new Error("Invoice not found.");
+		}
+		return { invoice };
 	},
 });
 
@@ -2889,10 +3278,11 @@ export const recordEmailSentInternal = internalMutation({
 		now: v.number(),
 	},
 	handler: async (ctx, args) => {
-		const { scope, invoice } = await requireWritableInvoice(
-			ctx,
-			args.invoiceId,
-		);
+		const invoice = await ctx.db.get(args.invoiceId);
+		if (!invoice || invoice.deletedAt || invoice.canceledAt) {
+			throw new Error("Invoice not found.");
+		}
+		const actorId = invoice.userId ?? "system";
 		const currentLifecycle = invoice.lifecycle ?? {};
 
 		await ctx.db.patch(
@@ -2909,8 +3299,8 @@ export const recordEmailSentInternal = internalMutation({
 		);
 
 		const deliveryEventId = await ctx.db.insert("invoice_delivery_events", {
-			workspaceId: scope.workspaceId,
-			ownerId: scope.userId,
+			workspaceId: invoice.workspaceId,
+			ownerId: actorId,
 			invoiceId: args.invoiceId,
 			channel: "email",
 			recipient: args.recipient,
@@ -2923,8 +3313,8 @@ export const recordEmailSentInternal = internalMutation({
 		});
 
 		await recordEmailEvent(ctx, {
-			workspaceId: scope.workspaceId,
-			ownerId: scope.userId,
+			workspaceId: invoice.workspaceId,
+			ownerId: actorId,
 			invoiceId: args.invoiceId,
 			deliveryEventId,
 			providerMessageId: args.providerMessageId,
@@ -2933,8 +3323,8 @@ export const recordEmailSentInternal = internalMutation({
 		});
 
 		await recordAuditLog(ctx, {
-			workspaceId: scope.workspaceId,
-			actorId: scope.userId,
+			workspaceId: invoice.workspaceId,
+			actorId,
 			action: "invoice.sent",
 			resourceType: "invoice",
 			resourceId: String(args.invoiceId),
@@ -2947,12 +3337,53 @@ export const recordEmailSentInternal = internalMutation({
 	},
 });
 
+export const prepareScheduledInvoiceDelivery = internalMutation({
+	args: {
+		invoiceId: v.id("invoices"),
+		scheduleVersion: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const invoice = await ctx.db.get(args.invoiceId);
+		if (!canRunScheduledDelivery(invoice, args.scheduleVersion)) return null;
+
+		const now = Date.now();
+		await ctx.db.patch(args.invoiceId, {
+			finalizedAt: now,
+			scheduledAt: undefined,
+			scheduleVersion: undefined,
+			status: "unpaid",
+			updatedAt: now,
+		});
+
+		return { invoiceId: args.invoiceId };
+	},
+});
+
+export const runScheduledInvoiceDelivery = internalAction({
+	args: {
+		invoiceId: v.id("invoices"),
+		scheduleVersion: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const prepared = await ctx.runMutation(
+			internal.invoices.prepareScheduledInvoiceDelivery,
+			args,
+		);
+		if (!prepared) return { ok: false, skipped: true };
+
+		await ctx.runAction(internal.invoices.sendInvoiceEmailAction, {
+			invoiceId: prepared.invoiceId,
+		});
+		return { ok: true, skipped: false };
+	},
+});
+
 export const sendInvoiceEmailAction = internalAction({
 	args: {
 		invoiceId: v.id("invoices"),
 	},
 	handler: async (ctx, args) => {
-		const { scope, invoice } = await ctx.runMutation(
+		const { invoice } = await ctx.runMutation(
 			internal.invoices.getInvoiceForSendingInternal,
 			{ invoiceId: args.invoiceId },
 		);

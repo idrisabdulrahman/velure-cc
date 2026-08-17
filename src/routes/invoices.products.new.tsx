@@ -75,7 +75,7 @@ function NewProductPage() {
 		previewUnitPrice >= 0;
 
 	const inputClass =
-		"h-10 rounded-md border-[#30352f] bg-[#0f1111] text-sm text-[#f2efe7] placeholder:text-[#737b89] focus-visible:border-[#4a4f45] focus-visible:ring-0";
+		"h-10 rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-accent-line focus-visible:ring-0";
 
 	const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
@@ -120,17 +120,17 @@ function NewProductPage() {
 		<div className="flex h-full w-full flex-col gap-5">
 			<div className="flex items-start justify-between gap-4">
 				<div>
-					<h1 className="text-[26px] font-medium tracking-[-0.02em] text-[#f2efe7]">
+					<h1 className="text-[26px] font-medium tracking-[-0.02em] text-ink">
 						New product
 					</h1>
-					<p className="mt-1 text-sm text-[#8d938f]">
+					<p className="mt-1 text-sm text-ink-3">
 						Add a product or service to your catalog.
 					</p>
 				</div>
 			</div>
 
 			<div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-				<div className="rounded-md border border-[#30352f] bg-[#171a18]">
+				<div className="rounded-md border border-rule bg-paper-2">
 					<div className="p-4 md:p-5">
 						<form onSubmit={onSubmit} className="space-y-4">
 							<div className="grid gap-3 md:grid-cols-2">
@@ -147,7 +147,7 @@ function NewProductPage() {
 										<SelectTrigger className={`${inputClass} w-full`}>
 											<SelectValue placeholder="Type" />
 										</SelectTrigger>
-										<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
+										<SelectContent className="border-rule bg-paper-2 text-ink">
 											<SelectItem value="product">Product</SelectItem>
 											<SelectItem value="service">Service</SelectItem>
 										</SelectContent>
@@ -163,7 +163,7 @@ function NewProductPage() {
 										<SelectTrigger className={`${inputClass} w-full`}>
 											<SelectValue placeholder="Unit" />
 										</SelectTrigger>
-										<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
+										<SelectContent className="border-rule bg-paper-2 text-ink">
 											{UNIT_OPTIONS.map((option) => (
 												<SelectItem key={option.value} value={option.value}>
 													{option.label}
@@ -195,7 +195,7 @@ function NewProductPage() {
 											description: event.target.value,
 										}))
 									}
-									className="resize-none rounded-md border-[#30352f] bg-[#0f1111] text-sm text-[#f2efe7] placeholder:text-[#737b89] focus-visible:border-[#4a4f45] focus-visible:ring-0"
+									className="resize-none rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-accent-line focus-visible:ring-0"
 									placeholder="Optional description"
 								/>
 							</Field>
@@ -242,43 +242,43 @@ function NewProductPage() {
 								/>
 							</Field>
 
-							<div className="inline-flex items-center gap-2 text-sm text-[#d8d1c4]">
+							<div className="inline-flex items-center gap-2 text-sm text-ink-2">
 								<Switch
 									checked={state.isActive}
 									onCheckedChange={(checked) =>
 										setState((prev) => ({ ...prev, isActive: checked }))
 									}
-									className="data-[state=checked]:bg-[#c8ff62] data-[state=unchecked]:bg-[#30352f]"
+									className="data-[state=checked]:bg-brand data-[state=unchecked]:bg-rule"
 								/>
 								<span>Active</span>
 							</div>
 
-							<div className="flex items-center justify-between border-t border-[#30352f] pt-4">
+							<div className="flex items-center justify-between border-t border-rule pt-4">
 								<Button
 									type="button"
 									variant="outline"
 									onClick={() => navigate({ to: "/invoices/products" })}
-									className="h-10 rounded-md border-[#30352f] bg-transparent text-sm font-medium text-[#d8d1c4] hover:bg-[#20241f] hover:text-[#f2efe7]"
+									className="h-10 rounded-md border-rule bg-transparent text-sm font-medium text-ink-2 hover:bg-paper-3 hover:text-ink"
 								>
 									Cancel
 								</Button>
 								<Button
 									type="submit"
 									disabled={!isValid || submitting}
-									className="h-10 rounded-md bg-[#c8ff62] text-sm font-medium text-[#0f1111] hover:bg-[#d5ff7a] disabled:bg-[#3f5130] disabled:text-[#817d72]"
+									className="h-10 rounded-md bg-brand text-sm font-medium text-brand-ink hover:bg-brand-hi disabled:bg-brand-line disabled:text-ink-3"
 								>
 									{submitting ? "Creating..." : "Create product"}
 								</Button>
 							</div>
-							<p className="text-xs text-[#8d938f]">* Required fields</p>
+							<p className="text-xs text-ink-3">* Required fields</p>
 						</form>
 					</div>
 				</div>
 
-				<aside className="h-fit rounded-md border border-[#30352f] bg-[#171a18] p-4">
-					<h2 className="text-sm font-medium text-[#f2efe7]">Preview</h2>
-					<div className="mt-3 rounded-md border border-[#30352f] bg-[#0f1111] p-3 text-xs text-[#d8d1c4]">
-						<p className="font-medium text-[#f2efe7]">
+				<aside className="h-fit rounded-md border border-rule bg-paper-2 p-4">
+					<h2 className="text-sm font-medium text-ink">Preview</h2>
+					<div className="mt-3 rounded-md border border-rule bg-paper p-3 text-xs text-ink-2">
+						<p className="font-medium text-ink">
 							{state.name || "Product name"}
 						</p>
 						<p className="mt-1 capitalize">{state.type}</p>

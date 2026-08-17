@@ -18,6 +18,7 @@
 			"!packages",
 			"!convex/_generated",
 			"!src/routeTree.gen.ts",
+			"!src/types/database.types.ts",
 			"!src/styles.css"
 		]
 	},

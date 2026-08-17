@@ -29,7 +29,6 @@ import {
 	useTransition,
 } from "react";
 import {
-	CartesianGrid,
 	Line,
 	LineChart,
 	ResponsiveContainer,
@@ -121,6 +120,14 @@ type CurrencySummary = {
 	overdueCount: number;
 	paidAmount: number;
 	paidCount: number;
+};
+
+type PaymentScore = {
+	score: number;
+	status: "no_data" | "excellent" | "good" | "fair" | "slow";
+	paidInvoiceCount: number;
+	onTimeCount: number;
+	averageDaysToPay: number | null;
 };
 
 type CleanupPreviewItem = {
@@ -349,6 +356,13 @@ function InvoicesIndex() {
 		[]) as CurrencySummary[];
 	const chartDataByCurrency = (invoiceSummaryQuery?.chartDataByCurrency ??
 		{}) as Record<string, RevenueChartPoint[]>;
+	const paymentScore = (invoiceSummaryQuery?.paymentScore ?? {
+		score: 0,
+		status: "no_data",
+		paidInvoiceCount: 0,
+		onTimeCount: 0,
+		averageDaysToPay: null,
+	}) as PaymentScore;
 	const activeInvoiceEnabled = activeInvoiceId !== null;
 	const { data: activeInvoice } = useQuery({
 		...convexQuery(api.invoices.getById, {
@@ -804,13 +818,13 @@ function InvoicesIndex() {
 	};
 
 	return (
-		<div className="flex h-full w-full flex-col gap-6">
+		<div className="flex h-full w-full flex-col gap-4">
 			<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 				<div>
-					<h1 className="text-3xl font-semibold tracking-[-0.02em] text-[#f2efe7]">
+					<h1 className="text-3xl font-semibold tracking-[-0.02em] text-ink">
 						Invoices
 					</h1>
-					<p className="mt-2 text-sm text-[#aaa294]">
+					<p className="mt-2 text-sm text-ink-3">
 						Review invoice status, search by customer, and keep the list moving.
 					</p>
 				</div>
@@ -823,25 +837,12 @@ function InvoicesIndex() {
 							setCreateDocumentType("standard");
 							setCreateOpen(true);
 						}}
-						className="h-10 rounded-md bg-[#c8ff62] px-4 text-sm font-medium text-[#0f1111] hover:bg-[#d5ff7a]"
+						className="h-10 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi"
 					>
 						New invoice
 					</Button>
-					<Button
-						type="button"
-						variant="ghost"
-						onClick={() => {
-							setImportedDraft(null);
-							setCreateDocumentType("proforma");
-							setCreateOpen(true);
-						}}
-						className="h-10 rounded-md border border-[#30352f] bg-[#171a18] px-4 text-sm font-medium text-[#d8d1c4] hover:bg-[#20241f]"
-					>
-						<ReceiptText className="mr-2 h-4 w-4 text-[#c8ff62]" />
-						New pro-forma
-					</Button>
-					<label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-[#30352f] bg-[#171a18] px-3 text-sm font-medium text-[#d8d1c4] transition-colors hover:bg-[#20241f]">
-						<Upload className="h-4 w-4 text-[#c8ff62]" />
+					<label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-rule bg-paper-2 px-3 text-sm font-medium text-ink-2 transition-colors hover:bg-paper-3">
+						<Upload className="h-4 w-4 text-brand" />
 						Import CSV
 						<input
 							type="file"
@@ -856,18 +857,18 @@ function InvoicesIndex() {
 				</div>
 			</div>
 
-			<div className="ui-panel rounded-md border border-[#30352f] bg-[#171a18] p-3">
-				<div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[minmax(240px,1.45fr)_minmax(128px,0.72fr)_minmax(150px,0.9fr)_minmax(128px,0.72fr)_minmax(144px,0.82fr)_minmax(128px,0.72fr)_auto] xl:items-end">
+			<div className="ui-panel rounded-md border border-rule bg-paper-2 p-3">
+				<div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_180px_auto] lg:items-end">
 					<FilterField label="Search">
-						<div className="flex h-10 items-center gap-2 rounded-md border border-[#30352f] bg-[#0f1111] px-3">
-							<Search className="h-4 w-4 text-[#817d72]" />
+						<div className="flex h-10 items-center gap-2 rounded-md border border-rule bg-paper px-3">
+							<Search className="h-4 w-4 text-ink-3" />
 							<input
 								value={query}
 								onChange={(event) =>
 									startTransition(() => setQuery(event.target.value))
 								}
 								placeholder="Invoice number or customer"
-								className="h-full w-full bg-transparent text-sm text-[#f2efe7] outline-none placeholder:text-[#817d72]"
+								className="h-full w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
 							/>
 						</div>
 					</FilterField>
@@ -881,10 +882,10 @@ function InvoicesIndex() {
 								)
 							}
 						>
-							<SelectTrigger className="h-10 w-full rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]">
+							<SelectTrigger className="h-10 w-full rounded-md border-rule bg-paper text-ink">
 								<SelectValue placeholder="All statuses" />
 							</SelectTrigger>
-							<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
+							<SelectContent className="border-rule bg-paper-2 text-ink">
 								<SelectItem value="all">All statuses</SelectItem>
 								{STATUS_OPTIONS.map((status) => (
 									<SelectItem
@@ -899,98 +900,106 @@ function InvoicesIndex() {
 						</Select>
 					</FilterField>
 
-					<FilterField label="Customer">
-						<div className="flex h-10 items-center rounded-md border border-[#30352f] bg-[#0f1111] px-3">
-							<input
-								value={customerFilter}
-								onChange={(event) =>
-									startTransition(() => setCustomerFilter(event.target.value))
-								}
-								placeholder="Any customer"
-								list="invoice-customer-filter-options"
-								className="h-full w-full bg-transparent text-sm text-[#f2efe7] outline-none placeholder:text-[#817d72]"
-							/>
-							<datalist id="invoice-customer-filter-options">
-								{customers.map((customer) => (
-									<option key={customer} value={customer} />
-								))}
-							</datalist>
-						</div>
-					</FilterField>
+					<div className="flex min-w-0 items-end gap-2 lg:justify-end">
+						<details className="group relative min-w-0 flex-1 lg:flex-none">
+							<summary className="flex h-10 cursor-pointer list-none items-center justify-center gap-2 rounded-md border border-rule bg-paper px-3 text-sm font-medium text-ink-2 transition-colors hover:bg-paper-3 group-open:border-brand-line group-open:text-ink [&::-webkit-details-marker]:hidden">
+								<SlidersHorizontal className="h-4 w-4 text-brand" />
+								<span>Filters</span>
+								{activeFilterCount > 0 ? (
+									<span className="inline-flex min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-semibold text-brand-ink">
+										{activeFilterCount}
+									</span>
+								) : null}
+							</summary>
+							<div className="mt-3 grid gap-3 rounded-md border border-rule bg-paper-2 p-3 shadow-lg sm:grid-cols-2 lg:absolute lg:right-0 lg:z-30 lg:w-[620px]">
+								<FilterField label="Customer">
+									<div className="flex h-10 items-center rounded-md border border-rule bg-paper px-3">
+										<input
+											value={customerFilter}
+											onChange={(event) =>
+												startTransition(() =>
+													setCustomerFilter(event.target.value),
+												)
+											}
+											placeholder="Any customer"
+											list="invoice-customer-filter-options"
+											className="h-full w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
+										/>
+										<datalist id="invoice-customer-filter-options">
+											{customers.map((customer) => (
+												<option key={customer} value={customer} />
+											))}
+										</datalist>
+									</div>
+								</FilterField>
 
-					<FilterField label="Schedule">
-						<Select
-							value={typeFilter}
-							onValueChange={(value) =>
-								startTransition(() => setTypeFilter(value as InvoiceTypeFilter))
-							}
-						>
-							<SelectTrigger className="h-10 w-full rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]">
-								<SelectValue placeholder="All schedules" />
-							</SelectTrigger>
-							<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
-								<SelectItem value="all">All schedules</SelectItem>
-								<SelectItem value="one-time">One-time</SelectItem>
-								<SelectItem value="recurring">Recurring</SelectItem>
-							</SelectContent>
-						</Select>
-					</FilterField>
+								<FilterField label="Schedule">
+									<Select
+										value={typeFilter}
+										onValueChange={(value) =>
+											startTransition(() =>
+												setTypeFilter(value as InvoiceTypeFilter),
+											)
+										}
+									>
+										<SelectTrigger className="h-10 w-full rounded-md border-rule bg-paper text-ink">
+											<SelectValue placeholder="All schedules" />
+										</SelectTrigger>
+										<SelectContent className="border-rule bg-paper-2 text-ink">
+											<SelectItem value="all">All schedules</SelectItem>
+											<SelectItem value="one-time">One-time</SelectItem>
+											<SelectItem value="recurring">Recurring</SelectItem>
+										</SelectContent>
+									</Select>
+								</FilterField>
 
-					<FilterField label="Document kind">
-						<Select
-							value={documentTypeFilter}
-							onValueChange={(value) =>
-								startTransition(() =>
-									setDocumentTypeFilter(value as DocumentTypeFilter),
-								)
-							}
-						>
-							<SelectTrigger className="h-10 w-full rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]">
-								<SelectValue placeholder="All document kinds" />
-							</SelectTrigger>
-							<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
-								<SelectItem value="all">All document kinds</SelectItem>
-								<SelectItem value="standard">Standard</SelectItem>
-								<SelectItem value="proforma">Pro-forma</SelectItem>
-							</SelectContent>
-						</Select>
-					</FilterField>
+								<FilterField label="Document kind">
+									<Select
+										value={documentTypeFilter}
+										onValueChange={(value) =>
+											startTransition(() =>
+												setDocumentTypeFilter(value as DocumentTypeFilter),
+											)
+										}
+									>
+										<SelectTrigger className="h-10 w-full rounded-md border-rule bg-paper text-ink">
+											<SelectValue placeholder="All document kinds" />
+										</SelectTrigger>
+										<SelectContent className="border-rule bg-paper-2 text-ink">
+											<SelectItem value="all">All document kinds</SelectItem>
+											<SelectItem value="standard">Standard</SelectItem>
+											<SelectItem value="proforma">Pro-forma</SelectItem>
+										</SelectContent>
+									</Select>
+								</FilterField>
 
-					<FilterField label="Due">
-						<Select
-							value={dueDateFilter}
-							onValueChange={(value) =>
-								startTransition(() =>
-									applyDueDateFilter(value as DueDateFilter),
-								)
-							}
-						>
-							<SelectTrigger className="h-10 w-full rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]">
-								<SelectValue placeholder="Any due date" />
-							</SelectTrigger>
-							<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
-								<SelectItem value="all">Any due date</SelectItem>
-								<SelectItem value="past-due">Due by today</SelectItem>
-								<SelectItem value="this-month">This month</SelectItem>
-								<SelectItem value="next-month">Next month</SelectItem>
-							</SelectContent>
-						</Select>
-					</FilterField>
-
-					<div className="flex items-end justify-between gap-3 md:col-span-2 lg:col-span-3 xl:col-span-1 xl:justify-end">
-						<div className="inline-flex h-10 min-w-22 items-center justify-center gap-2 rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-xs text-[#aaa294]">
-							<SlidersHorizontal className="h-4 w-4 text-[#c8ff62]" />
-							<span>
-								{activeFilterCount === 0
-									? "No filters"
-									: `${activeFilterCount} active`}
-							</span>
-						</div>
+								<FilterField label="Due">
+									<Select
+										value={dueDateFilter}
+										onValueChange={(value) =>
+											startTransition(() =>
+												applyDueDateFilter(value as DueDateFilter),
+											)
+										}
+									>
+										<SelectTrigger className="h-10 w-full rounded-md border-rule bg-paper text-ink">
+											<SelectValue placeholder="Any due date" />
+										</SelectTrigger>
+										<SelectContent className="border-rule bg-paper-2 text-ink">
+											<SelectItem value="all">Any due date</SelectItem>
+											<SelectItem value="past-due">Due by today</SelectItem>
+											<SelectItem value="this-month">This month</SelectItem>
+											<SelectItem value="next-month">Next month</SelectItem>
+										</SelectContent>
+									</Select>
+								</FilterField>
+							</div>
+						</details>
 						{hasActiveFilters ? (
 							<button
 								type="button"
 								onClick={clearFilters}
-								className="h-10 rounded-md border border-[#30352f] px-3 text-sm font-medium text-[#c8ff62] transition-colors hover:bg-[#1a2117] hover:text-[#d5ff7a]"
+								className="h-10 shrink-0 rounded-md px-3 text-sm font-medium text-brand transition-colors hover:bg-brand-soft hover:text-brand-hi"
 							>
 								Clear
 							</button>
@@ -1000,13 +1009,13 @@ function InvoicesIndex() {
 			</div>
 
 			{hasMixedCurrencies ? (
-				<section className="rounded-md border border-[#554b32] bg-[#1d1a12] px-4 py-3">
+				<section className="rounded-md border border-warn-line bg-paper-3 px-4 py-3">
 					<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 						<div>
-							<p className="text-sm font-medium text-[#f2efe7]">
+							<p className="text-sm font-medium text-ink">
 								Currency-scoped totals
 							</p>
-							<p className="mt-1 text-xs text-[#beb6a8]">
+							<p className="mt-1 text-xs text-ink-3">
 								Totals and chart are showing {summaryCurrency} only. Velure does
 								not combine currencies without an exchange-rate audit trail.
 							</p>
@@ -1016,10 +1025,10 @@ function InvoicesIndex() {
 								value={summaryCurrency}
 								onValueChange={setSelectedSummaryCurrency}
 							>
-								<SelectTrigger className="h-9 min-w-32 rounded-md border-[#554b32] bg-[#0f1111] text-[#f2efe7]">
+								<SelectTrigger className="h-9 min-w-32 rounded-md border-warn-line bg-paper text-ink">
 									<SelectValue placeholder="Currency" />
 								</SelectTrigger>
-								<SelectContent className="border-[#30352f] bg-[#171a18] text-[#f2efe7]">
+								<SelectContent className="border-rule bg-paper-2 text-ink">
 									{availableCurrencies.map((currency) => (
 										<SelectItem key={currency} value={currency}>
 											{currency}
@@ -1030,7 +1039,7 @@ function InvoicesIndex() {
 							{otherCurrencySummaries.map((item) => (
 								<span
 									key={item.currency}
-									className="inline-flex h-9 items-center rounded-md border border-[#3a3a35] bg-[#15171a] px-3 text-xs text-[#aaa294]"
+									className="inline-flex h-9 items-center rounded-md border border-rule bg-paper-3 px-3 text-xs text-ink-3"
 								>
 									{item.totalCount} {item.currency} invoice
 									{item.totalCount === 1 ? "" : "s"} outside totals
@@ -1041,7 +1050,7 @@ function InvoicesIndex() {
 				</section>
 			) : null}
 
-			<div className="grid gap-3 md:grid-cols-3">
+			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
 				<SummaryCard
 					label="Open"
 					value={formatCompactMoney(
@@ -1084,6 +1093,7 @@ function InvoicesIndex() {
 					tone="paid"
 					isLoading={isInvoicesLoading}
 				/>
+				<PaymentScoreCard score={paymentScore} isLoading={isInvoicesLoading} />
 			</div>
 
 			<RevenueTrendCard
@@ -1092,11 +1102,11 @@ function InvoicesIndex() {
 				isCurrencyScoped={hasMixedCurrencies}
 			/>
 
-			<div className="ui-panel overflow-hidden rounded-md border border-[#30352f] bg-[#171a18]">
-				<div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#30352f] px-4 py-3">
+			<div className="ui-panel overflow-hidden rounded-md border border-rule bg-paper-2">
+				<div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule px-4 py-3">
 					<div>
-						<p className="text-sm font-medium text-[#f2efe7]">Invoice list</p>
-						<p className="mt-1 text-xs text-[#817d72]">
+						<p className="text-sm font-medium text-ink">Invoice list</p>
+						<p className="mt-1 text-xs text-ink-3">
 							{isInvoicesLoading
 								? "Loading invoices"
 								: `${rows.length} invoices`}
@@ -1108,7 +1118,7 @@ function InvoicesIndex() {
 							<button
 								type="button"
 								onClick={selectDuplicateRows}
-								className="inline-flex items-center gap-2 rounded-md border border-[#6b3f3f] bg-[#2c1b1b] px-3 py-2 text-xs font-medium text-[#df9b9b] transition-colors hover:bg-[#352020]"
+								className="inline-flex items-center gap-2 rounded-md border border-danger-line bg-danger-soft px-3 py-2 text-xs font-medium text-danger transition-colors hover:bg-danger-soft"
 							>
 								<CircleAlert className="h-4 w-4" />
 								{duplicateRowCount} duplicate row
@@ -1127,7 +1137,7 @@ function InvoicesIndex() {
 									)
 								}
 								disabled={bulkActionPending}
-								className="h-9 w-9 rounded-md border border-[#30352f] bg-[#101211] p-0 text-[#beb6a8] hover:border-[#4c5741] hover:bg-[#1a2117] hover:text-[#c8ff62]"
+								className="h-9 w-9 rounded-md border border-rule bg-paper p-0 text-ink-3 hover:border-brand-line hover:bg-brand-soft hover:text-brand"
 							>
 								<Wrench className="h-4 w-4" />
 							</Button>
@@ -1153,7 +1163,7 @@ function InvoicesIndex() {
 									: void onDeleteEmptyDrafts()
 							}
 							disabled={bulkActionPending}
-							className="h-9 w-9 rounded-md border border-[#30352f] bg-[#101211] p-0 text-[#beb6a8] hover:border-[#5d4747] hover:bg-[#2a1f1f] hover:text-[#efb1b1]"
+							className="h-9 w-9 rounded-md border border-rule bg-paper p-0 text-ink-3 hover:border-danger-line hover:bg-danger-soft hover:text-danger"
 						>
 							<Trash2 className="h-4 w-4" />
 						</Button>
@@ -1161,7 +1171,7 @@ function InvoicesIndex() {
 							<button
 								type="button"
 								onClick={clearFilters}
-								className="text-sm text-[#c8ff62] hover:text-[#d5ff7a]"
+								className="text-sm text-brand hover:text-brand-hi"
 							>
 								Clear filters
 							</button>
@@ -1170,7 +1180,7 @@ function InvoicesIndex() {
 				</div>
 
 				{selectedCount > 0 ? (
-					<div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#30352f] bg-secondary  px-4 py-3 text-sm">
+					<div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule bg-secondary  px-4 py-3 text-sm">
 						<span className="font-extrabold text-primary">
 							{selectedCount} selected
 						</span>
@@ -1178,9 +1188,9 @@ function InvoicesIndex() {
 				) : null}
 
 				<div className="overflow-x-auto">
-					<table className="w-full min-w-205 text-sm">
-						<thead className="bg-[#15171a]">
-							<tr className="border-b border-[#30352f] text-left text-[#817d72]">
+					<table className="hm-ts-board w-full min-w-205 text-sm">
+						<thead className="bg-paper-3">
+							<tr className="border-b border-rule text-left text-ink-3">
 								<th className="w-12 px-4 py-3 font-medium">
 									<div className="flex items-center justify-center">
 										<Checkbox
@@ -1193,7 +1203,7 @@ function InvoicesIndex() {
 												toggleAllVisibleSelection(checked === true)
 											}
 											aria-label="Select all visible invoices"
-											className="relative z-10 h-5 w-5 border-[#3f5130] bg-[#101211] text-[#0f1111] data-[state=checked]:border-[#c8ff62] data-[state=checked]:bg-[#c8ff62] data-[state=indeterminate]:border-[#c8ff62] data-[state=indeterminate]:bg-[#c8ff62]"
+											className="relative z-10 h-5 w-5 border-brand-line bg-paper text-brand-ink data-[state=checked]:border-brand data-[state=checked]:bg-brand data-[state=indeterminate]:border-brand data-[state=indeterminate]:bg-brand"
 										/>
 									</div>
 								</th>
@@ -1209,14 +1219,14 @@ function InvoicesIndex() {
 							{isInvoicesLoading
 								? ["row-1", "row-2", "row-3", "row-4", "row-5"].map(
 										(rowKey) => (
-											<tr key={rowKey} className="border-b border-[#30352f]">
+											<tr key={rowKey} className="border-b border-rule">
 												{["c1", "c2", "c3", "c4", "c5", "c6", "c7"].map(
 													(cellKey) => (
 														<td
 															key={`${rowKey}-${cellKey}`}
 															className="px-4 py-3"
 														>
-															<Skeleton className="h-4 w-20 bg-[#22252a]" />
+															<Skeleton className="h-4 w-20 bg-paper-3" />
 														</td>
 													),
 												)}
@@ -1226,6 +1236,13 @@ function InvoicesIndex() {
 								: rows.map((invoice) => (
 										<tr
 											key={invoice.id}
+											data-status={
+												invoice.status === "partially-paid"
+													? "partial"
+													: invoice.status === "unpaid"
+														? "sent"
+														: invoice.status
+											}
 											tabIndex={0}
 											role="button"
 											aria-label={`Edit invoice ${invoice.invoiceNumber}`}
@@ -1237,9 +1254,9 @@ function InvoicesIndex() {
 												event.preventDefault();
 												setActiveInvoiceId(invoice.id as Id<"invoices">);
 											}}
-											className={`cursor-pointer border-b border-[#30352f] text-[#d8d1c4] outline-none transition-colors duration-150 hover:bg-[#1c1f22] focus-visible:bg-[#1a2117] focus-visible:shadow-[inset_3px_0_0_#c8ff62] ${
+											className={`cursor-pointer border-b border-rule text-ink-2 outline-none transition-colors duration-150 hover:bg-paper-3 focus-visible:bg-brand-soft focus-visible:shadow-[inset_3px_0_0_var(--color-brand)] ${
 												activeInvoiceId === invoice.id
-													? "bg-[#211d13]"
+													? "bg-danger-soft"
 													: invoice.status === "canceled"
 														? "opacity-55"
 														: ""
@@ -1260,16 +1277,16 @@ function InvoicesIndex() {
 														onClick={(event) => event.stopPropagation()}
 														onKeyDown={(event) => event.stopPropagation()}
 														aria-label={`Select invoice ${invoice.invoiceNumber}`}
-														className="relative z-10 h-5 w-5 border-[#3f5130] bg-[#101211] text-[#0f1111] data-[state=checked]:border-[#c8ff62] data-[state=checked]:bg-[#c8ff62]"
+														className="relative z-10 h-5 w-5 border-brand-line bg-paper text-brand-ink data-[state=checked]:border-brand data-[state=checked]:bg-brand"
 													/>
 												</div>
 											</td>
-											<td className="px-4 py-3 font-medium text-[#f2efe7]">
+											<td className="px-4 py-3 font-medium text-ink">
 												<div className="flex min-w-0 flex-col">
 													<span className="font-mono text-[13px]">
 														{invoice.invoiceNumber}
 													</span>
-													<span className="mt-1 truncate text-xs font-normal text-[#9fa69f]">
+													<span className="mt-1 truncate text-xs font-normal text-ink-3">
 														{invoice.customerName || "-"} ·{" "}
 														{formatCompactMoney(
 															invoice.amount,
@@ -1279,7 +1296,7 @@ function InvoicesIndex() {
 													{duplicateInvoiceNumbers.has(
 														invoice.invoiceNumber,
 													) ? (
-														<span className="mt-1 inline-flex w-fit items-center gap-1 rounded-md border border-[#6b3f3f] bg-[#2c1b1b] px-1.5 py-0.5 text-[10px] font-medium text-[#df9b9b]">
+														<span className="mt-1 inline-flex w-fit items-center gap-1 rounded-md border border-danger-line bg-danger-soft px-1.5 py-0.5 text-[10px] font-medium text-danger">
 															<CircleAlert className="h-3 w-3" />
 															Duplicate number
 														</span>
@@ -1288,29 +1305,31 @@ function InvoicesIndex() {
 											</td>
 											<td className="px-4 py-3">
 												<div className="flex items-center gap-2">
-													<StatusChip status={invoice.status} />
+													<span className={invoiceStatusStamp[invoice.status]}>
+														{invoiceStatusLabel(invoice.status)}
+													</span>
 													{invoice.lifecycle?.sentAt && (
-														<span className="inline-flex items-center rounded-md border border-[#2b313b] bg-[#151b23] px-1.5 py-0.5 text-[10px] text-[#c8ff62]">
+														<span className="inline-flex items-center rounded-md border border-rule bg-paper-3 px-1.5 py-0.5 text-[10px] text-brand">
 															Sent
 														</span>
 													)}
 													{invoice.lifecycle?.firstViewedAt && (
-														<span className="inline-flex items-center rounded-md border border-[#2b313b] bg-[#151b23] px-1.5 py-0.5 text-[10px] text-[#6ba3d6]">
+														<span className="inline-flex items-center rounded-md border border-rule bg-paper-3 px-1.5 py-0.5 text-[10px] text-info">
 															Viewed
 														</span>
 													)}
 												</div>
 											</td>
 											<td
-												className={`px-4 py-3 ${dueDateClassName(invoice)}`}
+												className={`hm-num-cell px-4 py-3 ${dueDateClassName(invoice)}`}
 												title={formatDate(invoice.dueDate)}
 											>
 												{formatDate(invoice.dueDate)}
 											</td>
-											<td className="px-4 py-3 text-[#beb6a8]">
+											<td className="hm-num-cell px-4 py-3 text-ink-3">
 												{formatDate(invoice.issueDate)}
 											</td>
-											<td className="px-4 py-3 text-[#beb6a8] capitalize">
+											<td className="px-4 py-3 text-ink-3 capitalize">
 												<div className="flex flex-col gap-1">
 													<span>
 														{invoice.documentType === "proforma"
@@ -1318,11 +1337,11 @@ function InvoicesIndex() {
 															: "Standard"}
 													</span>
 													{invoice.convertedToInvoiceId ? (
-														<span className="text-[10px] font-medium text-[#c8ff62]">
+														<span className="text-[10px] font-medium text-brand">
 															Converted
 														</span>
 													) : (
-														<span className="text-[10px] text-[#817d72]">
+														<span className="text-[10px] text-ink-3">
 															{invoice.type.replace("-", " ")}
 														</span>
 													)}
@@ -1339,20 +1358,20 @@ function InvoicesIndex() {
 															type="button"
 															variant="ghost"
 															aria-label={`Actions for ${invoice.invoiceNumber}`}
-															className="h-9 w-9 rounded-md border border-[#30352f] bg-[#171a18] p-0 hover:bg-[#1a2117]"
+															className="h-9 w-9 rounded-md border border-rule bg-paper-2 p-0 hover:bg-brand-soft"
 														>
-															<MoreHorizontal className="h-4 w-4 text-[#d8d1c4]" />
+															<MoreHorizontal className="h-4 w-4 text-ink-2" />
 														</Button>
 													</DropdownMenuTrigger>
 													<DropdownMenuContent
 														align="end"
-														className="min-w-47 border-[#30352f] bg-[#171a18] p-1 text-[#f2efe7]"
+														className="min-w-47 border-rule bg-paper-2 p-1 text-ink"
 													>
 														<DropdownMenuItem
 															onClick={() =>
 																setActiveInvoiceId(invoice.id as Id<"invoices">)
 															}
-															className="focus:bg-[#1a2117]"
+															className="focus:bg-brand-soft"
 														>
 															<FileEdit className="mr-2 h-4 w-4" />
 															Edit invoice
@@ -1365,21 +1384,21 @@ function InvoicesIndex() {
 																	"noopener,noreferrer",
 																)
 															}
-															className="focus:bg-[#1a2117]"
+															className="focus:bg-brand-soft"
 														>
 															<ExternalLink className="mr-2 h-4 w-4" />
 															Open invoice
 														</DropdownMenuItem>
 														<DropdownMenuItem
 															onClick={() => void copyPublicLink(invoice.token)}
-															className="focus:bg-[#1a2117]"
+															className="focus:bg-brand-soft"
 														>
 															<Copy className="mr-2 h-4 w-4" />
 															Copy link
 														</DropdownMenuItem>
 														<DropdownMenuItem
 															asChild
-															className="focus:bg-[#1a2117]"
+															className="focus:bg-brand-soft"
 														>
 															<a
 																href={`/i/${encodeURIComponent(invoice.token)}`}
@@ -1393,7 +1412,7 @@ function InvoicesIndex() {
 														</DropdownMenuItem>
 														<DropdownMenuItem
 															onClick={() => void onDuplicate(invoice.id)}
-															className="focus:bg-[#1a2117]"
+															className="focus:bg-brand-soft"
 														>
 															<Repeat2 className="mr-2 h-4 w-4" />
 															Duplicate
@@ -1407,7 +1426,7 @@ function InvoicesIndex() {
 																		invoice.id as Id<"invoices">,
 																	])
 																}
-																className="focus:bg-[#1a2117]"
+																className="focus:bg-brand-soft"
 															>
 																<Wrench className="mr-2 h-4 w-4" />
 																Fix duplicate number
@@ -1420,7 +1439,7 @@ function InvoicesIndex() {
 																		invoice.id as Id<"invoices">,
 																	])
 																}
-																className="text-[#d48f8f] focus:bg-[#2a1f1f] focus:text-[#efb1b1]"
+																className="text-danger focus:bg-danger-soft focus:text-danger"
 															>
 																<Trash2 className="mr-2 h-4 w-4" />
 																Delete
@@ -1432,24 +1451,24 @@ function InvoicesIndex() {
 																onClick={() =>
 																	void onConvertProforma(invoice.id)
 																}
-																className="focus:bg-[#1a2117]"
+																className="focus:bg-brand-soft"
 															>
 																<ReceiptText className="mr-2 h-4 w-4" />
 																Convert to invoice
 															</DropdownMenuItem>
 														) : null}
 														<DropdownMenuSub>
-															<DropdownMenuSubTrigger className="focus:bg-[#1a2117]">
+															<DropdownMenuSubTrigger className="focus:bg-brand-soft">
 																<CalendarDays className="mr-2 h-4 w-4" />
 																Mark as paid
 															</DropdownMenuSubTrigger>
-															<DropdownMenuSubContent className="min-w-62 border-[#30352f] bg-[#171a18] p-2 text-[#f2efe7]">
+															<DropdownMenuSubContent className="min-w-62 border-rule bg-paper-2 p-2 text-ink">
 																<button
 																	type="button"
 																	onClick={() =>
 																		void onRecordFullPayment(invoice)
 																	}
-																	className="mb-2 flex h-8 w-full items-center justify-center border border-[#30352f] bg-[#15171a] px-3 text-xs text-[#d8d1c4] transition-colors hover:bg-[#1a2117]"
+																	className="mb-2 flex h-8 w-full items-center justify-center border border-rule bg-paper-3 px-3 text-xs text-ink-2 transition-colors hover:bg-brand-soft"
 																>
 																	Mark paid today
 																</button>
@@ -1467,7 +1486,7 @@ function InvoicesIndex() {
 															onClick={() =>
 																void onStatusChange(invoice.id, "canceled")
 															}
-															className="text-[#d48f8f] focus:bg-[#2a1f1f] focus:text-[#efb1b1]"
+															className="text-danger focus:bg-danger-soft focus:text-danger"
 														>
 															<XCircle className="mr-2 h-4 w-4" />
 															Cancel
@@ -1482,7 +1501,7 @@ function InvoicesIndex() {
 				</div>
 
 				{!isInvoicesLoading && (rows.length > 0 || pageIndex > 0) ? (
-					<div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#30352f] px-4 py-3 text-sm text-[#aaa294]">
+					<div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule px-4 py-3 text-sm text-ink-3">
 						<span>Page {pageIndex + 1}</span>
 						<div className="flex items-center gap-2">
 							<Button
@@ -1490,7 +1509,7 @@ function InvoicesIndex() {
 								variant="ghost"
 								onClick={goToPreviousPage}
 								disabled={!canGoToPreviousPage}
-								className="h-9 rounded-md border border-[#30352f] px-3 text-[#d8d1c4] hover:bg-[#20241f] disabled:cursor-not-allowed disabled:opacity-40"
+								className="h-9 rounded-md border border-rule px-3 text-ink-2 hover:bg-paper-3 disabled:cursor-not-allowed disabled:opacity-40"
 							>
 								<ChevronLeft className="mr-1 h-4 w-4" />
 								Previous
@@ -1500,7 +1519,7 @@ function InvoicesIndex() {
 								variant="ghost"
 								onClick={goToNextPage}
 								disabled={!canGoToNextPage}
-								className="h-9 rounded-md border border-[#30352f] px-3 text-[#d8d1c4] hover:bg-[#20241f] disabled:cursor-not-allowed disabled:opacity-40"
+								className="h-9 rounded-md border border-rule px-3 text-ink-2 hover:bg-paper-3 disabled:cursor-not-allowed disabled:opacity-40"
 							>
 								Next
 								<ChevronRight className="ml-1 h-4 w-4" />
@@ -1510,9 +1529,9 @@ function InvoicesIndex() {
 				) : null}
 
 				{!isInvoicesLoading && rows.length === 0 ? (
-					<div className="flex flex-col items-center gap-3 px-4 py-10 text-sm text-[#aaa294] text-center">
+					<div className="flex flex-col items-center gap-3 px-4 py-10 text-sm text-ink-3 text-center">
 						<div>
-							<p className="font-medium text-[#f2efe7]">No invoices yet.</p>
+							<p className="font-medium text-ink">No invoices yet.</p>
 							<p className="mt-1">
 								Create an invoice, add a client email, then share the
 								Paystack-enabled public link.
@@ -1525,7 +1544,7 @@ function InvoicesIndex() {
 								setCreateDocumentType("standard");
 								setCreateOpen(true);
 							}}
-							className="h-9 rounded-md bg-[#c8ff62] px-3 text-sm font-medium text-[#0f1111] hover:bg-[#d5ff7a]"
+							className="h-9 rounded-md bg-brand px-3 text-sm font-medium text-brand-ink hover:bg-brand-hi"
 						>
 							New invoice
 						</Button>
@@ -1589,10 +1608,10 @@ function InvoicesIndex() {
 					}
 				}}
 			>
-				<AlertDialogContent className="max-w-2xl border-[#30352f] bg-[#171a18] text-[#f2efe7]">
+				<AlertDialogContent className="max-w-2xl border-rule bg-paper-2 text-ink">
 					<AlertDialogHeader>
 						<AlertDialogTitle>Confirm invoice cleanup</AlertDialogTitle>
-						<AlertDialogDescription className="text-[#aaa294]">
+						<AlertDialogDescription className="text-ink-3">
 							Untouched drafts will be permanently deleted. Invoices with sent,
 							viewed, or payment history will be archived instead.
 						</AlertDialogDescription>
@@ -1619,7 +1638,7 @@ function InvoicesIndex() {
 					) : null}
 
 					<AlertDialogFooter>
-						<AlertDialogCancel className="border-[#30352f] bg-transparent text-[#d8d1c4] hover:bg-[#20241f]">
+						<AlertDialogCancel className="border-rule bg-transparent text-ink-2 hover:bg-paper-3">
 							Cancel
 						</AlertDialogCancel>
 						<AlertDialogAction
@@ -1628,7 +1647,7 @@ function InvoicesIndex() {
 								void commitCleanup();
 							}}
 							disabled={bulkActionPending || cleanupTargetIds.length === 0}
-							className="bg-[#7f2d2d] text-[#fff5f5] hover:bg-[#933838]"
+							className="bg-danger text-paper hover:bg-danger"
 						>
 							Confirm cleanup
 						</AlertDialogAction>
@@ -1649,10 +1668,10 @@ function CleanupPreviewGroup({
 	emptyText: string;
 }) {
 	return (
-		<div className="rounded-md border border-[#30352f] bg-[#101211] p-3">
+		<div className="rounded-md border border-rule bg-paper p-3">
 			<div className="mb-2 flex items-center justify-between gap-3">
-				<p className="text-xs font-medium uppercase text-[#817d72]">{title}</p>
-				<span className="text-xs text-[#aaa294]">{items.length}</span>
+				<p className="text-xs font-medium uppercase text-ink-3">{title}</p>
+				<span className="text-xs text-ink-3">{items.length}</span>
 			</div>
 			{items.length > 0 ? (
 				<ul className="space-y-1.5">
@@ -1661,20 +1680,18 @@ function CleanupPreviewGroup({
 							key={String(item.id)}
 							className="flex items-center justify-between gap-3 text-xs"
 						>
-							<span className="font-mono text-[#f2efe7]">
-								{item.invoiceNumber}
-							</span>
-							<span className="truncate text-[#aaa294]">
+							<span className="font-mono text-ink">{item.invoiceNumber}</span>
+							<span className="truncate text-ink-3">
 								{item.customerName || item.reason || item.status || "-"}
 							</span>
 						</li>
 					))}
 					{items.length > 8 ? (
-						<li className="text-xs text-[#817d72]">+{items.length - 8} more</li>
+						<li className="text-xs text-ink-3">+{items.length - 8} more</li>
 					) : null}
 				</ul>
 			) : (
-				<p className="text-xs text-[#817d72]">{emptyText}</p>
+				<p className="text-xs text-ink-3">{emptyText}</p>
 			)}
 		</div>
 	);
@@ -1696,26 +1713,68 @@ function SummaryCard({
 	isLoading?: boolean;
 }) {
 	const toneClass = {
-		open: "border-l-[#d7bc7f]",
-		overdue: "border-l-[#df9b9b]",
-		paid: "border-l-[#66c2a3]",
+		open: "border-l-warn",
+		overdue: "border-l-danger",
+		paid: "border-l-ok",
 	}[tone];
 
 	return (
 		<div
-			className={`ui-panel rounded-md border border-l-4 border-[#30352f] bg-[#171a18] px-4 py-4 ${toneClass}`}
+			className={`ui-panel rounded-md border border-l-4 border-rule bg-paper-2 px-4 py-4 ${toneClass}`}
 			title={fullValue}
 		>
-			<p className="text-sm font-medium text-[#beb6a8]">{label}</p>
+			<p className="text-sm font-medium text-ink-3">{label}</p>
 			{isLoading ? (
 				<>
-					<div className="mt-2 h-8 w-32 animate-pulse rounded bg-[#22252a]" />
-					<div className="mt-2 h-5 w-24 animate-pulse rounded bg-[#22252a]" />
+					<div className="mt-2 h-8 w-32 animate-pulse rounded bg-paper-3" />
+					<div className="mt-2 h-5 w-24 animate-pulse rounded bg-paper-3" />
 				</>
 			) : (
 				<>
-					<p className="mt-2 text-2xl font-semibold text-[#f2efe7]">{value}</p>
-					<p className="mt-1 text-sm text-[#aaa294]">{meta}</p>
+					<p className="mt-2 text-2xl font-semibold text-ink">{value}</p>
+					<p className="mt-1 text-sm text-ink-3">{meta}</p>
+				</>
+			)}
+		</div>
+	);
+}
+
+function PaymentScoreCard({
+	score,
+	isLoading,
+}: {
+	score: PaymentScore;
+	isLoading?: boolean;
+}) {
+	const statusLabel = {
+		no_data: "No paid history",
+		excellent: "Excellent",
+		good: "Good",
+		fair: "Fair",
+		slow: "Needs attention",
+	}[score.status];
+	const meta =
+		score.paidInvoiceCount === 0
+			? "Score appears after the first paid invoice"
+			: `${score.onTimeCount}/${score.paidInvoiceCount} on time · ${score.averageDaysToPay ?? 0} day avg`;
+
+	return (
+		<div className="ui-panel rounded-md border border-l-4 border-rule border-l-info bg-paper-2 px-4 py-4">
+			<p className="text-sm font-medium text-ink-3">Payment score</p>
+			{isLoading ? (
+				<>
+					<div className="mt-2 h-8 w-32 animate-pulse rounded bg-paper-3" />
+					<div className="mt-2 h-5 w-24 animate-pulse rounded bg-paper-3" />
+				</>
+			) : (
+				<>
+					<div className="mt-2 flex items-baseline gap-2">
+						<p className="text-2xl font-semibold text-ink">{score.score}</p>
+						<span className="text-xs uppercase tracking-[0.08em] text-info">
+							{statusLabel}
+						</span>
+					</div>
+					<p className="mt-1 text-sm text-ink-3">{meta}</p>
 				</>
 			)}
 		</div>
@@ -1732,53 +1791,53 @@ function RevenueTrendCard({
 	isCurrencyScoped: boolean;
 }) {
 	return (
-		<section className="ui-panel rounded-md border border-[#c8ff62] bg-[#171a18]/90 p-4 shadow-[0_0_0_rgba(167,188,98,0)] backdrop-blur-md transition-[border-color,box-shadow] duration-200 hover:border-[#5f6d41] hover:shadow-[0_18px_60px_rgba(167,188,98,0.08)]">
+		<section className="ui-panel rounded-md border border-brand bg-paper-2/90 p-4 shadow-[0_0_0_transparent] backdrop-blur-md transition-[border-color,box-shadow] duration-200 hover:border-brand-line hover:shadow-[0_18px_60px_color-mix(in srgb, var(--color-brand) 8%, transparent)]">
 			<div className="mb-4 flex flex-wrap items-start justify-between gap-3">
 				<div>
-					<h2 className="text-sm font-medium text-[#f2efe7]">
+					<h2 className="text-sm font-medium text-ink">
 						Paid Invoices Over Time
 					</h2>
-					<p className="mt-1 text-xs text-[#817d72]">
+					<p className="mt-1 text-xs text-ink-3">
 						Paid and open invoice value by month
 						{isCurrencyScoped ? `, scoped to ${currency}.` : "."}
 					</p>
 				</div>
 				<div className="flex items-center gap-4 text-xs font-medium">
-					<span className="text-[#66c2a3]">● Paid</span>
-					<span className="text-[#d7bc7f]">● Open</span>
+					<span className="text-ok">● Paid</span>
+					<span className="text-warn">● Open</span>
 				</div>
 			</div>
 
-			<div className="h-55 w-full">
+			<div className="h-48 w-full">
 				<ResponsiveContainer width="100%" height="100%">
 					<LineChart
 						data={data}
-						margin={{ top: 8, right: 12, bottom: 0, left: 0 }}
+						margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
 					>
-						<CartesianGrid
-							stroke="#30352f"
+						{/* <CartesianGrid
+							stroke="var(--color-rule)"
 							strokeOpacity={0.65}
 							vertical={false}
-						/>
+						/> */}
 						<XAxis
 							dataKey="label"
 							tickLine={false}
 							axisLine={false}
-							tick={{ fill: "#817d72", fontSize: 12 }}
+							tick={{ fill: "var(--color-ink-3)", fontSize: 12 }}
 							dy={10}
 						/>
 						<YAxis
 							width={72}
 							tickLine={false}
 							axisLine={false}
-							tick={{ fill: "#817d72", fontSize: 12 }}
+							tick={{ fill: "var(--color-ink-3)", fontSize: 12 }}
 							tickFormatter={(value) =>
 								formatCompactMoney(Number(value), currency)
 							}
 							domain={["auto", "auto"]}
 						/>
 						<Tooltip
-							cursor={{ stroke: "#c8ff62", strokeWidth: 1 }}
+							cursor={{ stroke: "var(--color-brand)", strokeWidth: 1 }}
 							content={<RevenueTooltip currency={currency} />}
 						/>
 						<Line
@@ -1790,7 +1849,7 @@ function RevenueTrendCard({
 							activeDot={{
 								r: 5,
 								fill: "#66c2a3",
-								stroke: "#1a2117",
+								stroke: "var(--color-brand-soft)",
 								strokeWidth: 2,
 							}}
 						/>
@@ -1836,8 +1895,8 @@ function RevenueTooltip({
 	if (!point) return null;
 
 	return (
-		<div className="min-w-47.5 rounded-md border border-[#30352f] bg-[#0f1111]/95 px-3 py-3 text-xs shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-md">
-			<p className="mb-2 font-medium text-[#f2efe7]">{label}</p>
+		<div className="min-w-47.5 rounded-md border border-rule bg-paper/95 px-3 py-3 text-xs shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-md">
+			<p className="mb-2 font-medium text-ink">{label}</p>
 			<div className="space-y-2">
 				<TooltipRow
 					label="Paid"
@@ -1871,7 +1930,7 @@ function TooltipRow({
 	currency: string;
 	tone: "paid" | "unpaid";
 }) {
-	const toneClass = tone === "paid" ? "text-[#66c2a3]" : "text-[#d7bc7f]";
+	const toneClass = tone === "paid" ? "text-ok" : "text-warn";
 
 	return (
 		<div>
@@ -1881,7 +1940,7 @@ function TooltipRow({
 				<span>{label}</span>
 				<span>{formatMoney(revenue, currency)}</span>
 			</div>
-			<div className="mt-1 flex items-center justify-between gap-4 text-[#aaa294]">
+			<div className="mt-1 flex items-center justify-between gap-4 text-ink-3">
 				<span>Revenue</span>
 				<span>Count: {count} Invoices</span>
 			</div>
@@ -2000,35 +2059,25 @@ function FilterField({
 }) {
 	return (
 		<div className={`flex min-w-0 flex-col gap-1.5 ${className}`}>
-			<span className="text-xs font-medium text-[#817d72]">{label}</span>
+			<span className="text-xs font-medium text-ink-3">{label}</span>
 			{children}
 		</div>
 	);
 }
 
-function StatusChip({ status }: { status: InvoiceStatus }) {
-	const styles: Record<InvoiceStatus, string> = {
-		paid: "border-[#2f5e4e] bg-[#193229] text-[#8ed8bb]",
-		unpaid: "border-[#5b4e34] bg-[#262016] text-[#d7bc7f]",
-		"partially-paid": "border-[#365f62] bg-[#14292b] text-[#8ed5db]",
-		overdue: "border-[#6b3f3f] bg-[#2c1b1b] text-[#df9b9b]",
-		canceled: "border-[#5d4747] bg-[#261c1c] text-[#d4a0a0]",
-		draft: "border-[#5b4e34] bg-[#2b2113] text-[#e0c27b]",
-	};
-	const label =
-		status === "unpaid"
-			? "sent"
-			: status === "partially-paid"
-				? "partial"
-				: status;
+const invoiceStatusStamp: Record<InvoiceStatus, string> = {
+	paid: "hm-ts-stamp is-ok",
+	unpaid: "hm-ts-stamp is-info",
+	"partially-paid": "hm-ts-stamp is-warn",
+	overdue: "hm-ts-stamp is-danger",
+	canceled: "hm-ts-stamp is-paper",
+	draft: "hm-ts-stamp is-paper",
+};
 
-	return (
-		<span
-			className={`inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium capitalize ${styles[status]}`}
-		>
-			{label}
-		</span>
-	);
+function invoiceStatusLabel(status: InvoiceStatus) {
+	if (status === "unpaid") return "sent";
+	if (status === "partially-paid") return "partial";
+	return status;
 }
 
 function formatDate(value: string) {
@@ -2036,11 +2085,11 @@ function formatDate(value: string) {
 }
 
 function dueDateClassName(invoice: InvoiceRow) {
-	if (invoice.status === "paid") return "font-medium text-[#66c2a3]";
-	if (invoice.status === "canceled") return "text-[#737b89]";
+	if (invoice.status === "paid") return "font-medium text-ok";
+	if (invoice.status === "canceled") return "text-ink-3";
 
 	const dueDate = new Date(`${invoice.dueDate}T00:00:00`);
-	if (Number.isNaN(dueDate.getTime())) return "text-[#beb6a8]";
+	if (Number.isNaN(dueDate.getTime())) return "text-ink-3";
 
 	const today = new Date();
 	today.setHours(0, 0, 0, 0);
@@ -2049,8 +2098,8 @@ function dueDateClassName(invoice: InvoiceRow) {
 	);
 
 	if (daysUntilDue < 0 || invoice.status === "overdue") {
-		return "font-medium text-[#df9b9b]";
+		return "font-medium text-danger";
 	}
-	if (daysUntilDue <= 7) return "font-medium text-[#d7bc7f]";
-	return "text-[#beb6a8]";
+	if (daysUntilDue <= 7) return "font-medium text-warn";
+	return "text-ink-3";
 }

@@ -1,3 +1,18 @@
+import {
+	closestCenter,
+	DndContext,
+	type DragEndEvent,
+	PointerSensor,
+	useSensor,
+	useSensors,
+} from "@dnd-kit/core";
+import {
+	arrayMove,
+	SortableContext,
+	useSortable,
+	verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery } from "convex/react";
 import {
 	CalendarDays,
@@ -9,7 +24,9 @@ import {
 	Download,
 	ExternalLink,
 	FileText,
+	GripVertical,
 	ImagePlus,
+	Loader2,
 	Minus,
 	Plus,
 	ReceiptText,
@@ -17,7 +34,15 @@ import {
 	Settings2,
 	X,
 } from "lucide-react";
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+	type ChangeEvent,
+	type ReactNode,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import { DatePicker } from "#/components/navigation/DatePicker";
 import { Button } from "#/components/ui/button";
 import { Calendar } from "#/components/ui/calendar";
 import {
@@ -42,6 +67,7 @@ import {
 import { Input } from "#/components/ui/input";
 import {
 	Popover,
+	PopoverAnchor,
 	PopoverContent,
 	PopoverTrigger,
 } from "#/components/ui/popover";
@@ -58,6 +84,10 @@ import {
 	WITHHOLDING_ENTITY_TYPE_OPTIONS,
 	WITHHOLDING_RESIDENCY_OPTIONS,
 } from "#/features/compliance/nigeria";
+import {
+	netPayableFromCompliance,
+	PERSISTABLE_WARNING_CODES,
+} from "#/features/compliance/persist";
 import type {
 	InvoiceComplianceSnapshot,
 	JurisdictionCode,
@@ -70,9 +100,14 @@ import type {
 } from "#/features/compliance/types";
 import { formatMoney } from "#/features/invoices/format";
 import type { ImportedInvoiceDraft } from "#/features/invoices/import-spreadsheet";
+import { toEditorDoc } from "#/features/invoices/midday-adapter";
+import type { InvoiceTemplateSettings } from "#/features/invoices/types";
+import type { EditorDoc } from "#/lib/midday-invoice/types";
 import { cn } from "#/utils/cn";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { NotesEditor } from "./editor/notes-editor";
+import { InlineLabelInput } from "./inline-label-input";
 
 type LineItem = {
 	id: string;
@@ -80,6 +115,7 @@ type LineItem = {
 	quantity: number;
 	price: number;
 	productId?: Id<"products">;
+	unit?: string;
 };
 
 type CreateInvoicePanelProps = {
@@ -130,6 +166,7 @@ const DOCUMENT_SIZE_OPTIONS = [
 ] as const;
 
 const DATE_FORMAT_OPTIONS = [
+	{ value: "ng", label: "DD/MM/YYYY" },
 	{ value: "iso", label: "YYYY-MM-DD" },
 	{ value: "us", label: "MM/DD/YYYY" },
 ] as const;
@@ -139,14 +176,14 @@ const DOCUMENT_TYPE_OPTIONS = [
 	{
 		value: "standard",
 		label: "Standard",
-		description: "Final invoice for payment collection.",
 	},
 	{
 		value: "proforma",
 		label: "Pro-forma",
-		description: "Pre-sale approval, customs, or deposit request.",
 	},
 ] as const;
+
+type InvoiceDateFormat = (typeof DATE_FORMAT_OPTIONS)[number]["value"];
 
 const TAX_SETTING_OPTIONS = [
 	{ value: "none", label: "No tax" },
@@ -158,20 +195,6 @@ const PAYMENT_DETAILS_PLACEHOLDER =
 	"Add bank details, wallet address, or payment instructions";
 const NOTE_PLACEHOLDER =
 	"E.g. Thank you for your business. Payment due within 14 days.";
-const NGN_PER_CURRENCY = {
-	NGN: 1,
-	USD: 1500,
-	GBP: 1900,
-} as const;
-const PERSISTABLE_WARNING_CODES = new Set([
-	"missing_seller_tax_id",
-	"missing_buyer_tax_id",
-	"cross_border_review",
-	"reverse_charge_review",
-	"unknown_jurisdiction",
-	"domestic_vat_not_applied",
-	"missing_workspace_tax_status",
-]);
 
 type SupportedCurrency = (typeof INVOICE_CURRENCY_OPTIONS)[number]["code"];
 type SupportedTemplateName = (typeof TEMPLATE_OPTIONS)[number]["value"];
@@ -196,7 +219,11 @@ function normalizeCurrency(value?: string | null): SupportedCurrency {
 }
 
 function toIsoDate(value: Date) {
-	return value.toISOString().slice(0, 10);
+	return [
+		value.getFullYear(),
+		String(value.getMonth() + 1).padStart(2, "0"),
+		String(value.getDate()).padStart(2, "0"),
+	].join("-");
 }
 
 function fromIsoDate(value: string) {
@@ -241,11 +268,62 @@ function generateInvoiceNumber(
 	return `${prefix}-${new Date().getFullYear()}-${String(sequence).padStart(width, "0")}`;
 }
 
-function formatDate(value: string, format: "iso" | "us") {
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) return value;
+function formatDate(value: string, format: InvoiceDateFormat) {
+	const date = fromIsoDate(value);
+	if (!date) return value;
 	if (format === "iso") return value;
-	return date.toLocaleDateString("en-US");
+	return date.toLocaleDateString(format === "ng" ? "en-GB" : "en-US", {
+		day: "2-digit",
+		month: "2-digit",
+		year: "numeric",
+	});
+}
+
+function InvoiceDateField({
+	value,
+	onChange,
+	format,
+	label,
+	min,
+}: {
+	value: string;
+	onChange: (value: string) => void;
+	format: InvoiceDateFormat;
+	label: string;
+	min?: string;
+}) {
+	const [open, setOpen] = useState(false);
+	const selectedDate = fromIsoDate(value);
+	const minimumDate = min ? fromIsoDate(min) : undefined;
+
+	return (
+		<Popover open={open} onOpenChange={setOpen}>
+			<PopoverTrigger asChild>
+				<Button
+					type="button"
+					variant="ghost"
+					aria-label={label}
+					className="mt-1 inline-flex h-auto max-w-full items-center gap-2 border-0 bg-transparent p-0 font-mono text-[14px] text-ink hover:bg-transparent hover:text-ink-3"
+				>
+					<span className="truncate">{formatDate(value, format)}</span>
+					<CalendarDays className="h-4 w-4 shrink-0 text-ink-3" />
+				</Button>
+			</PopoverTrigger>
+			<PopoverContent align="start" className="w-auto border-rule bg-paper p-0">
+				<Calendar
+					mode="single"
+					selected={selectedDate}
+					defaultMonth={selectedDate}
+					disabled={minimumDate ? { before: minimumDate } : undefined}
+					onSelect={(date) => {
+						if (!date) return;
+						onChange(toIsoDate(date));
+						setOpen(false);
+					}}
+				/>
+			</PopoverContent>
+		</Popover>
+	);
 }
 
 function sanitizeDecimalInput(raw: string) {
@@ -277,28 +355,6 @@ function parsePriceInput(raw: string) {
 	return parsed;
 }
 
-function convertAmount(
-	amount: number,
-	fromCurrency: SupportedCurrency,
-	toCurrency: SupportedCurrency,
-) {
-	if (fromCurrency === toCurrency) return amount;
-	const converted =
-		(amount * NGN_PER_CURRENCY[fromCurrency]) / NGN_PER_CURRENCY[toCurrency];
-	return Math.round(converted * 100) / 100;
-}
-
-function netPayableFromCompliance(compliance: {
-	grandTotal: number;
-	withholdingTaxAmount?: number;
-	netPayable?: number;
-}) {
-	return (
-		compliance.netPayable ??
-		compliance.grandTotal - (compliance.withholdingTaxAmount ?? 0)
-	);
-}
-
 function toPersistableCompliance(compliance: InvoiceComplianceSnapshot) {
 	const {
 		netPayable: _netPayable,
@@ -319,6 +375,53 @@ function sanitizeTinInput(raw: string) {
 
 function sanitizeRcInput(raw: string) {
 	return raw.toUpperCase().replace(/\s+/g, "").slice(0, 10);
+}
+
+function CreateSortableLineItem({
+	id,
+	className,
+	children,
+}: {
+	id: string;
+	className?: string;
+	children: ReactNode;
+}) {
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({ id });
+
+	const style = {
+		transform: CSS.Transform.toString(transform),
+		transition,
+		opacity: isDragging ? 0.5 : 1,
+	};
+
+	return (
+		<div
+			ref={setNodeRef}
+			style={style}
+			className={cn(
+				"group relative flex min-w-0 items-start gap-2 border border-rule bg-paper px-2 py-2 md:items-center md:gap-3",
+				className,
+			)}
+		>
+			<button
+				type="button"
+				className="shrink-0 cursor-grab touch-none text-ink-3 hover:text-ink active:cursor-grabbing"
+				aria-label="Drag to reorder"
+				{...attributes}
+				{...listeners}
+			>
+				<GripVertical className="h-4 w-4" />
+			</button>
+			{children}
+		</div>
+	);
 }
 
 function createEmptyLineItem(): LineItem {
@@ -342,8 +445,8 @@ function pillClassName(isActive: boolean) {
 	return cn(
 		"inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-[12px] font-medium transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out",
 		isActive
-			? "border-[#c8ff62] bg-[#c8ff62] text-[#0f1111]"
-			: "border-[#30352f] bg-[#101211] text-[#beb6a8] hover:bg-[#20241f] hover:text-[#f2efe7]",
+			? "border-brand bg-brand text-brand-ink"
+			: "border-rule bg-paper text-ink-2 hover:bg-paper-2 hover:text-ink",
 	);
 }
 
@@ -367,6 +470,8 @@ export function CreateInvoicePanel({
 		currency?: string;
 	}>;
 	const workspace = useQuery(api.compliance.getWorkspaceSettings, {});
+	const savedTemplateSettings = useQuery(api.invoices.getTemplateDefaults, {});
+	const saveTemplateDefaults = useMutation(api.invoices.saveTemplateDefaults);
 
 	const [composerStage, setComposerStage] = useState<ComposerStage>("editor");
 	const [createdInvoice, setCreatedInvoice] =
@@ -384,13 +489,37 @@ export function CreateInvoicePanel({
 	const [fromName, setFromName] = useState("Velure Studio");
 	const [fromEmail, setFromEmail] = useState("hello@velure.app");
 	const [paymentDetails, setPaymentDetails] = useState("");
-	const [notes, setNotes] = useState("");
+	const [notes, setNotes] = useState<EditorDoc | null>(null);
+	const [topBlock, setTopBlock] = useState<EditorDoc | null>(null);
+	const [bottomBlock, setBottomBlock] = useState<EditorDoc | null>(null);
+	const [draftKey, setDraftKey] = useState(0);
 	const [currency, setCurrency] = useState<SupportedCurrency>("NGN");
 	const [invoiceSize, setInvoiceSize] = useState<"A4" | "LETTER">("A4");
-	const [dateFormat, setDateFormat] = useState<"iso" | "us">("iso");
+	const [dateFormat, setDateFormat] = useState<"iso" | "us" | "ng">("ng");
 	const [paymentTermDays, setPaymentTermDays] = useState(14);
 	const [dueDate, setDueDate] = useState(() => buildDueDate(14));
 	const [includeDecimals, setIncludeDecimals] = useState(true);
+	const [includeUnits, setIncludeUnits] = useState(false);
+	const [includeQr, setIncludeQr] = useState(false);
+	const [includeDiscount, setIncludeDiscount] = useState(false);
+	const [discount, setDiscount] = useState(0);
+	const [templateLabels, setTemplateLabels] = useState({
+		title: "Invoice",
+		customerLabel: "To",
+		fromLabel: "From",
+		invoiceNoLabel: "Invoice No",
+		issueDateLabel: "Issue Date",
+		dueDateLabel: "Due Date",
+		descriptionLabel: "Description",
+		quantityLabel: "Quantity",
+		priceLabel: "Price",
+		totalLabel: "Total",
+		totalSummaryLabel: "Total",
+		subtotalLabel: "Subtotal",
+		discountLabel: "Discount",
+		paymentLabel: "Payment Details",
+		noteLabel: "Note",
+	});
 	const [showFromEmail, setShowFromEmail] = useState(true);
 	const [showCustomerEmail, setShowCustomerEmail] = useState(true);
 	const [showPaymentDetailsSection, setShowPaymentDetailsSection] =
@@ -417,11 +546,14 @@ export function CreateInvoicePanel({
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [customerSearch, setCustomerSearch] = useState("");
 	const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
+	const [customerId, setCustomerId] = useState<Id<"clients"> | undefined>();
+	const [customerActiveIndex, setCustomerActiveIndex] = useState(0);
 	const [createClientOpen, setCreateClientOpen] = useState(false);
 	const [newClientName, setNewClientName] = useState("");
 	const [newClientEmail, setNewClientEmail] = useState("");
 	const [newClientSubmitting, setNewClientSubmitting] = useState(false);
 	const createClient = useMutation(api.clients.create);
+	const createProduct = useMutation(api.products.create);
 
 	const onCreateClientSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -430,7 +562,7 @@ export function CreateInvoicePanel({
 
 		setNewClientSubmitting(true);
 		try {
-			await createClient({
+			const id = await createClient({
 				name: newClientName,
 				email: newClientEmail,
 				currency: "NGN",
@@ -442,6 +574,7 @@ export function CreateInvoicePanel({
 			toast({ title: "Customer created", variant: "success" });
 			setCustomerName(newClientName);
 			setCustomerEmail(newClientEmail);
+			setCustomerId(id);
 			setCreateClientOpen(false);
 			setCustomerPickerOpen(false);
 			setNewClientName("");
@@ -454,7 +587,10 @@ export function CreateInvoicePanel({
 	};
 	const [lastCreatedToken, setLastCreatedToken] = useState<string | null>(null);
 	const [submitting, setSubmitting] = useState(false);
-	const [autoSendEmail, setAutoSendEmail] = useState(true);
+	const [deliveryType, setDeliveryType] = useState<
+		"create" | "create_and_send" | "scheduled"
+	>("create");
+	const [scheduledAt, setScheduledAt] = useState("");
 	const [shipmentWeight, setShipmentWeight] = useState("");
 	const [shipmentPackageCount, setShipmentPackageCount] = useState("");
 	const [shipmentHsCode, setShipmentHsCode] = useState("");
@@ -480,6 +616,10 @@ export function CreateInvoicePanel({
 		null,
 	);
 	const [productSearchQuery, setProductSearchQuery] = useState("");
+	const [productActiveIndex, setProductActiveIndex] = useState(0);
+	const [addingToCatalogIndex, setAddingToCatalogIndex] = useState<
+		number | null
+	>(null);
 	const lineItemsScrollRef = useRef<HTMLDivElement | null>(null);
 	const pendingLineInputRef = useRef<HTMLInputElement | null>(null);
 	const autosaveDraftIdRef = useRef<Id<"invoices"> | null>(null);
@@ -551,6 +691,32 @@ export function CreateInvoicePanel({
 	}, [workspace]);
 
 	useEffect(() => {
+		if (!savedTemplateSettings) return;
+		setIncludeDecimals(savedTemplateSettings.includeDecimals ?? true);
+		setIncludeUnits(savedTemplateSettings.includeUnits ?? false);
+		setIncludeQr(savedTemplateSettings.includeQr ?? false);
+		setIncludeDiscount(savedTemplateSettings.includeDiscount ?? false);
+		setDiscount(savedTemplateSettings.discount ?? 0);
+		setTemplateLabels((current) => ({
+			...current,
+			...Object.fromEntries(
+				Object.entries(savedTemplateSettings).filter(
+					([, value]) => typeof value === "string",
+				),
+			),
+		}));
+	}, [savedTemplateSettings]);
+
+	const templateSettings: InvoiceTemplateSettings = {
+		...templateLabels,
+		includeDecimals,
+		includeUnits,
+		includeQr,
+		includeDiscount,
+		discount: includeDiscount ? discount : 0,
+	};
+
+	useEffect(() => {
 		if (!workspace || initialDraft) return;
 		setInvoiceNumber(generateInvoiceNumber(workspace, documentType));
 	}, [
@@ -570,6 +736,7 @@ export function CreateInvoicePanel({
 	useEffect(() => {
 		if (!initialDraft) return;
 
+		setDraftKey((k) => k + 1);
 		setComposerStage("editor");
 		setCreatedInvoice(null);
 		setDocumentType(initialDocumentType);
@@ -581,9 +748,10 @@ export function CreateInvoicePanel({
 		if (initialDraft.customerEmail)
 			setCustomerEmail(initialDraft.customerEmail);
 		setCustomerPoNumber("");
+		setCustomerId(undefined);
 		setCurrency(normalizeCurrency(initialDraft.currency));
 		if (initialDraft.notes) {
-			setNotes(initialDraft.notes);
+			setNotes(toEditorDoc(initialDraft.notes));
 			setShowNoteSection(true);
 		}
 		if (initialDraft.paymentDetails) {
@@ -726,13 +894,12 @@ export function CreateInvoicePanel({
 			dueDate: depositDueDate || undefined,
 		};
 	}, [depositDueDate, depositEnabled, depositKind, depositValue, documentType]);
-	const isForeignCurrency = currency !== "NGN";
 	const paperFrameClass =
 		invoiceSize === "A4" ? "max-w-[860px]" : "max-w-[900px]";
 	const footerGhostButtonClass =
-		"inline-flex h-10 items-center gap-2 rounded-md border border-[#30352f] bg-[#101211] px-3.5 text-[13px] text-[#d8d1c4] transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-[#20241f] hover:text-[#f2efe7]";
+		"inline-flex h-10 items-center gap-2 rounded-md border border-rule bg-paper px-3.5 text-[13px] text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink";
 	const footerIconButtonClass =
-		"inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#30352f] bg-[#101211] text-[#beb6a8] transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-[#20241f] hover:text-[#f2efe7]";
+		"inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink";
 
 	const createdInvoicePublicUrl = createdInvoice
 		? `${typeof window !== "undefined" ? window.location.origin : ""}/i/${createdInvoice.token}`
@@ -748,10 +915,10 @@ export function CreateInvoicePanel({
 				: `${tinDigits}/10 digits`;
 	const tinHintClass =
 		tinDigits === 10
-			? "text-[#8fd26d]"
+			? "text-ok"
 			: tinDigits === 0
-				? "text-[#737b89]"
-				: "text-[#c8ff62]";
+				? "text-ink-3"
+				: "text-brand";
 	const rcIsValid =
 		sellerRcForSubmission.length === 0 ||
 		/^RC-\d{7}$/i.test(sellerRcForSubmission);
@@ -780,8 +947,6 @@ export function CreateInvoicePanel({
 				: autosaveStatus === "error"
 					? "Draft not saved"
 					: "";
-	const dueDateLabel =
-		documentType === "proforma" && !depositEnabled ? "Valid Until" : "Due Date";
 	const hasMeaningfulDraft = useMemo(() => {
 		const defaultFromName =
 			workspace?.legalName || workspace?.name || "Velure Studio";
@@ -803,14 +968,14 @@ export function CreateInvoicePanel({
 			paymentDetails.trim() !== defaultPaymentDetails.trim() ||
 			sellerTin.trim() !== defaultSellerTin.trim() ||
 			sellerRcNumber.trim() !== defaultSellerRc.trim() ||
-			notes.trim().length > 0 ||
+			Boolean(notes?.content.length) ||
 			documentType !== "standard" ||
 			Boolean(shipmentDetails) ||
 			Boolean(depositRequest) ||
 			dueDate !== defaultDueDate ||
 			currency !== "NGN" ||
 			invoiceSize !== "A4" ||
-			dateFormat !== "iso" ||
+			dateFormat !== "ng" ||
 			paymentTermDays !== defaultPaymentTermsDays ||
 			templateName !== "Default NG" ||
 			lineItems.some(
@@ -923,6 +1088,7 @@ export function CreateInvoicePanel({
 		depositRequest,
 		invoiceNumber: id ? invoiceNumber.trim() : "",
 		customerName: customerName.trim(),
+		customerId,
 		logoUrl: logoUrl.trim() || undefined,
 		customerPoNumber: customerPoNumber.trim() || undefined,
 		currency,
@@ -931,19 +1097,23 @@ export function CreateInvoicePanel({
 		dateFormat,
 		paymentTermsDays: paymentTermDays,
 		template: templateName,
+		templateSettings,
+		topBlock: topBlock ?? undefined,
+		bottomBlock: bottomBlock ?? undefined,
 		issueDate,
 		dueDate,
 		paymentDetails:
 			showPaymentDetailsSection && paymentDetails.trim()
 				? paymentDetails.trim()
 				: undefined,
-		notes: showNoteSection && notes.trim() ? notes.trim() : undefined,
+		notes: showNoteSection && notes?.content.length ? notes : undefined,
 		lineItems: lineItems.map((item) => ({
 			id: item.id,
 			name: item.name.trim(),
 			quantity: Math.max(1, item.quantity),
 			price: Math.max(0, item.price),
 			productId: item.productId,
+			unit: item.unit,
 		})),
 		compliance: toPersistableCompliance({
 			...compliance,
@@ -1095,12 +1265,6 @@ export function CreateInvoicePanel({
 
 	const updateCurrency = (nextCurrency: SupportedCurrency) => {
 		if (currency === nextCurrency) return;
-		setLineItems((items) =>
-			items.map((item) => ({
-				...item,
-				price: convertAmount(item.price, currency, nextCurrency),
-			})),
-		);
 		setPriceDrafts({});
 		setCurrency(nextCurrency);
 		if (nextCurrency !== "NGN") {
@@ -1122,14 +1286,13 @@ export function CreateInvoicePanel({
 		window.open(`/i/${token}`, "_blank", "noopener,noreferrer");
 	};
 
-	const selectClient = (name: string) => {
-		setCustomerName(name);
-		const matched = clients.find((client) => client.name === name);
-		if (matched) {
-			setCustomerEmail(matched.email ?? "");
-		}
+	const selectClient = (client: (typeof clients)[number]) => {
+		setCustomerId(client.id as Id<"clients"> | undefined);
+		setCustomerName(client.name);
+		setCustomerEmail(client.email ?? "");
 		setCustomerPickerOpen(false);
 		setCustomerSearch("");
+		setCustomerActiveIndex(0);
 	};
 
 	const updateLine = (index: number, patch: Partial<LineItem>) => {
@@ -1164,6 +1327,7 @@ export function CreateInvoicePanel({
 		}
 		setProductSearchIndex(null);
 		setProductSearchQuery("");
+		setProductActiveIndex(0);
 	};
 
 	const addLine = () => {
@@ -1176,6 +1340,21 @@ export function CreateInvoicePanel({
 				prev.filter((lineId) => lineId !== nextLine.id),
 			);
 		}, 180);
+	};
+
+	const dndSensors = useSensors(
+		useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+	);
+
+	const handleLineDragEnd = (event: DragEndEvent) => {
+		const { active, over } = event;
+		if (!over || active.id === over.id) return;
+		setLineItems((prev) => {
+			const oldIndex = prev.findIndex((i) => i.id === active.id);
+			const newIndex = prev.findIndex((i) => i.id === over.id);
+			if (oldIndex === -1 || newIndex === -1) return prev;
+			return arrayMove(prev, oldIndex, newIndex);
+		});
 	};
 
 	useEffect(() => {
@@ -1325,7 +1504,7 @@ export function CreateInvoicePanel({
 		setFromEmail(workspace?.email ?? "hello@velure.app");
 		setLogoUrl(workspace?.logoUrl ?? "");
 		setPaymentDetails(workspace?.paymentDetails ?? "");
-		setNotes("");
+		setNotes(null);
 		setCurrency("NGN");
 		setInvoiceSize("A4");
 		setDateFormat("iso");
@@ -1388,7 +1567,7 @@ export function CreateInvoicePanel({
 		setAutosaveStatus("idle");
 	};
 
-	const createInvoice = async (intent: CreateIntent = "create") => {
+	const createInvoice = async (intent: CreateIntent = deliveryType) => {
 		if (!canSubmit) return;
 		if (!tinIsValid) {
 			toast({
@@ -1417,6 +1596,28 @@ export function CreateInvoicePanel({
 			return;
 		}
 
+		if (
+			intent === "scheduled" &&
+			(!scheduledAt || Date.parse(scheduledAt) <= Date.now())
+		) {
+			toast({
+				title: "Choose a future schedule",
+				description: "Scheduled time must be in the future.",
+				variant: "error",
+			});
+			return;
+		}
+		if (
+			(intent === "create_and_send" || intent === "scheduled") &&
+			!customerEmail.trim()
+		) {
+			toast({
+				title: "Customer email needed",
+				description: "Add a customer email before sending or scheduling.",
+				variant: "error",
+			});
+			return;
+		}
 		setSubmitting(true);
 		try {
 			const created = await createDraft({
@@ -1426,6 +1627,7 @@ export function CreateInvoicePanel({
 				shipmentDetails,
 				depositRequest,
 				invoiceNumber: "",
+				customerId,
 				customerName: customerName.trim(),
 				logoUrl: logoUrl.trim() || undefined,
 				customerPoNumber: customerPoNumber.trim() || undefined,
@@ -1435,13 +1637,16 @@ export function CreateInvoicePanel({
 				dateFormat,
 				paymentTermsDays: paymentTermDays,
 				template: templateName,
+				templateSettings,
+				topBlock: topBlock ?? undefined,
+				bottomBlock: bottomBlock ?? undefined,
 				issueDate,
 				dueDate,
 				paymentDetails:
 					showPaymentDetailsSection && paymentDetails.trim()
 						? paymentDetails.trim()
 						: undefined,
-				notes: showNoteSection && notes.trim() ? notes.trim() : undefined,
+				notes: showNoteSection && notes?.content.length ? notes : undefined,
 				lineItems: lineItems
 					.filter((item) => item.name.trim().length > 0)
 					.map((item) => ({
@@ -1450,6 +1655,7 @@ export function CreateInvoicePanel({
 						quantity: Math.max(1, item.quantity),
 						price: Math.max(0, item.price),
 						productId: item.productId,
+						unit: item.unit,
 					})),
 				compliance: toPersistableCompliance({
 					...compliance,
@@ -1479,7 +1685,11 @@ export function CreateInvoicePanel({
 				fiscalization: {
 					status: "not_configured",
 				},
-				autoSendEmail,
+				deliveryType: intent,
+				scheduledAt:
+					intent === "scheduled"
+						? new Date(scheduledAt).toISOString()
+						: undefined,
 			});
 
 			setLastCreatedToken(created.token);
@@ -1525,13 +1735,13 @@ export function CreateInvoicePanel({
 				className={`flex h-full min-h-0 w-full flex-col ${isSheetMode ? "" : "pb-6"}`}
 			>
 				<div className={`flex-1 overflow-auto ${isSheetMode ? "p-0" : "px-2"}`}>
-					<div className="mx-auto flex h-full min-h-full w-full max-w-[720px] flex-col border border-[#30352f] bg-[#101211]">
+					<div className="mx-auto flex h-full min-h-full w-full max-w-[720px] flex-col border border-rule bg-paper">
 						<div className="flex min-h-0 flex-1 flex-col px-6 py-6">
 							<div>
-								<h2 className="text-[34px] font-medium tracking-[-0.03em] text-[#f2efe7]">
+								<h2 className="text-[34px] font-medium tracking-[-0.03em] text-ink">
 									Created
 								</h2>
-								<p className="mt-2 text-sm text-[#8d938f]">
+								<p className="mt-2 text-sm text-ink-3">
 									Your{" "}
 									{createdInvoice.documentType === "proforma"
 										? "pro-forma invoice"
@@ -1540,14 +1750,14 @@ export function CreateInvoicePanel({
 								</p>
 							</div>
 
-							<div className="mt-10 border border-[#30352f] bg-[#0f1111] p-5">
-								<div className="flex items-start justify-between gap-4 text-sm text-[#8d938f]">
+							<div className="mt-10 border border-rule bg-paper p-5">
+								<div className="flex items-start justify-between gap-4 text-sm text-ink-3">
 									<div className="text-[13px]">
 										{createdInvoice.documentType === "proforma"
 											? "Pro-forma No"
 											: "Invoice No"}
 										:{" "}
-										<span className="font-medium text-[#f2efe7]">
+										<span className="font-medium text-ink">
 											{createdInvoice.invoiceNumber}
 										</span>
 									</div>
@@ -1556,26 +1766,26 @@ export function CreateInvoicePanel({
 											? "Valid Until"
 											: "Due Date"}
 										:{" "}
-										<span className="font-medium text-[#f2efe7]">
+										<span className="font-medium text-ink">
 											{formatDate(createdInvoice.dueDate, dateFormat)}
 										</span>
 									</div>
 								</div>
 
 								<div className="mt-8">
-									<div className="text-[18px] font-medium text-[#f2efe7]">
+									<div className="text-[18px] font-medium text-ink">
 										{createdInvoice.customerName}
 									</div>
 									{createdInvoice.customerEmail ? (
-										<div className="mt-3 text-[13px] text-[#8d938f] underline underline-offset-2">
+										<div className="mt-3 text-[13px] text-ink-3 underline underline-offset-2">
 											{createdInvoice.customerEmail}
 										</div>
 									) : null}
 								</div>
 
-								<div className="mt-10 flex items-end justify-between gap-4 border-b border-[#30352f] pb-5">
-									<div className="text-[13px] text-[#8d938f]">Total</div>
-									<div className="text-[18px] text-[#f2efe7]">
+								<div className="mt-10 flex items-end justify-between gap-4 border-b border-rule pb-5">
+									<div className="text-[13px] text-ink-3">Total</div>
+									<div className="text-[18px] text-ink">
 										{formatMoney(
 											createdInvoice.total,
 											normalizeCurrency(currency),
@@ -1587,15 +1797,15 @@ export function CreateInvoicePanel({
 								</div>
 
 								<div className="mt-10">
-									<div className="text-[28px] font-medium tracking-[-0.03em] text-[#f2efe7]">
+									<div className="text-[28px] font-medium tracking-[-0.03em] text-ink">
 										Details
 									</div>
 									<div className="mt-10">
-										<div className="mb-2 text-[12px] text-[#8d938f]">
+										<div className="mb-2 text-[12px] text-ink-3">
 											Share link
 										</div>
 										<div className="flex items-center gap-2">
-											<div className="flex h-10 flex-1 items-center border border-[#30352f] bg-[#101211] px-3 text-[13px] text-[#8d938f]">
+											<div className="flex h-10 flex-1 items-center border border-rule bg-paper px-3 text-[13px] text-ink-3">
 												<span className="truncate">
 													{createdInvoicePublicUrl}
 												</span>
@@ -1625,11 +1835,11 @@ export function CreateInvoicePanel({
 							</div>
 						</div>
 
-						<div className="flex items-center justify-end gap-3 border-t border-[#30352f] bg-[#0f1111] px-6 py-5">
+						<div className="flex items-center justify-end gap-3 border-t border-rule bg-paper px-6 py-5">
 							<button
 								type="button"
 								onClick={() => openInvoiceTab(createdInvoice.token)}
-								className="inline-flex h-10 items-center rounded-md border border-[#30352f] bg-[#101211] px-5 text-[14px] text-[#f2efe7] transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-[#20241f]"
+								className="inline-flex h-10 items-center rounded-md border border-rule bg-paper px-5 text-[14px] text-ink transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2"
 							>
 								View{" "}
 								{createdInvoice.documentType === "proforma"
@@ -1639,7 +1849,7 @@ export function CreateInvoicePanel({
 							<button
 								type="button"
 								onClick={resetDraft}
-								className="inline-flex h-10 items-center rounded-md border border-[#c8ff62] bg-[#c8ff62] px-5 text-[14px] font-medium text-[#0f1111] transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-[#d5ff7a]"
+								className="inline-flex h-10 items-center rounded-md border border-brand bg-brand px-5 text-[14px] font-medium text-brand-ink transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-brand-hi"
 							>
 								Create another
 							</button>
@@ -1657,11 +1867,11 @@ export function CreateInvoicePanel({
 			>
 				<div className={`flex-1 overflow-auto ${isSheetMode ? "p-0" : "px-2"}`}>
 					<div
-						className={`mx-auto flex min-h-full w-full flex-col border border-[#30352f] bg-[#101211] ${paperFrameClass}`}
+						className={`mx-auto flex min-h-full w-full flex-col border border-rule bg-paper shadow-[0_18px_60px_rgba(0,0,0,0.08)] ${paperFrameClass}`}
 					>
 						<div className="flex min-h-0 flex-1 flex-col">
-							<div className="flex min-h-0 flex-1 flex-col px-6 pb-24 pt-6 md:px-7">
-								<div className="mb-5 grid gap-3 rounded-md border border-[#30352f] bg-[#0f1111] p-3 md:grid-cols-2">
+							<div className="flex min-h-0 flex-1 flex-col px-5 pb-16 pt-5 sm:px-6 md:px-8 md:pt-7 lg:px-10">
+								<div className="mb-5 flex w-fit rounded-md border border-rule bg-paper-2 p-1">
 									{DOCUMENT_TYPE_OPTIONS.map((option) => (
 										<button
 											key={option.value}
@@ -1671,95 +1881,78 @@ export function CreateInvoicePanel({
 											}
 											aria-pressed={documentType === option.value}
 											className={cn(
-												"rounded-md border px-3 py-3 text-left transition-[background-color,border-color,color] duration-[110ms]",
+												"rounded-sm px-3 py-1.5 text-[12px] font-medium transition-colors",
 												documentType === option.value
-													? "border-[#c8ff62] bg-[#1a2117] text-[#f2efe7]"
-													: "border-[#30352f] bg-[#101211] text-[#beb6a8] hover:bg-[#20241f]",
+													? "bg-brand text-brand-ink"
+													: "text-ink-3 hover:bg-paper-3 hover:text-ink",
 											)}
 										>
-											<span className="block text-sm font-medium">
-												{option.label}
-											</span>
-											<span className="mt-1 block text-xs text-[#8d938f]">
-												{option.description}
-											</span>
+											{option.label}
 										</button>
 									))}
 								</div>
 
-								<div className="mb-8 grid gap-5 border-b border-[#30352f] pb-6 lg:grid-cols-[minmax(0,1fr)_120px] lg:items-start">
-									<div className="space-y-4">
+								<div className="mb-7 grid gap-5 lg:grid-cols-[minmax(0,1fr)_108px] lg:items-start">
+									<div className="space-y-3">
 										<div className="grid gap-3 md:grid-cols-[minmax(190px,1.15fr)_minmax(150px,0.85fr)_minmax(168px,1fr)]">
-											<div className="min-h-[76px] rounded-md border border-[#30352f] bg-[#0f1111] px-3 py-2.5">
-												<div className="text-[11px] text-[#7f857f]">
-													Invoice No.
-												</div>
-												<div className="mt-1 font-mono text-[14px] text-[#f2efe7]">
+											<div className="min-h-[60px] border-b border-rule px-1 py-2">
+												<InlineLabelInput
+													value={templateLabels.invoiceNoLabel}
+													onChange={(value) =>
+														setTemplateLabels((current) => ({
+															...current,
+															invoiceNoLabel: value,
+														}))
+													}
+													className="text-[11px] text-ink-3"
+												/>
+												<div className="mt-1 font-mono text-[14px] text-ink">
 													{invoiceNumber}
 												</div>
-												<div className="mt-1 text-[11px] text-[#8d938f]">
-													Server-reserved when saved.
-												</div>
 											</div>
-											<div className="min-h-[76px] rounded-md border border-[#30352f] bg-[#0f1111] px-3 py-2.5">
-												<div className="text-[11px] text-[#7f857f]">
-													Issue Date
-												</div>
-												<div className="mt-1 font-mono text-[14px] text-[#f2efe7]">
-													{formatDate(issueDate, dateFormat)}
-												</div>
+											<div className="min-h-[60px] border-b border-rule px-1 py-2">
+												<InlineLabelInput
+													value={templateLabels.issueDateLabel}
+													onChange={(value) =>
+														setTemplateLabels((current) => ({
+															...current,
+															issueDateLabel: value,
+														}))
+													}
+													className="text-[11px] text-ink-3"
+												/>
+												<InvoiceDateField
+													value={issueDate}
+													onChange={setIssueDate}
+													format={dateFormat}
+													label="Issue date"
+												/>
 											</div>
-											<div className="min-h-[76px] rounded-md border border-[#c8ff62] bg-[#101211] px-3 py-2.5">
-												<div className="text-[11px] text-[#7f857f]">
-													{dueDateLabel}
-												</div>
-												<Popover>
-													<PopoverTrigger asChild>
-														<Button
-															type="button"
-															variant="ghost"
-															className="mt-1 inline-flex h-auto items-center gap-2 rounded-none border-0 bg-transparent p-0 font-mono text-[14px] text-[#f2efe7] hover:bg-transparent hover:text-[#f6f1e7]"
-														>
-															{formatDate(dueDate, dateFormat)}
-															<CalendarDays className="h-4 w-4 text-[#7f857f]" />
-														</Button>
-													</PopoverTrigger>
-													<PopoverContent
-														align="start"
-														className="w-auto border-[#30352f] bg-[#101211] p-0"
-													>
-														<Calendar
-															mode="single"
-															selected={fromIsoDate(dueDate)}
-															onSelect={(selectedDate) => {
-																if (!selectedDate) return;
-																setDueDate(toIsoDate(selectedDate));
-															}}
-														/>
-													</PopoverContent>
-												</Popover>
+											<div className="min-h-[60px] border-b border-brand px-1 py-2">
+												<InlineLabelInput
+													value={templateLabels.dueDateLabel}
+													onChange={(value) =>
+														setTemplateLabels((current) => ({
+															...current,
+															dueDateLabel: value,
+														}))
+													}
+													className="text-[11px] text-ink-3"
+												/>
+												<InvoiceDateField
+													value={dueDate}
+													onChange={setDueDate}
+													format={dateFormat}
+													label="Due date"
+													min={issueDate}
+												/>
 											</div>
-										</div>
-
-										<div className="flex flex-wrap items-center gap-2">
-											{INVOICE_CURRENCY_OPTIONS.map((option) => (
-												<button
-													key={option.code}
-													type="button"
-													aria-pressed={currency === option.code}
-													onClick={() => updateCurrency(option.code)}
-													className={pillClassName(currency === option.code)}
-												>
-													<span>{option.symbol}</span>
-													<span>{option.label}</span>
-												</button>
-											))}
 										</div>
 									</div>
 
 									<div className="justify-self-start lg:justify-self-end">
-										<div className="w-[108px] space-y-2">
-											<div className="h-[88px] w-[108px] overflow-hidden rounded-md border border-[#30352f] bg-[#0f1111]">
+										<div className="w-[96px] space-y-1.5">
+											<div className="h-[72px] w-[96px] overflow-hidden rounded-md border border-rule bg-paper">
 												{logoUrl.trim() ? (
 													<img
 														src={logoUrl}
@@ -1767,12 +1960,12 @@ export function CreateInvoicePanel({
 														className="h-full w-full object-contain"
 													/>
 												) : (
-													<div className="flex h-full w-full items-center justify-center text-[11px] text-[#817d72]">
+													<div className="flex h-full w-full items-center justify-center text-[11px] text-ink-3">
 														Logo
 													</div>
 												)}
 											</div>
-											<label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-[#30352f] bg-[#101211] px-2.5 text-[11px] text-[#beb6a8] transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-[#20241f] hover:text-[#f2efe7]">
+											<label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-rule bg-paper px-2.5 text-[11px] text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink">
 												<ImagePlus className="h-3.5 w-3.5" />
 												Upload
 												<input
@@ -1786,24 +1979,24 @@ export function CreateInvoicePanel({
 									</div>
 								</div>
 
-								<div className="mb-7 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(260px,280px)] lg:items-start">
+								<div className="mb-7 grid gap-6 border-y border-rule py-5 md:grid-cols-2 md:items-start">
 									<div className="space-y-2">
-										<div className="text-sm text-[#7f857f]">From</div>
+										<div className="text-sm text-ink-3">From</div>
 										<Input
 											value={fromName}
 											onChange={(event) => setFromName(event.target.value)}
-											className="h-9 w-full border-[#30352f] bg-[#0f1111] px-3 text-[14px] font-medium text-[#f2efe7]"
+											className="h-9 w-full border-rule bg-paper px-3 text-[14px] font-medium text-ink"
 										/>
 										{showFromEmail ? (
 											<Input
 												value={fromEmail}
 												onChange={(event) => setFromEmail(event.target.value)}
-												className="h-9 w-full border-[#30352f] bg-[#0f1111] px-3 text-[13px] text-[#d8d1c4]"
+												className="h-9 w-full border-rule bg-paper px-3 text-[13px] text-ink-2"
 											/>
 										) : null}
 										{showSellerTin ? (
 											<div className="flex items-center gap-2 pt-2">
-												<div className="w-[32px] text-[12px] text-[#7f857f]">
+												<div className="w-[32px] text-[12px] text-ink-3">
 													TIN
 												</div>
 												<Input
@@ -1812,13 +2005,13 @@ export function CreateInvoicePanel({
 														setSellerTin(sanitizeTinInput(event.target.value))
 													}
 													placeholder="0123456789"
-													className="h-8 w-full border-[#30352f] bg-[#0f1111] px-3 text-[13px] font-mono text-[#d8d1c4]"
+													className="h-8 w-full border-rule bg-paper px-3 text-[13px] font-mono text-ink-2"
 												/>
 											</div>
 										) : null}
 										{showSellerRc ? (
 											<div className="flex items-center gap-2 pt-1">
-												<div className="w-[32px] text-[12px] text-[#7f857f]">
+												<div className="w-[32px] text-[12px] text-ink-3">
 													CAC
 												</div>
 												<Input
@@ -1829,59 +2022,110 @@ export function CreateInvoicePanel({
 														)
 													}
 													placeholder="RC-1234567"
-													className="h-8 w-full border-[#30352f] bg-[#0f1111] px-3 text-[13px] font-mono text-[#d8d1c4]"
+													className="h-8 w-full border-rule bg-paper px-3 text-[13px] font-mono text-ink-2"
 												/>
 											</div>
 										) : null}
 									</div>
 
 									<div className="space-y-2">
-										<div className="text-sm text-[#7f857f]">To</div>
+										<div className="text-sm text-ink-3">To</div>
 										<div className="mb-1">
 											<div className="relative w-full">
 												<button
 													type="button"
-													onClick={() => setCustomerPickerOpen((prev) => !prev)}
-													className="flex h-9 w-full items-center justify-between rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-[13px] text-[#d8d1c4]"
+													aria-haspopup="listbox"
+													aria-expanded={customerPickerOpen}
+													onClick={() => {
+														setCustomerActiveIndex(0);
+														setCustomerPickerOpen((prev) => !prev);
+													}}
+													className="flex h-9 w-full items-center justify-between rounded-md border border-rule bg-paper px-3 text-[13px] text-ink-2"
 												>
 													{customerName || "Select client"}
-													<ChevronDown className="h-3.5 w-3.5 text-[#7f857f]" />
+													<ChevronDown className="h-3.5 w-3.5 text-ink-3" />
 												</button>
 												{customerPickerOpen ? (
-													<div className="absolute left-0 top-10 z-20 w-full min-w-[260px] rounded-md border border-[#30352f] bg-[#101211] p-2 shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
-														<div className="mb-2 flex h-8 items-center gap-2 rounded-md border border-[#30352f] bg-[#0f1111] px-2">
-															<Search className="h-3.5 w-3.5 text-[#7f857f]" />
+													<div className="absolute left-0 top-10 z-20 w-full min-w-[260px] rounded-md border border-rule bg-paper p-2 shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
+														<div className="mb-2 flex h-8 items-center gap-2 rounded-md border border-rule bg-paper px-2">
+															<Search className="h-3.5 w-3.5 text-ink-3" />
 															<input
+																role="combobox"
+																aria-autocomplete="list"
+																aria-controls="invoice-customer-options"
+																aria-expanded={customerPickerOpen}
 																value={customerSearch}
-																onChange={(event) =>
-																	setCustomerSearch(event.target.value)
-																}
+																onChange={(event) => {
+																	setCustomerSearch(event.target.value);
+																	setCustomerActiveIndex(0);
+																}}
+																onKeyDown={(event) => {
+																	if (event.key === "Escape") {
+																		setCustomerPickerOpen(false);
+																		return;
+																	}
+																	if (!filteredClients.length) return;
+																	if (
+																		event.key === "ArrowDown" ||
+																		event.key === "ArrowUp"
+																	) {
+																		event.preventDefault();
+																		setCustomerActiveIndex((current) =>
+																			event.key === "ArrowDown"
+																				? (current + 1) % filteredClients.length
+																				: (current -
+																						1 +
+																						filteredClients.length) %
+																					filteredClients.length,
+																		);
+																	} else if (event.key === "Enter") {
+																		event.preventDefault();
+																		selectClient(
+																			filteredClients[customerActiveIndex],
+																		);
+																	}
+																}}
 																placeholder="Search customer..."
-																className="h-full w-full bg-transparent text-xs text-[#d8d1c4] outline-none placeholder:text-[#616661]"
+																className="h-full w-full bg-transparent text-xs text-ink-2 outline-none placeholder:text-ink-3"
 															/>
 														</div>
-														<div className="max-h-48 overflow-y-auto overscroll-contain">
-															{filteredClients.map((client) => (
+														<div
+															id="invoice-customer-options"
+															role="listbox"
+															className="max-h-48 overflow-y-auto overscroll-contain"
+														>
+															{filteredClients.map((client, clientIndex) => (
 																<button
 																	key={client.id ?? client.name}
 																	type="button"
-																	onClick={() => selectClient(client.name)}
-																	className="flex h-8 w-full items-center rounded-md px-2 text-left text-[13px] text-[#d8d1c4] transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-[#20241f]"
+																	role="option"
+																	aria-selected={
+																		clientIndex === customerActiveIndex
+																	}
+																	onMouseEnter={() =>
+																		setCustomerActiveIndex(clientIndex)
+																	}
+																	onClick={() => selectClient(client)}
+																	className={cn(
+																		"flex h-8 w-full items-center rounded-md px-2 text-left text-[13px] text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2",
+																		clientIndex === customerActiveIndex &&
+																			"bg-paper-2 text-ink",
+																	)}
 																>
 																	{client.name}
 																</button>
 															))}
 															{filteredClients.length === 0 ? (
-																<div className="px-2 py-2 text-xs text-[#7f857f]">
+																<div className="px-2 py-2 text-xs text-ink-3">
 																	No customers found.
 																</div>
 															) : null}
 														</div>
-														<div className="mt-2 border-t border-[#30352f] pt-2">
+														<div className="mt-2 border-t border-rule pt-2">
 															<button
 																type="button"
 																onClick={() => setCreateClientOpen(true)}
-																className="h-8 rounded-md px-2 text-[13px] text-[#c8ff62] transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:text-[#d5ff7a]"
+																className="h-8 rounded-md px-2 text-[13px] text-brand transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:text-brand-hi"
 															>
 																Create customer
 															</button>
@@ -1893,9 +2137,12 @@ export function CreateInvoicePanel({
 
 										<Input
 											value={customerName}
-											onChange={(event) => setCustomerName(event.target.value)}
+											onChange={(event) => {
+												setCustomerId(undefined);
+												setCustomerName(event.target.value);
+											}}
 											placeholder="Client name"
-											className="h-9 w-full border-[#30352f] bg-[#0f1111] px-3 text-[14px] font-medium text-[#f2efe7]"
+											className="h-9 w-full border-rule bg-paper px-3 text-[14px] font-medium text-ink"
 										/>
 										{showCustomerEmail ? (
 											<Input
@@ -1904,7 +2151,7 @@ export function CreateInvoicePanel({
 													setCustomerEmail(event.target.value)
 												}
 												placeholder="client@email.com"
-												className="h-9 w-full border-[#30352f] bg-[#0f1111] px-3 text-[13px] text-[#d8d1c4]"
+												className="h-9 w-full border-rule bg-paper px-3 text-[13px] text-ink-2"
 											/>
 										) : null}
 										<Input
@@ -1913,107 +2160,17 @@ export function CreateInvoicePanel({
 												setCustomerPoNumber(event.target.value.slice(0, 80))
 											}
 											placeholder="Customer PO number (optional)"
-											className="h-9 w-full border-[#30352f] bg-[#0f1111] px-3 text-[13px] text-[#d8d1c4]"
+											className="h-9 w-full border-rule bg-paper px-3 text-[13px] text-ink-2"
 										/>
-										{customerEmail.trim() && (
-											<label className="flex items-center gap-2 pt-1">
-												<input
-													type="checkbox"
-													checked={autoSendEmail}
-													onChange={(e) => setAutoSendEmail(e.target.checked)}
-													className="h-4 w-4 rounded border-[#30352f] bg-[#0f1111] accent-[#c8ff62]"
-												/>
-												<span className="text-[12px] text-[#8d938f]">
-													Send invoice email now
-												</span>
-											</label>
-										)}
-									</div>
-
-									<div className="h-full rounded-md border border-[#30352f] bg-[#0f1111] p-4">
-										<div className="flex flex-wrap items-center gap-2">
-											<button
-												type="button"
-												onClick={openComplianceDialog}
-												className="rounded-md border border-[#30352f] bg-[#151817] px-2 py-1 text-[11px] text-[#d8d1c4] hover:border-[#3f5130] hover:bg-[#1a2117]"
-											>
-												{templateName}
-											</button>
-											<button
-												type="button"
-												onClick={openComplianceDialog}
-												className="rounded-md border border-[#6a5a2d] bg-[#1f1b10] px-2 py-1 text-[11px] text-[#e0c27b] hover:border-[#8a783c] hover:bg-[#282311]"
-											>
-												{selectedTaxSetting?.label}
-											</button>
-											{selectedWhtCategory?.value !== "none" ? (
-												<button
-													type="button"
-													onClick={openComplianceDialog}
-													className="rounded-md border border-[#6a5a2d] bg-[#1f1b10] px-2 py-1 text-[11px] text-[#e1b46c] hover:border-[#8a783c] hover:bg-[#282311]"
-												>
-													{selectedWhtCategory?.label}
-												</button>
-											) : null}
-										</div>
-										<button
-											type="button"
-											onClick={openComplianceDialog}
-											className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium text-[#c8ff62] hover:text-[#d5ff7a]"
-										>
-											<Settings2 className="h-3.5 w-3.5" />
-											Edit tax and compliance settings
-										</button>
-										<div className="mt-3 space-y-2 text-[12px] text-[#aaa294]">
-											<div>
-												<div className="text-[#7f857f]">Compliance</div>
-												<div className="mt-1 text-[#d8d1c4]">
-													{isForeignCurrency
-														? "Foreign currency settlement note active."
-														: selectedTaxSetting?.label === "No tax"
-															? "Domestic invoice with no tax line."
-															: `${selectedTaxSetting?.label} applied to totals.`}
-												</div>
-											</div>
-											<div>
-												<div className="text-[#7f857f]">Seller tax status</div>
-												<div className="mt-1 text-[#d8d1c4]">
-													{selectedSellerTaxStatus?.label ?? "VAT registered"}
-												</div>
-											</div>
-											<div>
-												<div className="text-[#7f857f]">WHT deduction</div>
-												<div className="mt-1 font-mono text-[#d8d1c4]">
-													{selectedWhtCategory?.value === "none"
-														? "Not applied"
-														: `${selectedWhtCategory?.label} • ${withholdingRecipientEntityType.replaceAll("_", " ")} • ${withholdingRecipientResidency.replaceAll("_", " ")}`}
-												</div>
-											</div>
-											{compliance.regulatoryNotice ? (
-												<div className="rounded-md border border-[#4e3b21] bg-[#1f1911] px-3 py-2 text-[#e1b46c]">
-													<div className="flex items-start gap-2">
-														<CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-														<span>{compliance.regulatoryNotice}</span>
-													</div>
-												</div>
-											) : null}
-										</div>
 									</div>
 								</div>
 
 								{documentType === "proforma" ? (
-									<div className="mb-7 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(260px,0.8fr)]">
-										<div className="rounded-md border border-[#30352f] bg-[#0f1111] p-4">
-											<div className="mb-3 flex items-center justify-between gap-3">
-												<div>
-													<p className="text-sm font-medium text-[#f2efe7]">
-														Shipment and customs details
-													</p>
-													<p className="mt-1 text-xs text-[#817d72]">
-														Static document fields only.
-													</p>
-												</div>
-											</div>
+									<div className="mb-5 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(260px,0.8fr)]">
+										<div className="rounded-md border border-rule bg-paper p-3">
+											<p className="mb-3 text-sm font-medium text-ink">
+												Shipment and customs details
+											</p>
 											<div className="grid gap-3 sm:grid-cols-2">
 												<Input
 													value={shipmentWeight}
@@ -2021,7 +2178,7 @@ export function CreateInvoicePanel({
 														setShipmentWeight(event.target.value.slice(0, 80))
 													}
 													placeholder="Weight (kg)"
-													className="h-9 border-[#30352f] bg-[#101211] px-3 text-[13px] text-[#d8d1c4]"
+													className="h-9 border-rule bg-paper px-3 text-[13px] text-ink-2"
 												/>
 												<Input
 													value={shipmentPackageCount}
@@ -2032,7 +2189,7 @@ export function CreateInvoicePanel({
 													}
 													inputMode="numeric"
 													placeholder="Packages count"
-													className="h-9 border-[#30352f] bg-[#101211] px-3 text-[13px] text-[#d8d1c4]"
+													className="h-9 border-rule bg-paper px-3 text-[13px] text-ink-2"
 												/>
 												<Input
 													value={shipmentHsCode}
@@ -2040,7 +2197,7 @@ export function CreateInvoicePanel({
 														setShipmentHsCode(event.target.value.slice(0, 40))
 													}
 													placeholder="HS code"
-													className="h-9 border-[#30352f] bg-[#101211] px-3 text-[13px] text-[#d8d1c4]"
+													className="h-9 border-rule bg-paper px-3 text-[13px] text-ink-2"
 												/>
 												<Input
 													value={shipmentIncoterms}
@@ -2050,7 +2207,7 @@ export function CreateInvoicePanel({
 														)
 													}
 													placeholder="Incoterms"
-													className="h-9 border-[#30352f] bg-[#101211] px-3 text-[13px] text-[#d8d1c4]"
+													className="h-9 border-rule bg-paper px-3 text-[13px] text-ink-2"
 												/>
 												<Input
 													value={shipmentPortOfLoading}
@@ -2060,7 +2217,7 @@ export function CreateInvoicePanel({
 														)
 													}
 													placeholder="Port of loading"
-													className="h-9 border-[#30352f] bg-[#101211] px-3 text-[13px] text-[#d8d1c4]"
+													className="h-9 border-rule bg-paper px-3 text-[13px] text-ink-2"
 												/>
 												<Input
 													value={shipmentPortOfDischarge}
@@ -2070,12 +2227,12 @@ export function CreateInvoicePanel({
 														)
 													}
 													placeholder="Port of discharge"
-													className="h-9 border-[#30352f] bg-[#101211] px-3 text-[13px] text-[#d8d1c4]"
+													className="h-9 border-rule bg-paper px-3 text-[13px] text-ink-2"
 												/>
 											</div>
 										</div>
 
-										<div className="rounded-md border border-[#30352f] bg-[#0f1111] p-4">
+										<div className="rounded-md border border-rule bg-paper p-3">
 											<label className="flex items-center gap-2">
 												<input
 													type="checkbox"
@@ -2083,9 +2240,9 @@ export function CreateInvoicePanel({
 													onChange={(event) =>
 														setDepositEnabled(event.target.checked)
 													}
-													className="h-4 w-4 rounded border-[#30352f] bg-[#0f1111] accent-[#c8ff62]"
+													className="h-4 w-4 rounded border-rule bg-paper accent-brand"
 												/>
-												<span className="text-sm font-medium text-[#f2efe7]">
+												<span className="text-sm font-medium text-ink">
 													Request deposit
 												</span>
 											</label>
@@ -2126,15 +2283,11 @@ export function CreateInvoicePanel({
 														placeholder={
 															depositKind === "percentage" ? "50" : "250000"
 														}
-														className="h-9 border-[#30352f] bg-[#0f1111] px-3 text-[13px] text-[#d8d1c4]"
+														className="h-9 border-rule bg-paper px-3 text-[13px] text-ink-2"
 													/>
-													<Input
+													<DatePicker
 														value={depositDueDate}
-														onChange={(event) =>
-															setDepositDueDate(event.target.value)
-														}
-														type="date"
-														className="h-9 border-[#30352f] bg-[#0f1111] px-3 text-[13px] text-[#d8d1c4]"
+														onChange={setDepositDueDate}
 													/>
 												</div>
 											) : null}
@@ -2142,222 +2295,445 @@ export function CreateInvoicePanel({
 									</div>
 								) : null}
 
-								<div className="mb-3 grid grid-cols-[minmax(0,1.7fr)_84px_120px_140px_32px] items-center gap-3 border-b border-[#30352f] px-2 pb-2 text-[12px] text-[#7f857f]">
-									<span>Description</span>
-									<span>Qty</span>
-									<span>Price</span>
-									<span className="text-right">Total</span>
+								<div className="mb-3 hidden grid-cols-[minmax(0,1.7fr)_84px_120px_140px_32px] items-center gap-3 border-b border-rule px-2 pb-2 text-[12px] text-ink-3 md:grid">
+									<InlineLabelInput
+										value={templateLabels.descriptionLabel}
+										onChange={(value) =>
+											setTemplateLabels((current) => ({
+												...current,
+												descriptionLabel: value,
+											}))
+										}
+									/>
+									<InlineLabelInput
+										value={templateLabels.quantityLabel}
+										onChange={(value) =>
+											setTemplateLabels((current) => ({
+												...current,
+												quantityLabel: value,
+											}))
+										}
+									/>
+									<InlineLabelInput
+										value={templateLabels.priceLabel}
+										onChange={(value) =>
+											setTemplateLabels((current) => ({
+												...current,
+												priceLabel: value,
+											}))
+										}
+									/>
+									<InlineLabelInput
+										value={templateLabels.totalLabel}
+										onChange={(value) =>
+											setTemplateLabels((current) => ({
+												...current,
+												totalLabel: value,
+											}))
+										}
+										className="text-right"
+									/>
 									<span />
 								</div>
 
 								<div
 									ref={lineItemsScrollRef}
-									className={cn(
-										"min-h-[52px] max-h-[250px] scroll-smooth",
-										productSearchIndex !== null
-											? "overflow-visible"
-											: "overflow-y-auto",
-									)}
+									className="min-h-[52px] max-h-[250px] scroll-smooth overflow-y-auto"
 								>
 									<div className="space-y-2">
-										{lineItems.map((item, index) => {
-											const lineTotal = item.quantity * item.price;
-											const isEntering = enteringLineIds.includes(item.id);
-											const isExiting = exitingLineIds.includes(item.id);
-											const isProductSearchOpen = productSearchIndex === index;
+										<DndContext
+											sensors={dndSensors}
+											collisionDetection={closestCenter}
+											onDragEnd={handleLineDragEnd}
+										>
+											<SortableContext
+												items={lineItems.map((i) => i.id)}
+												strategy={verticalListSortingStrategy}
+											>
+												{lineItems.map((item, index) => {
+													const lineTotal = item.quantity * item.price;
+													const isEntering = enteringLineIds.includes(item.id);
+													const isExiting = exitingLineIds.includes(item.id);
+													const isProductSearchOpen =
+														productSearchIndex === index;
 
-											return (
-												<div
-													key={item.id}
-													className={cn(
-														"group relative grid grid-cols-[minmax(0,1.7fr)_84px_120px_140px_32px] items-center gap-3 border border-[#30352f] bg-[#101211] px-2 py-2",
-														isProductSearchOpen ? "z-40" : "z-0",
-														isEntering && "invoice-line-enter",
-														isExiting && "invoice-line-exit",
-													)}
-												>
-													<div className="relative">
-														<Input
-															ref={
-																item.id === pendingFocusLineId
-																	? pendingLineInputRef
-																	: undefined
-															}
-															value={item.name}
-															onFocus={(e) => {
-																e.target.select();
-																setProductSearchIndex(index);
-																setProductSearchQuery(e.target.value.trim());
-															}}
-															onChange={(event) => {
-																updateLine(index, { name: event.target.value });
-																setProductSearchIndex(index);
-																setProductSearchQuery(event.target.value);
-															}}
-															onBlur={() => {
-																setTimeout(() => {
-																	setProductSearchIndex(null);
-																	setProductSearchQuery("");
-																}, 200);
-															}}
-															placeholder="Search product..."
+													return (
+														<CreateSortableLineItem
+															key={item.id}
+															id={item.id}
 															className={cn(
-																"h-10 border-[#30352f] bg-[#0f1111] px-3 text-[13px] leading-none text-[#f2efe7] placeholder:text-[#5f655f]",
+																isProductSearchOpen ? "z-40" : "z-0",
+																isEntering && "invoice-line-enter",
+																isExiting && "invoice-line-exit",
 															)}
-														/>
-														{isProductSearchOpen &&
-															visibleProductSearchResults.length > 0 && (
-																<div className="absolute left-0 top-10 z-50 w-full rounded-md border border-[#30352f] bg-[#101211] shadow-lg">
-																	<div className="border-b border-[#30352f] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[#817d72]">
-																		{productSearchQuery.trim().length > 0
-																			? "Matching products"
-																			: "Catalog products"}
+														>
+															<div className="relative grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-end gap-3 md:grid-cols-[minmax(0,1.7fr)_84px_120px_140px_32px] md:items-center">
+																<div className="relative col-span-2 min-w-0 md:col-span-1">
+																	<label
+																		className="mb-1 block text-[11px] text-ink-3 md:sr-only"
+																		htmlFor={`invoice-line-description-${item.id}`}
+																	>
+																		Description
+																	</label>
+																	<Popover open={isProductSearchOpen}>
+																		<PopoverAnchor asChild>
+																			<Input
+																				id={`invoice-line-description-${item.id}`}
+																				role="combobox"
+																				aria-autocomplete="list"
+																				aria-expanded={isProductSearchOpen}
+																				aria-controls={`invoice-product-options-${index}`}
+																				ref={
+																					item.id === pendingFocusLineId
+																						? pendingLineInputRef
+																						: undefined
+																				}
+																				value={item.name}
+																				onFocus={(e) => {
+																					e.target.select();
+																					setProductSearchIndex(index);
+																					setProductSearchQuery(
+																						e.target.value.trim(),
+																					);
+																				}}
+																				onChange={(event) => {
+																					updateLine(index, {
+																						name: event.target.value,
+																					});
+																					setProductSearchIndex(index);
+																					setProductSearchQuery(
+																						event.target.value,
+																					);
+																					setProductActiveIndex(0);
+																				}}
+																				onKeyDown={(event) => {
+																					if (event.key === "Escape") {
+																						setProductSearchIndex(null);
+																						setProductSearchQuery("");
+																						return;
+																					}
+																					if (
+																						!visibleProductSearchResults.length
+																					)
+																						return;
+																					if (
+																						event.key === "ArrowDown" ||
+																						event.key === "ArrowUp"
+																					) {
+																						event.preventDefault();
+																						setProductActiveIndex((current) =>
+																							event.key === "ArrowDown"
+																								? (current + 1) %
+																									visibleProductSearchResults.length
+																								: (current -
+																										1 +
+																										visibleProductSearchResults.length) %
+																									visibleProductSearchResults.length,
+																						);
+																					} else if (event.key === "Enter") {
+																						event.preventDefault();
+																						selectProduct(
+																							index,
+																							visibleProductSearchResults[
+																								productActiveIndex
+																							],
+																						);
+																					}
+																				}}
+																				onBlur={() => {
+																					setTimeout(() => {
+																						setProductSearchIndex(null);
+																						setProductSearchQuery("");
+																					}, 200);
+																				}}
+																				placeholder="Search product..."
+																				className="h-10 border-rule bg-paper px-3 text-[13px] leading-none text-ink placeholder:text-ink-3"
+																			/>
+																		</PopoverAnchor>
+																		{isProductSearchOpen &&
+																		(visibleProductSearchResults.length > 0 ||
+																			productSearchQuery.trim().length > 0) ? (
+																			<PopoverContent
+																				align="start"
+																				sideOffset={4}
+																				onOpenAutoFocus={(event) =>
+																					event.preventDefault()
+																				}
+																				onCloseAutoFocus={(event) =>
+																					event.preventDefault()
+																				}
+																				className="w-[min(560px,calc(100vw-2rem))] border-rule bg-paper p-0 shadow-lg"
+																			>
+																				{visibleProductSearchResults.length >
+																				0 ? (
+																					<>
+																						<div className="border-b border-rule px-3 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-ink-3">
+																							{productSearchQuery.trim()
+																								.length > 0
+																								? "Matching products"
+																								: "Catalog products"}
+																						</div>
+																						<div
+																							id={`invoice-product-options-${index}`}
+																							role="listbox"
+																							className="max-h-64 overflow-y-auto overscroll-contain"
+																						>
+																							{visibleProductSearchResults.map(
+																								(product, productIndex) => (
+																									<button
+																										type="button"
+																										role="option"
+																										aria-selected={
+																											productIndex ===
+																											productActiveIndex
+																										}
+																										onMouseEnter={() =>
+																											setProductActiveIndex(
+																												productIndex,
+																											)
+																										}
+																										key={product.id}
+																										onMouseDown={(e) => {
+																											e.preventDefault();
+																											selectProduct(
+																												index,
+																												product,
+																											);
+																										}}
+																										className={cn(
+																											"flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13px] text-ink hover:bg-paper-2",
+																											productIndex ===
+																												productActiveIndex &&
+																												"bg-paper-2",
+																										)}
+																									>
+																										<span className="min-w-0">
+																											<span className="block truncate">
+																												{product.name}
+																											</span>
+																											<span className="mt-0.5 block text-[11px] capitalize text-ink-3">
+																												{product.type}
+																												{product.unitName
+																													? ` / ${product.unitName}`
+																													: ""}
+																												{product.sku
+																													? ` / SKU ${product.sku}`
+																													: ""}
+																											</span>
+																										</span>
+																										<span className="shrink-0 font-mono text-brand">
+																											{formatMoney(
+																												product.defaultUnitPrice,
+																												currency,
+																											)}
+																										</span>
+																									</button>
+																								),
+																							)}
+																						</div>
+																					</>
+																				) : productSearchResults ===
+																					undefined ? (
+																					<div className="px-3 py-2 text-[12px] text-ink-3">
+																						Searching catalog...
+																					</div>
+																				) : (
+																					<>
+																						<div className="px-3 py-2 text-[12px] text-ink-3">
+																							<span className="block truncate font-medium text-ink">
+																								{item.name.trim()}
+																							</span>
+																							<span className="mt-1 block">
+																								No catalog match
+																							</span>
+																						</div>
+																						<button
+																							type="button"
+																							disabled={
+																								addingToCatalogIndex === index
+																							}
+																							onMouseDown={async (e) => {
+																								e.preventDefault();
+																								if (
+																									addingToCatalogIndex !== null
+																								)
+																									return;
+																								setAddingToCatalogIndex(index);
+																								try {
+																									const id =
+																										await createProduct({
+																											type: "product",
+																											name: item.name.trim(),
+																											defaultUnitPrice:
+																												item.price,
+																											isActive: true,
+																										});
+																									updateLine(index, {
+																										productId: id,
+																									});
+																									toast({
+																										title:
+																											"Added to product catalog",
+																										variant: "success",
+																									});
+																								} catch {
+																									toast({
+																										title:
+																											"Failed to add to catalog",
+																										variant: "error",
+																									});
+																								} finally {
+																									setAddingToCatalogIndex(null);
+																									setProductSearchIndex(null);
+																									setProductSearchQuery("");
+																								}
+																							}}
+																							className="flex w-full items-center gap-2 border-t border-rule px-3 py-2 text-left text-[12px] text-brand hover:bg-paper-2 disabled:opacity-50"
+																						>
+																							{addingToCatalogIndex ===
+																							index ? (
+																								<Loader2 className="h-3 w-3 animate-spin" />
+																							) : (
+																								<Plus className="h-3 w-3" />
+																							)}
+																							Add to catalog
+																						</button>
+																					</>
+																				)}
+																			</PopoverContent>
+																		) : null}
+																	</Popover>
+																</div>
+
+																<div className="min-w-0">
+																	<div className="mb-1 text-[11px] text-ink-3 md:sr-only">
+																		Qty
 																	</div>
-																	<div className="max-h-48 overflow-y-auto">
-																		{visibleProductSearchResults.map(
-																			(product) => (
-																				<button
-																					type="button"
-																					key={product.id}
-																					onMouseDown={(e) => {
-																						e.preventDefault();
-																						selectProduct(index, product);
-																					}}
-																					className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13px] text-[#f2efe7] hover:bg-[#20241f]"
-																				>
-																					<span className="min-w-0">
-																						<span className="block truncate">
-																							{product.name}
-																						</span>
-																						<span className="mt-0.5 block text-[11px] capitalize text-[#817d72]">
-																							{product.type}
-																							{product.unitName
-																								? ` / ${product.unitName}`
-																								: ""}
-																							{product.sku
-																								? ` / SKU ${product.sku}`
-																								: ""}
-																						</span>
-																					</span>
-																					<span className="shrink-0 font-mono text-[#c8ff62]">
-																						{formatMoney(
-																							product.defaultUnitPrice,
-																							"NGN",
-																						)}
-																					</span>
-																				</button>
-																			),
+																	<div className="flex items-center gap-1 text-ink-3 md:gap-1.5">
+																		<button
+																			type="button"
+																			onClick={() => decrementQuantity(index)}
+																			className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink"
+																			aria-label="Decrease quantity"
+																		>
+																			<Minus className="h-3 w-3" />
+																		</button>
+																		<Input
+																			type="number"
+																			min={1}
+																			step={1}
+																			value={item.quantity}
+																			onFocus={(e) => e.target.select()}
+																			onChange={(event) =>
+																				updateLine(index, {
+																					quantity: Math.max(
+																						1,
+																						Number(event.target.value) || 1,
+																					),
+																				})
+																			}
+																			onBlur={(event) =>
+																				updateLine(index, {
+																					quantity: Math.max(
+																						1,
+																						Number(event.target.value) || 1,
+																					),
+																				})
+																			}
+																			className="h-9 w-[42px] border-rule bg-paper px-0 text-center text-[13px] font-mono text-ink"
+																		/>
+																		<button
+																			type="button"
+																			onClick={() => incrementQuantity(index)}
+																			className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink"
+																			aria-label="Increase quantity"
+																		>
+																			<Plus className="h-3 w-3" />
+																		</button>
+																	</div>
+																</div>
+
+																<div className="min-w-0">
+																	<label
+																		className="mb-1 block text-[11px] text-ink-3 md:sr-only"
+																		htmlFor={`invoice-line-price-${item.id}`}
+																	>
+																		Price
+																	</label>
+																	<Input
+																		id={`invoice-line-price-${item.id}`}
+																		type="text"
+																		inputMode="decimal"
+																		value={
+																			priceDrafts[item.id] ??
+																			(item.price > 0
+																				? String(item.price)
+																				: "0")
+																		}
+																		onFocus={() =>
+																			onPriceFocus(item.id, item.price)
+																		}
+																		onChange={(event) =>
+																			onPriceChange(item.id, event.target.value)
+																		}
+																		onBlur={() =>
+																			commitPriceDraft(
+																				item.id,
+																				index,
+																				item.price,
+																			)
+																		}
+																		onKeyDown={(event) => {
+																			if (
+																				event.key === "ArrowUp" ||
+																				event.key === "ArrowDown"
+																			) {
+																				event.preventDefault();
+																			}
+																		}}
+																		className={cn(
+																			"h-9 w-full border-rule bg-paper px-3 text-[13px] font-mono text-ink",
 																		)}
-																	</div>
+																	/>
 																</div>
-															)}
-														{isProductSearchOpen &&
-															productSearchQuery.trim().length > 0 &&
-															productSearchResults === undefined && (
-																<div className="absolute left-0 top-10 z-50 w-full rounded-md border border-[#30352f] bg-[#101211] px-3 py-2 text-[12px] text-[#9fa69f] shadow-lg">
-																	Searching catalog...
+
+																<div className="col-span-2 flex items-baseline justify-between border-t border-rule pt-2 text-[13px] text-ink md:col-span-1 md:block md:border-0 md:pt-0 md:text-right md:font-mono">
+																	<span className="text-[11px] text-ink-3 md:hidden">
+																		Total
+																	</span>
+																	<span className="font-mono">
+																		{formatMoney(lineTotal, currency, {
+																			maximumFractionDigits:
+																				totalsMaximumFractionDigits,
+																		})}
+																	</span>
 																</div>
-															)}
-														{isProductSearchOpen &&
-															productSearchQuery.trim().length > 0 &&
-															productSearchResults !== undefined &&
-															visibleProductSearchResults.length === 0 && (
-																<div className="absolute left-0 top-10 z-50 w-full rounded-md border border-[#30352f] bg-[#101211] px-3 py-2 text-[12px] text-[#9fa69f] shadow-lg">
-																	No catalog match. Keep this text as a custom
-																	line, or create it in Products later.
-																</div>
-															)}
-													</div>
 
-													<div className="flex items-center gap-1.5 text-[#817d72]">
-														<button
-															type="button"
-															onClick={() => decrementQuantity(index)}
-															className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#30352f] bg-[#101211] text-[#beb6a8] transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-[#20241f] hover:text-[#f2efe7]"
-															aria-label="Decrease quantity"
-														>
-															<Minus className="h-3 w-3" />
-														</button>
-														<Input
-															type="number"
-															min={1}
-															step={1}
-															value={item.quantity}
-															onFocus={(e) => e.target.select()}
-															onChange={(event) =>
-																updateLine(index, {
-																	quantity: Math.max(
-																		1,
-																		Number(event.target.value) || 1,
-																	),
-																})
-															}
-															onBlur={(event) =>
-																updateLine(index, {
-																	quantity: Math.max(
-																		1,
-																		Number(event.target.value) || 1,
-																	),
-																})
-															}
-															className="h-9 w-[42px] border-[#30352f] bg-[#0f1111] px-0 text-center text-[13px] font-mono text-[#f2efe7]"
-														/>
-														<button
-															type="button"
-															onClick={() => incrementQuantity(index)}
-															className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#30352f] bg-[#101211] text-[#beb6a8] transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-[#20241f] hover:text-[#f2efe7]"
-															aria-label="Increase quantity"
-														>
-															<Plus className="h-3 w-3" />
-														</button>
-													</div>
-
-													<Input
-														type="text"
-														inputMode="decimal"
-														value={
-															priceDrafts[item.id] ??
-															(item.price > 0 ? String(item.price) : "0")
-														}
-														onFocus={() => onPriceFocus(item.id, item.price)}
-														onChange={(event) =>
-															onPriceChange(item.id, event.target.value)
-														}
-														onBlur={() =>
-															commitPriceDraft(item.id, index, item.price)
-														}
-														onKeyDown={(event) => {
-															if (
-																event.key === "ArrowUp" ||
-																event.key === "ArrowDown"
-															) {
-																event.preventDefault();
-															}
-														}}
-														className={cn(
-															"h-9 border-[#30352f] bg-[#0f1111] px-3 text-[13px] font-mono text-[#f2efe7]",
-														)}
-													/>
-
-													<div className="text-right text-[13px] font-mono text-[#f2efe7]">
-														{formatMoney(lineTotal, currency, {
-															maximumFractionDigits:
-																totalsMaximumFractionDigits,
-														})}
-													</div>
-
-													<button
-														type="button"
-														onClick={() => removeLine(index)}
-														className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-[#7f857f] opacity-0 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out group-hover:opacity-100 group-focus-within:opacity-100 hover:border-[#30352f] hover:bg-[#20241f] hover:text-[#f2efe7]"
-														aria-label={`Remove line item ${index + 1}`}
-													>
-														<X className="h-3.5 w-3.5" />
-													</button>
-												</div>
-											);
-										})}
+																<button
+																	type="button"
+																	onClick={() => removeLine(index)}
+																	className="absolute right-0 top-0 inline-flex h-7 w-7 items-center justify-center rounded-md border border-rule bg-paper text-ink-3 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink md:static md:border-transparent md:bg-transparent md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+																	aria-label={`Remove line item ${index + 1}`}
+																>
+																	<X className="h-3.5 w-3.5" />
+																</button>
+															</div>
+														</CreateSortableLineItem>
+													);
+												})}
+											</SortableContext>
+										</DndContext>
 									</div>
+
+									<NotesEditor
+										key={`top-${draftKey}`}
+										initialContent={topBlock}
+										onChange={(content) =>
+											setTopBlock(content as EditorDoc | null)
+										}
+										placeholder="Optional introduction or terms above line items"
+										className="mb-4 min-h-14 border-y border-dashed border-rule bg-paper px-1 py-3"
+									/>
 								</div>
 
 								<div className="mt-4 grid gap-4 md:grid-cols-[1fr_290px] md:items-start">
@@ -2365,14 +2741,14 @@ export function CreateInvoicePanel({
 										<button
 											type="button"
 											onClick={addLine}
-											className="inline-flex h-9 items-center gap-1.5 rounded-md border border-transparent px-1.5 text-[13px] text-[#beb6a8] transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:border-[#30352f] hover:bg-[#101211] hover:text-[#c8ff62]"
+											className="inline-flex h-9 items-center gap-1.5 rounded-md border border-transparent px-1.5 text-[13px] text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:border-rule hover:bg-paper hover:text-brand"
 										>
 											<Plus className="h-3.5 w-3.5" />
 											Add item
 										</button>
 									</div>
 
-									<div className="w-full rounded-md border border-[#30352f] bg-[#0f1111] p-4 text-[13px] text-[#aaa294]">
+									<div className="w-full border-t border-rule pt-4 text-[13px] text-ink-3">
 										<div className="flex items-center justify-between">
 											<span>Subtotal</span>
 											<span
@@ -2400,7 +2776,7 @@ export function CreateInvoicePanel({
 										) : null}
 
 										{withholdingCategory !== "none" ? (
-											<div className="mt-2 flex items-center justify-between text-[#e1b46c]">
+											<div className="mt-2 flex items-center justify-between text-warn">
 												<span>{selectedWhtCategory?.label}</span>
 												<span
 													key={`wht-${currency}-${compliance.withholdingTaxAmount}-${totalsMaximumFractionDigits}`}
@@ -2419,15 +2795,15 @@ export function CreateInvoicePanel({
 											</div>
 										) : null}
 
-										<div className="mt-3 flex items-center justify-between border-t border-[#30352f] pt-3">
-											<span className="text-[#d8d1c4]">
+										<div className="mt-3 flex items-center justify-between border-t border-rule pt-3">
+											<span className="text-ink-2">
 												{withholdingCategory === "none"
 													? "Total"
 													: "Net payable"}
 											</span>
 											<span
 												key={`net-${currency}-${netPayable}-${totalsMaximumFractionDigits}`}
-												className="text-[24px] leading-none text-[#f2efe7] invoice-value-fade"
+												className="text-[24px] leading-none text-ink invoice-value-fade"
 											>
 												{formatMoney(netPayable, currency, {
 													maximumFractionDigits: totalsMaximumFractionDigits,
@@ -2439,7 +2815,7 @@ export function CreateInvoicePanel({
 
 								{showPaymentDetailsSection || showNoteSection ? (
 									<div
-										className={`mt-7 grid items-start gap-6 ${
+										className={`mt-5 grid items-start gap-4 ${
 											showPaymentDetailsSection && showNoteSection
 												? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
 												: ""
@@ -2447,8 +2823,16 @@ export function CreateInvoicePanel({
 									>
 										{showPaymentDetailsSection ? (
 											<div>
-												<div className="mb-1.5 flex min-h-7 items-center text-[13px] text-[#7f857f]">
-													Payment Details
+												<div className="mb-1.5 flex min-h-7 items-center text-[13px] text-ink-3">
+													<InlineLabelInput
+														value={templateLabels.paymentLabel}
+														onChange={(value) =>
+															setTemplateLabels((current) => ({
+																...current,
+																paymentLabel: value,
+															}))
+														}
+													/>
 												</div>
 												<textarea
 													value={paymentDetails}
@@ -2456,39 +2840,51 @@ export function CreateInvoicePanel({
 														setPaymentDetails(event.target.value)
 													}
 													placeholder={PAYMENT_DETAILS_PLACEHOLDER}
-													className="h-24 w-full resize-none rounded-md border border-[#30352f] bg-[#0f1111] p-3 text-[13px] leading-5 text-[#d8d1c4] outline-none transition-colors placeholder:text-[#817d72]"
+													className="h-20 w-full resize-none rounded-md border border-rule bg-paper p-3 text-[13px] leading-5 text-ink-2 outline-none transition-colors placeholder:text-ink-3"
 												/>
 											</div>
 										) : null}
 										{showNoteSection ? (
 											<div>
-												<div className="mb-1.5 flex min-h-7 flex-wrap items-center justify-between gap-2">
-													<span className="text-[13px] text-[#d8d1c4]">
-														Note to client
-													</span>
-													<span className="inline-flex items-center gap-1 rounded-md border border-[#3f5130] bg-[#1a2117] px-2 py-1 text-[11px] font-medium text-[#c8ff62]">
-														<CircleAlert className="h-3.5 w-3.5" />
-														Visible on invoice
+												<div className="mb-1.5 flex min-h-7 items-center">
+													<span className="text-[13px] text-ink-2">
+														<InlineLabelInput
+															value={templateLabels.noteLabel}
+															onChange={(value) =>
+																setTemplateLabels((current) => ({
+																	...current,
+																	noteLabel: value,
+																}))
+															}
+														/>
 													</span>
 												</div>
-												<textarea
-													value={notes}
-													onChange={(event) => setNotes(event.target.value)}
+												<NotesEditor
+													key={draftKey}
+													initialContent={notes}
+													onChange={(content) =>
+														setNotes(content as EditorDoc | null)
+													}
 													placeholder={NOTE_PLACEHOLDER}
-													className="h-24 w-full resize-none rounded-md border border-[#30352f] bg-[#0f1111] p-3 text-[13px] leading-5 text-[#d8d1c4] outline-none transition-colors placeholder:text-[#817d72]"
+													className="min-h-20 w-full rounded-md border border-rule bg-paper px-3 py-2"
 												/>
-												<p className="mt-1.5 text-[11px] text-[#817d72]">
-													Use final client-facing language here. This text
-													prints on the public invoice and PDF.
-												</p>
 											</div>
 										) : null}
+										<NotesEditor
+											key={`bottom-${draftKey}`}
+											initialContent={bottomBlock}
+											onChange={(content) =>
+												setBottomBlock(content as EditorDoc | null)
+											}
+											placeholder="Optional footer or legal text"
+											className="mt-4 min-h-14 border-y border-dashed border-rule bg-paper px-1 py-3"
+										/>
 									</div>
 								) : null}
 							</div>
 						</div>
 
-						<div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#30352f] bg-[#0f1111] px-6 py-3 md:px-7">
+						<div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule bg-paper px-6 py-3 md:px-7">
 							<div className="flex flex-wrap items-center gap-2">
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
@@ -2504,30 +2900,30 @@ export function CreateInvoicePanel({
 									<DropdownMenuContent
 										side="top"
 										align="start"
-										className="min-w-[210px] border-[#30352f] bg-[#101211] p-1 text-[#d8d1c4]"
+										className="min-w-[210px] border-rule bg-paper p-1 text-ink-2"
 									>
 										<DropdownMenuSub>
-											<DropdownMenuSubTrigger className="text-xs focus:bg-[#20241f] data-[state=open]:bg-[#20241f] focus:text-[#f2efe7] data-[state=open]:text-[#f2efe7]">
+											<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
 												<FileText className="mr-2 h-3.5 w-3.5" />
 												Invoice
 											</DropdownMenuSubTrigger>
-											<DropdownMenuSubContent className="border-[#30352f] bg-[#101211] text-[#d8d1c4]">
-												<DropdownMenuLabel className="px-2 pb-1 pt-1 text-[10px] font-normal uppercase tracking-[0.08em] text-[#6f756f]">
+											<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
+												<DropdownMenuLabel className="px-2 pb-1 pt-1 text-[10px] font-normal uppercase tracking-[0.08em] text-ink-3">
 													Invoice
 												</DropdownMenuLabel>
-												<DropdownMenuSeparator className="bg-[#30352f]" />
+												<DropdownMenuSeparator className="bg-rule" />
 												<DropdownMenuSub>
-													<DropdownMenuSubTrigger className="text-xs focus:bg-[#20241f] data-[state=open]:bg-[#20241f] focus:text-[#f2efe7] data-[state=open]:text-[#f2efe7]">
+													<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
 														Invoice size
 													</DropdownMenuSubTrigger>
-													<DropdownMenuSubContent className="border-[#30352f] bg-[#101211] text-[#d8d1c4]">
+													<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
 														{DOCUMENT_SIZE_OPTIONS.map((option) => (
 															<DropdownMenuItem
 																key={option.value}
 																onClick={() => setInvoiceSize(option.value)}
-																className={`text-xs focus:bg-[#20241f] focus:text-[#f2efe7] ${
+																className={`text-xs focus:bg-paper-2 focus:text-ink ${
 																	invoiceSize === option.value
-																		? "text-[#c8ff62]"
+																		? "text-brand"
 																		: ""
 																}`}
 															>
@@ -2537,18 +2933,16 @@ export function CreateInvoicePanel({
 													</DropdownMenuSubContent>
 												</DropdownMenuSub>
 												<DropdownMenuSub>
-													<DropdownMenuSubTrigger className="text-xs focus:bg-[#20241f] data-[state=open]:bg-[#20241f] focus:text-[#f2efe7] data-[state=open]:text-[#f2efe7]">
+													<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
 														Currency
 													</DropdownMenuSubTrigger>
-													<DropdownMenuSubContent className="border-[#30352f] bg-[#101211] text-[#d8d1c4]">
+													<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
 														{INVOICE_CURRENCY_OPTIONS.map((option) => (
 															<DropdownMenuItem
 																key={option.code}
 																onClick={() => updateCurrency(option.code)}
-																className={`text-xs focus:bg-[#20241f] focus:text-[#f2efe7] ${
-																	currency === option.code
-																		? "text-[#c8ff62]"
-																		: ""
+																className={`text-xs focus:bg-paper-2 focus:text-ink ${
+																	currency === option.code ? "text-brand" : ""
 																}`}
 															>
 																{option.symbol} {option.label}
@@ -2557,17 +2951,17 @@ export function CreateInvoicePanel({
 													</DropdownMenuSubContent>
 												</DropdownMenuSub>
 												<DropdownMenuSub>
-													<DropdownMenuSubTrigger className="text-xs focus:bg-[#20241f] data-[state=open]:bg-[#20241f] focus:text-[#f2efe7] data-[state=open]:text-[#f2efe7]">
+													<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
 														Date format
 													</DropdownMenuSubTrigger>
-													<DropdownMenuSubContent className="border-[#30352f] bg-[#101211] text-[#d8d1c4]">
+													<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
 														{DATE_FORMAT_OPTIONS.map((option) => (
 															<DropdownMenuItem
 																key={option.value}
 																onClick={() => setDateFormat(option.value)}
-																className={`text-xs focus:bg-[#20241f] focus:text-[#f2efe7] ${
+																className={`text-xs focus:bg-paper-2 focus:text-ink ${
 																	dateFormat === option.value
-																		? "text-[#c8ff62]"
+																		? "text-brand"
 																		: ""
 																}`}
 															>
@@ -2577,18 +2971,16 @@ export function CreateInvoicePanel({
 													</DropdownMenuSubContent>
 												</DropdownMenuSub>
 												<DropdownMenuSub>
-													<DropdownMenuSubTrigger className="text-xs focus:bg-[#20241f] data-[state=open]:bg-[#20241f] focus:text-[#f2efe7] data-[state=open]:text-[#f2efe7]">
+													<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
 														Payment terms
 													</DropdownMenuSubTrigger>
-													<DropdownMenuSubContent className="border-[#30352f] bg-[#101211] text-[#d8d1c4]">
+													<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
 														{PAYMENT_TERM_OPTIONS.map((days) => (
 															<DropdownMenuItem
 																key={days}
 																onClick={() => updatePaymentTerms(days)}
-																className={`text-xs focus:bg-[#20241f] focus:text-[#f2efe7] ${
-																	paymentTermDays === days
-																		? "text-[#c8ff62]"
-																		: ""
+																className={`text-xs focus:bg-paper-2 focus:text-ink ${
+																	paymentTermDays === days ? "text-brand" : ""
 																}`}
 															>
 																Net {days}
@@ -2600,33 +2992,60 @@ export function CreateInvoicePanel({
 										</DropdownMenuSub>
 
 										<DropdownMenuSub>
-											<DropdownMenuSubTrigger className="text-xs focus:bg-[#20241f] data-[state=open]:bg-[#20241f] focus:text-[#f2efe7] data-[state=open]:text-[#f2efe7]">
+											<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
 												<DollarSign className="mr-2 h-3.5 w-3.5" />
 												Tax & Pricing
 											</DropdownMenuSubTrigger>
-											<DropdownMenuSubContent className="border-[#30352f] bg-[#101211] text-[#d8d1c4]">
+											<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
 												<DropdownMenuCheckboxItem
 													checked={includeDecimals}
 													onCheckedChange={(checked) =>
 														setIncludeDecimals(checked === true)
 													}
-													className="text-xs focus:bg-[#20241f] focus:text-[#f2efe7]"
+													className="text-xs focus:bg-paper-2 focus:text-ink"
 												>
 													Decimals
 												</DropdownMenuCheckboxItem>
-												<DropdownMenuSeparator className="bg-[#30352f]" />
+												<DropdownMenuCheckboxItem
+													checked={includeUnits}
+													onCheckedChange={(checked) =>
+														setIncludeUnits(checked === true)
+													}
+													className="text-xs focus:bg-paper-2 focus:text-ink"
+												>
+													Units
+												</DropdownMenuCheckboxItem>
+												<DropdownMenuCheckboxItem
+													checked={includeDiscount}
+													onCheckedChange={(checked) =>
+														setIncludeDiscount(checked === true)
+													}
+													className="text-xs focus:bg-paper-2 focus:text-ink"
+												>
+													Discount
+												</DropdownMenuCheckboxItem>
+												<DropdownMenuCheckboxItem
+													checked={includeQr}
+													onCheckedChange={(checked) =>
+														setIncludeQr(checked === true)
+													}
+													className="text-xs focus:bg-paper-2 focus:text-ink"
+												>
+													QR code
+												</DropdownMenuCheckboxItem>
+												<DropdownMenuSeparator className="bg-rule" />
 												<DropdownMenuSub>
-													<DropdownMenuSubTrigger className="text-xs focus:bg-[#20241f] data-[state=open]:bg-[#20241f] focus:text-[#f2efe7] data-[state=open]:text-[#f2efe7]">
+													<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
 														Seller type
 													</DropdownMenuSubTrigger>
-													<DropdownMenuSubContent className="border-[#30352f] bg-[#101211] text-[#d8d1c4]">
+													<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
 														<DropdownMenuItem
 															onClick={() =>
 																updateSellerProfileType("freelancer")
 															}
-															className={`text-xs focus:bg-[#20241f] focus:text-[#f2efe7] ${
+															className={`text-xs focus:bg-paper-2 focus:text-ink ${
 																sellerProfileType === "freelancer"
-																	? "text-[#c8ff62]"
+																	? "text-brand"
 																	: ""
 															}`}
 														>
@@ -2636,9 +3055,9 @@ export function CreateInvoicePanel({
 															onClick={() =>
 																updateSellerProfileType("business")
 															}
-															className={`text-xs focus:bg-[#20241f] focus:text-[#f2efe7] ${
+															className={`text-xs focus:bg-paper-2 focus:text-ink ${
 																sellerProfileType === "business"
-																	? "text-[#c8ff62]"
+																	? "text-brand"
 																	: ""
 															}`}
 														>
@@ -2647,19 +3066,19 @@ export function CreateInvoicePanel({
 													</DropdownMenuSubContent>
 												</DropdownMenuSub>
 												<DropdownMenuSub>
-													<DropdownMenuSubTrigger className="text-xs focus:bg-[#20241f] data-[state=open]:bg-[#20241f] focus:text-[#f2efe7] data-[state=open]:text-[#f2efe7]">
+													<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
 														Seller tax status
 													</DropdownMenuSubTrigger>
-													<DropdownMenuSubContent className="border-[#30352f] bg-[#101211] text-[#d8d1c4]">
+													<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
 														{SELLER_TAX_STATUS_OPTIONS.map((option) => (
 															<DropdownMenuItem
 																key={option.value}
 																onClick={() =>
 																	updateSellerTaxStatus(option.value)
 																}
-																className={`text-xs focus:bg-[#20241f] focus:text-[#f2efe7] ${
+																className={`text-xs focus:bg-paper-2 focus:text-ink ${
 																	sellerTaxStatus === option.value
-																		? "text-[#c8ff62]"
+																		? "text-brand"
 																		: ""
 																}`}
 															>
@@ -2669,17 +3088,17 @@ export function CreateInvoicePanel({
 													</DropdownMenuSubContent>
 												</DropdownMenuSub>
 												<DropdownMenuSub>
-													<DropdownMenuSubTrigger className="text-xs focus:bg-[#20241f] data-[state=open]:bg-[#20241f] focus:text-[#f2efe7] data-[state=open]:text-[#f2efe7]">
+													<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
 														Tax treatment
 													</DropdownMenuSubTrigger>
-													<DropdownMenuSubContent className="border-[#30352f] bg-[#101211] text-[#d8d1c4]">
+													<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
 														{TAX_SETTING_OPTIONS.map((option) => (
 															<DropdownMenuItem
 																key={option.value}
 																onClick={() => setTaxTreatment(option.value)}
-																className={`text-xs focus:bg-[#20241f] focus:text-[#f2efe7] ${
+																className={`text-xs focus:bg-paper-2 focus:text-ink ${
 																	taxTreatment === option.value
-																		? "text-[#c8ff62]"
+																		? "text-brand"
 																		: ""
 																}`}
 															>
@@ -2689,19 +3108,19 @@ export function CreateInvoicePanel({
 													</DropdownMenuSubContent>
 												</DropdownMenuSub>
 												<DropdownMenuSub>
-													<DropdownMenuSubTrigger className="text-xs focus:bg-[#20241f] data-[state=open]:bg-[#20241f] focus:text-[#f2efe7] data-[state=open]:text-[#f2efe7]">
+													<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
 														WHT deduction
 													</DropdownMenuSubTrigger>
-													<DropdownMenuSubContent className="border-[#30352f] bg-[#101211] text-[#d8d1c4]">
+													<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
 														{WITHHOLDING_CATEGORY_OPTIONS.map((option) => (
 															<DropdownMenuItem
 																key={option.value}
 																onClick={() =>
 																	setWithholdingCategory(option.value)
 																}
-																className={`text-xs focus:bg-[#20241f] focus:text-[#f2efe7] ${
+																className={`text-xs focus:bg-paper-2 focus:text-ink ${
 																	withholdingCategory === option.value
-																		? "text-[#c8ff62]"
+																		? "text-brand"
 																		: ""
 																}`}
 															>
@@ -2715,7 +3134,7 @@ export function CreateInvoicePanel({
 														event.preventDefault();
 														openComplianceDialog();
 													}}
-													className="text-xs focus:bg-[#20241f] focus:text-[#f2efe7]"
+													className="text-xs focus:bg-paper-2 focus:text-ink"
 												>
 													Compliance details
 												</DropdownMenuItem>
@@ -2723,17 +3142,17 @@ export function CreateInvoicePanel({
 										</DropdownMenuSub>
 
 										<DropdownMenuSub>
-											<DropdownMenuSubTrigger className="text-xs focus:bg-[#20241f] data-[state=open]:bg-[#20241f] focus:text-[#f2efe7] data-[state=open]:text-[#f2efe7]">
+											<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
 												<ReceiptText className="mr-2 h-3.5 w-3.5" />
 												Payments
 											</DropdownMenuSubTrigger>
-											<DropdownMenuSubContent className="border-[#30352f] bg-[#101211] text-[#d8d1c4]">
+											<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
 												<DropdownMenuCheckboxItem
 													checked={showPaymentDetailsSection}
 													onCheckedChange={(checked) =>
 														setShowPaymentDetailsSection(checked === true)
 													}
-													className="text-xs focus:bg-[#20241f] focus:text-[#f2efe7]"
+													className="text-xs focus:bg-paper-2 focus:text-ink"
 												>
 													Payment details block
 												</DropdownMenuCheckboxItem>
@@ -2742,22 +3161,22 @@ export function CreateInvoicePanel({
 													onCheckedChange={(checked) =>
 														setShowNoteSection(checked === true)
 													}
-													className="text-xs focus:bg-[#20241f] focus:text-[#f2efe7]"
+													className="text-xs focus:bg-paper-2 focus:text-ink"
 												>
 													Note block
 												</DropdownMenuCheckboxItem>
-												<DropdownMenuSeparator className="bg-[#30352f]" />
+												<DropdownMenuSeparator className="bg-rule" />
 												<DropdownMenuItem
 													onClick={() =>
 														setPaymentDetails(workspace?.paymentDetails ?? "")
 													}
-													className="text-xs focus:bg-[#20241f] focus:text-[#f2efe7]"
+													className="text-xs focus:bg-paper-2 focus:text-ink"
 												>
 													Reset payment details
 												</DropdownMenuItem>
 												<DropdownMenuItem
-													onClick={() => setNotes("")}
-													className="text-xs focus:bg-[#20241f] focus:text-[#f2efe7]"
+													onClick={() => setNotes(null)}
+													className="text-xs focus:bg-paper-2 focus:text-ink"
 												>
 													Reset note
 												</DropdownMenuItem>
@@ -2765,17 +3184,17 @@ export function CreateInvoicePanel({
 										</DropdownMenuSub>
 
 										<DropdownMenuSub>
-											<DropdownMenuSubTrigger className="text-xs focus:bg-[#20241f] data-[state=open]:bg-[#20241f] focus:text-[#f2efe7] data-[state=open]:text-[#f2efe7]">
+											<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
 												<Settings2 className="mr-2 h-3.5 w-3.5" />
 												Visibility
 											</DropdownMenuSubTrigger>
-											<DropdownMenuSubContent className="border-[#30352f] bg-[#101211] text-[#d8d1c4]">
+											<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
 												<DropdownMenuCheckboxItem
 													checked={showFromEmail}
 													onCheckedChange={(checked) =>
 														setShowFromEmail(checked === true)
 													}
-													className="text-xs focus:bg-[#20241f] focus:text-[#f2efe7]"
+													className="text-xs focus:bg-paper-2 focus:text-ink"
 												>
 													Show sender email
 												</DropdownMenuCheckboxItem>
@@ -2784,7 +3203,7 @@ export function CreateInvoicePanel({
 													onCheckedChange={(checked) =>
 														setShowCustomerEmail(checked === true)
 													}
-													className="text-xs focus:bg-[#20241f] focus:text-[#f2efe7]"
+													className="text-xs focus:bg-paper-2 focus:text-ink"
 												>
 													Show client email
 												</DropdownMenuCheckboxItem>
@@ -2797,24 +3216,24 @@ export function CreateInvoicePanel({
 									<DropdownMenuTrigger asChild>
 										<button type="button" className={footerGhostButtonClass}>
 											{templateName}
-											<ChevronDown className="h-3.5 w-3.5 text-[#8f958d]" />
+											<ChevronDown className="h-3.5 w-3.5 text-ink-3" />
 										</button>
 									</DropdownMenuTrigger>
 									<DropdownMenuContent
 										side="top"
 										align="start"
-										className="min-w-55 border-[#30352f] bg-[#101211] p-1 text-[#d8d1c4]"
+										className="min-w-55 border-rule bg-paper p-1 text-ink-2"
 									>
-										<DropdownMenuLabel className="px-2 pb-1 pt-1 text-[10px] font-normal uppercase tracking-[0.08em] text-[#6f756f]">
+										<DropdownMenuLabel className="px-2 pb-1 pt-1 text-[10px] font-normal uppercase tracking-[0.08em] text-ink-3">
 											Templates
 										</DropdownMenuLabel>
-										<DropdownMenuSeparator className="bg-[#30352f]" />
+										<DropdownMenuSeparator className="bg-rule" />
 										{TEMPLATE_OPTIONS.map((option) => (
 											<DropdownMenuItem
 												key={option.value}
 												onClick={() => setTemplateName(option.value)}
-												className={`text-xs focus:bg-[#20241f] focus:text-[#f2efe7] ${
-													templateName === option.value ? "text-[#f2efe7]" : ""
+												className={`text-xs focus:bg-paper-2 focus:text-ink ${
+													templateName === option.value ? "text-ink" : ""
 												}`}
 											>
 												{option.value}
@@ -2829,16 +3248,14 @@ export function CreateInvoicePanel({
 									<div
 										className={cn(
 											"hidden max-w-[140px] text-right text-[12px] sm:block",
-											autosaveStatus === "error"
-												? "text-[#e1b46c]"
-												: "text-[#8d938f]",
+											autosaveStatus === "error" ? "text-warn" : "text-ink-3",
 										)}
 									>
 										{autosaveStatusText}
 									</div>
 								) : null}
 								{submitBlockerText ? (
-									<div className="hidden max-w-[220px] text-right text-[12px] text-[#8d938f] sm:block">
+									<div className="hidden max-w-[220px] text-right text-[12px] text-ink-3 sm:block">
 										{submitBlockerText}
 									</div>
 								) : null}
@@ -2858,16 +3275,77 @@ export function CreateInvoicePanel({
 									<ExternalLink className="h-4 w-4" />
 								</Button>
 
-								<button
-									type="button"
-									disabled={!canSubmit}
-									onClick={() => void createInvoice("create")}
-									className={cn(
-										"inline-flex h-10 items-center rounded-md border border-[#c8ff62] bg-[#c8ff62] px-5 text-[13px] font-medium text-[#0f1111] transition-[opacity,background-color,border-color,color] duration-[150ms] hover:bg-[#d5ff7a] disabled:cursor-not-allowed disabled:border-[#30352f] disabled:bg-[#30352f] disabled:text-[#817d72]",
-									)}
-								>
-									{submitting ? "Creating..." : "Create"}
-								</button>
+								<div className="flex overflow-hidden rounded-md border border-brand">
+									<button
+										type="button"
+										disabled={!canSubmit}
+										onClick={() => void createInvoice(deliveryType)}
+										className={cn(
+											"inline-flex h-10 items-center bg-brand px-5 text-[13px] font-medium text-brand-ink hover:bg-brand-hi disabled:cursor-not-allowed disabled:bg-rule disabled:text-ink-3",
+										)}
+									>
+										{submitting
+											? "Working..."
+											: deliveryType === "create_and_send"
+												? "Create & Send"
+												: deliveryType === "scheduled"
+													? "Schedule"
+													: "Create"}
+									</button>
+									<DropdownMenu>
+										<DropdownMenuTrigger asChild>
+											<button
+												type="button"
+												disabled={!canSubmit}
+												aria-label="Choose invoice delivery action"
+												className="inline-flex h-10 w-10 items-center justify-center border-l border-brand-line bg-brand text-brand-ink hover:bg-brand-hi disabled:bg-rule"
+											>
+												<ChevronDown className="h-4 w-4" />
+											</button>
+										</DropdownMenuTrigger>
+										<DropdownMenuContent
+											side="top"
+											align="end"
+											className="w-64 border-rule bg-paper p-2"
+										>
+											{(
+												[
+													["create", "Create"],
+													["create_and_send", "Create & Send"],
+													["scheduled", "Schedule"],
+												] as const
+											).map(([value, label]) => (
+												<DropdownMenuItem
+													key={value}
+													onClick={() => setDeliveryType(value)}
+												>
+													{label}
+												</DropdownMenuItem>
+											))}
+											{deliveryType === "scheduled" ? (
+												<div className="space-y-1 border-t border-rule px-2 pt-2">
+													<label
+														htmlFor="invoice-scheduled-at"
+														className="text-xs text-ink-3"
+													>
+														Send at
+													</label>
+													<Input
+														id="invoice-scheduled-at"
+														type="datetime-local"
+														min={new Date(Date.now() + 60_000)
+															.toISOString()
+															.slice(0, 16)}
+														value={scheduledAt}
+														onChange={(event) =>
+															setScheduledAt(event.target.value)
+														}
+													/>
+												</div>
+											) : null}
+										</DropdownMenuContent>
+									</DropdownMenu>
+								</div>
 							</div>
 						</div>
 					</div>
@@ -2877,14 +3355,14 @@ export function CreateInvoicePanel({
 			<Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
 				<DialogContent
 					hideClose
-					className="flex max-h-[85vh] w-[94vw] max-w-170 flex-col overflow-hidden rounded-lg border-[#30352f] bg-[#101211] p-0 text-[#f2efe7]"
+					className="flex max-h-[85vh] w-[94vw] max-w-170 flex-col overflow-hidden rounded-lg border-rule bg-paper p-0 text-ink"
 				>
-					<div className="flex items-start justify-between gap-4 border-b border-[#30352f] px-6 py-5">
+					<div className="flex items-start justify-between gap-4 border-b border-rule px-6 py-5">
 						<div>
-							<DialogTitle className="mb-1 text-[20px] font-medium tracking-[-0.02em] text-[#f2efe7]">
+							<DialogTitle className="mb-1 text-[20px] font-medium tracking-[-0.02em] text-ink">
 								Tax & compliance settings
 							</DialogTitle>
-							<DialogDescription className="text-[13px] text-[#8d938f]">
+							<DialogDescription className="text-[13px] text-ink-3">
 								Controls VAT, WHT, seller identity, and what prints on this
 								invoice.
 							</DialogDescription>
@@ -2902,12 +3380,12 @@ export function CreateInvoicePanel({
 
 					<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
 						<div className="grid gap-6">
-							<section className="rounded-md border border-[#30352f] bg-[#0f1111] p-4">
+							<section className="rounded-md border border-rule bg-paper p-4">
 								<div>
-									<div className="text-[13px] font-medium text-[#f2efe7]">
+									<div className="text-[13px] font-medium text-ink">
 										Template
 									</div>
-									<div className="mt-1 text-[12px] text-[#8d938f]">
+									<div className="mt-1 text-[12px] text-ink-3">
 										Select the invoice treatment, then review the summary before
 										closing.
 									</div>
@@ -2929,14 +3407,81 @@ export function CreateInvoicePanel({
 								</div>
 							</section>
 
-							<section className="rounded-md border border-[#30352f] bg-[#0f1111] p-4">
-								<div className="text-[13px] font-medium text-[#f2efe7]">
+							<section className="rounded-md border border-rule bg-paper p-4">
+								<div className="text-[13px] font-medium text-ink">
+									Invoice labels & blocks
+								</div>
+								<div className="mt-4 grid gap-3 md:grid-cols-2">
+									{Object.entries(templateLabels).map(([key, value]) => (
+										<label
+											key={key}
+											htmlFor={`template-${key}`}
+											className="text-[12px] text-ink-3"
+										>
+											<span className="mb-1 block">
+												{key
+													.replace(/Label$/, " label")
+													.replace(/([A-Z])/g, " $1")}
+											</span>
+											<Input
+												id={`template-${key}`}
+												value={value}
+												maxLength={80}
+												onChange={(event) =>
+													setTemplateLabels((current) => ({
+														...current,
+														[key]: event.target.value,
+													}))
+												}
+												className="h-9 border-rule bg-paper text-ink"
+											/>
+										</label>
+									))}
+								</div>
+								{includeDiscount ? (
+									<label
+										htmlFor="template-discount"
+										className="mt-4 block text-[12px] text-ink-3"
+									>
+										<span className="mb-1 block">Discount amount</span>
+										<Input
+											id="template-discount"
+											type="number"
+											min={0}
+											value={discount}
+											onChange={(event) =>
+												setDiscount(
+													Math.max(0, Number(event.target.value) || 0),
+												)
+											}
+											className="h-9 border-rule bg-paper text-ink"
+										/>
+									</label>
+								) : null}
+								<Button
+									type="button"
+									className="mt-4"
+									onClick={() =>
+										void saveTemplateDefaults({
+											settings: templateSettings,
+										}).then(() =>
+											toast({
+												title: "Invoice defaults saved",
+												variant: "success",
+											}),
+										)
+									}
+								>
+									Save as workspace defaults
+								</Button>
+							</section>
+
+							<section className="rounded-md border border-rule bg-paper p-4">
+								<div className="text-[13px] font-medium text-ink">
 									Tax & deductions
 								</div>
 								<div className="mt-4">
-									<div className="mb-2 text-[12px] text-[#7f857f]">
-										Seller type
-									</div>
+									<div className="mb-2 text-[12px] text-ink-3">Seller type</div>
 									<div className="grid gap-2 md:grid-cols-2">
 										<button
 											type="button"
@@ -2944,14 +3489,14 @@ export function CreateInvoicePanel({
 											className={cn(
 												"rounded-md border p-3 text-left transition-[background-color,border-color,color] duration-[110ms]",
 												sellerProfileType === "freelancer"
-													? "border-[#c8ff62] bg-[#1f2618] text-[#f2efe7]"
-													: "border-[#30352f] bg-[#101211] text-[#beb6a8] hover:bg-[#20241f]",
+													? "border-brand bg-paper-3 text-ink"
+													: "border-rule bg-paper text-ink-2 hover:bg-paper-2",
 											)}
 										>
 											<span className="block text-[13px] font-medium">
 												Freelancer / individual
 											</span>
-											<span className="mt-1 block text-[12px] text-[#8d938f]">
+											<span className="mt-1 block text-[12px] text-ink-3">
 												Fast invoices, VAT off, tax IDs optional.
 											</span>
 										</button>
@@ -2961,21 +3506,21 @@ export function CreateInvoicePanel({
 											className={cn(
 												"rounded-md border p-3 text-left transition-[background-color,border-color,color] duration-[110ms]",
 												sellerProfileType === "business"
-													? "border-[#c8ff62] bg-[#1f2618] text-[#f2efe7]"
-													: "border-[#30352f] bg-[#101211] text-[#beb6a8] hover:bg-[#20241f]",
+													? "border-brand bg-paper-3 text-ink"
+													: "border-rule bg-paper text-ink-2 hover:bg-paper-2",
 											)}
 										>
 											<span className="block text-[13px] font-medium">
 												Registered business
 											</span>
-											<span className="mt-1 block text-[12px] text-[#8d938f]">
+											<span className="mt-1 block text-[12px] text-ink-3">
 												VAT-ready invoices with stronger compliance checks.
 											</span>
 										</button>
 									</div>
 								</div>
 								<div className="mt-4">
-									<div className="mb-2 text-[12px] text-[#7f857f]">
+									<div className="mb-2 text-[12px] text-ink-3">
 										Seller tax status
 									</div>
 									<div className="flex flex-wrap gap-2">
@@ -2992,13 +3537,13 @@ export function CreateInvoicePanel({
 											</button>
 										))}
 									</div>
-									<div className="mt-2 text-[12px] text-[#7f857f]">
+									<div className="mt-2 text-[12px] text-ink-3">
 										{selectedSellerTaxStatus?.description}
 									</div>
 								</div>
 
 								<div className="mt-4">
-									<div className="mb-2 text-[12px] text-[#7f857f]">
+									<div className="mb-2 text-[12px] text-ink-3">
 										Tax treatment
 									</div>
 									<div className="flex flex-wrap gap-2">
@@ -3016,7 +3561,7 @@ export function CreateInvoicePanel({
 								</div>
 
 								<div className="mt-4">
-									<div className="mb-2 text-[12px] text-[#7f857f]">
+									<div className="mb-2 text-[12px] text-ink-3">
 										WHT deduction
 									</div>
 									<div className="flex flex-wrap gap-2">
@@ -3036,7 +3581,7 @@ export function CreateInvoicePanel({
 									{withholdingCategory !== "none" ? (
 										<div className="mt-4 grid gap-4 md:grid-cols-2">
 											<div>
-												<div className="mb-2 text-[12px] text-[#7f857f]">
+												<div className="mb-2 text-[12px] text-ink-3">
 													Recipient type
 												</div>
 												<div className="flex flex-wrap gap-2">
@@ -3058,7 +3603,7 @@ export function CreateInvoicePanel({
 											</div>
 
 											<div>
-												<div className="mb-2 text-[12px] text-[#7f857f]">
+												<div className="mb-2 text-[12px] text-ink-3">
 													Recipient residency
 												</div>
 												<div className="flex flex-wrap gap-2">
@@ -3080,13 +3625,13 @@ export function CreateInvoicePanel({
 											</div>
 										</div>
 									) : null}
-									<div className="mt-2 text-[12px] text-[#7f857f]">
+									<div className="mt-2 text-[12px] text-ink-3">
 										{selectedWhtCategory?.description}
 									</div>
 								</div>
 
 								{currency !== "NGN" ? (
-									<div className="mt-4 rounded-md border border-[#4e3b21] bg-[#1f1911] px-3 py-3 text-[12px] text-[#e1b46c]">
+									<div className="mt-4 rounded-md border border-warn-line bg-paper-2 px-3 py-3 text-[12px] text-warn">
 										<div className="flex items-start gap-2">
 											<CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
 											<span>{NIGERIA_FOREIGN_CURRENCY_WARNING}</span>
@@ -3095,8 +3640,8 @@ export function CreateInvoicePanel({
 								) : null}
 							</section>
 
-							<section className="rounded-md border border-[#30352f] bg-[#0f1111] p-4">
-								<div className="text-[13px] font-medium text-[#f2efe7]">
+							<section className="rounded-md border border-rule bg-paper p-4">
+								<div className="text-[13px] font-medium text-ink">
 									Seller tax profile
 								</div>
 								<div className="mt-4 grid gap-2 md:grid-cols-2">
@@ -3106,8 +3651,8 @@ export function CreateInvoicePanel({
 										className={cn(
 											"flex min-h-10 items-center justify-between rounded-md border px-3 text-left text-[13px] transition-[background-color,border-color,color] duration-[110ms]",
 											showSellerTin
-												? "border-[#c8ff62] bg-[#1f2618] text-[#f2efe7]"
-												: "border-[#30352f] bg-[#101211] text-[#beb6a8] hover:bg-[#20241f]",
+												? "border-brand bg-paper-3 text-ink"
+												: "border-rule bg-paper text-ink-2 hover:bg-paper-2",
 										)}
 									>
 										<span>Include seller TIN</span>
@@ -3119,8 +3664,8 @@ export function CreateInvoicePanel({
 										className={cn(
 											"flex min-h-10 items-center justify-between rounded-md border px-3 text-left text-[13px] transition-[background-color,border-color,color] duration-[110ms]",
 											showSellerRc
-												? "border-[#c8ff62] bg-[#1f2618] text-[#f2efe7]"
-												: "border-[#30352f] bg-[#101211] text-[#beb6a8] hover:bg-[#20241f]",
+												? "border-brand bg-paper-3 text-ink"
+												: "border-rule bg-paper text-ink-2 hover:bg-paper-2",
 										)}
 									>
 										<span>Include CAC RC Number</span>
@@ -3131,7 +3676,7 @@ export function CreateInvoicePanel({
 									<div>
 										<label
 											htmlFor="seller-tin"
-											className="mb-1.5 block text-[12px] text-[#7f857f]"
+											className="mb-1.5 block text-[12px] text-ink-3"
 										>
 											Seller tax ID
 										</label>
@@ -3148,8 +3693,8 @@ export function CreateInvoicePanel({
 											}
 											aria-invalid={!tinIsValid}
 											className={cn(
-												"h-10 bg-[#0f1111] text-[#f2efe7] disabled:text-[#737b89]",
-												tinIsValid ? "border-[#30352f]" : "border-[#c76f5b]",
+												"h-10 bg-paper text-ink disabled:text-ink-3",
+												tinIsValid ? "border-rule" : "border-danger",
 											)}
 										/>
 										<div className={`mt-2 text-[12px] ${tinHintClass}`}>
@@ -3164,7 +3709,7 @@ export function CreateInvoicePanel({
 									<div>
 										<label
 											htmlFor="seller-rc"
-											className="mb-1.5 block text-[12px] text-[#7f857f]"
+											className="mb-1.5 block text-[12px] text-ink-3"
 										>
 											CAC RC Number
 										</label>
@@ -3179,14 +3724,14 @@ export function CreateInvoicePanel({
 											placeholder={showSellerRc ? "RC-1234567" : "Not included"}
 											aria-invalid={!rcIsValid}
 											className={cn(
-												"h-10 bg-[#0f1111] text-[#f2efe7] disabled:text-[#737b89]",
-												rcIsValid ? "border-[#30352f]" : "border-[#c76f5b]",
+												"h-10 bg-paper text-ink disabled:text-ink-3",
+												rcIsValid ? "border-rule" : "border-danger",
 											)}
 										/>
 										<div
 											className={cn(
 												"mt-2 text-[12px]",
-												rcIsValid ? "text-[#737b89]" : "text-[#c76f5b]",
+												rcIsValid ? "text-ink-3" : "text-danger",
 											)}
 										>
 											{!showSellerRc
@@ -3198,7 +3743,7 @@ export function CreateInvoicePanel({
 									</div>
 								</div>
 								{sellerProfileType === "freelancer" ? (
-									<div className="mt-4 rounded-md border border-[#30352f] bg-[#101211] px-3 py-3 text-[12px] text-[#8d938f]">
+									<div className="mt-4 rounded-md border border-rule bg-paper px-3 py-3 text-[12px] text-ink-3">
 										Freelancer mode keeps TIN and RC optional and does not
 										charge VAT by default.
 									</div>
@@ -3207,8 +3752,8 @@ export function CreateInvoicePanel({
 						</div>
 					</div>
 
-					<div className="flex shrink-0 items-center justify-between gap-3 border-t border-[#30352f] px-6 py-4">
-						<div className="min-w-0 text-[12px] text-[#8d938f]">
+					<div className="flex shrink-0 items-center justify-between gap-3 border-t border-rule px-6 py-4">
+						<div className="min-w-0 text-[12px] text-ink-3">
 							<div className="truncate">
 								{templateName}
 								{selectedTaxSetting?.label
@@ -3219,7 +3764,7 @@ export function CreateInvoicePanel({
 									: ""}
 							</div>
 							{sellerTinWillNotPrint ? (
-								<div className="mt-1 flex items-center gap-1 text-[#817d72]">
+								<div className="mt-1 flex items-center gap-1 text-ink-3">
 									<CircleAlert className="h-3.5 w-3.5" />
 									TIN is enabled but empty, so it will not print.
 								</div>
@@ -3228,7 +3773,7 @@ export function CreateInvoicePanel({
 						<DialogClose asChild>
 							<Button
 								type="button"
-								className="h-10 rounded-md border border-[#c8ff62] bg-[#c8ff62] px-5 text-[13px] font-medium text-[#0f1111] hover:bg-[#d5ff7a]"
+								className="h-10 rounded-md border border-brand bg-brand px-5 text-[13px] font-medium text-brand-ink hover:bg-brand-hi"
 							>
 								Done
 							</Button>
@@ -3238,22 +3783,19 @@ export function CreateInvoicePanel({
 			</Dialog>
 
 			<Dialog open={createClientOpen} onOpenChange={setCreateClientOpen}>
-				<DialogContent className="max-w-md border-[#30352f] bg-[#101211] p-0 shadow-2xl sm:rounded-xl">
-					<div className="border-b border-[#30352f] px-6 py-5">
-						<DialogTitle className="text-lg font-medium text-[#f2efe7]">
+				<DialogContent className="max-w-md border-rule bg-paper p-0 shadow-2xl sm:rounded-xl">
+					<div className="border-b border-rule px-6 py-5">
+						<DialogTitle className="text-lg font-medium text-ink">
 							Create Customer
 						</DialogTitle>
-						<DialogDescription className="mt-1 text-[13px] text-[#8d938f]">
+						<DialogDescription className="mt-1 text-[13px] text-ink-3">
 							Add a new customer to your workspace.
 						</DialogDescription>
 					</div>
 					<form onSubmit={onCreateClientSubmit} className="p-6">
 						<div className="space-y-4">
 							<div className="space-y-2">
-								<label
-									htmlFor="new-client-name"
-									className="text-sm text-[#f2efe7]"
-								>
+								<label htmlFor="new-client-name" className="text-sm text-ink">
 									Customer name *
 								</label>
 								<Input
@@ -3261,15 +3803,12 @@ export function CreateInvoicePanel({
 									value={newClientName}
 									onChange={(e) => setNewClientName(e.target.value)}
 									placeholder="Company or individual name"
-									className="h-10 border-[#30352f] bg-[#0f1111] text-sm text-[#f2efe7]"
+									className="h-10 border-rule bg-paper text-sm text-ink"
 									required
 								/>
 							</div>
 							<div className="space-y-2">
-								<label
-									htmlFor="new-client-email"
-									className="text-sm text-[#f2efe7]"
-								>
+								<label htmlFor="new-client-email" className="text-sm text-ink">
 									Email address *
 								</label>
 								<Input
@@ -3278,7 +3817,7 @@ export function CreateInvoicePanel({
 									value={newClientEmail}
 									onChange={(e) => setNewClientEmail(e.target.value)}
 									placeholder="billing@example.com"
-									className="h-10 border-[#30352f] bg-[#0f1111] text-sm text-[#f2efe7]"
+									className="h-10 border-rule bg-paper text-sm text-ink"
 									required
 								/>
 							</div>
@@ -3288,7 +3827,7 @@ export function CreateInvoicePanel({
 								type="button"
 								variant="outline"
 								onClick={() => setCreateClientOpen(false)}
-								className="h-10 border-[#30352f] bg-[#0f1111] text-[#f2efe7] hover:bg-[#20241f]"
+								className="h-10 border-rule bg-paper text-ink hover:bg-paper-2"
 							>
 								Cancel
 							</Button>
@@ -3299,7 +3838,7 @@ export function CreateInvoicePanel({
 									!newClientEmail.trim() ||
 									newClientSubmitting
 								}
-								className="h-10 bg-[#c8ff62] text-[#0f1111] hover:bg-[#d5ff7a]"
+								className="h-10 bg-brand text-brand-ink hover:bg-brand-hi"
 							>
 								{newClientSubmitting ? "Creating..." : "Create"}
 							</Button>

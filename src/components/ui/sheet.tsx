@@ -19,7 +19,7 @@ const SheetOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
 	<SheetPrimitive.Overlay
 		className={cn(
-			"fixed inset-0 z-50 bg-[#050606]/72 backdrop-blur-[2px] transition-[opacity,background-color] data-[state=open]:opacity-100 data-[state=closed]:opacity-0 data-[state=open]:duration-[160ms] data-[state=closed]:duration-[120ms]",
+			"fixed inset-0 z-50 bg-[var(--hm-scrim)] transition-[opacity,background-color] data-[state=open]:opacity-100 data-[state=closed]:opacity-0 data-[state=open]:duration-[160ms] data-[state=closed]:duration-[120ms]",
 			className,
 		)}
 		{...props}
@@ -81,7 +81,7 @@ const SheetContent = React.forwardRef<
 			>
 				<div
 					className={cn(
-						"vl-ledger-bg relative h-full w-full overflow-hidden border border-[#30352f] bg-[#0f1111] p-6 text-[#f2efe7] shadow-[0_24px_80px_rgba(0,0,0,0.38)]",
+						"vl-ledger-bg relative h-full w-full overflow-hidden border border-rule bg-paper p-6 text-ink shadow-[0_24px_80px_rgba(0,0,0,0.38)]",
 						className,
 					)}
 				>
@@ -128,7 +128,7 @@ const SheetTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
 	<SheetPrimitive.Title
 		ref={ref}
-		className={cn("text-lg font-semibold text-[#f2efe7]", className)}
+		className={cn("text-lg font-semibold text-ink", className)}
 		{...props}
 	/>
 ));
@@ -140,7 +140,7 @@ const SheetDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
 	<SheetPrimitive.Description
 		ref={ref}
-		className={cn("text-sm text-[#817d72]", className)}
+		className={cn("text-sm text-ink-3", className)}
 		{...props}
 	/>
 ));

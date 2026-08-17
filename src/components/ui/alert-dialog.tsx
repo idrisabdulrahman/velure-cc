@@ -17,7 +17,7 @@ const AlertDialogOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
 	<AlertDialogPrimitive.Overlay
 		className={cn(
-			"fixed inset-0 z-50 bg-[#050606]/60 transition-[opacity,background-color] data-[state=open]:opacity-100 data-[state=closed]:opacity-0 data-[state=open]:duration-[220ms] data-[state=closed]:duration-[180ms] data-[state=open]:ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:ease-out dark:bg-[#0f1111]/80",
+			"fixed inset-0 z-50 bg-ink/60 transition-[opacity,background-color] data-[state=open]:opacity-100 data-[state=closed]:opacity-0 data-[state=open]:duration-[220ms] data-[state=closed]:duration-[180ms] data-[state=open]:ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:ease-out dark:bg-ink/80",
 			className,
 		)}
 		{...props}
@@ -35,7 +35,7 @@ const AlertDialogContent = React.forwardRef<
 		<AlertDialogPrimitive.Content
 			ref={ref}
 			className={cn(
-				"vl-ledger-bg fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-[#30352f] bg-[#0f1111] p-6 text-[#f2efe7] shadow-[0_24px_80px_rgba(0,0,0,0.42)] transition-[transform,opacity,background-color,border-color,color] data-[state=open]:translate-x-[-50%] data-[state=open]:translate-y-[-50%] data-[state=open]:opacity-100 data-[state=closed]:translate-x-[-50%] data-[state=closed]:translate-y-[calc(-50%+8px)] data-[state=closed]:opacity-0 data-[state=open]:duration-[220ms] data-[state=closed]:duration-[180ms] data-[state=open]:ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:ease-out md:w-full",
+				"vl-ledger-bg fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-rule bg-paper p-6 text-ink shadow-[0_24px_80px_rgba(0,0,0,0.42)] transition-[transform,opacity,background-color,border-color,color] data-[state=open]:translate-x-[-50%] data-[state=open]:translate-y-[-50%] data-[state=open]:opacity-100 data-[state=closed]:translate-x-[-50%] data-[state=closed]:translate-y-[calc(-50%+8px)] data-[state=closed]:opacity-0 data-[state=open]:duration-[220ms] data-[state=closed]:duration-[180ms] data-[state=open]:ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:ease-out md:w-full",
 				className,
 			)}
 			{...props}
@@ -90,7 +90,7 @@ const AlertDialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
 	<AlertDialogPrimitive.Description
 		ref={ref}
-		className={cn("text-sm text-[#817d72]", className)}
+		className={cn("text-sm text-ink-3", className)}
 		{...props}
 	/>
 ));

@@ -48,7 +48,7 @@ describe("Paystack webhook route", () => {
 		expect(response.status).toBe(500);
 		await expect(response.json()).resolves.toMatchObject({
 			ok: false,
-			error: "PAYSTACK_SECRET_KEY is missing on the server.",
+			error: "Server configuration error.",
 		});
 	});
 
@@ -69,7 +69,7 @@ describe("Paystack webhook route", () => {
 		expect(response.status).toBe(401);
 		await expect(response.json()).resolves.toMatchObject({
 			ok: false,
-			error: "Invalid Paystack signature.",
+			error: "Unauthorized request.",
 		});
 	});
 
@@ -93,7 +93,7 @@ describe("Paystack webhook route", () => {
 		expect(response.status).toBe(400);
 		await expect(response.json()).resolves.toMatchObject({
 			ok: false,
-			error: "Invalid Paystack payload.",
+			error: "Invalid request payload.",
 		});
 	});
 
@@ -117,7 +117,7 @@ describe("Paystack webhook route", () => {
 		expect(response.status).toBe(400);
 		await expect(response.json()).resolves.toMatchObject({
 			ok: false,
-			error: "Incomplete Paystack payload.",
+			error: "Incomplete request payload.",
 		});
 	});
 });

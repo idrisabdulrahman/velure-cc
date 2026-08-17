@@ -39,8 +39,9 @@ type ComplianceInput = {
 	lineItems: InvoiceLineLike[];
 };
 
-function roundCurrency(value: number) {
-	return Math.round(value * 100) / 100;
+export function roundCurrency(value: number) {
+	if (!Number.isFinite(value)) return 0;
+	return Math.round((value + Math.sign(value) * Number.EPSILON) * 100) / 100;
 }
 
 export function invoiceSubtotal(lineItems: InvoiceLineLike[]) {

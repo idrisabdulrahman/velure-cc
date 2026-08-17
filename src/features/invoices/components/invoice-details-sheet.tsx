@@ -1,4 +1,19 @@
-import { useQuery } from "convex/react";
+import {
+	closestCenter,
+	DndContext,
+	type DragEndEvent,
+	PointerSensor,
+	useSensor,
+	useSensors,
+} from "@dnd-kit/core";
+import {
+	arrayMove,
+	SortableContext,
+	useSortable,
+	verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { useMutation, useQuery } from "convex/react";
 import {
 	ArrowDownToLine,
 	CalendarClock,
@@ -6,6 +21,7 @@ import {
 	Copy,
 	ExternalLink,
 	FileText,
+	GripVertical,
 	Loader2,
 	Plus,
 	Send,
@@ -14,6 +30,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { FaTelegram, FaWhatsapp } from "react-icons/fa6";
+import { DatePicker } from "#/components/navigation/DatePicker";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import {
@@ -37,7 +54,10 @@ import {
 	WITHHOLDING_RESIDENCY_OPTIONS,
 } from "#/features/compliance/nigeria";
 import {
-	type ComplianceWarningCode,
+	netPayableFromCompliance,
+	PERSISTABLE_WARNING_CODES,
+} from "#/features/compliance/persist";
+import {
 	JURISDICTION_OPTIONS,
 	type JurisdictionCode,
 	type SellerTaxStatus,
@@ -48,9 +68,12 @@ import {
 	type WithholdingRecipientResidency,
 } from "#/features/compliance/types";
 import { invoiceTotal } from "#/features/invoices/calculate";
+import { NotesEditor } from "#/features/invoices/components/editor/notes-editor";
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
+import { toEditorDoc } from "#/features/invoices/midday-adapter";
 import type { InvoiceLineItem, InvoiceRecord } from "#/features/invoices/types";
 import { authClient } from "#/lib/auth-client";
+import type { EditorDoc } from "#/lib/midday-invoice/types";
 import { api } from "../../../../convex/_generated/api";
 
 type Props = {
@@ -72,15 +95,6 @@ type Props = {
 
 const AUTOSAVE_DEBOUNCE_MS = 1600;
 
-const PERSISTABLE_WARNING_CODES = new Set<ComplianceWarningCode>([
-	"missing_seller_tax_id",
-	"missing_buyer_tax_id",
-	"cross_border_review",
-	"reverse_charge_review",
-	"unknown_jurisdiction",
-	"domestic_vat_not_applied",
-	"missing_workspace_tax_status",
-]);
 const NGN_PER_CURRENCY = {
 	NGN: 1,
 	USD: 1500,
@@ -193,12 +207,6 @@ function withPersistableCompliance(invoice: InvoiceRecord): InvoiceRecord {
 	};
 }
 
-function netPayableFromCompliance(
-	compliance: NonNullable<InvoiceRecord["compliance"]>,
-) {
-	return compliance.grandTotal - (compliance.withholdingTaxAmount ?? 0);
-}
-
 function withDerivedCompliance(invoice: InvoiceRecord): InvoiceRecord {
 	const existingCompliance = invoice.compliance;
 	const seller = {
@@ -280,12 +288,12 @@ function NumberStepperInput({
 	};
 
 	return (
-		<div className="flex h-10 items-center overflow-hidden rounded-md border border-[#30352f] bg-[#171a18]">
+		<div className="flex h-10 items-center overflow-hidden rounded-md border border-rule bg-paper-2">
 			<button
 				type="button"
 				disabled={disabled}
 				onClick={() => apply(value - step)}
-				className="inline-flex h-full w-10 items-center justify-center border-r border-[#30352f] text-[#9c968a] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7] disabled:cursor-not-allowed disabled:opacity-40"
+				className="inline-flex h-full w-10 items-center justify-center border-r border-rule text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
 				aria-label="Decrease value"
 			>
 				-
@@ -297,13 +305,13 @@ function NumberStepperInput({
 				step={step}
 				value={value}
 				onChange={(event) => apply(Number(event.target.value) || min)}
-				className="h-full w-full border-0 bg-transparent px-3 text-center text-sm text-[#f2efe7] [appearance:textfield] outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+				className="h-full w-full border-0 bg-transparent px-3 text-center text-sm text-ink [appearance:textfield] outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
 			/>
 			<button
 				type="button"
 				disabled={disabled}
 				onClick={() => apply(value + step)}
-				className="inline-flex h-full w-10 items-center justify-center border-l border-[#30352f] text-[#9c968a] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7] disabled:cursor-not-allowed disabled:opacity-40"
+				className="inline-flex h-full w-10 items-center justify-center border-l border-rule text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
 				aria-label="Increase value"
 			>
 				+
@@ -322,11 +330,11 @@ function Section({
 	children: ReactNode;
 }) {
 	return (
-		<section className="ui-panel rounded-md border border-[#30352f] bg-[#171a18]">
-			<div className="border-b border-[#30352f] px-5 py-4">
-				<h3 className="text-sm font-medium text-[#f2efe7]">{title}</h3>
+		<section className="ui-panel rounded-md border border-rule bg-paper-2">
+			<div className="border-b border-rule px-5 py-4">
+				<h3 className="text-sm font-medium text-ink">{title}</h3>
 				{subtitle ? (
-					<p className="mt-1 text-sm text-[#9c968a]">{subtitle}</p>
+					<p className="mt-1 text-sm text-ink-2">{subtitle}</p>
 				) : null}
 			</div>
 			<div className="px-5 py-5">{children}</div>
@@ -336,17 +344,15 @@ function Section({
 
 function FieldLabel({ children }: { children: ReactNode }) {
 	return (
-		<div className="mb-2 block text-xs font-medium text-[#9c968a]">
-			{children}
-		</div>
+		<div className="mb-2 block text-xs font-medium text-ink-2">{children}</div>
 	);
 }
 
 function CompactMetric({ label, value }: { label: string; value: string }) {
 	return (
-		<div className="rounded-md border border-[#30352f] bg-[#0f1111] px-3 py-3">
-			<div className="text-xs text-[#817d72]">{label}</div>
-			<div className="mt-2 text-base font-medium text-[#f2efe7]">{value}</div>
+		<div className="rounded-md border border-rule bg-paper px-3 py-3">
+			<div className="text-xs text-ink-3">{label}</div>
+			<div className="mt-2 text-base font-medium text-ink">{value}</div>
 		</div>
 	);
 }
@@ -354,7 +360,7 @@ function CompactMetric({ label, value }: { label: string; value: string }) {
 function SkeletonBlock({ className = "" }: { className?: string }) {
 	return (
 		<div
-			className={`animate-pulse rounded-md bg-[#242923] shadow-[inset_0_0_0_1px_rgba(200,255,98,0.03)] ${className}`}
+			className={`animate-pulse rounded-md bg-paper-3 shadow-[inset_0_0_0_1px_color-mix(in srgb, var(--color-brand) 3%, transparent)] ${className}`}
 		/>
 	);
 }
@@ -362,7 +368,7 @@ function SkeletonBlock({ className = "" }: { className?: string }) {
 function InvoiceDetailsSkeleton() {
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<div className="shrink-0 border-b border-[#30352f] bg-[#101211] px-6 py-5">
+			<div className="shrink-0 border-b border-rule bg-paper px-6 py-5">
 				<div className="flex items-start justify-between gap-6">
 					<div className="min-w-0 flex-1">
 						<SkeletonBlock className="h-8 w-56" />
@@ -377,8 +383,8 @@ function InvoiceDetailsSkeleton() {
 
 			<div className="flex-1 overflow-hidden px-6 py-6">
 				<div className="space-y-6">
-					<section className="ui-panel rounded-md border border-[#30352f] bg-[#171a18]">
-						<div className="border-b border-[#30352f] px-5 py-4">
+					<section className="ui-panel rounded-md border border-rule bg-paper-2">
+						<div className="border-b border-rule px-5 py-4">
 							<SkeletonBlock className="h-4 w-32" />
 							<SkeletonBlock className="mt-2 h-3 w-52" />
 						</div>
@@ -387,7 +393,7 @@ function InvoiceDetailsSkeleton() {
 								{["issue", "due", "status", "total"].map((item) => (
 									<div
 										key={item}
-										className="rounded-md border border-[#30352f] bg-[#0f1111] px-3 py-3"
+										className="rounded-md border border-rule bg-paper px-3 py-3"
 									>
 										<SkeletonBlock className="h-3 w-16" />
 										<SkeletonBlock className="mt-3 h-5 w-24" />
@@ -407,8 +413,8 @@ function InvoiceDetailsSkeleton() {
 						</div>
 					</section>
 
-					<section className="ui-panel rounded-md border border-[#30352f] bg-[#171a18]">
-						<div className="border-b border-[#30352f] px-5 py-4">
+					<section className="ui-panel rounded-md border border-rule bg-paper-2">
+						<div className="border-b border-rule px-5 py-4">
 							<SkeletonBlock className="h-4 w-24" />
 							<SkeletonBlock className="mt-2 h-3 w-64 max-w-full" />
 						</div>
@@ -416,7 +422,7 @@ function InvoiceDetailsSkeleton() {
 							{["line-1", "line-2", "line-3"].map((item) => (
 								<div
 									key={item}
-									className="grid gap-3 rounded-md border border-[#30352f] bg-[#0f1111] p-3 md:grid-cols-[1fr_110px_120px_130px_44px]"
+									className="grid gap-3 rounded-md border border-rule bg-paper p-3 md:grid-cols-[1fr_110px_120px_130px_44px]"
 								>
 									<SkeletonBlock className="h-10" />
 									<SkeletonBlock className="h-10" />
@@ -430,15 +436,53 @@ function InvoiceDetailsSkeleton() {
 				</div>
 			</div>
 
-			<div className="shrink-0 border-t border-[#30352f] bg-[#15171a] px-6 py-4">
+			<div className="shrink-0 border-t border-rule bg-paper-2 px-6 py-4">
 				<div className="flex items-center justify-between gap-4">
 					<SkeletonBlock className="h-4 w-56" />
 					<div className="flex gap-3">
 						<SkeletonBlock className="h-10 w-20" />
-						<SkeletonBlock className="h-10 w-28 bg-[#405126]" />
+						<SkeletonBlock className="h-10 w-28 bg-ok-soft" />
 					</div>
 				</div>
 			</div>
+		</div>
+	);
+}
+
+function SortableLineItem({
+	id,
+	children,
+}: {
+	id: string;
+	children: ReactNode;
+}) {
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({ id });
+
+	const style = {
+		transform: CSS.Transform.toString(transform),
+		transition,
+		opacity: isDragging ? 0.5 : 1,
+	};
+
+	return (
+		<div ref={setNodeRef} style={style} className="flex items-start gap-2">
+			<button
+				type="button"
+				className="mt-3 shrink-0 cursor-grab touch-none text-ink-3 hover:text-ink active:cursor-grabbing"
+				aria-label="Drag to reorder"
+				{...attributes}
+				{...listeners}
+			>
+				<GripVertical className="h-4 w-4" />
+			</button>
+			<div className="min-w-0 flex-1">{children}</div>
 		</div>
 	);
 }
@@ -455,7 +499,9 @@ export function InvoiceDetailsSheet({
 	const [draft, setDraft] = useState<InvoiceRecord | null>(
 		invoice ? withDerivedCompliance(invoice) : null,
 	);
-	const [editing, setEditing] = useState(true);
+	const draftRef = useRef(draft);
+	draftRef.current = draft;
+	const [editing, setEditing] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [savePillState, setSavePillState] = useState<
 		"idle" | "saved" | "error"
@@ -463,6 +509,9 @@ export function InvoiceDetailsSheet({
 	const [recipientEmail, setRecipientEmail] = useState("");
 	const [paymentReference, setPaymentReference] = useState("");
 	const [isSendingEmail, setIsSendingEmail] = useState(false);
+	const cancelSchedule = useMutation(api.invoices.cancelSchedule);
+	const reschedule = useMutation(api.invoices.reschedule);
+	const [rescheduleAt, setRescheduleAt] = useState("");
 	const [emailStatus, setEmailStatus] = useState<string | null>(null);
 	const [showCompliance, setShowCompliance] = useState(false);
 	const [showPayment, setShowPayment] = useState(false);
@@ -479,10 +528,15 @@ export function InvoiceDetailsSheet({
 	useEffect(() => {
 		const normalizedInvoice = invoice ? withDerivedCompliance(invoice) : null;
 		setDraft(normalizedInvoice);
-		setEditing(Boolean(invoice));
+		setEditing(false);
 		setSaving(false);
 		setEmailStatus(null);
 		setRecipientEmail(normalizedInvoice?.compliance?.buyer?.email ?? "");
+		setRescheduleAt(
+			normalizedInvoice?.scheduledAt
+				? new Date(normalizedInvoice.scheduledAt).toISOString().slice(0, 16)
+				: "",
+		);
 		setPaymentReference(normalizedInvoice?.paymentReference ?? "");
 		setShowCompliance(false);
 		setShowPayment(Boolean(normalizedInvoice?.paymentReference));
@@ -561,7 +615,8 @@ export function InvoiceDetailsSheet({
 
 		if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
 		autosaveTimeoutRef.current = setTimeout(() => {
-			void persistDraft(draft).catch(() => undefined);
+			const current = draftRef.current;
+			if (current) void persistDraft(current).catch(() => undefined);
 		}, AUTOSAVE_DEBOUNCE_MS);
 
 		return () => {
@@ -602,6 +657,25 @@ export function InvoiceDetailsSheet({
 			});
 		});
 		setPendingFocusLineId(nextId);
+	};
+
+	const sensors = useSensors(
+		useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+	);
+
+	const handleDragEnd = (event: DragEndEvent) => {
+		const { active, over } = event;
+		if (!over || active.id === over.id) return;
+		setDraft((prev) => {
+			if (!prev) return prev;
+			const oldIndex = prev.lineItems.findIndex((i) => i.id === active.id);
+			const newIndex = prev.lineItems.findIndex((i) => i.id === over.id);
+			if (oldIndex === -1 || newIndex === -1) return prev;
+			return withDerivedCompliance({
+				...prev,
+				lineItems: arrayMove(prev.lineItems, oldIndex, newIndex),
+			});
+		});
 	};
 
 	useEffect(() => {
@@ -739,10 +813,10 @@ export function InvoiceDetailsSheet({
 	const activityItems = draft
 		? [
 				{
-					id: "issued",
-					label: "Invoice issued",
-					meta: formatDate(draft.issueDate),
-					description: `Created as ${draft.status.toUpperCase()}.`,
+					id: "created",
+					label: "Invoice created",
+					meta: new Date(draft.createdAt).toLocaleDateString(),
+					description: "Invoice record created.",
 					icon: FileText,
 				},
 				...(draft.lifecycle?.sentAt
@@ -751,7 +825,20 @@ export function InvoiceDetailsSheet({
 								id: "sent",
 								label: "Invoice sent",
 								meta: new Date(draft.lifecycle.sentAt).toLocaleDateString(),
-								description: "Email delivered to recipient.",
+								description: "Invoice email submitted for delivery.",
+								icon: Send,
+							},
+						]
+					: []),
+				...(draft.lifecycle?.emailDeliveredAt
+					? [
+							{
+								id: "delivered",
+								label: "Email delivered",
+								meta: new Date(
+									draft.lifecycle.emailDeliveredAt,
+								).toLocaleDateString(),
+								description: "Delivery provider accepted the invoice email.",
 								icon: Send,
 							},
 						]
@@ -808,32 +895,32 @@ export function InvoiceDetailsSheet({
 				<SheetContent
 					side="right"
 					contentClassName="w-full sm:max-w-[820px] p-0"
-					className="flex h-full min-h-0 flex-col border-[#30352f] bg-[#101211] p-0 text-[#f2efe7] [background-image:none]"
+					className="flex h-full min-h-0 flex-col border-rule bg-paper p-0 text-ink [background-image:none]"
 					title={draft ? `Edit ${draft.invoiceNumber}` : "Edit invoice"}
 				>
 					{draft ? (
 						<>
-							<div className="border-b border-[#30352f] bg-[#101211] px-6 py-5">
+							<div className="border-b border-rule bg-paper px-6 py-5">
 								<SheetHeader className="space-y-0 text-left">
 									<div className="flex items-start justify-between gap-6">
 										<div>
-											<SheetTitle className="text-[28px] font-semibold tracking-[-0.03em] text-[#f2efe7]">
+											<SheetTitle className="text-[28px] font-semibold tracking-[-0.03em] text-ink">
 												{draft.invoiceNumber}
 											</SheetTitle>
-											<SheetDescription className="mt-2 text-sm text-[#9c968a]">
+											<SheetDescription className="mt-2 text-sm text-ink-2">
 												Edit the live invoice without leaving the list view.
 											</SheetDescription>
 										</div>
-										<div className="grid gap-1 text-right text-sm text-[#9c968a]">
+										<div className="grid gap-1 text-right text-sm text-ink-2">
 											<div>
-												<span className="text-[#817d72]">Customer:</span>{" "}
-												<span className="text-[#f2efe7]">
+												<span className="text-ink-3">Customer:</span>{" "}
+												<span className="text-ink">
 													{draft.customerName || "Unassigned"}
 												</span>
 											</div>
 											<div>
-												<span className="text-[#817d72]">Amount:</span>{" "}
-												<span className="text-[#f2efe7]">
+												<span className="text-ink-3">Amount:</span>{" "}
+												<span className="text-ink">
 													{formatMoney(invoiceTotal(draft), draft.currency)}
 												</span>
 											</div>
@@ -878,7 +965,7 @@ export function InvoiceDetailsSheet({
 															invoiceNumber: event.target.value.toUpperCase(),
 														}))
 													}
-													className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
+													className="h-10 rounded-md border-rule bg-paper text-ink"
 												/>
 											</div>
 											<div>
@@ -900,7 +987,7 @@ export function InvoiceDetailsSheet({
 																: prev.compliance,
 														}))
 													}
-													className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
+													className="h-10 rounded-md border-rule bg-paper text-ink"
 												/>
 											</div>
 											<div>
@@ -914,35 +1001,25 @@ export function InvoiceDetailsSheet({
 														}))
 													}
 													placeholder="PO number from the client"
-													className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
+													className="h-10 rounded-md border-rule bg-paper text-ink"
 												/>
 											</div>
 											<div>
 												<FieldLabel>Issue date</FieldLabel>
-												<Input
-													type="date"
+												<DatePicker
 													value={draft.issueDate}
-													onChange={(event) =>
-														patchDraft((prev) => ({
-															...prev,
-															issueDate: event.target.value,
-														}))
+													onChange={(v) =>
+														patchDraft((prev) => ({ ...prev, issueDate: v }))
 													}
-													className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
 												/>
 											</div>
 											<div>
 												<FieldLabel>Due date</FieldLabel>
-												<Input
-													type="date"
+												<DatePicker
 													value={draft.dueDate}
-													onChange={(event) =>
-														patchDraft((prev) => ({
-															...prev,
-															dueDate: event.target.value,
-														}))
+													onChange={(v) =>
+														patchDraft((prev) => ({ ...prev, dueDate: v }))
 													}
-													className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
 												/>
 											</div>
 											<div>
@@ -952,7 +1029,7 @@ export function InvoiceDetailsSheet({
 													onChange={(event) =>
 														updateCurrency(event.target.value)
 													}
-													className="h-10 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
+													className="h-10 w-full rounded-md border border-rule bg-paper px-3 text-sm text-ink outline-none"
 												>
 													{Object.keys(NGN_PER_CURRENCY).map((option) => (
 														<option key={option} value={option}>
@@ -971,7 +1048,7 @@ export function InvoiceDetailsSheet({
 															template: event.target.value,
 														}))
 													}
-													className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
+													className="h-10 rounded-md border-rule bg-paper text-ink"
 												/>
 											</div>
 										</div>
@@ -986,7 +1063,7 @@ export function InvoiceDetailsSheet({
 												type="button"
 												variant="ghost"
 												onClick={() => setShowCompliance(true)}
-												className="h-9 rounded-md border border-[#30352f] bg-[#0f1111] px-4 text-sm text-[#d8d1c4] hover:bg-[#1a2117] hover:text-[#f2efe7]"
+												className="h-9 rounded-md border border-rule bg-paper px-4 text-sm text-ink-2 hover:bg-paper-2 hover:text-ink"
 											>
 												Review compliance settings
 											</Button>
@@ -1012,9 +1089,94 @@ export function InvoiceDetailsSheet({
 																}))
 															}
 															placeholder="10-digit TIN"
-															className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
+															className="h-10 rounded-md border-rule bg-paper text-ink"
 														/>
 													</div>
+													{draft.status === "scheduled" ? (
+														<div className="mt-3 space-y-2 rounded-md border border-brand-line bg-brand-soft p-3">
+															<div className="flex flex-wrap items-end gap-2">
+																<label className="text-xs text-ink-3">
+																	Scheduled send time
+																	<input
+																		aria-label="Reschedule invoice"
+																		type="datetime-local"
+																		min={new Date(Date.now() + 60_000)
+																			.toISOString()
+																			.slice(0, 16)}
+																		value={rescheduleAt}
+																		onChange={(e) =>
+																			setRescheduleAt(e.target.value)
+																		}
+																		className="mt-1 block h-9 rounded-md border border-rule bg-paper px-2 text-sm text-ink"
+																	/>
+																</label>
+																<Button
+																	type="button"
+																	onClick={async () => {
+																		try {
+																			await reschedule({
+																				invoiceId: draft.id as never,
+																				scheduledAt: new Date(
+																					rescheduleAt,
+																				).toISOString(),
+																			});
+																			setDraft((p) =>
+																				p
+																					? {
+																							...p,
+																							scheduledAt:
+																								Date.parse(rescheduleAt),
+																						}
+																					: p,
+																			);
+																			toast({
+																				title: "Invoice rescheduled",
+																				variant: "success",
+																			});
+																		} catch (error) {
+																			toast({
+																				title: "Could not reschedule",
+																				description:
+																					error instanceof Error
+																						? error.message
+																						: "Try again.",
+																				variant: "error",
+																			});
+																		}
+																	}}
+																	disabled={!rescheduleAt}
+																	className="h-9"
+																>
+																	Reschedule
+																</Button>
+																<Button
+																	type="button"
+																	variant="ghost"
+																	onClick={async () => {
+																		await cancelSchedule({
+																			invoiceId: draft.id as never,
+																		});
+																		setDraft((p) =>
+																			p
+																				? {
+																						...p,
+																						status: "draft",
+																						scheduledAt: undefined,
+																					}
+																				: p,
+																		);
+																		toast({
+																			title: "Schedule canceled",
+																			variant: "success",
+																		});
+																	}}
+																	className="h-9 border border-danger-line text-danger"
+																>
+																	Cancel schedule
+																</Button>
+															</div>
+														</div>
+													) : null}
 													<div>
 														<FieldLabel>CAC RC Number</FieldLabel>
 														<Input
@@ -1035,7 +1197,7 @@ export function InvoiceDetailsSheet({
 																}))
 															}
 															placeholder="RC-1234567"
-															className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
+															className="h-10 rounded-md border-rule bg-paper text-ink"
 														/>
 													</div>
 													<div>
@@ -1057,7 +1219,7 @@ export function InvoiceDetailsSheet({
 																}))
 															}
 															placeholder="10-digit TIN"
-															className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
+															className="h-10 rounded-md border-rule bg-paper text-ink"
 														/>
 													</div>
 													<div>
@@ -1081,7 +1243,7 @@ export function InvoiceDetailsSheet({
 																}));
 															}}
 															placeholder="client@email.com"
-															className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
+															className="h-10 rounded-md border-rule bg-paper text-ink"
 														/>
 													</div>
 													<div>
@@ -1105,7 +1267,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															className="h-10 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
+															className="h-10 w-full rounded-md border border-rule bg-paper px-3 text-sm text-ink outline-none"
 														>
 															{JURISDICTION_OPTIONS.map((option) => (
 																<option key={option.value} value={option.value}>
@@ -1139,7 +1301,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															className="h-10 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
+															className="h-10 w-full rounded-md border border-rule bg-paper px-3 text-sm text-ink outline-none"
 														>
 															{JURISDICTION_OPTIONS.map((option) => (
 																<option key={option.value} value={option.value}>
@@ -1170,7 +1332,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															className="h-10 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
+															className="h-10 w-full rounded-md border border-rule bg-paper px-3 text-sm text-ink outline-none"
 														>
 															{SELLER_TAX_STATUS_OPTIONS.map((option) => (
 																<option key={option.value} value={option.value}>
@@ -1195,7 +1357,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															className="h-10 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
+															className="h-10 w-full rounded-md border border-rule bg-paper px-3 text-sm text-ink outline-none"
 														>
 															{TAX_TREATMENT_OPTIONS.map((option) => (
 																<option key={option.value} value={option.value}>
@@ -1223,7 +1385,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
+															className="h-10 rounded-md border-rule bg-paper text-ink"
 														/>
 													</div>
 													<div>
@@ -1249,7 +1411,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															className="h-10 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
+															className="h-10 w-full rounded-md border border-rule bg-paper px-3 text-sm text-ink outline-none"
 														>
 															{WITHHOLDING_CATEGORY_OPTIONS.map((option) => (
 																<option key={option.value} value={option.value}>
@@ -1281,7 +1443,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															className="h-10 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
+															className="h-10 w-full rounded-md border border-rule bg-paper px-3 text-sm text-ink outline-none"
 														>
 															{WITHHOLDING_ENTITY_TYPE_OPTIONS.map((option) => (
 																<option key={option.value} value={option.value}>
@@ -1313,7 +1475,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															className="h-10 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm text-[#f2efe7] outline-none"
+															className="h-10 w-full rounded-md border border-rule bg-paper px-3 text-sm text-ink outline-none"
 														>
 															{WITHHOLDING_RESIDENCY_OPTIONS.map((option) => (
 																<option key={option.value} value={option.value}>
@@ -1358,7 +1520,7 @@ export function InvoiceDetailsSheet({
 												</div>
 
 												{draft.compliance?.regulatoryNotice ? (
-													<div className="mt-4 rounded-md border border-[#5b4630] bg-[#261d15] px-4 py-3 text-sm text-[#efc58f]">
+													<div className="mt-4 rounded-md border border-warn-line bg-warn-soft px-4 py-3 text-sm text-warn">
 														{draft.compliance.regulatoryNotice}
 													</div>
 												) : null}
@@ -1368,7 +1530,7 @@ export function InvoiceDetailsSheet({
 														{draft.compliance.warnings.map((warning) => (
 															<span
 																key={warning}
-																className="inline-flex rounded-full border border-[#5b4630] bg-[#261d15] px-2.5 py-1 text-[11px] text-[#efc58f]"
+																className="inline-flex rounded-full border border-warn-line bg-warn-soft px-2.5 py-1 text-[11px] text-warn"
 															>
 																{warning.replaceAll("_", " ")}
 															</span>
@@ -1383,116 +1545,126 @@ export function InvoiceDetailsSheet({
 										title="Line items"
 										subtitle="Update quantities, pricing, and descriptions."
 									>
+										<div className="hidden grid-cols-[minmax(0,1fr)_132px_132px_160px_44px] gap-3 px-1 text-xs font-medium text-ink-2 md:grid">
+											<span>Description</span>
+											<span>Quantity</span>
+											<span>Unit price</span>
+											<span className="text-right">Line total</span>
+											<span />
+										</div>
+
 										<div
 											ref={lineItemsScrollRef}
 											className="max-h-[420px] space-y-3 overflow-y-auto pr-1"
 										>
-											<div className="hidden grid-cols-[minmax(0,1fr)_132px_132px_160px_44px] gap-3 px-1 text-xs font-medium text-[#9c968a] md:grid">
-												<span>Description</span>
-												<span>Quantity</span>
-												<span>Unit price</span>
-												<span className="text-right">Line total</span>
-												<span />
-											</div>
-
-											{draft.lineItems.map((item) => (
-												<div
-													key={item.id}
-													className="rounded-md border border-[#30352f] bg-[#0f1111] p-3 md:border-0 md:bg-transparent md:p-0"
+											<DndContext
+												sensors={sensors}
+												collisionDetection={closestCenter}
+												onDragEnd={handleDragEnd}
+											>
+												<SortableContext
+													items={draft.lineItems.map((i) => i.id)}
+													strategy={verticalListSortingStrategy}
 												>
-													<div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_132px_132px_160px_44px] md:items-center">
-														<div>
-															<div className="mb-2 text-[11px] text-[#817d72] md:hidden">
-																Description
+													{draft.lineItems.map((item) => (
+														<SortableLineItem key={item.id} id={item.id}>
+															<div className="rounded-md border border-rule bg-paper p-3 md:border-0 md:bg-transparent md:p-0">
+																<div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_132px_132px_160px_44px] md:items-center">
+																	<div>
+																		<div className="mb-2 text-[11px] text-ink-3 md:hidden">
+																			Description
+																		</div>
+																		<Input
+																			ref={
+																				item.id === pendingFocusLineId
+																					? pendingLineInputRef
+																					: undefined
+																			}
+																			value={item.name}
+																			onChange={(event) =>
+																				updateLine(item.id, {
+																					name: event.target.value,
+																				})
+																			}
+																			placeholder="Item description"
+																			className="h-10 rounded-md border-rule bg-paper text-ink"
+																		/>
+																	</div>
+																	<div>
+																		<div className="mb-2 text-[11px] text-ink-3 md:hidden">
+																			Quantity
+																		</div>
+																		<NumberStepperInput
+																			disabled={false}
+																			value={item.quantity}
+																			min={1}
+																			step={1}
+																			onChange={(quantity) =>
+																				updateLine(item.id, { quantity })
+																			}
+																		/>
+																	</div>
+																	<div>
+																		<div className="mb-2 text-[11px] text-ink-3 md:hidden">
+																			Unit price
+																		</div>
+																		<NumberStepperInput
+																			disabled={false}
+																			value={item.price}
+																			min={0}
+																			step={0.01}
+																			onChange={(price) =>
+																				updateLine(item.id, { price })
+																			}
+																		/>
+																	</div>
+																	<div>
+																		<div className="mb-2 text-[11px] text-ink-3 md:hidden">
+																			Line total
+																		</div>
+																		<div className="flex h-10 items-center justify-between rounded-md border border-rule bg-paper px-3 text-sm font-medium text-ink md:justify-end">
+																			<span className="md:hidden text-ink-3">
+																				Total
+																			</span>
+																			<span className="text-right">
+																				{formatMoney(
+																					item.quantity * item.price,
+																					draft.currency,
+																				)}
+																			</span>
+																		</div>
+																	</div>
+																	<div className="flex items-end md:block">
+																		<button
+																			type="button"
+																			onClick={() => removeLineItem(item.id)}
+																			className="inline-flex h-10 w-11 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
+																			aria-label="Remove line item"
+																		>
+																			<X className="h-4 w-4" />
+																		</button>
+																	</div>
+																</div>
 															</div>
-															<Input
-																ref={
-																	item.id === pendingFocusLineId
-																		? pendingLineInputRef
-																		: undefined
-																}
-																value={item.name}
-																onChange={(event) =>
-																	updateLine(item.id, {
-																		name: event.target.value,
-																	})
-																}
-																placeholder="Item description"
-																className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
-															/>
-														</div>
-														<div>
-															<div className="mb-2 text-[11px] text-[#817d72] md:hidden">
-																Quantity
-															</div>
-															<NumberStepperInput
-																disabled={false}
-																value={item.quantity}
-																min={1}
-																step={1}
-																onChange={(quantity) =>
-																	updateLine(item.id, { quantity })
-																}
-															/>
-														</div>
-														<div>
-															<div className="mb-2 text-[11px] text-[#817d72] md:hidden">
-																Unit price
-															</div>
-															<NumberStepperInput
-																disabled={false}
-																value={item.price}
-																min={0}
-																step={0.01}
-																onChange={(price) =>
-																	updateLine(item.id, { price })
-																}
-															/>
-														</div>
-														<div>
-															<div className="mb-2 text-[11px] text-[#817d72] md:hidden">
-																Line total
-															</div>
-															<div className="flex h-10 items-center justify-between rounded-md border border-[#30352f] bg-[#0f1111] px-3 text-sm font-medium text-[#f2efe7] md:justify-end">
-																<span className="md:hidden text-[#817d72]">
-																	Total
-																</span>
-																<span className="text-right">
-																	{formatMoney(
-																		item.quantity * item.price,
-																		draft.currency,
-																	)}
-																</span>
-															</div>
-														</div>
-														<div className="flex items-end md:block">
-															<button
-																type="button"
-																onClick={() => removeLineItem(item.id)}
-																className="inline-flex h-10 w-11 items-center justify-center rounded-md border border-[#30352f] bg-[#0f1111] text-[#9c968a] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7]"
-																aria-label="Remove line item"
-															>
-																<X className="h-4 w-4" />
-															</button>
-														</div>
-													</div>
-												</div>
-											))}
+														</SortableLineItem>
+													))}
+												</SortableContext>
+											</DndContext>
 
-											<div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#30352f] pt-3">
+											<div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule pt-3">
 												<Button
 													type="button"
 													variant="ghost"
 													onClick={addLineItem}
-													className="h-10 rounded-md border border-[#30352f] bg-[#0f1111] px-4 text-sm text-[#d8d1c4] hover:bg-[#1a2117] hover:text-[#f2efe7]"
+													className="h-10 rounded-md border border-rule bg-paper px-4 text-sm text-ink-2 hover:bg-paper-2 hover:text-ink"
 												>
 													<Plus className="mr-2 h-4 w-4" />
 													Add line item
 												</Button>
-												<div className="w-full max-w-[260px] space-y-2 rounded-md border border-[#30352f] bg-[#0f1111] px-4 py-3">
-													<div className="flex items-center justify-between text-sm text-[#9c968a]">
+												<div className="w-full max-w-[260px] space-y-2 rounded-md border border-rule bg-paper px-4 py-3">
+													<div className="flex items-center justify-between text-sm text-ink-2">
 														<span>Subtotal</span>
-														<span className="text-[#f2efe7]">
+														<span className="text-ink">
 															{formatMoney(
 																draft.compliance?.subtotal ?? 0,
 																draft.currency,
@@ -1500,12 +1672,12 @@ export function InvoiceDetailsSheet({
 														</span>
 													</div>
 													{(draft.compliance?.totalTax ?? 0) > 0 ? (
-														<div className="flex items-center justify-between text-sm text-[#9c968a]">
+														<div className="flex items-center justify-between text-sm text-ink-2">
 															<span>
 																{draft.compliance?.taxLabel ?? "VAT"} (
 																{draft.compliance?.taxRate ?? 0}%)
 															</span>
-															<span className="text-[#f2efe7]">
+															<span className="text-ink">
 																{formatMoney(
 																	draft.compliance?.totalTax ?? 0,
 																	draft.currency,
@@ -1514,12 +1686,12 @@ export function InvoiceDetailsSheet({
 														</div>
 													) : null}
 													{(draft.compliance?.withholdingTaxAmount ?? 0) > 0 ? (
-														<div className="flex items-center justify-between text-sm text-[#9c968a]">
+														<div className="flex items-center justify-between text-sm text-ink-2">
 															<span>
 																{draft.compliance?.withholdingTaxLabel ?? "WHT"}{" "}
 																({draft.compliance?.withholdingTaxRate ?? 0}%)
 															</span>
-															<span className="text-[#f2efe7]">
+															<span className="text-ink">
 																-
 																{formatMoney(
 																	draft.compliance?.withholdingTaxAmount ?? 0,
@@ -1528,9 +1700,9 @@ export function InvoiceDetailsSheet({
 															</span>
 														</div>
 													) : null}
-													<div className="flex items-center justify-between border-t border-[#30352f] pt-2 text-sm">
-														<span className="text-[#9c968a]">Net payable</span>
-														<span className="text-lg font-semibold text-[#f2efe7]">
+													<div className="flex items-center justify-between border-t border-rule pt-2 text-sm">
+														<span className="text-ink-2">Net payable</span>
+														<span className="text-lg font-semibold text-ink">
 															{formatMoney(invoiceTotal(draft), draft.currency)}
 														</span>
 													</div>
@@ -1542,7 +1714,7 @@ export function InvoiceDetailsSheet({
 									<div className="grid gap-6 lg:grid-cols-2">
 										<Section title="Status">
 											<div className="space-y-3">
-												<div className="rounded-md border border-[#30352f] bg-[#0f1111] px-3 py-2 text-sm capitalize text-[#f2efe7]">
+												<div className="rounded-md border border-rule bg-paper px-3 py-2 text-sm capitalize text-ink">
 													{draft.status === "unpaid"
 														? "sent"
 														: draft.status.replace("-", " ")}
@@ -1573,7 +1745,7 @@ export function InvoiceDetailsSheet({
 																	: prev,
 															);
 														}}
-														className="h-9 whitespace-nowrap rounded-md border border-[#3f5130] bg-[#1a2117] px-3 text-sm font-medium text-[#c8ff62] hover:bg-[#202a18] hover:text-[#d5ff7a]"
+														className="h-9 whitespace-nowrap rounded-md border border-brand-line bg-brand-soft px-3 text-sm font-medium text-brand hover:bg-brand-soft hover:text-brand-hi"
 													>
 														Mark as paid
 													</Button>
@@ -1596,7 +1768,7 @@ export function InvoiceDetailsSheet({
 																	: prev,
 															);
 														}}
-														className="h-9 rounded-md border border-[#4b2d2d] bg-[#1a1111] px-3 text-sm text-[#efb1b1] hover:bg-[#2a1f1f]"
+														className="h-9 rounded-md border border-danger-line bg-danger-soft px-3 text-sm text-danger hover:bg-danger-soft"
 													>
 														Cancel invoice
 													</Button>
@@ -1616,13 +1788,13 @@ export function InvoiceDetailsSheet({
 															}
 															type="email"
 															placeholder="client@email.com"
-															className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
+															className="h-10 rounded-md border-rule bg-paper text-ink"
 														/>
 														<Button
 															onClick={onSendEmail}
 															disabled={isSendingEmail}
 															variant="ghost"
-															className="h-10 rounded-md border border-[#30352f] bg-[#0f1111] px-3 hover:bg-[#1a2117]"
+															className="h-10 rounded-md border border-rule bg-paper px-3 hover:bg-paper-2"
 														>
 															{isSendingEmail ? (
 																<Loader2 className="h-4 w-4 animate-spin" />
@@ -1632,7 +1804,7 @@ export function InvoiceDetailsSheet({
 														</Button>
 													</div>
 													{emailStatus ? (
-														<p className="mt-2 text-xs text-[#9c968a]">
+														<p className="mt-2 text-xs text-ink-2">
 															{emailStatus}
 														</p>
 													) : null}
@@ -1644,7 +1816,7 @@ export function InvoiceDetailsSheet({
 														target="_blank"
 														rel="noreferrer"
 														aria-label="Share on Telegram"
-														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#30352f] bg-[#0f1111] text-[#d8d1c4] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7]"
+														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
 													>
 														<FaTelegram className="h-4 w-4" />
 													</a>
@@ -1653,7 +1825,7 @@ export function InvoiceDetailsSheet({
 														target="_blank"
 														rel="noreferrer"
 														aria-label="Share on WhatsApp"
-														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#30352f] bg-[#0f1111] text-[#d8d1c4] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7]"
+														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
 													>
 														<FaWhatsapp className="h-4 w-4" />
 													</a>
@@ -1678,7 +1850,7 @@ export function InvoiceDetailsSheet({
 															);
 														}}
 														aria-label="Share link"
-														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#30352f] bg-[#0f1111] text-[#d8d1c4] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7]"
+														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
 													>
 														<Share2 className="h-4 w-4" />
 													</button>
@@ -1692,7 +1864,7 @@ export function InvoiceDetailsSheet({
 															)
 														}
 														aria-label="Open invoice"
-														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#30352f] bg-[#0f1111] text-[#d8d1c4] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7]"
+														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
 													>
 														<ExternalLink className="h-4 w-4" />
 													</button>
@@ -1704,7 +1876,7 @@ export function InvoiceDetailsSheet({
 															)
 														}
 														aria-label="Copy link"
-														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#30352f] bg-[#0f1111] text-[#d8d1c4] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7]"
+														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
 													>
 														<Copy className="h-4 w-4" />
 													</button>
@@ -1713,7 +1885,7 @@ export function InvoiceDetailsSheet({
 														target="_blank"
 														rel="noreferrer"
 														aria-label="Preview before download"
-														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#30352f] bg-[#0f1111] text-[#d8d1c4] transition-colors hover:bg-[#1a2117] hover:text-[#f2efe7]"
+														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
 													>
 														<ArrowDownToLine className="h-4 w-4" />
 													</a>
@@ -1728,7 +1900,7 @@ export function InvoiceDetailsSheet({
 												type="button"
 												variant="ghost"
 												onClick={() => setShowPayment(true)}
-												className="h-9 rounded-md border border-[#30352f] bg-[#0f1111] px-4 text-sm text-[#d8d1c4] hover:bg-[#1a2117] hover:text-[#f2efe7]"
+												className="h-9 rounded-md border border-rule bg-paper px-4 text-sm text-ink-2 hover:bg-paper-2 hover:text-ink"
 											>
 												Add payment details
 											</Button>
@@ -1742,9 +1914,9 @@ export function InvoiceDetailsSheet({
 															setPaymentReference(event.target.value)
 														}
 														placeholder="Transfer ref, Paystack ref, or receipt no."
-														className="h-10 rounded-md border-[#30352f] bg-[#0f1111] text-[#f2efe7]"
+														className="h-10 rounded-md border-rule bg-paper text-ink"
 													/>
-													<p className="mt-2 text-xs text-[#9c968a]">
+													<p className="mt-2 text-xs text-ink-2">
 														Select Paid in status after entering reference.
 													</p>
 												</div>
@@ -1761,7 +1933,7 @@ export function InvoiceDetailsSheet({
 												type="button"
 												variant="ghost"
 												onClick={() => setShowNotes(true)}
-												className="h-9 rounded-md border border-[#30352f] bg-[#0f1111] px-4 text-sm text-[#d8d1c4] hover:bg-[#1a2117] hover:text-[#f2efe7]"
+												className="h-9 rounded-md border border-rule bg-paper px-4 text-sm text-ink-2 hover:bg-paper-2 hover:text-ink"
 											>
 												Add notes & payment instructions
 											</Button>
@@ -1777,28 +1949,31 @@ export function InvoiceDetailsSheet({
 																paymentDetails: event.target.value,
 															}))
 														}
-														className="min-h-32 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 py-2 text-sm text-[#f2efe7] outline-none placeholder:text-[#817d72]"
+														className="min-h-32 w-full rounded-md border border-rule bg-paper px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-3"
 														placeholder={
 															"Bank Name: Zenith Bank\nAccount Name: Velure Studio\nAccount Number: 0123456789"
 														}
 													/>
 													{draft.currency.trim().toUpperCase() !== "NGN" ? (
-														<p className="mt-2 text-xs text-[#efc58f]">
+														<p className="mt-2 text-xs text-warn">
 															{NIGERIA_FOREIGN_CURRENCY_WARNING}
 														</p>
 													) : null}
 												</div>
 												<div>
 													<FieldLabel>Internal note</FieldLabel>
-													<textarea
-														value={draft.notes ?? ""}
-														onChange={(event) =>
+													<NotesEditor
+														key={draft.id}
+														initialContent={toEditorDoc(draft.notes)}
+														onChange={(content) =>
 															patchDraft((prev) => ({
 																...prev,
-																notes: event.target.value,
+																notes:
+																	(content as EditorDoc | undefined) ??
+																	undefined,
 															}))
 														}
-														className="min-h-32 w-full rounded-md border border-[#30352f] bg-[#0f1111] px-3 py-2 text-sm text-[#f2efe7] outline-none placeholder:text-[#817d72]"
+														className="min-h-32 w-full rounded-md border border-rule bg-paper px-3 py-2 outline-none"
 														placeholder="Private context for the team"
 													/>
 												</div>
@@ -1813,25 +1988,23 @@ export function InvoiceDetailsSheet({
 												return (
 													<div
 														key={item.id}
-														className="rounded-md border border-[#30352f] bg-[#0f1111] px-3 py-3"
+														className="rounded-md border border-rule bg-paper px-3 py-3"
 													>
 														<div className="flex items-start justify-between gap-3">
 															<div className="flex items-start gap-3">
-																<div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-md border border-[#3a4330] bg-[#1a2117] text-[#b7ca7c]">
+																<div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-md border border-ok-line bg-brand-soft text-ok">
 																	<Icon className="h-4 w-4" />
 																</div>
 																<div>
-																	<p className="text-sm font-medium text-[#f2efe7]">
+																	<p className="text-sm font-medium text-ink">
 																		{item.label}
 																	</p>
-																	<p className="mt-1 text-xs text-[#9c968a]">
+																	<p className="mt-1 text-xs text-ink-2">
 																		{item.description}
 																	</p>
 																</div>
 															</div>
-															<p className="text-xs text-[#817d72]">
-																{item.meta}
-															</p>
+															<p className="text-xs text-ink-3">{item.meta}</p>
 														</div>
 													</div>
 												);
@@ -1841,9 +2014,9 @@ export function InvoiceDetailsSheet({
 								</div>
 							</div>
 
-							<div className="shrink-0 border-t border-[#30352f] bg-[#15171a] px-6 py-4">
+							<div className="shrink-0 border-t border-rule bg-paper-2 px-6 py-4">
 								<div className="flex items-center justify-between gap-4">
-									<div className="text-sm text-[#9c968a]">
+									<div className="text-sm text-ink-2">
 										{saving ? "Saving changes..." : ""}
 									</div>
 									<div className="flex items-center gap-3">
@@ -1851,7 +2024,7 @@ export function InvoiceDetailsSheet({
 											type="button"
 											variant="ghost"
 											onClick={onResetDraft}
-											className="h-10 rounded-md border border-[#30352f] bg-[#0f1111] px-4 text-sm text-[#d8d1c4] hover:bg-[#1a2117] hover:text-[#f2efe7]"
+											className="h-10 rounded-md border border-rule bg-paper px-4 text-sm text-ink-2 hover:bg-paper-2 hover:text-ink"
 										>
 											Reset
 										</Button>
@@ -1859,7 +2032,7 @@ export function InvoiceDetailsSheet({
 											type="button"
 											onClick={onSaveDraft}
 											disabled={saving}
-											className="h-10 rounded-md bg-[#c8ff62] px-4 text-sm font-medium text-[#0f1111] hover:bg-[#d5ff7a]"
+											className="h-10 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi"
 										>
 											{saving ? (
 												<>
@@ -1880,12 +2053,12 @@ export function InvoiceDetailsSheet({
 				</SheetContent>
 			</Sheet>
 			{savePillState !== "idle" ? (
-				<div className="pointer-events-none fixed bottom-6 left-1/2 z-[110] -translate-x-1/2">
+				<div className="pointer-events-none fixed bottom-6 left-1/2 z-110 -translate-x-1/2">
 					<div
 						className={`inline-flex items-center rounded-md border px-3 py-1.5 text-[12px] font-medium shadow-[0_14px_30px_rgba(0,0,0,0.35)] ${
 							savePillState === "saved"
-								? "border-[#425033] bg-[#1e2418] text-[#d8e3b4]"
-								: "border-[#6b3f3f] bg-[#2c1b1b] text-[#efb1b1]"
+								? "border-ok-line bg-ok-soft text-ok"
+								: "border-danger-line bg-danger-soft text-danger"
 						}`}
 					>
 						{savePillState === "saved" ? "Saved" : "Could not save"}
