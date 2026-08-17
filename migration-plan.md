@@ -601,6 +601,15 @@ joins on it), so it is cosmetic, not a flip blocker. Recommended:
 - Option B: backfill a mapping table `old_convex_id → new_uuid` during a
   future import run and rewrite `resource_id` where it resolves.
 
+**RESOLVED 2026-08-17 (Option B, no re-import needed):** because the
+importer's `stableUuid(table, convexId)` is a pure SHA-256 function,
+`scripts/bridge-proof/backfill-audit-resource-ids.mjs` re-derives the
+mapping offline. Dry-run first, then `--apply`: 111/228 audit rows now
+carry the migrated uuid (104 invoices, 4 recurring schedules, 2 exports,
+1 workspace); the remaining 117 reference resources deleted before the
+snapshot (only 42 invoices exist) and are left as-is — they are still
+non-joinable audit notes, documented.
+
 ### 4. What actually needs doing before the flip
 
 1. **Nothing in the data layer** — no `UPDATE` rewrites of owner/user ids.
