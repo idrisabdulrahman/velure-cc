@@ -195,66 +195,67 @@ export function DashboardLayout() {
 			sessionUserId,
 			defaultInvoiceArgs,
 		],
-		queryFn: async () => {
+		queryFn: () => {
 			if (!supabaseClient || !sessionUserId)
 				throw new Error("Supabase session unavailable.");
-			const summary = await listInvoiceSummary(
+			return listInvoiceSummary(
 				supabaseClient,
 				sessionUserId,
 				defaultInvoiceArgs,
 			);
-			return summary.currencySummaries.reduce(
+		},
+		// Same cache entry the invoices page reads; derive the count so the
+		// stored shape never changes.
+		select: (summary) =>
+			summary.currencySummaries.reduce(
 				(total, item) => total + item.totalCount,
 				0,
-			);
-		},
+			),
 		enabled: canCount,
 		staleTime: 60_000,
 	});
 
 	const { data: clientCount } = useQuery({
 		queryKey: ["supabase-clients", sessionUserId ?? "none", ""],
-		queryFn: async () => {
+		queryFn: () => {
 			if (!supabaseClient || !sessionUserId)
 				throw new Error("Supabase session unavailable.");
-			const rows = await listClients(supabaseClient, sessionUserId, {
+			return listClients(supabaseClient, sessionUserId, {
 				q: "",
 				status: "all",
 			});
-			return rows.length;
 		},
+		select: (rows) => rows.length,
 		enabled: canCount,
 		staleTime: 60_000,
 	});
 
 	const { data: productCount } = useQuery({
 		queryKey: ["products", sessionUserId, "", "all", "all"],
-		queryFn: async () => {
+		queryFn: () => {
 			if (!supabaseClient || !sessionUserId)
 				throw new Error("Supabase session unavailable.");
-			const rows = await listProducts(supabaseClient, sessionUserId, {
+			return listProducts(supabaseClient, sessionUserId, {
 				q: "",
 				type: "all",
 				status: "all",
 			});
-			return rows.length;
 		},
+		select: (rows) => rows.length,
 		enabled: canCount,
 		staleTime: 60_000,
 	});
 
 	const { data: reminderCount } = useQuery({
 		queryKey: ["supabase-collection-overview", sessionUserId ?? "none", 3],
-		queryFn: async () => {
+		queryFn: () => {
 			if (!supabaseClient || !sessionUserId)
 				throw new Error("Supabase session unavailable.");
-			const overview = await getCollectionOverview(
-				supabaseClient,
-				sessionUserId,
-				{ daysBeforeDue: 3 },
-			);
-			return overview.stats.actionableCount;
+			return getCollectionOverview(supabaseClient, sessionUserId, {
+				daysBeforeDue: 3,
+			});
 		},
+		select: (overview) => overview.stats.actionableCount,
 		enabled: canCount,
 		staleTime: 60_000,
 	});
