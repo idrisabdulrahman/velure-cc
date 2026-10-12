@@ -1,10 +1,10 @@
-import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMutation } from "convex/react";
-import { Settings, Trash2, Upload } from "lucide-react";
-import type React from "react";
+import { Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { FormField } from "#/components/redesign/form-field";
+import { Panel } from "#/components/redesign/panel";
+import { StatusPill } from "#/components/redesign/status-pill";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -22,14 +22,12 @@ import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
 import { NIGERIA_TAX_RULE_SET_VERSION } from "#/features/compliance/nigeria";
 import { authClient } from "#/lib/auth-client";
-import { api } from "../../convex/_generated/api";
+import { useSupabaseSession } from "#/lib/supabase-session";
+import {
+	getWorkspaceSettings,
+	upsertWorkspaceSettings,
+} from "#/server/data/compliance";
 export const Route = createFileRoute("/settings/")({
-	beforeLoad: ({ context }) => {
-		// Fire-and-forget: warm the cache without blocking the transition.
-		void context.queryClient
-			.prefetchQuery(convexQuery(api.compliance.getWorkspaceSettings, {}))
-			.catch(() => undefined);
-	},
 	component: SettingsPage,
 });
 
@@ -69,6 +67,13 @@ const initialForm: BusinessForm = {
 	nextInvoiceSequence: "1",
 };
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+	NGN: "₦",
+	USD: "$",
+	GBP: "£",
+	EUR: "€",
+};
+
 function formatDate(value: unknown) {
 	if (!value) return "Not available";
 
@@ -93,18 +98,22 @@ function formatPhone(value: string) {
 	return allowed.replace(/\s{2,}/g, " ").trimStart();
 }
 
-function invoicePreviewPrefix(form: BusinessForm) {
-	const source =
-		form.invoiceNumberMode === "business_name"
-			? form.name
-			: form.invoiceNumberPrefix;
-	return (
-		source
-			.trim()
-			.toUpperCase()
-			.replace(/[^A-Z0-9]/g, "")
-			.slice(0, 12) || "INV"
-	);
+function currencySymbol(code: string) {
+	return CURRENCY_SYMBOLS[code.trim().toUpperCase()] ?? "₦";
+}
+
+function invoicePreviewNumber(form: BusinessForm) {
+	const n = String(Number.parseInt(form.nextInvoiceSequence, 10) || 1);
+	if (form.invoiceNumberMode === "business_name") {
+		const stripped =
+			form.name
+				.trim()
+				.toUpperCase()
+				.replace(/[^A-Z0-9]/g, "") || "INV";
+		return `${stripped}-2026-${n.padStart(4, "0")}`;
+	}
+	const prefix = form.invoiceNumberPrefix.trim().toUpperCase() || "INV";
+	return `${prefix}-2026-${n.padStart(6, "0")}`;
 }
 
 function validate(form: BusinessForm): FormErrors {
@@ -143,17 +152,27 @@ function validate(form: BusinessForm): FormErrors {
 function SettingsPage() {
 	const navigate = useNavigate();
 	const { data: session } = authClient.useSession();
-	const { data: workspace } = useQuery(
-		convexQuery(api.compliance.getWorkspaceSettings, {}),
-	);
-	const saveWorkspace = useMutation(api.compliance.upsertWorkspaceSettings);
-	const deleteAccount = useMutation(api.account.deleteCurrentAccount);
+	const { client, velureUserId } = useSupabaseSession(session?.user.id);
+	const {
+		data: workspace,
+		isPending: settingsPending,
+		isError: settingsError,
+		refetch: refetchSettings,
+	} = useQuery({
+		queryKey: ["supabase-workspace-settings", velureUserId],
+		queryFn: () => getWorkspaceSettings(client!, velureUserId!),
+		enabled: Boolean(client && velureUserId),
+	});
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
 
 	const [form, setForm] = useState<BusinessForm>(initialForm);
 	const [savedForm, setSavedForm] = useState<BusinessForm>(initialForm);
 	const [errors, setErrors] = useState<FormErrors>({});
 	const [logoPreview, setLogoPreview] = useState<string | null>(() => {
+		if (typeof window === "undefined") return null;
+		return window.localStorage.getItem("velure-business-logo");
+	});
+	const [savedLogo, setSavedLogo] = useState<string | null>(() => {
 		if (typeof window === "undefined") return null;
 		return window.localStorage.getItem("velure-business-logo");
 	});
@@ -215,6 +234,7 @@ function SettingsPage() {
 
 	const resetForm = () => {
 		setForm(savedForm);
+		setLogoPreview(savedLogo);
 		setErrors({});
 	};
 
@@ -226,7 +246,9 @@ function SettingsPage() {
 
 		setSaving(true);
 		try {
-			await saveWorkspace({
+			if (!client || !velureUserId)
+				throw new Error("Supabase session unavailable.");
+			await upsertWorkspaceSettings(client, velureUserId, {
 				name: form.name.trim(),
 				legalName: form.legalName.trim() || form.name.trim(),
 				email: form.email.trim(),
@@ -271,6 +293,7 @@ function SettingsPage() {
 				nextInvoiceSequence: Number(form.nextInvoiceSequence) || 1,
 			});
 			setSavedForm(form);
+			setSavedLogo(logoPreview);
 			toast({ title: "Profile updated", variant: "success" });
 		} catch (error) {
 			toast({
@@ -294,7 +317,12 @@ function SettingsPage() {
 
 		setDeletingAccount(true);
 		try {
-			await deleteAccount({});
+			const response = await fetch("/api/auth/delete-user", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ callbackURL: "/" }),
+			});
+			if (!response.ok) throw new Error("Account deletion is not enabled.");
 			if (typeof window !== "undefined") {
 				window.localStorage.removeItem("velure-business-logo");
 			}
@@ -311,261 +339,356 @@ function SettingsPage() {
 		}
 	};
 
+	const dirty =
+		JSON.stringify(form) !== JSON.stringify(savedForm) ||
+		logoPreview !== savedLogo;
+	const requiredInvalid =
+		!form.name.trim() || !form.email.trim() || !form.address.trim();
+	const loaded = Boolean(workspace);
+	const nameError =
+		errors.name ??
+		(loaded && !form.name.trim() ? "Business name is required." : undefined);
+	const emailError =
+		errors.email ??
+		(loaded && !form.email.trim() ? "Business email is required." : undefined);
+	const addressError =
+		errors.address ??
+		(loaded && !form.address.trim()
+			? "Business address is required."
+			: undefined);
+
+	const previewNumber = invoicePreviewNumber(form);
+	const previewSymbol = currencySymbol(form.defaultCurrency);
+	const previewInitial = (form.name.trim().charAt(0) || "?").toUpperCase();
+	const previewTerms = form.defaultPaymentTermsDays.trim() || "14";
+	const isPrefixMode = form.invoiceNumberMode === "prefix";
+
 	return (
-		<div className="mx-auto w-full max-w-7xl space-y-8">
-			<div className="flex items-start gap-3">
-				<div className="mt-1 flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper-2 text-brand">
-					<Settings className="h-5 w-5" />
-				</div>
-				<div>
-					<h1 className="text-3xl font-bold tracking-[-0.02em] text-ink">
-						Settings
-					</h1>
-					<p className="mt-2 text-sm text-white/55">
-						Manage your business profile and preferences
-					</p>
-				</div>
+		<div className="mx-auto w-full max-w-7xl space-y-6 pb-24">
+			<div>
+				<h1 className="text-3xl font-bold tracking-[-0.02em] text-ink">
+					General
+				</h1>
+				<p className="mt-2 text-sm text-ink-3">
+					Manage your business profile, invoice defaults and payment details.
+					The preview on the right shows how it lands on an invoice.
+				</p>
 			</div>
 
-			<section className="rounded-md border border-rule bg-paper/95">
-				<div className="border-b border-rule px-5 py-4">
-					<h2 className="text-sm font-medium text-ink">Business profile</h2>
-				</div>
+			{settingsPending ? (
+				<Panel title="Loading settings">
+					<p className="text-sm text-ink-3">Fetching your workspace…</p>
+				</Panel>
+			) : null}
+			{!settingsPending && settingsError ? (
+				<Panel
+					title="Could not load settings"
+					sub="Check your connection and try again."
+				>
+					<Button
+						type="button"
+						variant="outline"
+						onClick={() => {
+							void refetchSettings();
+						}}
+						className="h-9 rounded-md border-rule bg-transparent px-3 text-sm text-ink-2 hover:bg-paper-3"
+					>
+						Retry
+					</Button>
+				</Panel>
+			) : null}
 
-				<div className="grid gap-8 px-5 py-6 lg:grid-cols-[200px_1fr] xl:gap-12 xl:px-8">
-					<div className="flex flex-col items-center">
-						<button
-							type="button"
-							onClick={() => fileInputRef.current?.click()}
-							className="flex h-36 w-36 items-center justify-center overflow-hidden rounded-full border border-dashed border-rule bg-paper text-center text-sm text-ink-3 transition-[border-color,background-color] hover:border-brand hover:bg-brand-soft focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus)]"
-						>
-							{logoPreview ? (
-								<img
-									src={logoPreview}
-									alt="Business logo"
-									className="h-full w-full object-cover"
-								/>
-							) : (
-								<span className="px-5">Logo placeholder</span>
-							)}
-						</button>
-						<input
-							ref={fileInputRef}
-							type="file"
-							accept="image/png,image/jpeg,image/webp"
-							className="hidden"
-							onChange={(event) => onLogoChange(event.target.files?.[0])}
-						/>
-						<Button
-							type="button"
-							variant="outline"
-							onClick={() => fileInputRef.current?.click()}
-							className="mt-4 h-10 rounded-md border-rule bg-transparent text-sm text-ink-2 hover:bg-paper-3"
-						>
-							<Upload className="mr-2 h-4 w-4" />
-							Upload Logo
-						</Button>
-						<p className="mt-2 text-center text-xs text-ink-3">
-							Max 2MB, square crop.
-						</p>
-						{errors.logo ? (
-							<p className="mt-2 text-center text-xs text-danger">
-								{errors.logo}
-							</p>
-						) : null}
-					</div>
-
-					<div className="grid gap-x-5 gap-y-5 md:grid-cols-2">
-						<Field label="Workspace Name*" error={errors.name}>
-							<Input
-								value={form.name}
-								onChange={(event) => updateField("name", event.target.value)}
-								className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
-							/>
-						</Field>
-						<Field label="Registered Business Name" error={errors.legalName}>
-							<Input
-								value={form.legalName}
-								onChange={(event) =>
-									updateField("legalName", event.target.value)
-								}
-								placeholder="Shown on invoices when different"
-								className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
-							/>
-						</Field>
-						<Field label="Business Email*" error={errors.email}>
-							<Input
-								type="email"
-								value={form.email}
-								onChange={(event) => updateField("email", event.target.value)}
-								className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
-							/>
-						</Field>
-						<Field label="Business Phone" error={errors.phone}>
-							<Input
-								type="tel"
-								value={form.phone}
-								onChange={(event) =>
-									updateField("phone", formatPhone(event.target.value))
-								}
-								className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
-							/>
-						</Field>
-						<Field label="TIN" error={errors.taxId}>
-							<Input
-								value={form.taxId}
-								onChange={(event) =>
-									updateField(
-										"taxId",
-										event.target.value.replace(/\D/g, "").slice(0, 10),
-									)
-								}
-								placeholder="10-digit TIN"
-								aria-invalid={Boolean(errors.taxId)}
-								className={`rounded-md bg-paper text-ink focus-visible:border-brand ${
-									errors.taxId ? "border-danger" : "border-rule"
-								}`}
-							/>
-						</Field>
-						<Field label="CAC RC Number" error={errors.rcNumber}>
-							<Input
-								value={form.rcNumber}
-								onChange={(event) =>
-									updateField(
-										"rcNumber",
-										event.target.value
-											.toUpperCase()
-											.replace(/\s+/g, "")
-											.slice(0, 10),
-									)
-								}
-								placeholder="RC-1234567"
-								aria-invalid={Boolean(errors.rcNumber)}
-								className={`rounded-md bg-paper text-ink focus-visible:border-brand ${
-									errors.rcNumber ? "border-danger" : "border-rule"
-								}`}
-							/>
-						</Field>
-						<Field label="Default Currency" error={errors.defaultCurrency}>
-							<Input
-								value={form.defaultCurrency}
-								onChange={(event) =>
-									updateField(
-										"defaultCurrency",
-										event.target.value.toUpperCase().slice(0, 3),
-									)
-								}
-								aria-invalid={Boolean(errors.defaultCurrency)}
-								className={`rounded-md bg-paper text-ink focus-visible:border-brand ${
-									errors.defaultCurrency ? "border-danger" : "border-rule"
-								}`}
-							/>
-						</Field>
-						<Field label="Payment Terms" error={errors.defaultPaymentTermsDays}>
-							<Input
-								type="number"
-								min={1}
-								value={form.defaultPaymentTermsDays}
-								onChange={(event) =>
-									updateField("defaultPaymentTermsDays", event.target.value)
-								}
-								className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
-							/>
-						</Field>
-						<Field label="Invoice Naming" className="md:col-span-2">
-							<div className="grid gap-2 sm:grid-cols-2">
+			<div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
+				<div className="grid min-w-0 gap-5">
+					<Panel
+						title="Business profile"
+						sub="Shown on every invoice you send."
+					>
+						<div className="grid gap-5">
+							<div className="flex flex-wrap items-center gap-4">
 								<button
 									type="button"
-									onClick={() => updateField("invoiceNumberMode", "prefix")}
-									className={`rounded-md border px-3 py-3 text-left text-sm transition-colors ${
-										form.invoiceNumberMode === "prefix"
-											? "border-brand bg-brand-soft text-ink"
-											: "border-rule bg-paper text-ink-3 hover:bg-paper-2"
-									}`}
+									onClick={() => fileInputRef.current?.click()}
+									aria-label="Upload business logo"
+									className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-md border border-dashed border-rule bg-paper-2 text-center text-lg font-semibold text-ink-2 transition-[border-color,background-color] hover:border-brand hover:bg-brand-soft focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus)]"
 								>
-									<span className="block font-medium">Use invoice prefix</span>
-									<span className="mt-1 block text-xs text-ink-3">
-										Keep generated numbers like INV-2026-000001.
-									</span>
-								</button>
-								<button
-									type="button"
-									onClick={() =>
-										updateField("invoiceNumberMode", "business_name")
-									}
-									className={`rounded-md border px-3 py-3 text-left text-sm transition-colors ${
-										form.invoiceNumberMode === "business_name"
-											? "border-brand bg-brand-soft text-ink"
-											: "border-rule bg-paper text-ink-3 hover:bg-paper-2"
-									}`}
-								>
-									<span className="block font-medium">Use business name</span>
-									<span className="mt-1 block text-xs text-ink-3">
-										Build generated numbers from the business name.
-									</span>
-								</button>
-							</div>
-						</Field>
-						<Field label="Invoice Prefix" error={errors.invoiceNumberPrefix}>
-							<Input
-								value={form.invoiceNumberPrefix}
-								disabled={form.invoiceNumberMode === "business_name"}
-								onChange={(event) =>
-									updateField(
-										"invoiceNumberPrefix",
-										event.target.value
-											.toUpperCase()
-											.replace(/[^A-Z0-9]/g, "")
-											.slice(0, 12),
-									)
-								}
-								className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
-							/>
-						</Field>
-						<Field
-							label="Next Invoice Number"
-							error={errors.nextInvoiceSequence}
-						>
-							<Input
-								type="number"
-								min={1}
-								value={form.nextInvoiceSequence}
-								onChange={(event) =>
-									updateField("nextInvoiceSequence", event.target.value)
-								}
-								className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
-							/>
-						</Field>
-						<div className="md:col-span-2">
-							<div className="rounded-md border border-brand bg-brand-soft px-4 py-3">
-								<p className="text-xs font-medium uppercase tracking-[0.14em] text-brand">
-									Next invoice number preview
-								</p>
-								<p className="mt-2 font-mono text-lg font-semibold text-ink">
-									{invoicePreviewPrefix(form)}-{new Date().getFullYear()}-
-									{String(Number(form.nextInvoiceSequence) || 1).padStart(
-										4,
-										"0",
+									{logoPreview ? (
+										<img
+											src={logoPreview}
+											alt="Business logo"
+											className="h-full w-full object-cover"
+										/>
+									) : (
+										<span aria-hidden="true">{previewInitial}</span>
 									)}
+								</button>
+								<div>
+									<Button
+										type="button"
+										variant="outline"
+										onClick={() => fileInputRef.current?.click()}
+										className="h-9 rounded-md border-rule bg-transparent text-sm text-ink-2 hover:bg-paper-3"
+									>
+										<Upload className="mr-2 h-4 w-4" />
+										Upload logo
+									</Button>
+									<p className="mt-2 text-xs text-ink-3">
+										Max 2MB, square crop.
+									</p>
+								</div>
+								<input
+									ref={fileInputRef}
+									type="file"
+									accept="image/png,image/jpeg,image/webp"
+									className="hidden"
+									aria-label="Business logo file"
+									onChange={(event) => onLogoChange(event.target.files?.[0])}
+								/>
+							</div>
+							{errors.logo ? (
+								<p role="alert" className="text-xs text-danger">
+									{errors.logo}
 								</p>
+							) : null}
+							<div className="grid gap-5 sm:grid-cols-2">
+								<FormField label="Workspace name *" error={nameError}>
+									<Input
+										value={form.name}
+										onChange={(event) =>
+											updateField("name", event.target.value)
+										}
+										className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
+									/>
+								</FormField>
+								<FormField label="Registered business name">
+									<Input
+										value={form.legalName}
+										onChange={(event) =>
+											updateField("legalName", event.target.value)
+										}
+										placeholder="Shown on invoices when different"
+										className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
+									/>
+								</FormField>
+								<FormField label="Business email *" error={emailError}>
+									<Input
+										type="email"
+										value={form.email}
+										onChange={(event) =>
+											updateField("email", event.target.value)
+										}
+										className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
+									/>
+								</FormField>
+								<FormField label="Business phone" error={errors.phone}>
+									<Input
+										type="tel"
+										value={form.phone}
+										onChange={(event) =>
+											updateField("phone", formatPhone(event.target.value))
+										}
+										className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
+									/>
+								</FormField>
+								<FormField label="TIN" error={errors.taxId}>
+									<Input
+										value={form.taxId}
+										onChange={(event) =>
+											updateField(
+												"taxId",
+												event.target.value.replace(/\D/g, "").slice(0, 10),
+											)
+										}
+										placeholder="10-digit TIN"
+										aria-invalid={Boolean(errors.taxId)}
+										className={`rounded-md bg-paper text-ink focus-visible:border-brand ${
+											errors.taxId ? "border-danger" : "border-rule"
+										}`}
+									/>
+								</FormField>
+								<FormField
+									label="CAC RC number"
+									error={errors.rcNumber}
+									hint={
+										errors.rcNumber || form.rcNumber.trim()
+											? undefined
+											: "Not set. Add it so it prints on invoices."
+									}
+								>
+									<Input
+										value={form.rcNumber}
+										onChange={(event) =>
+											updateField(
+												"rcNumber",
+												event.target.value
+													.toUpperCase()
+													.replace(/\s+/g, "")
+													.slice(0, 10),
+											)
+										}
+										placeholder="RC-1234567"
+										aria-invalid={Boolean(errors.rcNumber)}
+										className={`rounded-md bg-paper text-ink focus-visible:border-brand ${
+											errors.rcNumber ? "border-danger" : "border-rule"
+										}`}
+									/>
+								</FormField>
 							</div>
 						</div>
-						<Field
-							label="Business Address*"
-							error={errors.address}
-							className="md:col-span-2"
-						>
+					</Panel>
+
+					<Panel
+						title="Invoicing"
+						sub="Currency, terms and how invoice numbers are built."
+					>
+						<div className="grid gap-5">
+							<div className="grid gap-5 sm:grid-cols-2">
+								<FormField
+									label="Default currency"
+									error={errors.defaultCurrency}
+								>
+									<Input
+										value={form.defaultCurrency}
+										onChange={(event) =>
+											updateField(
+												"defaultCurrency",
+												event.target.value.toUpperCase().slice(0, 3),
+											)
+										}
+										aria-invalid={Boolean(errors.defaultCurrency)}
+										className={`rounded-md bg-paper text-ink focus-visible:border-brand ${
+											errors.defaultCurrency ? "border-danger" : "border-rule"
+										}`}
+									/>
+								</FormField>
+								<FormField
+									label="Payment terms"
+									error={errors.defaultPaymentTermsDays}
+								>
+									<Input
+										type="number"
+										min={1}
+										value={form.defaultPaymentTermsDays}
+										onChange={(event) =>
+											updateField("defaultPaymentTermsDays", event.target.value)
+										}
+										className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
+									/>
+								</FormField>
+							</div>
+							<div>
+								<span
+									id="invoice-naming-label"
+									className="mb-2 block text-xs font-medium text-ink-2"
+								>
+									Invoice naming
+								</span>
+								<div
+									role="radiogroup"
+									aria-labelledby="invoice-naming-label"
+									className="grid gap-2 sm:grid-cols-2"
+								>
+									<button
+										type="button"
+										role="radio"
+										aria-checked={isPrefixMode}
+										onClick={() => updateField("invoiceNumberMode", "prefix")}
+										className={`rounded-md border px-3 py-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus)] ${
+											isPrefixMode
+												? "border-brand bg-brand-soft text-ink"
+												: "border-rule bg-paper text-ink-3 hover:bg-paper-2"
+										}`}
+									>
+										<span className="block font-medium">
+											Use invoice prefix
+										</span>
+										<span className="mt-1 block text-xs text-ink-3">
+											Keep generated numbers like INV-2026-000001.
+										</span>
+									</button>
+									<button
+										type="button"
+										role="radio"
+										aria-checked={!isPrefixMode}
+										onClick={() =>
+											updateField("invoiceNumberMode", "business_name")
+										}
+										className={`rounded-md border px-3 py-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus)] ${
+											!isPrefixMode
+												? "border-brand bg-brand-soft text-ink"
+												: "border-rule bg-paper text-ink-3 hover:bg-paper-2"
+										}`}
+									>
+										<span className="block font-medium">Use business name</span>
+										<span className="mt-1 block text-xs text-ink-3">
+											Build generated numbers from the business name.
+										</span>
+									</button>
+								</div>
+							</div>
+							<div className="grid gap-5 sm:grid-cols-2">
+								<FormField
+									label="Invoice prefix"
+									error={errors.invoiceNumberPrefix}
+									hint="Only used with Use invoice prefix."
+								>
+									<Input
+										value={form.invoiceNumberPrefix}
+										disabled={!isPrefixMode}
+										onChange={(event) =>
+											updateField(
+												"invoiceNumberPrefix",
+												event.target.value
+													.toUpperCase()
+													.replace(/[^A-Z0-9]/g, "")
+													.slice(0, 12),
+											)
+										}
+										className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand disabled:opacity-50"
+									/>
+								</FormField>
+								<FormField
+									label="Next invoice number"
+									error={errors.nextInvoiceSequence}
+								>
+									<Input
+										type="number"
+										min={1}
+										value={form.nextInvoiceSequence}
+										onChange={(event) =>
+											updateField("nextInvoiceSequence", event.target.value)
+										}
+										className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
+									/>
+								</FormField>
+							</div>
+							<div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-rule bg-paper-2 px-4 py-3">
+								<div>
+									<p className="text-xs text-ink-3">Next invoice number</p>
+									<p className="mt-1 font-num text-sm font-medium tabular-nums text-ink">
+										{previewNumber}
+									</p>
+								</div>
+								<StatusPill tone="ok">Live preview</StatusPill>
+							</div>
+						</div>
+					</Panel>
+
+					<Panel title="Address" sub="Printed in the invoice header.">
+						<FormField label="Business address *" error={addressError}>
 							<Textarea
 								value={form.address}
 								onChange={(event) => updateField("address", event.target.value)}
 								className="min-h-28 rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
 							/>
-						</Field>
-						<Field
-							label="Payment Details"
-							error={errors.paymentDetails}
-							className="md:col-span-2"
-						>
+						</FormField>
+					</Panel>
+
+					<Panel
+						title="Payment details"
+						sub="Where customers send money. Printed on every invoice."
+					>
+						<FormField label="Payment details" error={errors.paymentDetails}>
 							<Textarea
 								value={form.paymentDetails}
 								onChange={(event) =>
@@ -576,44 +699,97 @@ function SettingsPage() {
 								}
 								className="min-h-28 rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
 							/>
-						</Field>
-					</div>
+						</FormField>
+					</Panel>
 				</div>
 
-				<div className="flex flex-wrap justify-end gap-3 border-t border-rule px-5 py-4">
-					<Button
-						type="button"
-						variant="outline"
-						onClick={resetForm}
-						className="h-10 rounded-md border-rule bg-transparent px-4 text-sm text-ink-2 hover:bg-paper-3"
-					>
-						Cancel
-					</Button>
-					<Button
-						type="button"
-						disabled={saving}
-						onClick={() => {
-							void saveChanges();
-						}}
-						className="h-10 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi"
-					>
-						{saving ? "Saving..." : "Save Changes"}
-					</Button>
+				<div className="min-w-0 lg:sticky lg:top-6">
+					<Panel title="Invoice preview" sub="Updates as you type">
+						<div className="rounded-md border border-rule bg-paper-2 p-4">
+							<div className="flex items-start justify-between gap-3">
+								<div className="flex min-w-0 items-center gap-2.5">
+									{logoPreview ? (
+										<img
+											src={logoPreview}
+											alt=""
+											aria-hidden="true"
+											className="h-9 w-9 flex-none rounded-md object-cover"
+										/>
+									) : (
+										<span
+											aria-hidden="true"
+											className="grid h-9 w-9 flex-none place-items-center rounded-md bg-brand font-semibold text-brand-ink"
+										>
+											{previewInitial}
+										</span>
+									)}
+									<div className="min-w-0">
+										<p className="truncate text-[13px] font-semibold text-ink">
+											{form.name.trim() || "Workspace name"}
+										</p>
+										<p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-ink-3">
+											{form.address.trim() || "Business address"}
+										</p>
+									</div>
+								</div>
+								<div className="flex-none text-right">
+									<p className="font-num text-[10px] font-semibold tracking-wide text-ink-3">
+										INVOICE
+									</p>
+									<p className="mt-1 font-num text-xs font-medium tabular-nums text-ink">
+										{previewNumber}
+									</p>
+								</div>
+							</div>
+							<div className="my-3.5 border-t border-rule" />
+							<div className="flex items-center justify-between text-[11px] text-ink-3">
+								<span>Bill to</span>
+								<span>Due in {previewTerms} days</span>
+							</div>
+							<p className="mt-1 text-[11px] text-ink-2">Client name</p>
+							<div className="my-3.5 border-t border-rule" />
+							<div className="grid gap-1.5 text-[11px]">
+								<div className="flex items-center justify-between gap-3">
+									<span className="min-w-0 truncate text-ink-2">
+										Solar panel 730W × 4
+									</span>
+									<span className="flex-none font-num tabular-nums text-ink">
+										{previewSymbol}620,000
+									</span>
+								</div>
+								<div className="flex items-center justify-between gap-3">
+									<span className="min-w-0 truncate text-ink-2">
+										Inverter 12KVA × 1
+									</span>
+									<span className="flex-none font-num tabular-nums text-ink">
+										{previewSymbol}1,500,000
+									</span>
+								</div>
+							</div>
+							<div className="mt-2 flex items-center justify-between text-xs font-semibold">
+								<span className="text-ink">Total</span>
+								<span className="font-num tabular-nums text-ink">
+									{previewSymbol}2,120,000
+								</span>
+							</div>
+							<div className="mt-3.5 rounded-md bg-paper-3 p-2.5 text-[11px] leading-relaxed">
+								<p className="font-semibold text-ink">Pay to</p>
+								<p className="mt-0.5 whitespace-pre-line text-ink-2">
+									{form.paymentDetails.trim() || "Bank name · Account number"}
+								</p>
+							</div>
+						</div>
+					</Panel>
 				</div>
-			</section>
+			</div>
 
-			<section className="ui-panel rounded-md border border-rule bg-paper-2">
-				<div className="border-b border-rule px-5 py-4">
-					<h2 className="text-sm font-medium text-ink">Account info</h2>
-				</div>
-				<div className="grid gap-3 px-5 py-5 md:grid-cols-2">
+			<Panel title="Account info">
+				<div className="grid gap-3 sm:grid-cols-2">
 					<ReadOnlyItem label="Member Since" value={memberSince} />
-					<div className="rounded-md border border-rule bg-paper px-4 py-3">
+					<div className="rounded-md border border-rule bg-paper-2 px-4 py-3">
 						<p className="text-xs text-ink-3">Plan</p>
 						<div className="mt-2 flex items-center justify-between gap-3">
-							<span className="rounded-sm border border-brand bg-brand-soft px-2 py-1 text-xs font-medium text-brand">
-								Free Plan
-							</span>
+							<StatusPill tone="ok">Free Plan</StatusPill>
 							<Button
 								asChild
 								type="button"
@@ -625,21 +801,18 @@ function SettingsPage() {
 						</div>
 					</div>
 				</div>
-			</section>
+			</Panel>
 
-			<section className="rounded-md border border-rule bg-paper-2">
-				<div className="border-b border-rule px-5 py-4">
-					<h2 className="text-sm font-medium text-ink">Backup and tax notes</h2>
-				</div>
-				<div className="grid gap-3 px-5 py-5 md:grid-cols-2">
-					<div className="rounded-md border border-rule bg-paper px-4 py-3">
+			<Panel title="Backup and tax notes">
+				<div className="grid gap-3 sm:grid-cols-2">
+					<div className="rounded-md border border-rule bg-paper-2 px-4 py-3">
 						<p className="text-sm font-medium text-ink">Your data is yours.</p>
 						<p className="mt-1 text-sm text-ink-3">
 							Export invoices as PDF or CSV anytime. Use Compliance exports for
 							invoice CSV, tax summary CSV, and customer ledger CSV.
 						</p>
 					</div>
-					<div className="rounded-md border border-rule bg-paper px-4 py-3">
+					<div className="rounded-md border border-rule bg-paper-2 px-4 py-3">
 						<p className="text-sm font-medium text-ink">Tax disclaimer</p>
 						<p className="mt-1 text-sm text-ink-3">
 							Velure helps structure invoice data for Nigerian finance
@@ -648,16 +821,19 @@ function SettingsPage() {
 						</p>
 					</div>
 				</div>
-			</section>
+			</Panel>
 
-			<section className="rounded-md border border-danger-line bg-paper-2">
-				<div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5">
-					<div>
-						<h2 className="text-sm font-medium text-danger">Danger Zone</h2>
-						<p className="mt-1 text-sm text-ink-3">
-							Permanently remove this account.
-						</p>
-					</div>
+			<Panel
+				title="Danger Zone"
+				sub="Permanently remove this account."
+				className="border-danger-line"
+			>
+				<div className="flex flex-wrap items-center justify-between gap-4">
+					<p className="text-sm text-ink-3">
+						This cannot be undone. Your workspace, invoices, clients, exports,
+						reminders, sessions, and sign-in records will be permanently
+						deleted.
+					</p>
 					<AlertDialog>
 						<AlertDialogTrigger asChild>
 							<Button
@@ -708,36 +884,45 @@ function SettingsPage() {
 						</AlertDialogContent>
 					</AlertDialog>
 				</div>
-			</section>
-		</div>
-	);
-}
+			</Panel>
 
-function Field({
-	label,
-	error,
-	className,
-	children,
-}: {
-	label: string;
-	error?: string;
-	className?: string;
-	children: React.ReactNode;
-}) {
-	return (
-		<div className={className}>
-			<span className="mb-2 block text-xs font-medium text-ink-3">{label}</span>
-			{children}
-			{error ? (
-				<span className="mt-2 block text-xs text-danger">{error}</span>
-			) : null}
+			<div
+				className={`pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-5 transition-transform duration-200 ${
+					dirty ? "translate-y-0" : "translate-y-[120%]"
+				}`}
+			>
+				<div className="pointer-events-auto flex items-center gap-4 rounded-lg border border-rule bg-paper-2 py-2.5 pr-2.5 pl-4 shadow-lg">
+					<span className="flex items-center gap-2.5 text-[13px] text-ink">
+						<span aria-hidden="true" className="h-2 w-2 rounded-full bg-warn" />
+						Unsaved changes
+					</span>
+					<Button
+						type="button"
+						variant="outline"
+						onClick={resetForm}
+						className="h-9 rounded-md border-rule bg-transparent px-3 text-sm text-ink-2 hover:bg-paper-3"
+					>
+						Discard
+					</Button>
+					<Button
+						type="button"
+						disabled={saving || requiredInvalid}
+						onClick={() => {
+							void saveChanges();
+						}}
+						className="h-9 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi disabled:opacity-50"
+					>
+						{saving ? "Saving..." : "Save changes"}
+					</Button>
+				</div>
+			</div>
 		</div>
 	);
 }
 
 function ReadOnlyItem({ label, value }: { label: string; value: string }) {
 	return (
-		<div className="rounded-md border border-rule bg-paper px-4 py-3">
+		<div className="rounded-md border border-rule bg-paper-2 px-4 py-3">
 			<p className="text-xs text-ink-3">{label}</p>
 			<p className="mt-2 truncate text-sm text-ink-3">{value}</p>
 		</div>
