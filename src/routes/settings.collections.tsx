@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
 	CheckCircle2,
+	CircleAlert,
 	History,
 	Inbox,
 	Loader2,
@@ -93,6 +94,33 @@ function validateReminderPolicy(policy: {
 	return errors;
 }
 
+// Delivery-infrastructure failures (missing email provider keys, SMTP/Resend
+// misconfiguration) must never reach the UI verbatim. Map them to user-safe
+// copy and keep the raw reason in the console for operators.
+function toUserFacingQueueMessage(result: {
+	sent: number;
+	skipped: number;
+	reason?: string;
+}): { message: string; delivered: boolean } {
+	const delivered = result.sent > 0;
+	const reason = result.reason;
+	if (
+		reason &&
+		/resend|api[_\s-]?key|smtp|provider|not configured/i.test(reason)
+	) {
+		console.error("[reminders] email delivery misconfigured:", reason);
+		return {
+			delivered,
+			message:
+				"Email delivery isn't connected yet. Add an email provider to send reminders.",
+		};
+	}
+	return {
+		delivered,
+		message: reason ?? `${result.sent} sent, ${result.skipped} skipped.`,
+	};
+}
+
 function PaymentRemindersSettingsPage() {
 	const authState = useUnifiedAuth();
 	const userId = authState.data?.user?.id;
@@ -172,7 +200,10 @@ function PaymentRemindersSettingsPage() {
 	};
 	const [note, setNote] = useState("");
 	const [scheduleOpen, setScheduleOpen] = useState(false);
-	const [lastRunResult, setLastRunResult] = useState<string | null>(null);
+	const [lastRunResult, setLastRunResult] = useState<{
+		message: string;
+		ok: boolean;
+	} | null>(null);
 	const [errors, setErrors] = useState<ReminderPolicyErrors>({});
 	const [busyAction, setBusyAction] = useState<
 		"save" | "find" | "send" | "single" | "pause" | "resume" | "manual" | null
@@ -405,7 +436,7 @@ function PaymentRemindersSettingsPage() {
 								try {
 									const result = await runReminderBatch({});
 									const message = `${result.scannedCount} invoices scanned, ${result.queuedCount} reminders queued, ${result.escalatedCount} internal reviews queued for ${result.date}.`;
-									setLastRunResult(message);
+									setLastRunResult({ message, ok: true });
 									toast({
 										title:
 											result.queuedCount > 0
@@ -431,17 +462,15 @@ function PaymentRemindersSettingsPage() {
 								setBusyAction("send");
 								try {
 									const result = await sendQueuedEmails({});
-									const message =
-										result.reason ??
-										`${result.sent} sent, ${result.skipped} skipped.`;
-									setLastRunResult(message);
+									const { message, delivered } =
+										toUserFacingQueueMessage(result);
+									setLastRunResult({ message, ok: delivered });
 									toast({
-										title:
-											result.sent > 0
-												? "Customer reminder emails sent"
-												: "No reminder emails sent",
+										title: delivered
+											? "Customer reminder emails sent"
+											: "No reminder emails sent",
 										description: message,
-										variant: "success",
+										variant: delivered ? "success" : "error",
 									});
 								} finally {
 									setBusyAction(null);
@@ -456,9 +485,19 @@ function PaymentRemindersSettingsPage() {
 			</Panel>
 
 			{lastRunResult ? (
-				<div className="flex items-start gap-3 rounded-md border border-ok-line bg-ok-soft px-4 py-3 text-sm text-ok">
-					<CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-					<span>{lastRunResult}</span>
+				<div
+					className={`flex items-start gap-3 rounded-md border px-4 py-3 text-sm ${
+						lastRunResult.ok
+							? "border-ok-line bg-ok-soft text-ok"
+							: "border-danger-line bg-danger-soft text-danger"
+					}`}
+				>
+					{lastRunResult.ok ? (
+						<CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+					) : (
+						<CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+					)}
+					<span>{lastRunResult.message}</span>
 				</div>
 			) : null}
 
@@ -638,7 +677,10 @@ function PaymentRemindersSettingsPage() {
 										escalateAfterCount: policy.escalateAfterCount,
 										businessSignature: policy.businessSignature,
 									});
-									setLastRunResult("Reminder schedule saved.");
+									setLastRunResult({
+										message: "Reminder schedule saved.",
+										ok: true,
+									});
 									toast({
 										title: "Reminder schedule saved",
 										variant: "success",
@@ -652,9 +694,19 @@ function PaymentRemindersSettingsPage() {
 						</Button>
 					</div>
 					{lastRunResult ? (
-						<div className="mt-4 flex items-start gap-3 rounded-md border border-ok-line bg-ok-soft px-4 py-3 text-sm text-ok">
-							<CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-							<span>{lastRunResult}</span>
+						<div
+							className={`mt-4 flex items-start gap-3 rounded-md border px-4 py-3 text-sm ${
+								lastRunResult.ok
+									? "border-ok-line bg-ok-soft text-ok"
+									: "border-danger-line bg-danger-soft text-danger"
+							}`}
+						>
+							{lastRunResult.ok ? (
+								<CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+							) : (
+								<CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+							)}
+							<span>{lastRunResult.message}</span>
 						</div>
 					) : null}
 					<p className="mt-3 text-xs text-ink-3">
@@ -838,9 +890,10 @@ function PaymentRemindersSettingsPage() {
 												if (result.skipped) {
 													const reason =
 														result.reason ?? "Reminder was skipped.";
-													setLastRunResult(
-														`${selectedInvoice.invoiceNumber}: ${reason}`,
-													);
+													setLastRunResult({
+														message: `${selectedInvoice.invoiceNumber}: ${reason}`,
+														ok: false,
+													});
 													toast({
 														title: "Reminder not queued",
 														description: reason,
@@ -848,9 +901,10 @@ function PaymentRemindersSettingsPage() {
 													});
 													return;
 												}
-												setLastRunResult(
-													`${selectedInvoice.invoiceNumber} was queued for ${selectedInvoiceBuyerEmail}.`,
-												);
+												setLastRunResult({
+													message: `${selectedInvoice.invoiceNumber} was queued for ${selectedInvoiceBuyerEmail}.`,
+													ok: true,
+												});
 												toast({
 													title: "Reminder queued for customer",
 													description: `${selectedInvoice.invoiceNumber} will send to ${selectedInvoiceBuyerEmail}.`,
@@ -881,9 +935,10 @@ function PaymentRemindersSettingsPage() {
 													await resumeReminders({
 														invoiceId: selectedInvoice.id,
 													});
-													setLastRunResult(
-														`Automatic reminders resumed for ${selectedInvoice.invoiceNumber}.`,
-													);
+													setLastRunResult({
+														message: `Automatic reminders resumed for ${selectedInvoice.invoiceNumber}.`,
+														ok: true,
+													});
 													toast({
 														title: "Reminders resumed",
 														variant: "success",
@@ -899,9 +954,10 @@ function PaymentRemindersSettingsPage() {
 													invoiceId: selectedInvoice.id,
 													note: note || undefined,
 												});
-												setLastRunResult(
-													`Automatic reminders paused for ${selectedInvoice.invoiceNumber}.`,
-												);
+												setLastRunResult({
+													message: `Automatic reminders paused for ${selectedInvoice.invoiceNumber}.`,
+													ok: true,
+												});
 												toast({
 													title: "Reminders paused",
 													variant: "success",
@@ -949,9 +1005,10 @@ function PaymentRemindersSettingsPage() {
 												invoiceId: selectedInvoice.id,
 												note: note.trim(),
 											});
-											setLastRunResult(
-												`${selectedInvoice.invoiceNumber} was marked for manual follow-up.`,
-											);
+											setLastRunResult({
+												message: `${selectedInvoice.invoiceNumber} was marked for manual follow-up.`,
+												ok: true,
+											});
 											toast({
 												title: "Marked for manual review",
 												variant: "success",

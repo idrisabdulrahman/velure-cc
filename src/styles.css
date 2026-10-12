@@ -5,11 +5,10 @@
 @import "@fontsource/ibm-plex-sans-condensed/500.css";
 @import "@fontsource/ibm-plex-sans-condensed/600.css";
 @import "@fontsource/ibm-plex-sans-condensed/700.css";
-@import "@fontsource/plus-jakarta-sans/400.css";
-@import "@fontsource/plus-jakarta-sans/500.css";
-@import "@fontsource/plus-jakarta-sans/700.css";
-@import "@fontsource/plus-jakarta-sans/800.css";
-@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -24,16 +23,11 @@ body {
   height: 100%; */
   font-family:
     var(--hm-font-body),
-    "IBM Plex Sans Condensed",
-    "Nimbus Sans Narrow",
-    "Arial Narrow",
-    "Liberation Sans Narrow",
-    "Helvetica Neue",
     ui-sans-serif,
     system-ui,
     -apple-system,
+    "Helvetica Neue",
     sans-serif;
-  font-feature-settings: "cv05" 1;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
@@ -100,6 +94,45 @@ code {
   --vl-accent-soft: var(--hm-accent-soft);
   --vl-text: var(--hm-ink);
   --vl-muted: var(--hm-ink-3);
+  /* Ledger grid line. Derived from the rule token rather than hardcoded, so it
+   * tracks the theme — the previous value was an olive `rgba(46,59,35,.055)`
+   * left over from an older palette, with a white fallback in `.vl-ledger-bg`
+   * that was invisible on cream paper. */
+  --vl-grid-line: color-mix(in oklab, var(--hm-rule) 62%, transparent);
+  /* ── Bklit chart bridge ───────────────────────────────────────────────────
+   * The vendored chart family (src/components/charts) reads these semantic
+   * names. Every one resolves to an --hm-* token so charts follow the theme
+   * toggle with no `dark:` variants and no hex — see design.md § Charts.
+   * The registry ships a grayscale ramp here; it is deliberately overridden.
+   * Declared once: the --hm-* values re-point per theme, so these follow. */
+  --legend: var(--hm-paper);
+  --legend-foreground: var(--hm-ink);
+  --legend-muted: var(--hm-paper-2);
+  --legend-muted-foreground: var(--hm-ink-3);
+  --legend-track: var(--hm-rule);
+  --chart-background: var(--hm-paper);
+  --chart-foreground: var(--hm-ink-2);
+  --chart-foreground-muted: var(--hm-ink-3);
+  --chart-line-primary: var(--hm-accent);
+  --chart-line-secondary: var(--hm-info);
+  --chart-crosshair: var(--hm-accent);
+  --chart-grid: var(--hm-rule);
+  --chart-brush-border: var(--hm-rule);
+  /* Tooltip is an overlay — glass allowed (design.md § Glassmorphism). */
+  --chart-tooltip-background: color-mix(in oklab, var(--hm-paper) 92%, transparent);
+  --chart-tooltip-foreground: var(--hm-ink);
+  --chart-tooltip-muted: var(--hm-ink-3);
+  --chart-marker-background: var(--hm-paper);
+  --chart-marker-border: var(--hm-rule);
+  --chart-marker-foreground: var(--hm-ink);
+  --chart-label: var(--hm-ink-3);
+  /* Sequential ramp (heatmap/gauge fills) — accent-tinted, light→dark. */
+  --chart-scale-01: var(--hm-paper-2);
+  --chart-scale-02: var(--hm-accent-soft);
+  --chart-scale-03: var(--hm-accent-line);
+  --chart-scale-04: var(--hm-accent);
+  --chart-scale-05: var(--hm-accent-hi);
+  --chart-scale-pattern-color: var(--hm-paper-2);
 }
 
 .dark {
@@ -139,6 +172,9 @@ code {
   --sidebar-accent-foreground: var(--hm-accent);
   --sidebar-border: var(--hm-rule);
   --sidebar-ring: var(--hm-focus);
+  /* No chart/legend overrides here on purpose: the bridge above is declared
+   * entirely in --hm-* terms, and those re-point in `.dark .hm-app`. Adding a
+   * second dark ramp would be the `dark:`-variant problem in CSS form. */
 }
 
 .light {
@@ -186,6 +222,11 @@ code {
   --vl-accent-soft: var(--hm-accent-soft);
   --vl-text: var(--hm-ink);
   --vl-muted: var(--hm-ink-3);
+  /* Ledger grid line. Derived from the rule token rather than hardcoded, so it
+   * tracks the theme — the previous value was an olive `rgba(46,59,35,.055)`
+   * left over from an older palette, with a white fallback in `.vl-ledger-bg`
+   * that was invisible on cream paper. */
+  --vl-grid-line: color-mix(in oklab, var(--hm-rule) 62%, transparent);
 }
 
 @theme inline {
@@ -213,10 +254,15 @@ code {
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius-sm: var(--radius);
-  --radius-md: var(--radius);
-  --radius-lg: var(--radius);
-  --radius-xl: var(--radius);
+  /* The generated bridge flattened all four steps onto `--radius`, so
+   * `rounded-sm` and `rounded-xl` rendered identically and the scale carried no
+   * information. Mapped onto the editorial token set instead: `md` keeps its
+   * current 8 px so none of the ~270 existing `rounded-md` sites move, and
+   * panels opt into the 12 px card radius with `rounded-lg`. */
+  --radius-sm: var(--hm-r-input);
+  --radius-md: var(--hm-r-btn);
+  --radius-lg: var(--hm-r-card);
+  --radius-xl: var(--hm-r-card);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -262,6 +308,32 @@ code {
   --font-display: var(--hm-font-display);
   --font-label: var(--hm-font-label);
   --font-num: var(--hm-font-num);
+  --color-chart-scale-pattern-color: var(--chart-scale-pattern-color);
+  --color-chart-scale-05: var(--chart-scale-05);
+  --color-chart-scale-04: var(--chart-scale-04);
+  --color-chart-scale-03: var(--chart-scale-03);
+  --color-chart-scale-02: var(--chart-scale-02);
+  --color-chart-scale-01: var(--chart-scale-01);
+  --color-chart-label: var(--chart-label);
+  --color-chart-marker-foreground: var(--chart-marker-foreground);
+  --color-chart-marker-border: var(--chart-marker-border);
+  --color-chart-marker-background: var(--chart-marker-background);
+  --color-chart-tooltip-muted: var(--chart-tooltip-muted);
+  --color-chart-tooltip-foreground: var(--chart-tooltip-foreground);
+  --color-chart-tooltip-background: var(--chart-tooltip-background);
+  --color-chart-brush-border: var(--chart-brush-border);
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-crosshair: var(--chart-crosshair);
+  --color-chart-line-secondary: var(--chart-line-secondary);
+  --color-chart-line-primary: var(--chart-line-primary);
+  --color-chart-foreground-muted: var(--chart-foreground-muted);
+  --color-chart-foreground: var(--chart-foreground);
+  --color-chart-background: var(--chart-background);
+  --color-legend-track: var(--legend-track);
+  --color-legend-muted-foreground: var(--legend-muted-foreground);
+  --color-legend-muted: var(--legend-muted);
+  --color-legend-foreground: var(--legend-foreground);
+  --color-legend: var(--legend);
 }
 
 @layer base {
@@ -295,14 +367,44 @@ code {
   body {
     @apply bg-background text-foreground;
   }
+}
 
-  button:focus-visible,
-  input:focus-visible,
-  textarea:focus-visible,
-  select:focus-visible,
-  [role="button"]:not(tr):focus-visible {
-    box-shadow: 0 0 0 2px var(--hm-focus);
-  }
+/* Focus indicator — deliberately UNLAYERED, and deliberately `outline`.
+ *
+ * design.md § Microinteractions: "2px solid var(--hm-focus)` with
+ * `outline-offset: 2px`. Never `box-shadow`-only, never removed." Getting there
+ * needs both halves of this rule's placement:
+ *
+ *  - `outline`, not `box-shadow`: as a box-shadow it was outranked by any
+ *    Tailwind shadow/ring utility, so controls carrying one showed a
+ *    transparent ring instead of a focus state.
+ *  - unlayered, not `@layer base`: 37 files use shadcn's stock
+ *    `focus-visible:outline-none`, a utility-layer rule that beats any layered
+ *    base rule. Unlayered CSS outranks every @layer, so this is the one
+ *    placement that survives both. Measured on /auth before the move: 4 of 6
+ *    tabbable controls resolved to `outline-style: none`.
+ *
+ * Scope is controls only. Portalled menu items (`[role="menuitem"]`) are
+ * deliberately absent — their focus state is the `bg-accent` row highlight, and
+ * a 2px outline on every dropdown row would read as a mistake. */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+a[href]:focus-visible,
+[role="button"]:not(tr):focus-visible {
+  outline: 2px solid var(--hm-focus);
+  outline-offset: 2px;
+}
+
+/* Text controls already signal focus with a border-color change, so their
+ * ring sits flush (offset 0): an offset ring plus a changed border reads as
+ * an uneven double ring, and offset rings get clipped by overflow-hidden
+ * ancestors (palette, sheets). Buttons/links keep the 2px offset. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline-offset: 0;
 }
 
 @layer utilities {
@@ -312,34 +414,14 @@ code {
 
   .ui-panel {
     animation: panel-enter 220ms cubic-bezier(0.22, 1, 0.36, 1);
-    box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
   }
 
   .vl-ledger-bg {
     background-color: var(--vl-bg);
     background-image:
-      linear-gradient(var(--vl-grid-line, rgba(255, 255, 255, 0.035)) 1px, transparent 1px),
-      linear-gradient(90deg, var(--vl-grid-line, rgba(255, 255, 255, 0.035)) 1px, transparent 1px);
-    background-size: 48px 48px;
-  }
-
-  .vl-panel {
-    border: 1px solid var(--vl-border);
-    background: var(--vl-surface);
-    color: var(--vl-text);
-    box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
-  }
-
-  .vl-kicker {
-    display: inline-flex;
-    border: 1px solid var(--hm-accent-line);
-    background: var(--vl-accent-soft);
-    padding: 0.45rem 0.7rem;
-    color: var(--vl-accent);
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
+      linear-gradient(var(--vl-grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--vl-grid-line) 1px, transparent 1px);
+    background-size: 64px 64px;
   }
 
   .ui-stagger-1 {
@@ -378,12 +460,16 @@ code {
     filter: drop-shadow(0 0 5px var(--hm-accent));
     transform-origin: center;
   }
-}
 
-.light {
-  --vl-grid-line: rgba(46, 59, 35, 0.055);
+  /* `font-num` is the Tailwind face-swap utility (bridged from --hm-font-num).
+   * The numeral character variant used to ride on `body`, but body is Inter
+   * now and "cv05" means a different alternate there — so it belongs with the
+   * face that needs it, not with the document. */
+  .font-num {
+    font-feature-settings: "cv05" 1;
+    font-variant-numeric: tabular-nums;
+  }
 }
-
 
 .dark .dotted-bg {
   background-image: radial-gradient(circle at 1px 1px, #232323 0.5px, transparent 0);
@@ -477,6 +563,176 @@ code {
   to {
     opacity: 1;
   }
+}
+
+/* ── Overlay enter/exit (Factory motion) ───────────────────────────────────
+ * Sheet/Dialog/AlertDialog panels and scrims animate with keyframes on
+ * BOTH data-states, not transitions. A transition cannot run on mount: the
+ * panel arrives already at its open position, so open always snapped. With
+ * `both` fill the end frame holds until Radix unmounts (exit) or hands over
+ * to the resting state (enter). Open 200 ms / close 160 ms panels, 150/120
+ * ms scrims, all on cubic-bezier(0.4, 0, 0.2, 1). Dialog keyframes carry the
+ * -50%/-50% centering inside the transform — animating `transform` without
+ * it would jump the dialog. Reduced motion is covered by the global
+ * kill-switch below; nothing extra needed here. */
+@keyframes ui-overlay-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ui-overlay-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes ui-sheet-right-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes ui-sheet-right-out {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes ui-sheet-left-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes ui-sheet-left-out {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes ui-sheet-top-in {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes ui-sheet-top-out {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes ui-sheet-bottom-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes ui-sheet-bottom-out {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes ui-dialog-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 8px));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@keyframes ui-dialog-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 8px));
+  }
+}
+
+.ui-overlay-fade[data-state="open"] {
+  animation: ui-overlay-fade-in 150ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.ui-overlay-fade[data-state="closed"] {
+  animation: ui-overlay-fade-out 120ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.ui-sheet-in-right[data-state="open"] {
+  animation: ui-sheet-right-in 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.ui-sheet-in-right[data-state="closed"] {
+  animation: ui-sheet-right-out 160ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.ui-sheet-in-left[data-state="open"] {
+  animation: ui-sheet-left-in 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.ui-sheet-in-left[data-state="closed"] {
+  animation: ui-sheet-left-out 160ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.ui-sheet-in-top[data-state="open"] {
+  animation: ui-sheet-top-in 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.ui-sheet-in-top[data-state="closed"] {
+  animation: ui-sheet-top-out 160ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.ui-sheet-in-bottom[data-state="open"] {
+  animation: ui-sheet-bottom-in 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.ui-sheet-in-bottom[data-state="closed"] {
+  animation: ui-sheet-bottom-out 160ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.ui-dialog-pop[data-state="open"] {
+  animation: ui-dialog-in 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.ui-dialog-pop[data-state="closed"] {
+  animation: ui-dialog-out 160ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 @keyframes client-favorite-pop {
@@ -631,12 +887,18 @@ body {
   --hm-info-soft: oklch(94% 0.03 215);
   --hm-info-line: oklch(80% 0.06 215);
 
-  --hm-font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  --hm-font-body: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  --hm-font-label: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  /* One neutral grotesque across display/title/body/label — design.md
+   * Typography. Plus Jakarta Sans and Space Grotesk are retired; the editorial
+   * voice comes from weight and rule-work now. The numeral face is the one
+   * family that stays, and it is load-bearing: every money column, chart axis,
+   * and stat value depends on condensed tabular figures. */
+  --hm-font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --hm-font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --hm-font-label: "Inter", ui-sans-serif, system-ui, sans-serif;
   --hm-font-num: "IBM Plex Sans Condensed", ui-sans-serif, system-ui, sans-serif;
 
-  --hm-r-card: 8px;
+  --hm-r-card: 12px;
+  --hm-r-btn: 8px;
   --hm-r-input: 6px;
   --hm-r-pill: 999px;
 
@@ -969,7 +1231,36 @@ body {
 .hm-app .rounded,
 .hm-app .rounded-sm,
 .hm-app .rounded-md {
-  border-radius: var(--hm-r-input) !important;
+	border-radius: var(--hm-r-input) !important;
+}
+
+/* Midday-style invoice paper: values are edited on the document itself. */
+.invoice-paper-controls input:not([type="checkbox"]):not([type="file"]),
+.invoice-paper-controls textarea,
+.invoice-paper-controls [role="combobox"] {
+	border-color: transparent !important;
+	border-radius: 0 !important;
+	background-color: transparent !important;
+	box-shadow: none !important;
+}
+
+.invoice-paper-controls input:not([type="checkbox"]):not([type="file"]):hover,
+.invoice-paper-controls textarea:hover,
+.invoice-paper-controls [role="combobox"]:hover {
+	border-color: var(--hm-rule) !important;
+	background-color: color-mix(in oklab, var(--hm-paper-2) 38%, transparent) !important;
+}
+
+.invoice-paper-controls input:not([type="checkbox"]):not([type="file"]):focus-visible,
+.invoice-paper-controls textarea:focus-visible,
+.invoice-paper-controls [role="combobox"]:focus-visible {
+	border-color: var(--hm-focus) !important;
+	box-shadow: 0 0 0 2px var(--hm-focus) !important;
+}
+
+.invoice-paper-controls [class*="border-rule"]:has(input),
+.invoice-paper-controls [class*="border-rule"]:has(textarea) {
+	border-color: transparent;
 }
 
 .hm [class*="rounded-full"],
