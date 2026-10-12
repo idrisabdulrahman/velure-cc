@@ -1,4 +1,3 @@
-import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import {
 	createFileRoute,
@@ -6,21 +5,23 @@ import {
 	useMatches,
 	useNavigate,
 } from "@tanstack/react-router";
-import { useMutation } from "convex/react";
 import { motion } from "framer-motion";
 import {
 	Archive,
-	BarChart3,
 	Copy,
 	Eye,
+	Package,
 	Pencil,
 	Plus,
-	Repeat2,
 	Search,
-	TrendingDown,
-	Users,
 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
+import { Callout } from "#/components/redesign/callout";
+import { EmptyState } from "#/components/redesign/empty-state";
+import { Kpi, KpiStrip } from "#/components/redesign/kpi-strip";
+import { Panel } from "#/components/redesign/panel";
+import { StatusPill } from "#/components/redesign/status-pill";
+import { Tabs } from "#/components/redesign/tabs";
 import { Button } from "#/components/ui/button";
 import { PanelLoader } from "#/components/ui/panel-loader";
 import {
@@ -38,41 +39,20 @@ import {
 } from "#/components/ui/tooltip";
 import { toast } from "#/components/ui/use-toast";
 import { formatCompactMoney, formatMoney } from "#/features/invoices/format";
-import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
+import { useUnifiedAuth } from "#/lib/auth-hook";
+import { useSupabaseSession } from "#/lib/supabase-session";
+import {
+	archiveProduct,
+	duplicateProduct,
+	getProductAnalytics,
+	listProducts,
+	type ProductRecord,
+} from "#/server/data/products";
 export const Route = createFileRoute("/invoices/products")({
-	beforeLoad: ({ context }) => {
-		// Fire-and-forget: warm the cache without blocking the transition.
-		void Promise.all([
-			context.queryClient.prefetchQuery(
-				convexQuery(api.products.list, {
-					q: "",
-					type: "all",
-					status: "all",
-				}),
-			),
-			context.queryClient.prefetchQuery(
-				convexQuery(api.products.getAnalytics, {}),
-			),
-		]).catch(() => undefined);
-	},
 	component: ProductsPage,
 });
 
-type ProductRow = {
-	id: Id<"products">;
-	workspaceId: Id<"workspaces">;
-	type: "product" | "service";
-	name: string;
-	description?: string;
-	sku?: string;
-	unitName?: string;
-	defaultUnitPrice: number;
-	defaultTaxId?: string;
-	isActive: boolean;
-	createdAt: number;
-	updatedAt: number;
-};
+type ProductRow = ProductRecord;
 
 type AnalyticsRow = {
 	productId: string;
@@ -116,6 +96,48 @@ type ProductSummary = {
 
 type Tab = "catalog" | "analytics";
 
+const COPY_SUFFIX_PATTERN = /(\s*\(copy\))+$/i;
+
+function duplicateBaseName(name: string): string {
+	return name.replace(COPY_SUFFIX_PATTERN, "").toLowerCase().trim();
+}
+
+type DuplicateGroup = {
+	key: string;
+	price: number;
+	members: ProductRow[];
+};
+
+function findDuplicateGroups(products: ProductRow[]): DuplicateGroup[] {
+	const byKey = new Map<string, ProductRow[]>();
+	for (const product of products) {
+		if (!product.isActive) continue;
+		const base = duplicateBaseName(product.name);
+		if (base.length === 0) continue;
+		const key = `${base}||${product.defaultUnitPrice}`;
+		const members = byKey.get(key);
+		if (members) {
+			members.push(product);
+		} else {
+			byKey.set(key, [product]);
+		}
+	}
+	return [...byKey.values()]
+		.filter((members) => members.length > 1)
+		.map((members) => ({
+			key: `${duplicateBaseName(members[0].name)}||${members[0].defaultUnitPrice}`,
+			price: members[0].defaultUnitPrice,
+			members,
+		}));
+}
+
+function copyForGroup(group: DuplicateGroup): ProductRow {
+	return (
+		group.members.find((member) => COPY_SUFFIX_PATTERN.test(member.name)) ??
+		group.members[1]
+	);
+}
+
 function ProductsPage() {
 	const matches = useMatches();
 	const hasNestedProductRoute = matches.some((match) =>
@@ -140,17 +162,42 @@ function ProductCatalogPage() {
 		"all" | "active" | "archived"
 	>("all");
 
-	const { data: productsQuery, isPending: isProductsLoading } = useQuery(
-		convexQuery(api.products.list, {
-			q: search,
-			type: typeFilter,
-			status: statusFilter,
-		}),
-	);
+	const authState = useUnifiedAuth();
+	const userId = authState.data?.user?.id;
+	const { client: supabaseClient } = useSupabaseSession(userId);
+	const {
+		data: productsQuery,
+		isPending: isProductsLoading,
+		isError: isProductsError,
+		error: productsError,
+	} = useQuery({
+		queryKey: ["products", userId, search, typeFilter, statusFilter],
+		queryFn: () => {
+			if (!supabaseClient || !userId)
+				throw new Error("Supabase session unavailable.");
+			return listProducts(supabaseClient, userId, {
+				q: search,
+				type: typeFilter,
+				status: statusFilter,
+			});
+		},
+		enabled: Boolean(supabaseClient && userId),
+	});
 
-	const { data: analyticsQuery, isPending: isAnalyticsLoading } = useQuery(
-		convexQuery(api.products.getAnalytics, {}),
-	);
+	const {
+		data: analyticsQuery,
+		isPending: isAnalyticsLoading,
+		isError: isAnalyticsError,
+		error: analyticsError,
+	} = useQuery({
+		queryKey: ["product-analytics", userId],
+		queryFn: () => {
+			if (!supabaseClient || !userId)
+				throw new Error("Supabase session unavailable.");
+			return getProductAnalytics(supabaseClient, userId);
+		},
+		enabled: Boolean(supabaseClient && userId),
+	});
 
 	const products = (productsQuery ?? []) as ProductRow[];
 	const analytics = (analyticsQuery ?? []) as AnalyticsRow[];
@@ -162,15 +209,10 @@ function ProductCatalogPage() {
 		() => new Map(analytics.map((item) => [item.productId, item])),
 		[analytics],
 	);
-
-	const filteredAnalytics = useMemo(() => {
-		let result = analytics;
-		if (search) {
-			const q = search.toLowerCase();
-			result = result.filter((a) => a.name.toLowerCase().includes(q));
-		}
-		return result;
-	}, [analytics, search]);
+	const activeCount = useMemo(
+		() => products.filter((product) => product.isActive).length,
+		[products],
+	);
 
 	return (
 		<motion.div
@@ -188,83 +230,43 @@ function ProductCatalogPage() {
 						Manage your product catalog and view sales analytics.
 					</p>
 				</div>
-				<div className="flex flex-wrap items-center gap-3">
-					<div className="flex h-10 w-full min-w-[260px] items-center gap-2 rounded-md border border-rule bg-paper-2 px-3 lg:w-[320px]">
-						<Search className="h-4 w-4 text-ink-3" />
-						<input
-							value={search}
-							onChange={(event) => setSearch(event.target.value)}
-							placeholder="Search products..."
-							className="h-full w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
-						/>
-					</div>
-					{activeTab === "catalog" && (
-						<>
-							<Select
-								value={typeFilter}
-								onValueChange={(value) =>
-									setTypeFilter(value as "all" | "product" | "service")
-								}
-							>
-								<SelectTrigger className="h-10 w-[140px] rounded-md border border-rule bg-paper-2 text-sm text-ink-2">
-									<SelectValue placeholder="Type" />
-								</SelectTrigger>
-								<SelectContent className="border-rule bg-paper-2 text-ink">
-									<SelectItem value="all">All Types</SelectItem>
-									<SelectItem value="product">Products</SelectItem>
-									<SelectItem value="service">Services</SelectItem>
-								</SelectContent>
-							</Select>
-							<Select
-								value={statusFilter}
-								onValueChange={(value) =>
-									setStatusFilter(value as "all" | "active" | "archived")
-								}
-							>
-								<SelectTrigger className="h-10 w-[140px] rounded-md border border-rule bg-paper-2 text-sm text-ink-2">
-									<SelectValue placeholder="Status" />
-								</SelectTrigger>
-								<SelectContent className="border-rule bg-paper-2 text-ink">
-									<SelectItem value="all">All Status</SelectItem>
-									<SelectItem value="active">Active</SelectItem>
-									<SelectItem value="archived">Archived</SelectItem>
-								</SelectContent>
-							</Select>
-						</>
-					)}
-				</div>
+				<Button
+					type="button"
+					onClick={() => navigate({ to: "/invoices/products/new" })}
+					className="h-10 shrink-0 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi"
+				>
+					<Plus className="mr-1.5 h-4 w-4" />
+					New Product
+				</Button>
 			</div>
 
-			<div className="flex gap-2 border-b border-rule pb-3">
-				<button
-					type="button"
-					onClick={() => setActiveTab("catalog")}
-					className={
-						activeTab === "catalog"
-							? "hm-ts-stamp is-warn"
-							: "text-ink-2 transition-colors hover:text-ink"
-					}
-				>
-					Catalog
-				</button>
-				<button
-					type="button"
-					onClick={() => setActiveTab("analytics")}
-					className={
-						activeTab === "analytics"
-							? "hm-ts-stamp is-warn"
-							: "text-ink-2 transition-colors hover:text-ink"
-					}
-				>
-					Analytics
-				</button>
-			</div>
+			<Tabs
+				tabs={[
+					{ value: "catalog", label: "Catalog", count: activeCount },
+					{ value: "analytics", label: "Analytics" },
+				]}
+				value={activeTab}
+				onChange={(value) => setActiveTab(value as Tab)}
+			/>
 
 			{activeTab === "catalog" ? (
 				<CatalogTab
 					products={products}
 					analyticsByProduct={analyticsByProduct}
 					isLoading={isProductsLoading}
+					loadError={
+						isProductsError
+							? productsError instanceof Error
+								? productsError.message
+								: "Unknown error"
+							: null
+					}
+					search={search}
+					onSearchChange={setSearch}
+					typeFilter={typeFilter}
+					onTypeChange={setTypeFilter}
+					statusFilter={statusFilter}
+					onStatusChange={setStatusFilter}
 					onCreate={() => navigate({ to: "/invoices/products/new" })}
 					onEdit={(id) =>
 						navigate({
@@ -275,9 +277,16 @@ function ProductCatalogPage() {
 				/>
 			) : (
 				<AnalyticsTab
-					analytics={filteredAnalytics}
+					analytics={analytics}
 					summary={summary}
 					isLoading={isAnalyticsLoading}
+					loadError={
+						isAnalyticsError
+							? analyticsError instanceof Error
+								? analyticsError.message
+								: "Unknown error"
+							: null
+					}
 				/>
 			)}
 		</motion.div>
@@ -288,21 +297,56 @@ function CatalogTab({
 	products,
 	analyticsByProduct,
 	isLoading,
+	loadError,
+	search,
+	onSearchChange,
+	typeFilter,
+	onTypeChange,
+	statusFilter,
+	onStatusChange,
 	onCreate,
 	onEdit,
 }: {
 	products: ProductRow[];
 	analyticsByProduct: Map<string, AnalyticsRow>;
 	isLoading: boolean;
+	loadError: string | null;
+	search: string;
+	onSearchChange: (value: string) => void;
+	typeFilter: "all" | "product" | "service";
+	onTypeChange: (value: "all" | "product" | "service") => void;
+	statusFilter: "all" | "active" | "archived";
+	onStatusChange: (value: "all" | "active" | "archived") => void;
 	onCreate: () => void;
-	onEdit: (id: Id<"products">) => void;
+	onEdit: (id: string) => void;
 }) {
-	const archiveProduct = useMutation(api.products.archive);
-	const duplicateProduct = useMutation(api.products.duplicate);
+	const authState = useUnifiedAuth();
+	const userId = authState.data?.user?.id;
+	const { client: supabaseClient } = useSupabaseSession(userId);
 
-	const handleArchive = async (id: Id<"products">) => {
+	const duplicateGroups = useMemo(
+		() => findDuplicateGroups(products),
+		[products],
+	);
+	const duplicateHintById = useMemo(() => {
+		const hints = new Map<string, string>();
+		for (const group of duplicateGroups) {
+			for (const member of group.members) {
+				const other = group.members.find((item) => item.id !== member.id);
+				if (other) hints.set(member.id, other.name);
+			}
+		}
+		return hints;
+	}, [duplicateGroups]);
+	const singleCopy =
+		duplicateGroups.length === 1 ? copyForGroup(duplicateGroups[0]) : undefined;
+	const filtersActive =
+		search.trim() !== "" || typeFilter !== "all" || statusFilter !== "all";
+
+	const handleArchive = async (id: string) => {
 		try {
-			await archiveProduct({ id });
+			if (!supabaseClient || !userId) throw new Error("Session is not ready.");
+			await archiveProduct(supabaseClient, userId, id);
 			toast({ title: "Product archived", variant: "success" });
 		} catch (error) {
 			toast({
@@ -313,9 +357,10 @@ function CatalogTab({
 		}
 	};
 
-	const handleDuplicate = async (id: Id<"products">) => {
+	const handleDuplicate = async (id: string) => {
 		try {
-			await duplicateProduct({ id });
+			if (!supabaseClient || !userId) throw new Error("Session is not ready.");
+			await duplicateProduct(supabaseClient, userId, id);
 			toast({ title: "Product duplicated", variant: "success" });
 		} catch (error) {
 			toast({
@@ -327,133 +372,262 @@ function CatalogTab({
 	};
 
 	return (
-		<div className="ui-panel overflow-hidden rounded-md border border-rule bg-paper-2">
-			<div className="flex items-center justify-between border-b border-rule px-4 py-3">
-				<p className="text-sm font-medium text-ink">Product catalog</p>
-				<Button
-					type="button"
-					onClick={onCreate}
-					className="h-9 rounded-md bg-brand px-3 text-sm font-medium text-brand-ink hover:bg-brand-hi"
+		<div className="flex flex-col gap-4">
+			{duplicateGroups.length > 0 ? (
+				<Callout
+					tone="warn"
+					title="Possible duplicates"
+					action={
+						singleCopy
+							? {
+									label: "Archive the copy",
+									onClick: () => void handleArchive(singleCopy.id),
+								}
+							: undefined
+					}
 				>
-					<Plus className="mr-1.5 h-4 w-4" />
-					New Product
-				</Button>
-			</div>
-
-			<div className="overflow-x-auto">
-				<table className="w-full min-w-[800px] text-sm">
-					<thead className="bg-paper-3">
-						<tr className="border-b border-rule text-left text-ink-3">
-							<th className="px-4 py-3 font-medium">Name</th>
-							<th className="px-4 py-3 font-medium">Type</th>
-							<th className="px-4 py-3 font-medium">Unit Price</th>
-							<th className="px-4 py-3 font-medium">Usage</th>
-							<th className="px-4 py-3 font-medium">Status</th>
-							<th className="px-4 py-3 text-right font-medium">Actions</th>
-						</tr>
-					</thead>
-					<tbody>
-						{products.map((product) => {
-							const insight = analyticsByProduct.get(product.id);
+					<div className="flex flex-col gap-2">
+						{duplicateGroups.map((group) => {
+							const copy = copyForGroup(group);
+							const original = group.members.find(
+								(member) => member.id !== copy.id,
+							);
 							return (
-								<tr
-									key={product.id}
-									className="border-b border-rule text-ink-2 hover:bg-paper-3"
+								<div
+									key={group.key}
+									className="flex flex-wrap items-center gap-x-3 gap-y-1.5"
 								>
-									<td className="px-4 py-3 font-medium text-ink">
-										{product.name}
-									</td>
-									<td className="px-4 py-3">
-										<span className="hm-ts-stamp is-paper">{product.type}</span>
-									</td>
-									<td className="hm-num-cell px-4 py-3 text-ink-3">
-										{formatMoney(product.defaultUnitPrice, "NGN")}
-									</td>
-									<td className="hm-num-cell px-4 py-3 text-ink-3">
-										{insight && insight.usageCount > 0 ? (
-											<div>
-												<p className="text-ink">{insight.usageCount} uses</p>
-												<p className="mt-0.5 text-xs text-ink-3">
-													{formatCompactMoney(insight.revenue, "NGN")}
-												</p>
-											</div>
-										) : (
-											<span>-</span>
-										)}
-									</td>
-									<td className="px-4 py-3">
-										<span
-											className={
-												product.isActive
-													? "hm-ts-stamp is-ok"
-													: "hm-ts-stamp is-paper"
-											}
-										>
-											{product.isActive ? "Active" : "Archived"}
+									<p>
+										<span className="font-medium text-ink">{copy.name}</span>{" "}
+										looks like a duplicate of{" "}
+										<span className="font-medium text-ink">
+											{original?.name ?? group.members[0].name}
 										</span>
-									</td>
-									<td className="px-4 py-3 text-right">
-										<div className="flex items-center justify-end gap-1">
-											<ProductAction
-												label="View product"
-												tooltip="Open product details"
-												onClick={() => onEdit(product.id)}
-											>
-												<Eye className="h-4 w-4" />
-											</ProductAction>
-											<ProductAction
-												label="Edit product"
-												tooltip="Edit price and catalog information"
-												onClick={() => onEdit(product.id)}
-											>
-												<Pencil className="h-4 w-4" />
-											</ProductAction>
-											<ProductAction
-												label="Duplicate product"
-												tooltip="Duplicate this catalog item"
-												onClick={() => void handleDuplicate(product.id)}
-											>
-												<Copy className="h-4 w-4" />
-											</ProductAction>
-											{product.isActive && (
-												<ProductAction
-													label="Archive product"
-													tooltip="Archive this product"
-													onClick={() => void handleArchive(product.id)}
-													danger
-												>
-													<Archive className="h-4 w-4" />
-												</ProductAction>
-											)}
-										</div>
-									</td>
-								</tr>
+										: same name, same {formatMoney(group.price, "NGN")}.
+									</p>
+									{singleCopy ? null : (
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											onClick={() => void handleArchive(copy.id)}
+										>
+											Archive the copy
+										</Button>
+									)}
+								</div>
 							);
 						})}
-					</tbody>
-				</table>
-			</div>
-
-			{isLoading ? (
-				<PanelLoader label="Loading products" />
-			) : products.length === 0 ? (
-				<div className="flex min-h-[156px] flex-col items-center justify-center gap-3 px-4 py-10 text-center text-sm text-ink-3">
-					<div>
-						<p className="font-medium text-ink">No products yet.</p>
-						<p className="mt-1">
-							Create products and services to speed up invoice creation.
-						</p>
 					</div>
-					<Button
-						type="button"
-						onClick={onCreate}
-						className="h-9 rounded-md bg-brand px-3 text-sm font-medium text-brand-ink hover:bg-brand-hi"
-					>
-						<Plus className="mr-1.5 h-4 w-4" />
-						New Product
-					</Button>
-				</div>
+				</Callout>
 			) : null}
+
+			<Panel title="Product catalog">
+				<div className="flex flex-col gap-3">
+					<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+						<div className="flex h-10 w-full items-center gap-2 rounded-md border border-rule bg-paper-2 px-3">
+							<Search
+								className="h-4 w-4 flex-none text-ink-3"
+								aria-hidden="true"
+							/>
+							<input
+								value={search}
+								onChange={(event) => onSearchChange(event.target.value)}
+								placeholder="Search products"
+								aria-label="Search products"
+								className="h-full w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
+							/>
+						</div>
+						<div className="flex flex-col gap-2 sm:flex-row sm:flex-none sm:items-center">
+							<Select
+								value={typeFilter}
+								onValueChange={(value) =>
+									onTypeChange(value as "all" | "product" | "service")
+								}
+							>
+								<SelectTrigger
+									aria-label="Type"
+									className="h-10 w-full rounded-md border border-rule bg-paper-2 text-sm text-ink-2 sm:w-35"
+								>
+									<SelectValue placeholder="Type" />
+								</SelectTrigger>
+								<SelectContent className="border-rule bg-paper-2 text-ink">
+									<SelectItem value="all">All Types</SelectItem>
+									<SelectItem value="product">Products</SelectItem>
+									<SelectItem value="service">Services</SelectItem>
+								</SelectContent>
+							</Select>
+							<Select
+								value={statusFilter}
+								onValueChange={(value) =>
+									onStatusChange(value as "all" | "active" | "archived")
+								}
+							>
+								<SelectTrigger
+									aria-label="Status"
+									className="h-10 w-full rounded-md border border-rule bg-paper-2 text-sm text-ink-2 sm:w-35"
+								>
+									<SelectValue placeholder="Status" />
+								</SelectTrigger>
+								<SelectContent className="border-rule bg-paper-2 text-ink">
+									<SelectItem value="all">All Status</SelectItem>
+									<SelectItem value="active">Active</SelectItem>
+									<SelectItem value="archived">Archived</SelectItem>
+								</SelectContent>
+							</Select>
+						</div>
+					</div>
+
+					{isLoading ? (
+						<PanelLoader label="Loading products" />
+					) : loadError ? (
+						<EmptyState title="Couldn't load products" copy={loadError} />
+					) : products.length === 0 ? (
+						filtersActive ? (
+							<EmptyState
+								icon={<Search aria-hidden="true" />}
+								title="No products match"
+								copy="Adjust the search or filters."
+							/>
+						) : (
+							<EmptyState
+								icon={<Package aria-hidden="true" />}
+								title="No products yet."
+								copy="Create products and services to speed up invoice creation."
+								action={
+									<Button
+										type="button"
+										onClick={onCreate}
+										className="h-9 rounded-md bg-brand px-3 text-sm font-medium text-brand-ink hover:bg-brand-hi"
+									>
+										<Plus className="mr-1.5 h-4 w-4" />
+										New Product
+									</Button>
+								}
+							/>
+						)
+					) : (
+						<>
+							<div className="overflow-x-auto rounded-md border border-rule">
+								<table className="w-full min-w-[800px] text-sm">
+									<thead className="bg-paper-3">
+										<tr className="border-b border-rule text-left text-ink-3">
+											<th className="px-4 py-3 font-medium">Name</th>
+											<th className="px-4 py-3 font-medium">Type</th>
+											<th className="px-4 py-3 text-right font-medium">
+												Unit Price
+											</th>
+											<th className="px-4 py-3 font-medium">Usage</th>
+											<th className="px-4 py-3 font-medium">Status</th>
+											<th className="px-4 py-3 text-right font-medium">
+												Actions
+											</th>
+										</tr>
+									</thead>
+									<tbody>
+										{products.map((product) => {
+											const insight = analyticsByProduct.get(product.id);
+											const duplicateHint = product.isActive
+												? duplicateHintById.get(product.id)
+												: undefined;
+											return (
+												<tr
+													key={product.id}
+													className="border-b border-rule text-ink-2 last:border-b-0 hover:bg-paper-3"
+												>
+													<td className="px-4 py-3">
+														<p className="font-medium text-ink">
+															{product.name}
+														</p>
+														{duplicateHint ? (
+															<p className="mt-0.5 flex items-center gap-1 text-xs text-ink-3">
+																<Copy
+																	className="h-3 w-3 flex-none"
+																	aria-hidden="true"
+																/>
+																<span>
+																	Same price as {duplicateHint} — duplicate?
+																</span>
+															</p>
+														) : null}
+													</td>
+													<td className="px-4 py-3">
+														<span className="rounded bg-paper-3 px-1.5 py-0.5 text-[11px] font-medium tracking-wide text-ink-2 uppercase">
+															{product.type}
+														</span>
+													</td>
+													<td className="hm-num-cell px-4 py-3 text-right font-num text-ink-3 tabular-nums">
+														{formatMoney(product.defaultUnitPrice, "NGN")}
+													</td>
+													<td className="hm-num-cell px-4 py-3 text-ink-3">
+														{insight && insight.usageCount > 0 ? (
+															<div>
+																<p className="text-ink">
+																	{insight.usageCount} uses
+																</p>
+																<p className="mt-0.5 text-xs text-ink-3">
+																	{formatCompactMoney(insight.revenue, "NGN")}
+																</p>
+															</div>
+														) : (
+															<span>Not used yet</span>
+														)}
+													</td>
+													<td className="px-4 py-3">
+														<StatusPill tone={product.isActive ? "ok" : "mute"}>
+															{product.isActive ? "Active" : "Archived"}
+														</StatusPill>
+													</td>
+													<td className="px-4 py-3 text-right">
+														<div className="flex items-center justify-end gap-1">
+															<ProductAction
+																label="View product"
+																tooltip="Open product details"
+																onClick={() => onEdit(product.id)}
+															>
+																<Eye className="h-4 w-4" />
+															</ProductAction>
+															<ProductAction
+																label="Edit product"
+																tooltip="Edit price and catalog information"
+																onClick={() => onEdit(product.id)}
+															>
+																<Pencil className="h-4 w-4" />
+															</ProductAction>
+															<ProductAction
+																label="Duplicate product"
+																tooltip="Duplicate this catalog item"
+																onClick={() => void handleDuplicate(product.id)}
+															>
+																<Copy className="h-4 w-4" />
+															</ProductAction>
+															{product.isActive && (
+																<ProductAction
+																	label="Archive product"
+																	tooltip="Archive this product"
+																	onClick={() => void handleArchive(product.id)}
+																	danger
+																>
+																	<Archive className="h-4 w-4" />
+																</ProductAction>
+															)}
+														</div>
+													</td>
+												</tr>
+											);
+										})}
+									</tbody>
+								</table>
+							</div>
+							<div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-3">
+								<span>
+									Showing {products.length} of {products.length} products
+								</span>
+							</div>
+						</>
+					)}
+				</div>
+			</Panel>
 		</div>
 	);
 }
@@ -498,164 +672,142 @@ function AnalyticsTab({
 	analytics,
 	summary,
 	isLoading,
+	loadError,
 }: {
 	analytics: AnalyticsRow[];
 	summary: ProductSummary;
 	isLoading: boolean;
+	loadError: string | null;
 }) {
 	return (
-		<>
-			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-				<InsightCard
-					icon={BarChart3}
+		<div className="flex flex-col gap-4">
+			<KpiStrip>
+				<Kpi
 					label="Product revenue"
-					value={formatCompactMoney(summary?.totalRevenue ?? 0, "NGN")}
-					detail={`${summary?.usedProductCount ?? 0} products used`}
+					value={formatCompactMoney(summary.totalRevenue, "NGN")}
+					sub={`${summary.usedProductCount} products used`}
+					tone="brand"
 				/>
-				<InsightCard
-					icon={Repeat2}
+				<Kpi
 					label="Invoice usage"
-					value={`${summary?.totalUsageCount ?? 0}`}
-					detail={`${summary?.activeProductCount ?? 0} active catalog items`}
+					value={`${summary.totalUsageCount}`}
+					sub={`${summary.activeProductCount} active catalog items`}
+					tone="info"
 				/>
-				<InsightCard
-					icon={Users}
+				<Kpi
 					label="Repeat-client products"
-					value={`${summary?.repeatClientProductCount ?? 0}`}
-					detail="Sold to more than one client"
+					value={`${summary.repeatClientProductCount}`}
+					sub="Sold to more than one client"
+					tone="ok"
 				/>
-				<InsightCard
-					icon={TrendingDown}
+				<Kpi
 					label="Declining signals"
-					value={`${summary?.decliningProductCount ?? 0}`}
-					detail="Lower recent revenue"
+					value={`${summary.decliningProductCount}`}
+					sub="Lower recent revenue"
+					tone="warn"
 				/>
-			</div>
+			</KpiStrip>
 
-			<div className="ui-panel overflow-hidden rounded-md border border-rule bg-paper-2">
-				<div className="border-b border-rule px-4 py-3">
-					<p className="text-sm font-medium text-ink">Product intelligence</p>
-					<p className="mt-1 text-xs text-ink-3">
-						Generated from invoice line items.
-					</p>
-				</div>
+			<Callout tone="info">
+				Product intelligence is generated from invoice line items. Items typed
+				by hand instead of picked from the catalog carry no catalog reference,
+				so usage can be undercounted — picking catalog items when building an
+				invoice fills the Usage column.
+			</Callout>
 
-				<div className="overflow-x-auto">
-					<table className="hm-ts-board w-full min-w-[1080px] text-sm">
-						<thead className="bg-paper-3">
-							<tr className="border-b border-rule text-left text-ink-3">
-								<th className="px-4 py-3 font-medium">Name</th>
-								<th className="px-4 py-3 font-medium">Usage</th>
-								<th className="px-4 py-3 font-medium">Clients</th>
-								<th className="px-4 py-3 text-right font-medium">Revenue</th>
-								<th className="px-4 py-3 text-right font-medium">Avg Price</th>
-								<th className="px-4 py-3 font-medium">Top Client</th>
-								<th className="px-4 py-3 font-medium">Signal</th>
-								<th className="px-4 py-3 font-medium">Last Sold</th>
-							</tr>
-						</thead>
-						<tbody>
-							{analytics.map((item) => (
-								<tr
-									key={item.productId}
-									className="border-b border-rule text-ink-2 hover:bg-paper-3"
-								>
-									<td className="px-4 py-3">
-										<p className="font-medium text-ink">{item.name}</p>
-										<p className="mt-0.5 text-xs capitalize text-ink-3">
-											{item.type ?? "catalog item"}
-											{item.sku ? ` / SKU ${item.sku}` : ""}
-										</p>
-									</td>
-									<td className="px-4 py-3 text-ink-3">
-										{item.usageCount} uses
-										<span className="ml-1 text-ink-3">
-											/ {item.quantitySold} sold
-										</span>
-									</td>
-									<td className="px-4 py-3 text-ink-3">
-										{item.customerCount ?? "-"}
-									</td>
-									<td className="hm-num-cell px-4 py-3 text-right font-medium text-ink">
-										<span title={formatMoney(item.revenue, "NGN")}>
-											{formatCompactMoney(item.revenue, "NGN")}
-										</span>
-									</td>
-									<td className="hm-num-cell px-4 py-3 text-right text-ink-3">
-										{formatMoney(item.averagePrice, "NGN")}
-									</td>
-									<td className="px-4 py-3 text-ink-3">
-										{item.topClients?.[0]?.customerName ?? "-"}
-									</td>
-									<td className="px-4 py-3">
-										<TrendBadge trend={item.trend ?? "steady"} />
-									</td>
-									<td className="px-4 py-3 text-ink-3">
-										{item.lastSoldAt
-											? new Date(item.lastSoldAt).toLocaleDateString()
-											: "-"}
-									</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
-				</div>
-
+			<Panel
+				title="Product intelligence"
+				sub="Generated from invoice line items."
+			>
 				{isLoading ? (
 					<PanelLoader label="Loading product intelligence" />
+				) : loadError ? (
+					<EmptyState
+						title="Couldn't load product intelligence"
+						copy={loadError}
+					/>
 				) : analytics.length === 0 ? (
-					<div className="flex min-h-[156px] flex-col items-center justify-center gap-3 px-4 py-10 text-center text-sm text-ink-3">
-						<div>
-							<p className="font-medium text-ink">
-								No product intelligence yet.
-							</p>
-							<p className="mt-1">
-								Signals will appear once catalog products are used in invoices.
-							</p>
-						</div>
+					<EmptyState
+						title="No product intelligence yet."
+						copy="Signals will appear once catalog products are used in invoices."
+					/>
+				) : (
+					<div className="overflow-x-auto rounded-md border border-rule">
+						<table className="hm-ts-board w-full min-w-[1080px] text-sm">
+							<thead className="bg-paper-3">
+								<tr className="border-b border-rule text-left text-ink-3">
+									<th className="px-4 py-3 font-medium">Name</th>
+									<th className="px-4 py-3 font-medium">Usage</th>
+									<th className="px-4 py-3 font-medium">Clients</th>
+									<th className="px-4 py-3 text-right font-medium">Revenue</th>
+									<th className="px-4 py-3 text-right font-medium">
+										Avg Price
+									</th>
+									<th className="px-4 py-3 font-medium">Top Client</th>
+									<th className="px-4 py-3 font-medium">Signal</th>
+									<th className="px-4 py-3 font-medium">Last Sold</th>
+								</tr>
+							</thead>
+							<tbody>
+								{analytics.map((item) => (
+									<tr
+										key={item.productId}
+										className="border-b border-rule text-ink-2 last:border-b-0 hover:bg-paper-3"
+									>
+										<td className="px-4 py-3">
+											<p className="font-medium text-ink">{item.name}</p>
+											<p className="mt-0.5 text-xs capitalize text-ink-3">
+												{item.type ?? "catalog item"}
+												{item.sku ? ` / SKU ${item.sku}` : ""}
+											</p>
+										</td>
+										<td className="px-4 py-3 text-ink-3">
+											{item.usageCount} uses
+											<span className="ml-1 text-ink-3">
+												/ {item.quantitySold} sold
+											</span>
+										</td>
+										<td className="px-4 py-3 text-ink-3">
+											{item.customerCount ?? "-"}
+										</td>
+										<td className="hm-num-cell px-4 py-3 text-right font-medium font-num text-ink tabular-nums">
+											<span title={formatMoney(item.revenue, "NGN")}>
+												{formatCompactMoney(item.revenue, "NGN")}
+											</span>
+										</td>
+										<td className="hm-num-cell px-4 py-3 text-right font-num text-ink-3 tabular-nums">
+											{formatMoney(item.averagePrice, "NGN")}
+										</td>
+										<td className="px-4 py-3 text-ink-3">
+											{item.topClients?.[0]?.customerName ?? "-"}
+										</td>
+										<td className="px-4 py-3">
+											<StatusPill
+												tone={
+													item.trend === "declining"
+														? "bad"
+														: item.trend === "rising" || item.trend === "new"
+															? "ok"
+															: "mute"
+												}
+											>
+												{item.trend ?? "steady"}
+											</StatusPill>
+										</td>
+										<td className="px-4 py-3 text-ink-3">
+											{item.lastSoldAt
+												? new Date(item.lastSoldAt).toLocaleDateString()
+												: "-"}
+										</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
 					</div>
-				) : null}
-			</div>
-		</>
-	);
-}
-
-function InsightCard({
-	icon: Icon,
-	label,
-	value,
-	detail,
-}: {
-	icon: typeof BarChart3;
-	label: string;
-	value: string;
-	detail: string;
-}) {
-	return (
-		<div className="hm-stat border-l-info-line rounded-md border border-rule bg-paper-2 p-4">
-			<div className="flex items-center justify-between gap-3">
-				<p className="text-xs uppercase tracking-[0.12em] text-ink-3">
-					{label}
-				</p>
-				<Icon className="h-4 w-4 text-brand" />
-			</div>
-			<p className="mt-3 hm-num-cell text-2xl font-semibold text-ink">
-				{value}
-			</p>
-			<p className="mt-1 text-xs text-ink-3">{detail}</p>
+				)}
+			</Panel>
 		</div>
 	);
-}
-
-function TrendBadge({ trend }: { trend: AnalyticsRow["trend"] }) {
-	const classes =
-		trend === "declining"
-			? "hm-ts-stamp is-danger"
-			: trend === "rising" || trend === "new"
-				? "hm-ts-stamp is-ok"
-				: "hm-ts-stamp is-paper";
-
-	return <span className={classes}>{trend}</span>;
 }
 
 function buildProductSummary(
