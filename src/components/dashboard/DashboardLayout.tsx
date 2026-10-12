@@ -1,8 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { useReducedMotion } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
 import {
-	Bell,
 	BellRing,
 	Building2,
 	ChartNoAxesCombined,
@@ -10,33 +10,54 @@ import {
 	ChevronsUpDown,
 	FileText,
 	LayoutGrid,
-	Loader2,
+	Menu,
 	Repeat2,
 	Scale,
+	Search,
 	Settings,
 	Users,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ProfileDropdown } from "#/components/dashboard/profile-dropdown";
+import { CommandPalette } from "#/components/global-search/command-palette";
 import { RouteTransition } from "#/components/navigation/RouteTransition";
 import { TextSizeToggle } from "#/components/text-size/text-size-toggle";
 import { ThemeToggle } from "#/components/theme/theme-toggle";
-import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
-import { Button } from "#/components/ui/button";
+import { AppLoader } from "#/components/ui/app-loader";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
-	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
 import { toast } from "#/components/ui/use-toast";
 import { authClient } from "#/lib/auth-client";
 import { useDashboardAuth, useWorkspaceActions } from "#/lib/auth-hook";
+import { useSupabaseSession } from "#/lib/supabase-session";
+import { listClients } from "#/server/data/clients";
+import {
+	type InvoiceListArgs,
+	listSummary as listInvoiceSummary,
+} from "#/server/data/invoices";
+import { listProducts } from "#/server/data/products";
+import { getCollectionOverview } from "#/server/data/reminders";
 
 const matchesPathSegment = (pathname: string, path: string) =>
 	pathname === path || pathname.startsWith(`${path}/`);
 
 const pendingBusinessNameKey = "velure.pending-business-name";
+
+// Same default filter shapes the pages use, so the layout's count queries
+// share the pages' React Query cache instead of fetching twice.
+const defaultInvoiceArgs: InvoiceListArgs = {
+	q: "",
+	status: "all",
+	type: "all",
+	documentType: "all",
+	customer: undefined,
+	dueDateFrom: undefined,
+	dueDateTo: undefined,
+};
 
 type InvoiceTypeItem = {
 	to: "/invoices";
@@ -117,6 +138,31 @@ const settingsItems = [
 	},
 ] as const;
 
+function CountBadge({ count }: { count: number | undefined }) {
+	if (count === undefined) return null;
+	return (
+		<span className="ml-auto shrink-0 font-num text-[11px] tabular-nums text-ink-3">
+			{count}
+		</span>
+	);
+}
+
+function ReminderBadge({ count }: { count: number | undefined }) {
+	if (count === undefined) return null;
+	if (count === 0) {
+		return (
+			<span className="ml-auto shrink-0 font-num text-[11px] tabular-nums text-ink-3">
+				0
+			</span>
+		);
+	}
+	return (
+		<span className="ml-auto shrink-0 rounded-full bg-warn-soft px-2 py-0.5 font-num text-[11px] tabular-nums text-warn">
+			{count}
+		</span>
+	);
+}
+
 export function DashboardLayout() {
 	const location = useLocation();
 	const navigate = useNavigate();
@@ -124,6 +170,8 @@ export function DashboardLayout() {
 	const workspaceEnsureAttemptedRef = useRef(false);
 	const shouldReduceMotion = useReducedMotion();
 	const [ensuringWorkspace, setEnsuringWorkspace] = useState(false);
+	const [navOpen, setNavOpen] = useState(false);
+	const [paletteOpen, setPaletteOpen] = useState(false);
 
 	// Use unified auth hook
 	const {
@@ -132,7 +180,94 @@ export function DashboardLayout() {
 		isConvexAuthenticated,
 		workspaces,
 		workspaceContext,
+		workspaceQueriesPending,
+		canUseSupabase,
 	} = useDashboardAuth();
+
+	const sessionUserId = session?.user?.id;
+	const { client: supabaseClient } = useSupabaseSession(sessionUserId);
+	const canCount = Boolean(supabaseClient && sessionUserId);
+
+	const { data: invoiceCount } = useQuery({
+		queryKey: [
+			"supabase-invoices",
+			"summary",
+			sessionUserId,
+			defaultInvoiceArgs,
+		],
+		queryFn: async () => {
+			if (!supabaseClient || !sessionUserId)
+				throw new Error("Supabase session unavailable.");
+			const summary = await listInvoiceSummary(
+				supabaseClient,
+				sessionUserId,
+				defaultInvoiceArgs,
+			);
+			return summary.currencySummaries.reduce(
+				(total, item) => total + item.totalCount,
+				0,
+			);
+		},
+		enabled: canCount,
+		staleTime: 60_000,
+	});
+
+	const { data: clientCount } = useQuery({
+		queryKey: ["supabase-clients", sessionUserId ?? "none", ""],
+		queryFn: async () => {
+			if (!supabaseClient || !sessionUserId)
+				throw new Error("Supabase session unavailable.");
+			const rows = await listClients(supabaseClient, sessionUserId, {
+				q: "",
+				status: "all",
+			});
+			return rows.length;
+		},
+		enabled: canCount,
+		staleTime: 60_000,
+	});
+
+	const { data: productCount } = useQuery({
+		queryKey: ["products", sessionUserId, "", "all", "all"],
+		queryFn: async () => {
+			if (!supabaseClient || !sessionUserId)
+				throw new Error("Supabase session unavailable.");
+			const rows = await listProducts(supabaseClient, sessionUserId, {
+				q: "",
+				type: "all",
+				status: "all",
+			});
+			return rows.length;
+		},
+		enabled: canCount,
+		staleTime: 60_000,
+	});
+
+	const { data: reminderCount } = useQuery({
+		queryKey: ["supabase-collection-overview", sessionUserId ?? "none", 3],
+		queryFn: async () => {
+			if (!supabaseClient || !sessionUserId)
+				throw new Error("Supabase session unavailable.");
+			const overview = await getCollectionOverview(
+				supabaseClient,
+				sessionUserId,
+				{ daysBeforeDue: 3 },
+			);
+			return overview.stats.actionableCount;
+		},
+		enabled: canCount,
+		staleTime: 60_000,
+	});
+
+	const counts = useMemo(
+		() => ({
+			"/invoices": invoiceCount,
+			"/clients": clientCount,
+			"/invoices/products": productCount,
+			"/settings/collections": reminderCount,
+		}),
+		[clientCount, invoiceCount, productCount, reminderCount],
+	);
 
 	const hasSession = Boolean(session?.user);
 	const { setActive: setActiveWorkspace, ensure: ensureWorkspaceContext } =
@@ -148,10 +283,22 @@ export function DashboardLayout() {
 	}, [location.pathname, location.search, location.hash, shouldReduceMotion]);
 
 	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+				event.preventDefault();
+				setPaletteOpen(true);
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, []);
+
+	useEffect(() => {
 		if (
 			isPending ||
 			!isConvexAuthenticated ||
 			!hasSession ||
+			workspaceQueriesPending ||
 			workspaceContext !== null ||
 			workspaceEnsureAttemptedRef.current
 		) {
@@ -186,28 +333,42 @@ export function DashboardLayout() {
 		isConvexAuthenticated,
 		isPending,
 		workspaceContext,
+		workspaceQueriesPending,
 	]);
 
 	const waitingForInitialSession = isPending && !hasSession;
+	// Genuine first-time bootstrap only: reads settled through a live bridge
+	// and there is no workspace at all. A null context on its own also covers
+	// transient/refetch states for returning users, which must never wear the
+	// provisioning label.
 	const needsWorkspaceBootstrap =
 		!waitingForInitialSession &&
 		isConvexAuthenticated &&
 		hasSession &&
+		canUseSupabase &&
+		!workspaceQueriesPending &&
 		workspaceContext === null &&
+		workspaces.length === 0 &&
 		!workspaceEnsureAttemptedRef.current;
-	const waitingForConvexAuth =
+	const waitingForSupabaseSession =
 		!waitingForInitialSession && hasSession && !isConvexAuthenticated;
 
 	if (
 		waitingForInitialSession ||
 		isPending ||
-		waitingForConvexAuth ||
+		waitingForSupabaseSession ||
+		workspaceQueriesPending ||
 		ensuringWorkspace ||
 		needsWorkspaceBootstrap
 	) {
+		// The provisioning claim is reserved for actual first-time workspace
+		// creation; every other wait is a bare spinner.
+		const isProvisioning = ensuringWorkspace || needsWorkspaceBootstrap;
 		return (
 			<div className="hm-app flex h-dvh w-full items-center justify-center bg-paper">
-				<Loader2 className="h-8 w-8 animate-spin text-brand" />
+				<AppLoader
+					label={isProvisioning ? "Setting up your workspace" : null}
+				/>
 			</div>
 		);
 	}
@@ -216,7 +377,6 @@ export function DashboardLayout() {
 		return null;
 	}
 
-	const userInitial = session.user.name?.charAt(0)?.toUpperCase() ?? "U";
 	const activeWorkspace = workspaces.find((workspace) => workspace.isActive);
 	const workspaceLabel =
 		workspaceContext?.name ?? activeWorkspace?.name ?? "Select workspace";
@@ -224,6 +384,15 @@ export function DashboardLayout() {
 	const invoicesActive = invoiceTypeItems.some((item) =>
 		item.match(location.pathname),
 	);
+	const activePageLabel =
+		invoiceTypeItems.find((item) => item.match(location.pathname))?.label ??
+		[...navItems, ...settingsItems].find((item) =>
+			item.match(location.pathname),
+		)?.label ??
+		"Workspace";
+	const ownerInitial = (session.user.name ?? session.user.email ?? "?")
+		.slice(0, 1)
+		.toUpperCase();
 	const switchWorkspace = async (workspaceId: string) => {
 		if (activeWorkspace?.id === workspaceId) return;
 
@@ -239,12 +408,35 @@ export function DashboardLayout() {
 		}
 	};
 
+	const navLinkClass = (active: boolean) =>
+		`relative flex w-full items-center gap-3 rounded-[var(--hm-r-input)] px-3 py-2 text-left transition-[background-color,color] duration-200 ${
+			active
+				? "bg-[linear-gradient(90deg,var(--hm-accent-soft),transparent_95%)] before:absolute before:bottom-2 before:left-0 before:top-2 before:w-0.5 before:rounded-full before:bg-brand"
+				: "border border-transparent text-ink-3 hover:border-rule hover:bg-paper-3"
+		}`;
+
 	return (
-		<div className="hm-app vl-ledger-bg flex h-dvh min-h-0 overflow-hidden text-ink">
-			<aside className="ui-stagger-1 hidden h-full min-h-0 w-[260px] shrink-0 rounded-[var(--hm-r-card)] border border-r-0 border-l-0 border-rule bg-paper/96 shadow-[inset_-1px_0_0_rgba(242,239,231,0.02)] lg:flex lg:flex-col">
+		<div className="hm-app flex h-dvh min-h-0 overflow-hidden text-ink">
+			{navOpen ? (
+				<button
+					type="button"
+					aria-label="Close navigation"
+					onClick={() => setNavOpen(false)}
+					className="fixed inset-0 z-30 bg-[var(--hm-scrim)] lg:hidden"
+				/>
+			) : null}
+			<aside
+				className={`fixed inset-y-0 left-0 z-40 flex h-full min-h-0 w-[240px] shrink-0 flex-col border-r border-rule bg-paper transition-transform duration-200 lg:static lg:z-auto lg:translate-x-0 ${
+					navOpen ? "translate-x-0" : "-translate-x-full"
+				}`}
+			>
 				<div className="border-b border-rule px-5 py-5">
-					<Link to="/invoices" className="flex items-center gap-3">
-						<span className="flex h-8 w-8 items-center justify-center border border-brand/45 bg-brand-soft text-xs font-bold text-brand">
+					<Link
+						to="/invoices"
+						onClick={() => setNavOpen(false)}
+						className="flex items-center gap-3"
+					>
+						<span className="flex h-8 w-8 items-center justify-center rounded-[var(--hm-r-input)] border border-brand/45 bg-brand-soft text-xs font-bold text-brand">
 							V
 						</span>
 						<div>
@@ -258,7 +450,7 @@ export function DashboardLayout() {
 						<DropdownMenuTrigger asChild>
 							<button
 								type="button"
-								className="mt-4 flex h-10 w-full items-center justify-between gap-2 rounded-[var(--hm-r-card)] border border-rule bg-paper px-3 text-left text-sm text-ink transition-colors hover:border-brand-line hover:bg-brand-soft"
+								className="mt-4 flex h-10 w-full items-center justify-between gap-2 rounded-[var(--hm-r-btn)] border border-rule bg-paper px-3 text-left text-sm text-ink transition-colors hover:border-brand-line hover:bg-brand-soft"
 							>
 								<span className="flex min-w-0 items-center gap-2">
 									<Building2 className="h-4 w-4 shrink-0 text-brand" />
@@ -305,63 +497,64 @@ export function DashboardLayout() {
 				</div>
 
 				<div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-					<nav className="space-y-4">
-						<div className="space-y-0.5">
-							<Link
-								to="/invoices"
-								className={`flex w-full items-center gap-3 rounded-[var(--hm-r-card)] border px-3 py-2 text-left transition-[background-color,border-color,color] duration-200 ${
-									invoicesActive
-										? "border-brand bg-brand-soft shadow-[inset_3px_0_0_var(--color-brand)]"
-										: "border-transparent text-ink-3 hover:border-rule hover:bg-paper-3"
-								}`}
-							>
-								<LayoutGrid
-									className={`h-4 w-4 shrink-0 ${
-										invoicesActive ? "text-brand" : "text-ink-3"
-									}`}
-								/>
-								<div className="min-w-0 flex-1">
-									<p
-										className={`text-sm font-medium ${
+					<nav className="space-y-4" aria-label="Primary">
+						<div>
+							<p className="px-3 pb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-ink-3">
+								Workspace
+							</p>
+							<div className="space-y-0.5">
+								<Link
+									to="/invoices"
+									onClick={() => setNavOpen(false)}
+									className={navLinkClass(invoicesActive)}
+								>
+									<LayoutGrid
+										className={`h-4 w-4 shrink-0 ${
+											invoicesActive ? "text-brand" : "text-ink-3"
+										}`}
+									/>
+									<span
+										className={`min-w-0 flex-1 truncate text-sm font-medium ${
 											invoicesActive ? "text-ink" : "text-ink-2"
 										}`}
 									>
 										Invoices
-									</p>
-								</div>
-							</Link>
+									</span>
+									<CountBadge count={counts["/invoices"]} />
+								</Link>
 
-							{navItems.map((item) => {
-								const Icon = item.icon;
-								const active = item.match(location.pathname);
+								{navItems.map((item) => {
+									const Icon = item.icon;
+									const active = item.match(location.pathname);
 
-								return (
-									<Link
-										key={item.to}
-										to={item.to}
-										className={`flex items-center gap-3 rounded-[var(--hm-r-card)] border px-3 py-2 transition-[background-color,border-color,color] duration-200 ${
-											active
-												? "border-brand bg-brand-soft shadow-[inset_3px_0_0_var(--color-brand)]"
-												: "border-transparent text-ink-3 hover:border-rule hover:bg-paper-3"
-										}`}
-									>
-										<Icon
-											className={`h-4 w-4 shrink-0 ${
-												active ? "text-brand" : "text-ink-3"
-											}`}
-										/>
-										<div className="min-w-0">
-											<p
-												className={`text-sm font-medium ${
+									return (
+										<Link
+											key={item.to}
+											to={item.to}
+											onClick={() => setNavOpen(false)}
+											className={navLinkClass(active)}
+										>
+											<Icon
+												className={`h-4 w-4 shrink-0 ${
+													active ? "text-brand" : "text-ink-3"
+												}`}
+											/>
+											<span
+												className={`min-w-0 flex-1 truncate text-sm font-medium ${
 													active ? "text-ink" : "text-ink-2"
 												}`}
 											>
 												{item.label}
-											</p>
-										</div>
-									</Link>
-								);
-							})}
+											</span>
+											{item.to === "/clients" ? (
+												<CountBadge count={counts["/clients"]} />
+											) : item.to === "/invoices/products" ? (
+												<CountBadge count={counts["/invoices/products"]} />
+											) : null}
+										</Link>
+									);
+								})}
+							</div>
 						</div>
 
 						<div className="border-t border-rule pt-3">
@@ -379,7 +572,7 @@ export function DashboardLayout() {
 											<div
 												key={item.to}
 												aria-disabled="true"
-												className="flex cursor-not-allowed items-center gap-3 rounded-[var(--hm-r-card)] border border-transparent px-3 py-2 text-ink-3 opacity-70"
+												className="flex cursor-not-allowed items-center gap-3 rounded-[var(--hm-r-btn)] border border-transparent px-3 py-2 text-ink-3 opacity-70"
 												title="Coming soon"
 											>
 												<Icon className="h-4 w-4 shrink-0 text-ink-3" />
@@ -402,26 +595,26 @@ export function DashboardLayout() {
 											key={item.to}
 											to={item.to}
 											title={item.description}
-											className={`flex items-center gap-3 rounded-[var(--hm-r-card)] border px-3 py-2 transition-[background-color,border-color,color] duration-200 ${
-												active
-													? "border-brand bg-brand-soft shadow-[inset_3px_0_0_var(--color-brand)]"
-													: "border-transparent text-ink-3 hover:border-rule hover:bg-paper-2"
-											}`}
+											onClick={() => setNavOpen(false)}
+											className={navLinkClass(active)}
 										>
 											<Icon
 												className={`h-4 w-4 shrink-0 ${
 													active ? "text-brand" : "text-ink-3"
 												}`}
 											/>
-											<div className="min-w-0">
-												<p
-													className={`text-sm font-medium ${
-														active ? "text-ink" : "text-ink-2"
-													}`}
-												>
-													{item.label}
-												</p>
-											</div>
+											<span
+												className={`min-w-0 flex-1 truncate text-sm font-medium ${
+													active ? "text-ink" : "text-ink-2"
+												}`}
+											>
+												{item.label}
+											</span>
+											{item.to === "/settings/collections" ? (
+												<ReminderBadge
+													count={counts["/settings/collections"]}
+												/>
+											) : null}
 										</Link>
 									);
 								})}
@@ -429,137 +622,78 @@ export function DashboardLayout() {
 						</div>
 					</nav>
 				</div>
+
+				<div className="flex items-center gap-3 border-t border-rule px-5 py-3">
+					<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-brand-line bg-brand-soft text-[11px] font-semibold text-brand">
+						{ownerInitial}
+					</span>
+					<div className="min-w-0">
+						<p className="truncate text-[13px] font-medium text-ink">
+							{session.user.name ?? "Owner"}
+						</p>
+						<p className="truncate text-xs text-ink-3">{workspaceLabel}</p>
+					</div>
+				</div>
 			</aside>
 
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-				<header className="shrink-0 rounded-[var(--hm-r-card)] border border-rule border-b-0 border-t-0 bg-paper/92 backdrop-blur-md">
-					<div className="flex h-14 items-center justify-between gap-4 px-4 lg:px-8">
-						<div className="min-w-0">
-							<p className="truncate text-[10px] font-bold uppercase tracking-[0.22em] text-brand">
-								Active workspace
-							</p>
-							<p className="mt-0.5 truncate text-sm font-semibold text-ink">
-								{workspaceLabel}
-							</p>
-							<p className="truncate text-xs text-ink-3">
-								{session.user.email}
+				<header className="shrink-0 border-b border-rule bg-paper/92 backdrop-blur-md">
+					<div className="flex h-14 items-center justify-between gap-4 px-4 lg:px-7">
+						<div className="flex min-w-0 items-center gap-3">
+							<button
+								type="button"
+								aria-label="Open navigation"
+								onClick={() => setNavOpen(true)}
+								className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--hm-r-btn)] border border-rule bg-paper-2 text-ink-3 transition-colors hover:border-brand-line hover:bg-brand-soft hover:text-ink lg:hidden"
+							>
+								<Menu className="h-4 w-4" />
+							</button>
+							<p className="truncate text-[13px] text-ink-3">
+								<span className="truncate">{workspaceLabel}</span>
+								<span className="mx-2">/</span>
+								<span className="font-medium text-ink">{activePageLabel}</span>
 							</p>
 						</div>
 
 						<div className="flex items-center gap-2">
-							<TextSizeToggle className="h-9 w-9 rounded-[var(--hm-r-card)] border border-rule bg-paper-2 text-ink-3 hover:border-brand-line hover:bg-brand-soft hover:text-ink" />
-							<ThemeToggle className="h-9 w-9 rounded-[var(--hm-r-card)] border border-rule bg-paper-2 text-ink-3 hover:border-brand-line hover:bg-brand-soft hover:text-ink" />
-							<Button
+							<button
 								type="button"
-								variant="ghost"
-								size="icon"
-								className="h-9 w-9 rounded-[var(--hm-r-card)] border border-rule bg-paper-2 text-ink-3 hover:border-brand-line hover:bg-brand-soft hover:text-ink"
+								onClick={() => setPaletteOpen(true)}
+								className="hidden h-[34px] w-[260px] items-center gap-2.5 rounded-[var(--hm-r-input)] border border-rule bg-paper px-3 pl-3 text-left text-[13px] text-ink-3 transition-colors hover:border-brand-line hover:text-ink-2 md:flex"
 							>
-								<Bell className="h-4 w-4" />
-							</Button>
-							<DropdownMenu>
-								<DropdownMenuTrigger asChild>
-									<button
-										type="button"
-										title="Open user menu"
-										className="flex h-9 w-9 items-center justify-center rounded-[var(--hm-r-card)] border border-brand/45 bg-paper-2 text-sm font-medium text-ink hover:bg-brand-soft"
-									>
-										<Avatar className="h-9 w-9">
-											<AvatarImage
-												src={session.user.image ?? undefined}
-												alt={session.user.name ?? "User"}
-											/>
-											<AvatarFallback className="bg-transparent text-sm font-bold text-ink">
-												{userInitial}
-											</AvatarFallback>
-										</Avatar>
-									</button>
-								</DropdownMenuTrigger>
-								<DropdownMenuContent
-									align="end"
-									className="min-w-[220px] border-rule bg-paper-2 p-1 text-ink"
-								>
-									<div className="px-2 py-2 text-sm">
-										<p className="truncate font-medium text-ink">
-											{session.user.name ?? "User"}
-										</p>
-										<p className="truncate text-xs text-ink-3">
-											{session.user.email}
-										</p>
-									</div>
-									<DropdownMenuSeparator className="bg-rule" />
-									<DropdownMenuItem asChild className="focus:bg-brand-soft">
-										<Link to="/invoices">Invoices</Link>
-									</DropdownMenuItem>
-									<DropdownMenuItem asChild className="focus:bg-brand-soft">
-										<Link to="/clients">Clients</Link>
-									</DropdownMenuItem>
-									<DropdownMenuItem asChild className="focus:bg-brand-soft">
-										<Link to="/settings/compliance">Compliance</Link>
-									</DropdownMenuItem>
-									<DropdownMenuItem asChild className="focus:bg-brand-soft">
-										<Link to="/settings/collections">Payment reminders</Link>
-									</DropdownMenuItem>
-									<DropdownMenuSeparator className="bg-rule" />
-									<DropdownMenuItem
-										className="text-danger focus:bg-danger-soft focus:text-danger"
-										onClick={async () => {
-											await authClient.signOut();
-											await navigate({ to: "/auth" });
-										}}
-									>
-										Log out
-									</DropdownMenuItem>
-								</DropdownMenuContent>
-							</DropdownMenu>
+								<Search className="h-4 w-4 shrink-0" />
+								<span className="flex-1 truncate">Search or jump to…</span>
+								<kbd className="rounded-md border border-rule bg-paper-2 px-1.5 py-0.5 font-num text-[11px]">
+									⌘K
+								</kbd>
+							</button>
+							<TextSizeToggle className="h-9 w-9 rounded-[var(--hm-r-btn)] border border-rule bg-paper-2 text-ink-3 hover:border-brand-line hover:bg-brand-soft hover:text-ink" />
+							<ThemeToggle className="h-9 w-9 rounded-[var(--hm-r-btn)] border border-rule bg-paper-2 text-ink-3 hover:border-brand-line hover:bg-brand-soft hover:text-ink" />
+							<ProfileDropdown
+								name={session.user.name}
+								email={session.user.email}
+								image={session.user.image}
+								onSignOut={async () => {
+									await authClient.signOut();
+									await navigate({ to: "/auth" });
+								}}
+							/>
 						</div>
-					</div>
-
-					<div className="flex gap-2 overflow-x-auto border-t border-rule px-4 py-3 lg:hidden">
-						<Link
-							to="/invoices"
-							className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm whitespace-nowrap transition-[background-color,border-color,color] duration-200 ${
-								location.pathname === "/invoices"
-									? "border-brand bg-brand-soft text-ink"
-									: "border-rule bg-paper-2 text-ink-3"
-							}`}
-						>
-							<LayoutGrid className="h-4 w-4" />
-							Invoices
-						</Link>
-						{navItems.map((item) => {
-							const Icon = item.icon;
-							const active = item.match(location.pathname);
-
-							return (
-								<Link
-									key={item.to}
-									to={item.to}
-									className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm whitespace-nowrap transition-[background-color,border-color,color] duration-200 ${
-										active
-											? "border-brand bg-brand-soft text-ink"
-											: "border-rule bg-paper-2 text-ink-3"
-									}`}
-								>
-									<Icon className="h-4 w-4" />
-									{item.label}
-								</Link>
-							);
-						})}
 					</div>
 				</header>
 
 				<main
 					ref={mainRef}
-					className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-10 lg:px-8 lg:py-6 lg:pb-12"
+					className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-10 lg:px-7 lg:py-7 lg:pb-12"
 				>
-					<div className="mx-auto w-full max-w-7xl">
+					<div className="mx-auto w-full max-w-[1180px]">
 						<RouteTransition routeKey={location.pathname}>
 							<Outlet />
 						</RouteTransition>
 					</div>
 				</main>
 			</div>
+			<CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
 		</div>
 	);
 }
