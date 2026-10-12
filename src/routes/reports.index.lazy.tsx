@@ -1,28 +1,27 @@
-import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createLazyFileRoute } from "@tanstack/react-router";
-import type { LucideIcon } from "lucide-react";
+import { createLazyFileRoute, Link } from "@tanstack/react-router";
 import {
-	ArrowDownRight,
-	Banknote,
+	ArrowRight,
 	CalendarClock,
-	LineChart as LineChartIcon,
-	ReceiptText,
+	Check,
+	FileText,
 	Users,
 } from "lucide-react";
-import type { ReactNode } from "react";
 import { useMemo, useState, useTransition } from "react";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { Callout } from "#/components/redesign/callout";
+import { EmptyState } from "#/components/redesign/empty-state";
+import { Kpi, KpiStrip } from "#/components/redesign/kpi-strip";
+import { ListRow } from "#/components/redesign/list-row";
+import { Panel } from "#/components/redesign/panel";
+import { SegmentedFilter } from "#/components/redesign/segmented-filter";
+import { StatusPill } from "#/components/redesign/status-pill";
 import {
-	Bar,
-	BarChart,
-	CartesianGrid,
-	Line,
-	LineChart,
-	ResponsiveContainer,
-	Tooltip,
-	XAxis,
-	YAxis,
-} from "recharts";
+	type ChartConfig,
+	ChartContainer,
+	ChartTooltip,
+} from "#/components/ui/chart";
+import { monthYearFmt } from "#/components/ui/chart-format";
 import { RowsEmptyGuard } from "#/components/ui/rows-empty-guard";
 import {
 	Select,
@@ -37,9 +36,12 @@ import {
 	formatInvoiceDate,
 	formatMoney,
 } from "#/features/invoices/format";
+import { useUnifiedAuth } from "#/lib/auth-hook";
+import { useSupabaseSession } from "#/lib/supabase-session";
+import { cn } from "#/lib/utils.ts";
+import { getRevenueCashFlow } from "#/server/data/reports";
 import type { PeriodPreset } from "#/utils/date";
 import { PERIOD_OPTIONS, resolvePeriod } from "#/utils/date";
-import { api } from "../../convex/_generated/api";
 
 export const Route = createLazyFileRoute("/reports/")({
 	component: ReportsIndex,
@@ -59,12 +61,6 @@ type CurrencySummary = {
 	collectionRate: number;
 };
 
-type ChartTooltipPayload = {
-	dataKey?: string | number;
-	value?: number | string;
-	payload?: Record<string, unknown>;
-};
-
 const METRIC_SKELETON_KEYS = ["billed", "collected", "outstanding", "overdue"];
 const TABLE_SKELETON_KEYS = ["customers", "late-payers", "products"];
 
@@ -78,18 +74,108 @@ function compactNumber(value: number) {
 	}).format(Number.isFinite(value) ? value : 0);
 }
 
+const barChartConfig = {
+	billedAmount: {
+		label: "Billed",
+		color: "var(--color-info)",
+	},
+	collectedAmount: {
+		label: "Collected",
+		color: "var(--color-ok)",
+	},
+} satisfies ChartConfig;
+
+type RechartsTooltipItem = {
+	payload: Record<string, number | string | undefined>;
+};
+
+function ChartTooltipRow({
+	label,
+	value,
+	color,
+}: {
+	label: string;
+	value: string;
+	color: string;
+}) {
+	return (
+		<div className="flex w-full items-center justify-between gap-6 leading-none">
+			<span className="flex items-center gap-1.5 text-ink-3">
+				<span
+					className="h-2 w-2 shrink-0 rounded-full"
+					style={{ backgroundColor: color }}
+				/>
+				{label}
+			</span>
+			<span className="font-num font-medium text-ink tabular-nums">
+				{value}
+			</span>
+		</div>
+	);
+}
+
+function RevenueTooltip({
+	active,
+	payload,
+	currency,
+}: {
+	active?: boolean;
+	payload?: RechartsTooltipItem[];
+	currency: string;
+}) {
+	if (!active || !payload?.length) return null;
+	const point = payload[0]?.payload ?? {};
+	return (
+		<div className="border-rule bg-paper grid min-w-[10rem] items-start gap-1.5 rounded-[var(--hm-r-input)] border px-2.5 py-1.5 text-xs shadow-xl">
+			<div className="font-medium text-ink">{String(point.label ?? "")}</div>
+			<div className="grid gap-1.5">
+				<ChartTooltipRow
+					label="Billed"
+					value={formatMoney(Number(point.billedAmount ?? 0), currency)}
+					color="var(--color-info)"
+				/>
+				<ChartTooltipRow
+					label="Collected"
+					value={formatMoney(Number(point.collectedAmount ?? 0), currency)}
+					color="var(--color-ok)"
+				/>
+			</div>
+		</div>
+	);
+}
+
 function ReportsIndex() {
+	const authState = useUnifiedAuth();
+	const userId = authState.data?.user?.id;
+	const { client } = useSupabaseSession(userId);
 	const [, startTransition] = useTransition();
 	const [period, setPeriod] = useState<PeriodPreset>("last-6-months");
 	const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
-	const window = useMemo(() => resolvePeriod(period), [period]);
-	const { data: report, isPending: isLoading } = useQuery(
-		convexQuery(api.reports.getRevenueCashFlow, {
-			from: window.from,
-			to: window.to,
-			limit: 8,
-		}),
+	const [chartMode, setChartMode] = useState<"monthly" | "cumulative">(
+		"monthly",
 	);
+	const [visibleSeries, setVisibleSeries] = useState({
+		billedAmount: true,
+		collectedAmount: true,
+	});
+	const window = useMemo(() => resolvePeriod(period), [period]);
+	const { data: report, isPending: isLoading } = useQuery({
+		queryKey: [
+			"supabase-revenue-report",
+			userId ?? "none",
+			window.from,
+			window.to,
+		],
+		queryFn: () => {
+			if (!client || !userId) return null;
+			return getRevenueCashFlow(client, userId, {
+				from: window.from,
+				to: window.to,
+				limit: 8,
+			});
+		},
+		enabled: Boolean(client && userId),
+	});
 	const currencies =
 		report?.currencySummaries.map((item) => item.currency) ?? [];
 	const currency =
@@ -103,8 +189,36 @@ function ReportsIndex() {
 	const timeline = (report?.timeline ?? []).filter(
 		(point) => point.currency === currency,
 	);
-	const topCustomers = (report?.topCustomers ?? []).filter(
-		(customer) => customer.currency === currency,
+	// Bucket labels are "YYYY-MM"; the bar chart needs short display labels.
+	const chartData = useMemo(() => {
+		const rows = timeline.map((point) => {
+			const date = new Date(`${point.key}-01T00:00:00`);
+			return {
+				label: Number.isNaN(date.getTime())
+					? point.key
+					: monthYearFmt.format(date),
+				billedAmount: point.billedAmount,
+				collectedAmount: point.collectedAmount,
+			};
+		});
+		if (chartMode === "cumulative") {
+			let billed = 0;
+			let collected = 0;
+			return rows.map((row) => {
+				billed += row.billedAmount;
+				collected += row.collectedAmount;
+				return { ...row, billedAmount: billed, collectedAmount: collected };
+			});
+		}
+		return rows;
+	}, [timeline, chartMode]);
+	const topCustomers = useMemo(
+		() =>
+			(report?.topCustomers ?? [])
+				.filter((customer) => customer.currency === currency)
+				.slice()
+				.sort((a, b) => b.billedAmount - a.billedAmount),
+		[report, currency],
 	);
 	const latePayers = (report?.latePayers ?? []).filter(
 		(customer) => customer.currency === currency,
@@ -115,15 +229,20 @@ function ReportsIndex() {
 	const openInvoices = (report?.openInvoices ?? []).filter(
 		(invoice) => invoice.currency === currency,
 	);
+	const topCustomer = topCustomers[0];
+	const topShare =
+		summary.billedAmount > 0 && topCustomer
+			? topCustomer.billedAmount / summary.billedAmount
+			: 0;
+	const maxProductRevenue = topProducts.reduce(
+		(max, product) => Math.max(max, product.revenue),
+		0,
+	);
 
 	return (
-		<div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 lg:px-8">
-			<header className="flex flex-col gap-4 border-b border-rule pb-5 lg:flex-row lg:items-end lg:justify-between">
+		<div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-6">
+			<header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 				<div>
-					<div className="mb-3 inline-flex items-center gap-2 rounded-md border border-brand-line bg-brand-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand">
-						<LineChartIcon className="h-3.5 w-3.5" />
-						Reports
-					</div>
 					<h1 className="text-3xl font-semibold tracking-[-0.02em] text-ink">
 						Revenue and cash flow
 					</h1>
@@ -174,189 +293,248 @@ function ReportsIndex() {
 				<ReportsSkeleton />
 			) : (
 				<>
-					<section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-						<MetricPanel
-							icon={ReceiptText}
+					<KpiStrip>
+						<Kpi
 							label="Billed"
-							value={formatMoney(summary.billedAmount, currency)}
-							detail={`${summary.invoiceCount} invoices`}
+							value={formatCompactMoney(summary.billedAmount, currency)}
+							sub={`${summary.invoiceCount} invoices`}
+							tone="info"
 						/>
-						<MetricPanel
-							icon={Banknote}
+						<Kpi
 							label="Collected"
-							value={formatMoney(summary.collectedAmount, currency)}
-							detail={`${formatPercent(summary.collectionRate)} collection rate`}
-							tone="brand"
+							value={formatCompactMoney(summary.collectedAmount, currency)}
+							sub={`${formatPercent(summary.collectionRate)} collection rate`}
+							tone="ok"
 						/>
-						<MetricPanel
-							icon={ArrowDownRight}
+						<Kpi
 							label="Outstanding"
-							value={formatMoney(summary.outstandingAmount, currency)}
-							detail={`${summary.openInvoiceCount} open invoices`}
-							tone="amber"
+							value={formatCompactMoney(summary.outstandingAmount, currency)}
+							sub={`${summary.openInvoiceCount} open invoices`}
+							tone="warn"
 						/>
-						<MetricPanel
-							icon={CalendarClock}
+						<Kpi
 							label="Overdue"
-							value={formatMoney(summary.overdueAmount, currency)}
-							detail={`${summary.overdueInvoiceCount} overdue invoices`}
-							tone="rose"
+							value={formatCompactMoney(summary.overdueAmount, currency)}
+							sub={`${summary.overdueInvoiceCount} overdue invoices`}
+							tone="danger"
 						/>
-					</section>
+					</KpiStrip>
 
-					<section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-						<ReportPanel
-							title="Monthly movement"
-							label={`${formatInvoiceDate(window.from)} - ${formatInvoiceDate(window.to)}`}
+					<InsightCallout
+						currency={currency}
+						billedAmount={summary.billedAmount}
+						collectedAmount={summary.collectedAmount}
+						collectionRate={summary.collectionRate}
+						topCustomerName={topCustomer?.customerName}
+						topShare={topShare}
+					/>
+
+					<Panel
+						title="Revenue visualization"
+						sub={`${formatInvoiceDate(window.from)} – ${formatInvoiceDate(window.to)}`}
+					>
+						<div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+							<div className="flex flex-wrap items-center gap-2">
+								{(
+									[
+										["billedAmount", "Billed", "var(--color-info)"],
+										["collectedAmount", "Collected", "var(--color-ok)"],
+									] as const
+								).map(([key, label, color]) => {
+									const active = visibleSeries[key];
+									return (
+										<button
+											key={key}
+											type="button"
+											onClick={() =>
+												setVisibleSeries((current) => ({
+													...current,
+													[key]: !current[key],
+												}))
+											}
+											className={cn(
+												"inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition-colors",
+												active
+													? "border-rule bg-paper-3 text-ink"
+													: "border-transparent text-ink-3",
+											)}
+											aria-pressed={active}
+										>
+											<span
+												aria-hidden="true"
+												className="h-2 w-2 rounded-full"
+												style={{
+													backgroundColor: color,
+													opacity: active ? 1 : 0.3,
+												}}
+											/>
+											{label}
+										</button>
+									);
+								})}
+							</div>
+							<SegmentedFilter
+								options={[
+									{ value: "monthly", label: "Monthly" },
+									{ value: "cumulative", label: "Cumulative" },
+								]}
+								value={chartMode}
+								onChange={(value) =>
+									setChartMode(value as "monthly" | "cumulative")
+								}
+							/>
+						</div>
+						<ChartContainer
+							config={barChartConfig}
+							className="aspect-[16/6] min-h-[240px] w-full"
 						>
-							<div className="h-[320px]">
-								<ResponsiveContainer width="100%" height="100%">
-									<LineChart
-										data={timeline}
-										margin={{ left: 0, right: 16, top: 10 }}
-									>
-										<CartesianGrid
-											stroke="var(--color-rule)"
-											strokeDasharray="4 4"
-										/>
-										<XAxis
-											dataKey="label"
-											stroke="var(--color-ink-3)"
-											fontSize={12}
-											tickLine={false}
-											axisLine={false}
-										/>
-										<YAxis
-											stroke="var(--color-ink-3)"
-											fontSize={12}
-											tickLine={false}
-											axisLine={false}
-											tickFormatter={(value) =>
-												formatCompactMoney(Number(value), currency)
-											}
-										/>
-										<Tooltip
-											cursor={{ stroke: "var(--color-brand)", strokeWidth: 1 }}
-											content={<MovementTooltip currency={currency} />}
-										/>
-										<Line
-											type="monotone"
-											dataKey="billedAmount"
-											stroke="#8bd5ff"
-											strokeWidth={2}
-											dot={false}
-										/>
-										<Line
-											type="monotone"
-											dataKey="collectedAmount"
-											stroke="var(--color-brand)"
-											strokeWidth={2}
-											dot={false}
-										/>
-									</LineChart>
-								</ResponsiveContainer>
-							</div>
-						</ReportPanel>
-
-						<ReportPanel title="Customer concentration" label={currency}>
-							<div className="h-[320px]">
-								<ResponsiveContainer width="100%" height="100%">
-									<BarChart data={topCustomers.slice(0, 5)} layout="vertical">
-										<CartesianGrid
-											stroke="var(--color-rule)"
-											strokeDasharray="4 4"
-										/>
-										<XAxis
-											type="number"
-											stroke="var(--color-ink-3)"
-											fontSize={12}
-											tickLine={false}
-											axisLine={false}
-											tickFormatter={(value) =>
-												formatCompactMoney(Number(value), currency)
-											}
-										/>
-										<YAxis
-											type="category"
-											dataKey="customerName"
-											stroke="var(--color-ink-3)"
-											fontSize={12}
-											tickLine={false}
-											axisLine={false}
-											width={112}
-										/>
-										<Tooltip
-											cursor={{
-												fill: "color-mix(in srgb, var(--color-brand) 8%, transparent)",
-											}}
-											content={
-												<CustomerConcentrationTooltip currency={currency} />
-											}
-										/>
-										<Bar
-											dataKey="billedAmount"
-											fill="var(--color-info)"
-											radius={2}
-										/>
-									</BarChart>
-								</ResponsiveContainer>
-							</div>
-						</ReportPanel>
-					</section>
+							<BarChart
+								accessibilityLayer
+								data={chartData}
+								margin={{ left: 8, right: 12, top: 8, bottom: 0 }}
+							>
+								<CartesianGrid vertical={false} stroke="var(--chart-grid)" />
+								<XAxis
+									dataKey="label"
+									tickLine={false}
+									axisLine={false}
+									tickMargin={12}
+									minTickGap={16}
+									tick={{ fontSize: 12 }}
+								/>
+								<YAxis
+									tickLine={false}
+									axisLine={false}
+									width={64}
+									tick={{ fontSize: 12 }}
+									tickFormatter={(value: number) =>
+										formatCompactMoney(value, currency)
+									}
+								/>
+								<ChartTooltip
+									cursor={{ fill: "var(--chart-scale-01)" }}
+									content={<RevenueTooltip currency={currency} />}
+								/>
+								{visibleSeries.billedAmount && (
+									<Bar
+										dataKey="billedAmount"
+										fill="var(--color-billedAmount)"
+										radius={4}
+										maxBarSize={38}
+									/>
+								)}
+								{visibleSeries.collectedAmount && (
+									<Bar
+										dataKey="collectedAmount"
+										fill="var(--color-collectedAmount)"
+										radius={4}
+										maxBarSize={38}
+									/>
+								)}
+							</BarChart>
+						</ChartContainer>
+					</Panel>
 
 					<section className="grid gap-4 xl:grid-cols-3">
-						<ReportPanel title="Top customers" label="Billed">
+						<Panel title="Top customers" sub="Billed">
 							<RowsEmptyGuard show={topCustomers.length === 0}>
-								<div className="divide-y divide-rule">
-									{topCustomers.map((customer) => (
-										<CustomerRow
-											key={`${customer.currency}:${customer.customerName}`}
-											name={customer.customerName}
-											primary={formatMoney(customer.billedAmount, currency)}
-											secondary={`${formatMoney(customer.outstandingAmount, currency)} open`}
-											meta={`${customer.invoiceCount} invoices`}
-										/>
-									))}
+								<div>
+									{topCustomers.map((customer) => {
+										const share =
+											summary.billedAmount > 0
+												? (customer.billedAmount / summary.billedAmount) * 100
+												: 0;
+										return (
+											<ListRow
+												key={`${customer.currency}:${customer.customerName}`}
+												icon={<Users />}
+												tint="accent"
+												title={customer.customerName}
+												subtitle={`${customer.invoiceCount} invoice${customer.invoiceCount === 1 ? "" : "s"} · all open`}
+												amount={
+													<span className="block text-right">
+														<span className="block text-ink">
+															{formatMoney(customer.billedAmount, currency)}
+														</span>
+														<span className="mt-1 block text-xs text-ink-3">
+															{formatPercent(share / 100)}
+														</span>
+													</span>
+												}
+												barPercent={share}
+												barTone="accent"
+											/>
+										);
+									})}
 								</div>
 							</RowsEmptyGuard>
-						</ReportPanel>
+							<div className="px-1 pt-3">
+								<Link
+									to="/invoices"
+									className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-hi underline-offset-2 hover:underline"
+								>
+									Assign customers to invoices
+									<ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+								</Link>
+							</div>
+						</Panel>
 
-						<ReportPanel title="Late payers" label="Overdue">
-							<RowsEmptyGuard show={latePayers.length === 0}>
-								<div className="divide-y divide-rule">
+						<Panel title="Late payers" sub="Overdue">
+							{latePayers.length === 0 ? (
+								<EmptyState
+									icon={<Check />}
+									title="No late payers"
+									copy="Nothing is past due in this period."
+								/>
+							) : (
+								<div>
 									{latePayers.map((customer) => (
-										<CustomerRow
+										<ListRow
 											key={`${customer.currency}:${customer.customerName}`}
-											name={customer.customerName}
-											primary={formatMoney(customer.overdueAmount, currency)}
-											secondary={`${compactNumber(customer.averageDaysOverdue)} days avg`}
-											meta={`${customer.overdueInvoiceCount} invoices`}
-											tone="rose"
+											icon={<CalendarClock />}
+											tint="warn"
+											title={customer.customerName}
+											subtitle={`${compactNumber(customer.averageDaysOverdue)} days avg · ${customer.overdueInvoiceCount} invoices`}
+											amount={
+												<span className="text-ink">
+													{formatMoney(customer.overdueAmount, currency)}
+												</span>
+											}
 										/>
 									))}
 								</div>
-							</RowsEmptyGuard>
-						</ReportPanel>
+							)}
+						</Panel>
 
-						<ReportPanel title="Product revenue" label="Line items">
+						<Panel title="Product revenue" sub="Line items">
 							<RowsEmptyGuard show={topProducts.length === 0}>
-								<div className="divide-y divide-rule">
+								<div>
 									{topProducts.map((product) => (
-										<CustomerRow
+										<ListRow
 											key={`${product.currency}:${product.productId ?? product.name}`}
-											name={product.name}
-											primary={formatMoney(product.revenue, currency)}
-											secondary={`${compactNumber(product.quantitySold)} sold`}
-											meta={`${product.invoiceCount} invoices`}
-											tone="cyan"
+											icon={<FileText />}
+											tint="info"
+											title={product.name}
+											subtitle={`${product.invoiceCount} invoice${product.invoiceCount === 1 ? "" : "s"} · ${compactNumber(product.quantitySold)} sold`}
+											amount={
+												<span className="text-ink">
+													{formatMoney(product.revenue, currency)}
+												</span>
+											}
+											barPercent={
+												maxProductRevenue > 0
+													? (product.revenue / maxProductRevenue) * 100
+													: 0
+											}
+											barTone="info"
 										/>
 									))}
 								</div>
 							</RowsEmptyGuard>
-						</ReportPanel>
+						</Panel>
 					</section>
 
-					<ReportPanel title="Open invoices" label={currency}>
+					<Panel title="Open invoices" sub={currency}>
 						<RowsEmptyGuard show={openInvoices.length === 0}>
 							<div className="overflow-x-auto">
 								<table className="w-full min-w-[760px] text-left text-sm">
@@ -381,21 +559,17 @@ function ReportsIndex() {
 												<td className="py-3 pr-4">
 													{formatInvoiceDate(invoice.dueDate)}
 												</td>
-												<td className="py-3 pr-4 text-right font-medium text-ink">
+												<td className="font-num py-3 pr-4 text-right font-medium text-ink tabular-nums">
 													{formatMoney(invoice.balance, currency)}
 												</td>
 												<td className="py-3 text-right">
-													<span
-														className={`inline-flex border px-2 py-1 text-xs font-medium ${
-															invoice.daysOverdue > 0
-																? "border-danger-line/40 bg-danger-soft text-danger"
-																: "border-brand-line bg-brand-soft text-brand"
-														}`}
+													<StatusPill
+														tone={invoice.daysOverdue > 0 ? "bad" : "ok"}
 													>
 														{invoice.daysOverdue > 0
 															? `${invoice.daysOverdue} days overdue`
 															: invoice.status}
-													</span>
+													</StatusPill>
 												</td>
 											</tr>
 										))}
@@ -403,10 +577,74 @@ function ReportsIndex() {
 								</table>
 							</div>
 						</RowsEmptyGuard>
-					</ReportPanel>
+					</Panel>
 				</>
 			)}
 		</div>
+	);
+}
+
+function InsightCallout({
+	currency,
+	billedAmount,
+	collectedAmount,
+	collectionRate,
+	topCustomerName,
+	topShare,
+}: {
+	currency: string;
+	billedAmount: number;
+	collectedAmount: number;
+	collectionRate: number;
+	topCustomerName?: string;
+	topShare: number;
+}) {
+	if (billedAmount <= 0) {
+		return (
+			<Callout tone="info" title="No revenue in this period.">
+				<p>
+					Invoices issued in the selected period will show up here once they are
+					created.
+				</p>
+			</Callout>
+		);
+	}
+	if (collectedAmount <= 0) {
+		return (
+			<Callout tone="info" title="Nothing has been collected yet.">
+				<p>
+					{topCustomerName
+						? `${topCustomerName} alone is ${formatPercent(topShare)} of what you have billed, with ${formatMoney(billedAmount, currency)} still outstanding.`
+						: `${formatMoney(billedAmount, currency)} is still outstanding across this period.`}
+				</p>
+				<Link
+					to="/settings/collections"
+					className="mt-2 inline-flex items-center gap-1 text-[13px] font-medium text-brand-hi underline-offset-2 hover:underline"
+				>
+					Open payment reminders
+					<ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+				</Link>
+			</Callout>
+		);
+	}
+	return (
+		<Callout
+			tone="info"
+			title={`${formatPercent(collectionRate)} collected so far.`}
+		>
+			<p>
+				{topCustomerName
+					? `${topCustomerName} is ${formatPercent(topShare)} of billed revenue at ${formatMoney(billedAmount, currency)}.`
+					: `${formatMoney(collectedAmount, currency)} of ${formatMoney(billedAmount, currency)} billed has been collected.`}
+			</p>
+			<Link
+				to="/settings/collections"
+				className="mt-2 inline-flex items-center gap-1 text-[13px] font-medium text-brand-hi underline-offset-2 hover:underline"
+			>
+				Open payment reminders
+				<ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+			</Link>
+		</Callout>
 	);
 }
 
@@ -424,194 +662,6 @@ function createEmptySummary(currency: string): CurrencySummary {
 		averageInvoiceValue: 0,
 		collectionRate: 0,
 	};
-}
-
-function MovementTooltip({
-	active,
-	payload,
-	label,
-	currency,
-}: {
-	active?: boolean;
-	payload?: ChartTooltipPayload[];
-	label?: string;
-	currency: string;
-}) {
-	if (!active || !payload?.length) return null;
-
-	return (
-		<div className="min-w-[210px] rounded-md border border-rule bg-paper/95 px-3 py-3 text-xs shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-md">
-			<p className="mb-2 font-medium text-ink">{label}</p>
-			<div className="space-y-2">
-				{payload.map((entry) => {
-					const isCollected = entry.dataKey === "collectedAmount";
-					return (
-						<div
-							key={String(entry.dataKey)}
-							className="flex items-center justify-between gap-4"
-						>
-							<span className="inline-flex items-center gap-2 text-ink-3">
-								<span
-									className={`h-2 w-2 rounded-full ${
-										isCollected ? "bg-brand" : "bg-info"
-									}`}
-								/>
-								{isCollected ? "Collected" : "Billed"}
-							</span>
-							<span className="font-medium text-ink">
-								{formatMoney(Number(entry.value ?? 0), currency)}
-							</span>
-						</div>
-					);
-				})}
-			</div>
-		</div>
-	);
-}
-
-function CustomerConcentrationTooltip({
-	active,
-	payload,
-	currency,
-}: {
-	active?: boolean;
-	payload?: ChartTooltipPayload[];
-	currency: string;
-}) {
-	if (!active || !payload?.length) return null;
-
-	const point = payload[0]?.payload ?? {};
-	const customerName = String(point.customerName ?? "Unknown customer");
-	const billedAmount = Number(point.billedAmount ?? payload[0]?.value ?? 0);
-	const outstandingAmount = Number(point.outstandingAmount ?? 0);
-	const invoiceCount = Number(point.invoiceCount ?? 0);
-
-	return (
-		<div className="min-w-[230px] rounded-md border border-rule bg-paper/95 px-3 py-3 text-xs shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-md">
-			<p className="font-medium text-ink">{customerName}</p>
-			<div className="mt-2 space-y-2">
-				<div className="flex items-center justify-between gap-4">
-					<span className="text-ink-3">Billed</span>
-					<span className="font-medium text-info">
-						{formatMoney(billedAmount, currency)}
-					</span>
-				</div>
-				<div className="flex items-center justify-between gap-4">
-					<span className="text-ink-3">Open</span>
-					<span className="font-medium text-ink">
-						{formatMoney(outstandingAmount, currency)}
-					</span>
-				</div>
-				<div className="flex items-center justify-between gap-4">
-					<span className="text-ink-3">Invoices</span>
-					<span className="text-ink-2">{invoiceCount}</span>
-				</div>
-			</div>
-		</div>
-	);
-}
-
-function MetricPanel({
-	icon: Icon,
-	label,
-	value,
-	detail,
-	tone = "neutral",
-}: {
-	icon: LucideIcon;
-	label: string;
-	value: string;
-	detail: string;
-	tone?: "neutral" | "brand" | "amber" | "rose";
-}) {
-	const toneClass = {
-		neutral: "text-info border-info-line/35 bg-info-soft",
-		brand: "text-brand border-brand/35 bg-brand-soft",
-		amber: "text-warn border-warn-line/35 bg-warn-soft",
-		rose: "text-danger border-danger-line/35 bg-danger-soft",
-	}[tone];
-
-	return (
-		<div className="ui-panel rounded-md border border-rule bg-paper-2 p-4">
-			<div className="flex items-center justify-between gap-3">
-				<p className="text-xs font-medium uppercase tracking-[0.1em] text-ink-3">
-					{label}
-				</p>
-				<span
-					className={`flex h-8 w-8 items-center justify-center border ${toneClass}`}
-				>
-					<Icon className="h-4 w-4" />
-				</span>
-			</div>
-			<p className="mt-4 truncate text-2xl font-semibold tracking-normal text-ink">
-				{value}
-			</p>
-			<p className="mt-2 text-sm text-ink-3">{detail}</p>
-		</div>
-	);
-}
-
-function ReportPanel({
-	title,
-	label,
-	children,
-}: {
-	title: string;
-	label: string;
-	children: ReactNode;
-}) {
-	return (
-		<section className="ui-panel rounded-md border border-rule bg-paper-2">
-			<div className="flex items-center justify-between gap-3 border-b border-rule px-4 py-3">
-				<h2 className="text-sm font-semibold text-ink">{title}</h2>
-				<span className="text-xs font-medium uppercase tracking-[0.08em] text-ink-3">
-					{label}
-				</span>
-			</div>
-			<div className="p-4">{children}</div>
-		</section>
-	);
-}
-
-function CustomerRow({
-	name,
-	primary,
-	secondary,
-	meta,
-	tone = "brand",
-}: {
-	name: string;
-	primary: string;
-	secondary: string;
-	meta: string;
-	tone?: "brand" | "rose" | "cyan";
-}) {
-	const Icon =
-		tone === "rose" ? ArrowDownRight : tone === "cyan" ? ReceiptText : Users;
-	const iconClass =
-		tone === "rose"
-			? "border-danger-line/35 bg-danger-soft text-danger"
-			: tone === "cyan"
-				? "border-info-line/35 bg-info-soft text-info"
-				: "border-brand/35 bg-brand-soft text-brand";
-
-	return (
-		<div className="flex items-center gap-3 py-3">
-			<span
-				className={`flex h-9 w-9 shrink-0 items-center justify-center border ${iconClass}`}
-			>
-				<Icon className="h-4 w-4" />
-			</span>
-			<div className="min-w-0 flex-1">
-				<p className="truncate text-sm font-medium text-ink">{name}</p>
-				<p className="mt-1 text-xs text-ink-3">{meta}</p>
-			</div>
-			<div className="text-right">
-				<p className="text-sm font-semibold text-ink">{primary}</p>
-				<p className="mt-1 text-xs text-ink-3">{secondary}</p>
-			</div>
-		</div>
-	);
 }
 
 function ReportsSkeleton() {
