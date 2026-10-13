@@ -387,24 +387,34 @@ code {
  * Scope is controls only. Portalled menu items (`[role="menuitem"]`) are
  * deliberately absent — their focus state is the `bg-accent` row highlight, and
  * a 2px outline on every dropdown row would read as a mistake. */
+/* Outline colour mirrors the mock's `--accent-line` (app-redesign.html:31
+ * `outline:2px solid var(--accent-line)`), i.e. the accent at 38% alpha
+ * (`rgba(229,72,59,.38)`). The opaque vivid accent reads as an error box on
+ * dark paper. color-mix keeps the shared opaque tokens (charts, pills) at
+ * their locked values. */
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
 a[href]:focus-visible,
 [role="button"]:not(tr):focus-visible {
-  outline: 2px solid var(--hm-focus);
+  outline: 2px solid color-mix(in oklab, var(--hm-accent) 38%, transparent);
   outline-offset: 2px;
 }
 
-/* Text controls already signal focus with a border-color change, so their
- * ring sits flush (offset 0): an offset ring plus a changed border reads as
- * an uneven double ring, and offset rings get clipped by overflow-hidden
- * ancestors (palette, sheets). Buttons/links keep the 2px offset. */
+/* Text controls follow the mock's field treatment (app-redesign.html:161
+ * `.fld input:focus` → accent-line border + 3px accent-soft halo) instead of
+ * the hard outline: on the invoice paper's invisible inputs a vivid 2px box
+ * pops around what looks like plain text, and on bordered inputs an offset
+ * ring plus a changed border reads as an uneven double ring. This is also
+ * shadcn's ring idiom (box-shadow halo), so layered component rings and this
+ * unlayered rule never disagree. */
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline-offset: 0;
+  outline: none;
+  border-color: color-mix(in oklab, var(--hm-accent) 38%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--hm-accent) 11%, transparent);
 }
 
 @layer utilities {
@@ -1265,11 +1275,10 @@ body {
 .invoice-paper-controls input:not([type="checkbox"]):not([type="file"]):focus-visible,
 .invoice-paper-controls textarea:focus-visible,
 .invoice-paper-controls [role="combobox"]:focus-visible {
-	border-color: var(--hm-focus) !important;
-	/* No box-shadow spread: the global flush focus outline already rings the
-	 * control. A spread shadow bleeds into neighbouring cells (Price over
-	 * Quantity) in the tight line-item grid. */
-	box-shadow: none !important;
+	/* Same soft field treatment as the global text-control rule; !important
+	 * because the rest state above pins a transparent border. */
+	border-color: color-mix(in oklab, var(--hm-accent) 38%, transparent) !important;
+	box-shadow: 0 0 0 3px color-mix(in oklab, var(--hm-accent) 11%, transparent) !important;
 }
 
 .invoice-paper-controls [class*="border-rule"]:has(input),
@@ -1443,10 +1452,16 @@ body {
   transform: translateY(1px) scale(1);
 }
 
-.hm :is(button, a[href], [role="button"], input, textarea, select):focus-visible {
-  outline: 2px solid var(--hm-focus);
+.hm :is(button, a[href], [role="button"]):focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--hm-accent) 38%, transparent);
   outline-offset: 2px;
   box-shadow: none;
+}
+
+.hm :is(input, textarea, select):focus-visible {
+  outline: none;
+  border-color: color-mix(in oklab, var(--hm-accent) 38%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--hm-accent) 11%, transparent);
 }
 
 .hm-link {

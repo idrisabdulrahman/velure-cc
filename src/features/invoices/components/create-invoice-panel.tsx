@@ -13,7 +13,7 @@ import {
 	verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "@tanstack/react-query";
 import {
 	CalendarDays,
 	Check,
@@ -102,10 +102,20 @@ import { formatMoney } from "#/features/invoices/format";
 import type { ImportedInvoiceDraft } from "#/features/invoices/import-spreadsheet";
 import { toEditorDoc } from "#/features/invoices/midday-adapter";
 import type { InvoiceTemplateSettings } from "#/features/invoices/types";
+import { useUnifiedAuth } from "#/lib/auth-hook";
 import type { EditorDoc } from "#/lib/midday-invoice/types";
+import { useSupabaseSession } from "#/lib/supabase-session";
+import { createClient, listClients } from "#/server/data/clients";
+import {
+	autosaveDraft,
+	createDraft,
+	getTemplateDefaults,
+	saveTemplateDefaults,
+} from "#/server/data/invoices";
+import { createProduct, searchProducts } from "#/server/data/products";
+import { getInvoiceWorkspaceSettings } from "#/server/data/workspaces";
 import { cn } from "#/utils/cn";
-import { api } from "../../../../convex/_generated/api";
-import type { Id } from "../../../../convex/_generated/dataModel";
+
 import { NotesEditor } from "./editor/notes-editor";
 import { InlineLabelInput } from "./inline-label-input";
 
@@ -114,7 +124,7 @@ type LineItem = {
 	name: string;
 	quantity: number;
 	price: number;
-	productId?: Id<"products">;
+	productId?: string;
 	unit?: string;
 };
 
@@ -127,7 +137,7 @@ type CreateInvoicePanelProps = {
 
 type ComposerStage = "editor" | "success";
 
-type CreateIntent = "create" | "open";
+type CreateIntent = "create" | "open" | "create_and_send" | "scheduled";
 type AutosaveStatus = "idle" | "saving" | "saved" | "error";
 type InvoiceDocumentType = "standard" | "proforma";
 type DepositRequestKind = "amount" | "percentage";
@@ -198,24 +208,23 @@ const NOTE_PLACEHOLDER =
 
 type SupportedCurrency = (typeof INVOICE_CURRENCY_OPTIONS)[number]["code"];
 type SupportedTemplateName = (typeof TEMPLATE_OPTIONS)[number]["value"];
+const CURRENCY_COUNTRIES: Record<SupportedCurrency, JurisdictionCode> = {
+	NGN: "NG",
+	GBP: "GB",
+	USD: "US",
+};
+
 function getCountryCodeFromCurrency(currency: string): JurisdictionCode {
-	switch (currency.toUpperCase()) {
-		case "NGN":
-			return "NG";
-		case "GBP":
-			return "GB";
-		case "USD":
-			return "US";
-		default:
-			return "OTHER";
-	}
+	return (
+		CURRENCY_COUNTRIES[currency.toUpperCase() as SupportedCurrency] ?? "OTHER"
+	);
 }
 
 function normalizeCurrency(value?: string | null): SupportedCurrency {
 	const normalized = value?.trim().toUpperCase();
-	if (normalized === "NGN" || normalized === "USD" || normalized === "GBP")
-		return normalized;
-	return "NGN";
+	return normalized && normalized in CURRENCY_COUNTRIES
+		? (normalized as SupportedCurrency)
+		: "NGN";
 }
 
 function toIsoDate(value: Date) {
@@ -458,20 +467,45 @@ export function CreateInvoicePanel({
 }: CreateInvoicePanelProps) {
 	// const navigate = useNavigate();
 	const isSheetMode = mode === "sheet";
-	const createDraft = useMutation(api.invoices.createDraft);
-	const autosaveDraft = useMutation(api.invoices.autosaveDraft);
-	const clients = (useQuery(api.clients.list, {
-		q: "",
-		status: "all",
-	}) ?? []) as Array<{
+	const authState = useUnifiedAuth();
+	const userId = authState.data?.user?.id;
+	const { client: supabaseClient } = useSupabaseSession(userId);
+	const requireSupabase = () => {
+		if (!supabaseClient || !userId) throw new Error("Session unavailable");
+		return { client: supabaseClient, userId };
+	};
+	const clientsQuery = useQuery({
+		queryKey: ["invoice-composer-clients", userId],
+		queryFn: () => {
+			const context = requireSupabase();
+			return listClients(context.client, context.userId);
+		},
+		enabled: Boolean(supabaseClient && userId),
+	});
+	const clients = (clientsQuery.data ?? []) as Array<{
 		id?: string;
 		name: string;
 		email?: string;
 		currency?: string;
 	}>;
-	const workspace = useQuery(api.compliance.getWorkspaceSettings, {});
-	const savedTemplateSettings = useQuery(api.invoices.getTemplateDefaults, {});
-	const saveTemplateDefaults = useMutation(api.invoices.saveTemplateDefaults);
+	const workspaceQuery = useQuery({
+		queryKey: ["invoice-workspace", userId],
+		queryFn: () => {
+			const context = requireSupabase();
+			return getInvoiceWorkspaceSettings(context.client, context.userId);
+		},
+		enabled: Boolean(supabaseClient && userId),
+	});
+	const workspace = workspaceQuery.data;
+	const savedTemplateSettingsQuery = useQuery({
+		queryKey: ["invoice-template-defaults", userId],
+		queryFn: () => {
+			const context = requireSupabase();
+			return getTemplateDefaults(context.client, context.userId);
+		},
+		enabled: Boolean(supabaseClient && userId),
+	});
+	const savedTemplateSettings = savedTemplateSettingsQuery.data;
 
 	const [composerStage, setComposerStage] = useState<ComposerStage>("editor");
 	const [createdInvoice, setCreatedInvoice] =
@@ -546,14 +580,12 @@ export function CreateInvoicePanel({
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [customerSearch, setCustomerSearch] = useState("");
 	const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
-	const [customerId, setCustomerId] = useState<Id<"clients"> | undefined>();
+	const [customerId, setCustomerId] = useState<string | undefined>();
 	const [customerActiveIndex, setCustomerActiveIndex] = useState(0);
 	const [createClientOpen, setCreateClientOpen] = useState(false);
 	const [newClientName, setNewClientName] = useState("");
 	const [newClientEmail, setNewClientEmail] = useState("");
 	const [newClientSubmitting, setNewClientSubmitting] = useState(false);
-	const createClient = useMutation(api.clients.create);
-	const createProduct = useMutation(api.products.create);
 
 	const onCreateClientSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -562,7 +594,8 @@ export function CreateInvoicePanel({
 
 		setNewClientSubmitting(true);
 		try {
-			const id = await createClient({
+			if (!supabaseClient || !userId) throw new Error("Session unavailable");
+			const id = await createClient(supabaseClient, userId, {
 				name: newClientName,
 				email: newClientEmail,
 				currency: "NGN",
@@ -622,27 +655,31 @@ export function CreateInvoicePanel({
 	>(null);
 	const lineItemsScrollRef = useRef<HTMLDivElement | null>(null);
 	const pendingLineInputRef = useRef<HTMLInputElement | null>(null);
-	const autosaveDraftIdRef = useRef<Id<"invoices"> | null>(null);
+	const autosaveDraftIdRef = useRef<string | null>(null);
 	const autosaveTokenRef = useRef(`pub-${crypto.randomUUID()}`);
 	const autosaveSignatureRef = useRef("");
 	const autosaveInFlightRef = useRef(false);
 	const autosavePendingRef = useRef(false);
 	const autosaveNowRef = useRef<() => void>(() => {});
 
-	const productSearchResults = useQuery(
-		api.products.list,
-		productSearchIndex !== null
-			? {
-					q: productSearchQuery.trim(),
-					type: "all",
-					status: "active",
-				}
-			: "skip",
-	);
+	const productSearchQueryResult = useQuery({
+		queryKey: ["invoice-product-search", userId, productSearchQuery],
+		queryFn: () => {
+			const context = requireSupabase();
+			return searchProducts(context.client, context.userId, productSearchQuery);
+		},
+		enabled: Boolean(
+			supabaseClient &&
+				userId &&
+				productSearchIndex !== null &&
+				productSearchQuery.trim(),
+		),
+	});
+	const productSearchResults = productSearchQueryResult.data;
 	const visibleProductSearchResults = (
 		(productSearchResults as
 			| Array<{
-					id: Id<"products">;
+					id: string;
 					name: string;
 					sku?: string;
 					defaultUnitPrice: number;
@@ -675,7 +712,15 @@ export function CreateInvoicePanel({
 		);
 		setSellerTaxStatus(nextSellerTaxStatus);
 		setTaxTreatment(defaultTaxTreatmentForSellerTaxStatus(nextSellerTaxStatus));
-		setInvoiceNumber(generateInvoiceNumber(workspace, documentType));
+		setInvoiceNumber(
+			generateInvoiceNumber(
+				{
+					...workspace,
+					invoiceNumberPrefix: workspace.invoiceNumberPrefix ?? undefined,
+				},
+				documentType,
+			),
+		);
 		setFromName(workspace.legalName || workspace.name || "Velure Studio");
 		setFromEmail(workspace.email ?? "");
 		setLogoUrl(workspace.logoUrl ?? "");
@@ -718,7 +763,17 @@ export function CreateInvoicePanel({
 
 	useEffect(() => {
 		if (!workspace || initialDraft) return;
-		setInvoiceNumber(generateInvoiceNumber(workspace, documentType));
+		setInvoiceNumber(
+			generateInvoiceNumber(
+				workspace
+					? {
+							...workspace,
+							invoiceNumberPrefix: workspace.invoiceNumberPrefix ?? undefined,
+						}
+					: undefined,
+				documentType,
+			),
+		);
 	}, [
 		documentType,
 		initialDraft,
@@ -897,9 +952,9 @@ export function CreateInvoicePanel({
 	const paperFrameClass =
 		invoiceSize === "A4" ? "max-w-[860px]" : "max-w-[900px]";
 	const footerGhostButtonClass =
-		"inline-flex h-10 items-center gap-2 rounded-md border border-rule bg-paper px-3.5 text-[13px] text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink";
+		"inline-flex h-10 items-center gap-2 rounded-md border border-rule bg-paper px-3.5 text-[13px] text-ink-2 transition-[opacity,background-color,border-color,color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-paper-2 hover:text-ink";
 	const footerIconButtonClass =
-		"inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink";
+		"inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-[opacity,background-color,border-color,color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-paper-2 hover:text-ink";
 
 	const createdInvoicePublicUrl = createdInvoice
 		? `${typeof window !== "undefined" ? window.location.origin : ""}/i/${createdInvoice.token}`
@@ -1080,7 +1135,7 @@ export function CreateInvoicePanel({
 		],
 	);
 
-	const buildDraftMutationArgs = (id?: Id<"invoices"> | null) => ({
+	const buildDraftMutationArgs = (id?: string | null) => ({
 		id: id ?? undefined,
 		token: autosaveTokenRef.current,
 		documentType,
@@ -1165,10 +1220,13 @@ export function CreateInvoicePanel({
 		setAutosaveStatus("saving");
 
 		try {
+			if (!supabaseClient || !userId) throw new Error("Session unavailable");
 			const saved = await autosaveDraft(
+				supabaseClient,
+				userId,
 				buildDraftMutationArgs(autosaveDraftIdRef.current),
 			);
-			autosaveDraftIdRef.current = saved.id as Id<"invoices">;
+			autosaveDraftIdRef.current = saved.id;
 			setInvoiceNumber(saved.invoiceNumber);
 			autosaveSignatureRef.current = autosaveSignature;
 			setAutosaveStatus("saved");
@@ -1287,7 +1345,7 @@ export function CreateInvoicePanel({
 	};
 
 	const selectClient = (client: (typeof clients)[number]) => {
-		setCustomerId(client.id as Id<"clients"> | undefined);
+		setCustomerId(client.id);
 		setCustomerName(client.name);
 		setCustomerEmail(client.email ?? "");
 		setCustomerPickerOpen(false);
@@ -1306,7 +1364,7 @@ export function CreateInvoicePanel({
 	const selectProduct = (
 		index: number,
 		product: {
-			id: Id<"products"> | string;
+			id: string;
 			name: string;
 			sku?: string;
 			defaultUnitPrice: number;
@@ -1317,7 +1375,7 @@ export function CreateInvoicePanel({
 		updateLine(index, {
 			name: product.name,
 			price: product.defaultUnitPrice,
-			productId: product.id as Id<"products">,
+			productId: product.id,
 		});
 		if (lineId) {
 			setPriceDrafts((prev) => ({
@@ -1494,7 +1552,16 @@ export function CreateInvoicePanel({
 		setComposerStage("editor");
 		setCreatedInvoice(null);
 		setDocumentType(initialDocumentType);
-		setInvoiceNumber(generateInvoiceNumber(workspace));
+		setInvoiceNumber(
+			generateInvoiceNumber(
+				workspace
+					? {
+							...workspace,
+							invoiceNumberPrefix: workspace.invoiceNumberPrefix ?? undefined,
+						}
+					: undefined,
+			),
+		);
 		setIssueDate(nextIssueDate);
 		setLogoUrl("");
 		setCustomerName("");
@@ -1620,7 +1687,8 @@ export function CreateInvoicePanel({
 		}
 		setSubmitting(true);
 		try {
-			const created = await createDraft({
+			if (!supabaseClient || !userId) throw new Error("Session unavailable");
+			const created = await createDraft(supabaseClient, userId, {
 				id: autosaveDraftIdRef.current ?? undefined,
 				token: `pub-${crypto.randomUUID()}`,
 				documentType,
@@ -1685,7 +1753,7 @@ export function CreateInvoicePanel({
 				fiscalization: {
 					status: "not_configured",
 				},
-				deliveryType: intent,
+				deliveryType: intent === "open" ? "create" : intent,
 				scheduledAt:
 					intent === "scheduled"
 						? new Date(scheduledAt).toISOString()
@@ -1705,6 +1773,19 @@ export function CreateInvoicePanel({
 			});
 			setComposerStage("success");
 			onCreated?.(created.id);
+			if (intent === "create_and_send") {
+				const response = await fetch(
+					`/api/invoice/send/${encodeURIComponent(created.id)}`,
+					{
+						method: "POST",
+						credentials: "include",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ to: customerEmail.trim() }),
+					},
+				);
+				if (!response.ok)
+					throw new Error("Invoice created but email delivery failed.");
+			}
 			autosaveDraftIdRef.current = null;
 			autosaveTokenRef.current = `pub-${crypto.randomUUID()}`;
 			autosaveSignatureRef.current = "";
@@ -1734,8 +1815,10 @@ export function CreateInvoicePanel({
 			<div
 				className={`flex h-full min-h-0 w-full flex-col ${isSheetMode ? "" : "pb-6"}`}
 			>
-				<div className={`flex-1 overflow-auto ${isSheetMode ? "p-0" : "px-2"}`}>
-					<div className="mx-auto flex h-full min-h-full w-full max-w-[720px] flex-col border border-rule bg-paper">
+				<div
+					className={`min-h-0 flex-1 ${isSheetMode ? "p-0" : "overflow-auto px-2"}`}
+				>
+					<div className="mx-auto flex h-full min-h-0 w-full max-w-[720px] flex-col border border-rule bg-paper">
 						<div className="flex min-h-0 flex-1 flex-col px-6 py-6">
 							<div>
 								<h2 className="text-[34px] font-medium tracking-[-0.03em] text-ink">
@@ -1750,7 +1833,7 @@ export function CreateInvoicePanel({
 								</p>
 							</div>
 
-							<div className="mt-10 border border-rule bg-paper p-5">
+							<div className="relative my-auto border border-rule bg-paper-2 p-5 pb-7">
 								<div className="flex items-start justify-between gap-4 text-sm text-ink-3">
 									<div className="text-[13px]">
 										{createdInvoice.documentType === "proforma"
@@ -1832,6 +1915,17 @@ export function CreateInvoicePanel({
 										</div>
 									</div>
 								</div>
+								<div
+									aria-hidden="true"
+									className="absolute -bottom-3 left-0 right-0 flex justify-around overflow-hidden"
+								>
+									{[..."abcdefghijkl"].map((edge) => (
+										<span
+											key={`receipt-edge-${edge}`}
+											className="h-6 w-6 shrink-0 rounded-full bg-paper"
+										/>
+									))}
+								</div>
 							</div>
 						</div>
 
@@ -1865,12 +1959,33 @@ export function CreateInvoicePanel({
 			<div
 				className={`flex h-full min-h-0 w-full flex-col ${isSheetMode ? "" : "pb-6"}`}
 			>
-				<div className={`flex-1 overflow-auto ${isSheetMode ? "p-0" : "px-2"}`}>
+				<div
+					className={`min-h-0 flex-1 ${isSheetMode ? "p-0" : "overflow-auto px-2"}`}
+				>
 					<div
-						className={`mx-auto flex min-h-full w-full flex-col border border-rule bg-paper shadow-[0_18px_60px_rgba(0,0,0,0.08)] ${paperFrameClass}`}
+						className={`mx-auto flex h-[calc(100dvh-7rem)] min-h-0 w-full flex-col overflow-hidden border border-rule bg-paper shadow-[0_18px_60px_rgba(0,0,0,0.08)] ${isSheetMode ? "h-full" : "max-h-[960px]"} ${paperFrameClass}`}
 					>
 						<div className="flex min-h-0 flex-1 flex-col">
-							<div className="flex min-h-0 flex-1 flex-col px-5 pb-16 pt-5 sm:px-6 md:px-8 md:pt-7 lg:px-10">
+							<div className="invoice-paper-controls flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-5 pb-16 pt-5 sm:px-6 md:px-8 md:pt-7 lg:px-10">
+								{!isSheetMode ? (
+									<ol
+										aria-label="Create your first invoice in three steps"
+										className="mb-5 grid gap-x-4 gap-y-3 border-b border-rule pb-5 text-[12px] text-ink-2 sm:grid-cols-2 lg:grid-cols-3"
+									>
+										{[
+											"Choose a client",
+											"Add a priced item",
+											"Create and send",
+										].map((step, index) => (
+											<li key={step} className="flex items-center gap-2">
+												<span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-rule bg-paper-2 text-[11px] font-medium text-ink">
+													{index + 1}
+												</span>
+												{step}
+											</li>
+										))}
+									</ol>
+								) : null}
 								<div className="mb-5 flex w-fit rounded-md border border-rule bg-paper-2 p-1">
 									{DOCUMENT_TYPE_OPTIONS.map((option) => (
 										<button
@@ -1892,9 +2007,9 @@ export function CreateInvoicePanel({
 									))}
 								</div>
 
-								<div className="mb-7 grid gap-5 lg:grid-cols-[minmax(0,1fr)_108px] lg:items-start">
+								<div className="mb-7 grid gap-6 lg:grid-cols-[minmax(0,1fr)_96px] lg:items-start">
 									<div className="space-y-3">
-										<div className="grid gap-3 md:grid-cols-[minmax(190px,1.15fr)_minmax(150px,0.85fr)_minmax(168px,1fr)]">
+										<div className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,1fr)]">
 											<div className="min-h-[60px] border-b border-rule px-1 py-2">
 												<InlineLabelInput
 													value={templateLabels.invoiceNoLabel}
@@ -2030,6 +2145,25 @@ export function CreateInvoicePanel({
 
 									<div className="space-y-2">
 										<div className="text-sm text-ink-3">To</div>
+										{!clientsQuery.isLoading &&
+										clients.length === 0 &&
+										!customerName ? (
+											<div className="mb-3 border-l-2 border-brand bg-paper-2 px-3 py-2.5">
+												<p className="text-[13px] font-medium text-ink">
+													Start with your first client
+												</p>
+												<p className="mt-1 text-[12px] text-ink-3">
+													Add their billing details, then select them here.
+												</p>
+												<button
+													type="button"
+													onClick={() => setCreateClientOpen(true)}
+													className="mt-2 inline-flex h-8 items-center rounded-md border border-brand bg-brand px-3 text-[12px] font-medium text-brand-ink hover:bg-brand-hi"
+												>
+													Add your first client
+												</button>
+											</div>
+										) : null}
 										<div className="mb-1">
 											<div className="relative w-full">
 												<button
@@ -2295,45 +2429,51 @@ export function CreateInvoicePanel({
 									</div>
 								) : null}
 
-								<div className="mb-3 hidden grid-cols-[minmax(0,1.7fr)_84px_120px_140px_32px] items-center gap-3 border-b border-rule px-2 pb-2 text-[12px] text-ink-3 md:grid">
-									<InlineLabelInput
-										value={templateLabels.descriptionLabel}
-										onChange={(value) =>
-											setTemplateLabels((current) => ({
-												...current,
-												descriptionLabel: value,
-											}))
-										}
-									/>
-									<InlineLabelInput
-										value={templateLabels.quantityLabel}
-										onChange={(value) =>
-											setTemplateLabels((current) => ({
-												...current,
-												quantityLabel: value,
-											}))
-										}
-									/>
-									<InlineLabelInput
-										value={templateLabels.priceLabel}
-										onChange={(value) =>
-											setTemplateLabels((current) => ({
-												...current,
-												priceLabel: value,
-											}))
-										}
-									/>
-									<InlineLabelInput
-										value={templateLabels.totalLabel}
-										onChange={(value) =>
-											setTemplateLabels((current) => ({
-												...current,
-												totalLabel: value,
-											}))
-										}
-										className="text-right"
-									/>
-									<span />
+								<div className="mb-3 hidden items-center gap-3 border-b border-rule px-2 pb-2 text-[12px] text-ink-3 md:flex">
+									{/* Mirrors CreateSortableLineItem's structure —16px drag
+									 * handle + gap-3 — so the label cells sit exactly above
+									 * their row columns. */}
+									<span className="w-4 shrink-0" aria-hidden />
+									<div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1.4fr)_112px_minmax(0,1fr)_minmax(0,1.1fr)_24px] items-center gap-2">
+										<InlineLabelInput
+											value={templateLabels.descriptionLabel}
+											onChange={(value) =>
+												setTemplateLabels((current) => ({
+													...current,
+													descriptionLabel: value,
+												}))
+											}
+										/>
+										<InlineLabelInput
+											value={templateLabels.quantityLabel}
+											onChange={(value) =>
+												setTemplateLabels((current) => ({
+													...current,
+													quantityLabel: value,
+												}))
+											}
+										/>
+										<InlineLabelInput
+											value={templateLabels.priceLabel}
+											onChange={(value) =>
+												setTemplateLabels((current) => ({
+													...current,
+													priceLabel: value,
+												}))
+											}
+										/>
+										<InlineLabelInput
+											value={templateLabels.totalLabel}
+											onChange={(value) =>
+												setTemplateLabels((current) => ({
+													...current,
+													totalLabel: value,
+												}))
+											}
+											className="text-right"
+										/>
+										<span />
+									</div>
 								</div>
 
 								<div
@@ -2367,7 +2507,7 @@ export function CreateInvoicePanel({
 																isExiting && "invoice-line-exit",
 															)}
 														>
-															<div className="relative grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-end gap-3 md:grid-cols-[minmax(0,1.7fr)_84px_120px_140px_32px] md:items-center">
+															<div className="relative grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-end gap-2 md:grid-cols-[minmax(0,1.4fr)_112px_minmax(0,1fr)_minmax(0,1.1fr)_24px] md:items-center">
 																<div className="relative col-span-2 min-w-0 md:col-span-1">
 																	<label
 																		className="mb-1 block text-[11px] text-ink-3 md:sr-only"
@@ -2560,14 +2700,20 @@ export function CreateInvoicePanel({
 																									return;
 																								setAddingToCatalogIndex(index);
 																								try {
+																									const context =
+																										requireSupabase();
 																									const id =
-																										await createProduct({
-																											type: "product",
-																											name: item.name.trim(),
-																											defaultUnitPrice:
-																												item.price,
-																											isActive: true,
-																										});
+																										await createProduct(
+																											context.client,
+																											context.userId,
+																											{
+																												type: "product",
+																												name: item.name.trim(),
+																												defaultUnitPrice:
+																													item.price,
+																												isActive: true,
+																											},
+																										);
 																									updateLine(index, {
 																										productId: id,
 																									});
@@ -2760,7 +2906,6 @@ export function CreateInvoicePanel({
 												})}
 											</span>
 										</div>
-
 										{compliance.totalTax > 0 ? (
 											<div className="mt-2 flex items-center justify-between">
 												<span>{selectedTaxSetting?.label}</span>
@@ -2774,7 +2919,6 @@ export function CreateInvoicePanel({
 												</span>
 											</div>
 										) : null}
-
 										{withholdingCategory !== "none" ? (
 											<div className="mt-2 flex items-center justify-between text-warn">
 												<span>{selectedWhtCategory?.label}</span>
@@ -2812,10 +2956,9 @@ export function CreateInvoicePanel({
 										</div>
 									</div>
 								</div>
-
 								{showPaymentDetailsSection || showNoteSection ? (
 									<div
-										className={`mt-5 grid items-start gap-4 ${
+										className={`mt-auto grid items-start gap-4 pt-10 ${
 											showPaymentDetailsSection && showNoteSection
 												? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
 												: ""
@@ -2840,7 +2983,7 @@ export function CreateInvoicePanel({
 														setPaymentDetails(event.target.value)
 													}
 													placeholder={PAYMENT_DETAILS_PLACEHOLDER}
-													className="h-20 w-full resize-none rounded-md border border-rule bg-paper p-3 text-[13px] leading-5 text-ink-2 outline-none transition-colors placeholder:text-ink-3"
+													className="min-h-20 w-full resize-none border-0 bg-transparent px-0 py-1 text-[13px] leading-5 text-ink-2 outline-none placeholder:text-ink-3 focus-visible:ring-0"
 												/>
 											</div>
 										) : null}
@@ -2866,7 +3009,7 @@ export function CreateInvoicePanel({
 														setNotes(content as EditorDoc | null)
 													}
 													placeholder={NOTE_PLACEHOLDER}
-													className="min-h-20 w-full rounded-md border border-rule bg-paper px-3 py-2"
+													className="min-h-20 w-full border-0 bg-transparent px-0 py-1"
 												/>
 											</div>
 										) : null}
@@ -2882,469 +3025,469 @@ export function CreateInvoicePanel({
 									</div>
 								) : null}
 							</div>
-						</div>
 
-						<div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule bg-paper px-6 py-3 md:px-7">
-							<div className="flex flex-wrap items-center gap-2">
-								<DropdownMenu>
-									<DropdownMenuTrigger asChild>
-										<Button
-											type="button"
-											variant="ghost"
-											className={footerGhostButtonClass}
-										>
-											<Settings2 className="h-4 w-4" />
-											Settings
-										</Button>
-									</DropdownMenuTrigger>
-									<DropdownMenuContent
-										side="top"
-										align="start"
-										className="min-w-[210px] border-rule bg-paper p-1 text-ink-2"
-									>
-										<DropdownMenuSub>
-											<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
-												<FileText className="mr-2 h-3.5 w-3.5" />
-												Invoice
-											</DropdownMenuSubTrigger>
-											<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
-												<DropdownMenuLabel className="px-2 pb-1 pt-1 text-[10px] font-normal uppercase tracking-[0.08em] text-ink-3">
-													Invoice
-												</DropdownMenuLabel>
-												<DropdownMenuSeparator className="bg-rule" />
-												<DropdownMenuSub>
-													<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
-														Invoice size
-													</DropdownMenuSubTrigger>
-													<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
-														{DOCUMENT_SIZE_OPTIONS.map((option) => (
-															<DropdownMenuItem
-																key={option.value}
-																onClick={() => setInvoiceSize(option.value)}
-																className={`text-xs focus:bg-paper-2 focus:text-ink ${
-																	invoiceSize === option.value
-																		? "text-brand"
-																		: ""
-																}`}
-															>
-																{option.label}
-															</DropdownMenuItem>
-														))}
-													</DropdownMenuSubContent>
-												</DropdownMenuSub>
-												<DropdownMenuSub>
-													<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
-														Currency
-													</DropdownMenuSubTrigger>
-													<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
-														{INVOICE_CURRENCY_OPTIONS.map((option) => (
-															<DropdownMenuItem
-																key={option.code}
-																onClick={() => updateCurrency(option.code)}
-																className={`text-xs focus:bg-paper-2 focus:text-ink ${
-																	currency === option.code ? "text-brand" : ""
-																}`}
-															>
-																{option.symbol} {option.label}
-															</DropdownMenuItem>
-														))}
-													</DropdownMenuSubContent>
-												</DropdownMenuSub>
-												<DropdownMenuSub>
-													<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
-														Date format
-													</DropdownMenuSubTrigger>
-													<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
-														{DATE_FORMAT_OPTIONS.map((option) => (
-															<DropdownMenuItem
-																key={option.value}
-																onClick={() => setDateFormat(option.value)}
-																className={`text-xs focus:bg-paper-2 focus:text-ink ${
-																	dateFormat === option.value
-																		? "text-brand"
-																		: ""
-																}`}
-															>
-																{option.label}
-															</DropdownMenuItem>
-														))}
-													</DropdownMenuSubContent>
-												</DropdownMenuSub>
-												<DropdownMenuSub>
-													<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
-														Payment terms
-													</DropdownMenuSubTrigger>
-													<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
-														{PAYMENT_TERM_OPTIONS.map((days) => (
-															<DropdownMenuItem
-																key={days}
-																onClick={() => updatePaymentTerms(days)}
-																className={`text-xs focus:bg-paper-2 focus:text-ink ${
-																	paymentTermDays === days ? "text-brand" : ""
-																}`}
-															>
-																Net {days}
-															</DropdownMenuItem>
-														))}
-													</DropdownMenuSubContent>
-												</DropdownMenuSub>
-											</DropdownMenuSubContent>
-										</DropdownMenuSub>
-
-										<DropdownMenuSub>
-											<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
-												<DollarSign className="mr-2 h-3.5 w-3.5" />
-												Tax & Pricing
-											</DropdownMenuSubTrigger>
-											<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
-												<DropdownMenuCheckboxItem
-													checked={includeDecimals}
-													onCheckedChange={(checked) =>
-														setIncludeDecimals(checked === true)
-													}
-													className="text-xs focus:bg-paper-2 focus:text-ink"
-												>
-													Decimals
-												</DropdownMenuCheckboxItem>
-												<DropdownMenuCheckboxItem
-													checked={includeUnits}
-													onCheckedChange={(checked) =>
-														setIncludeUnits(checked === true)
-													}
-													className="text-xs focus:bg-paper-2 focus:text-ink"
-												>
-													Units
-												</DropdownMenuCheckboxItem>
-												<DropdownMenuCheckboxItem
-													checked={includeDiscount}
-													onCheckedChange={(checked) =>
-														setIncludeDiscount(checked === true)
-													}
-													className="text-xs focus:bg-paper-2 focus:text-ink"
-												>
-													Discount
-												</DropdownMenuCheckboxItem>
-												<DropdownMenuCheckboxItem
-													checked={includeQr}
-													onCheckedChange={(checked) =>
-														setIncludeQr(checked === true)
-													}
-													className="text-xs focus:bg-paper-2 focus:text-ink"
-												>
-													QR code
-												</DropdownMenuCheckboxItem>
-												<DropdownMenuSeparator className="bg-rule" />
-												<DropdownMenuSub>
-													<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
-														Seller type
-													</DropdownMenuSubTrigger>
-													<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
-														<DropdownMenuItem
-															onClick={() =>
-																updateSellerProfileType("freelancer")
-															}
-															className={`text-xs focus:bg-paper-2 focus:text-ink ${
-																sellerProfileType === "freelancer"
-																	? "text-brand"
-																	: ""
-															}`}
-														>
-															Freelancer / individual
-														</DropdownMenuItem>
-														<DropdownMenuItem
-															onClick={() =>
-																updateSellerProfileType("business")
-															}
-															className={`text-xs focus:bg-paper-2 focus:text-ink ${
-																sellerProfileType === "business"
-																	? "text-brand"
-																	: ""
-															}`}
-														>
-															Registered business
-														</DropdownMenuItem>
-													</DropdownMenuSubContent>
-												</DropdownMenuSub>
-												<DropdownMenuSub>
-													<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
-														Seller tax status
-													</DropdownMenuSubTrigger>
-													<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
-														{SELLER_TAX_STATUS_OPTIONS.map((option) => (
-															<DropdownMenuItem
-																key={option.value}
-																onClick={() =>
-																	updateSellerTaxStatus(option.value)
-																}
-																className={`text-xs focus:bg-paper-2 focus:text-ink ${
-																	sellerTaxStatus === option.value
-																		? "text-brand"
-																		: ""
-																}`}
-															>
-																{option.label}
-															</DropdownMenuItem>
-														))}
-													</DropdownMenuSubContent>
-												</DropdownMenuSub>
-												<DropdownMenuSub>
-													<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
-														Tax treatment
-													</DropdownMenuSubTrigger>
-													<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
-														{TAX_SETTING_OPTIONS.map((option) => (
-															<DropdownMenuItem
-																key={option.value}
-																onClick={() => setTaxTreatment(option.value)}
-																className={`text-xs focus:bg-paper-2 focus:text-ink ${
-																	taxTreatment === option.value
-																		? "text-brand"
-																		: ""
-																}`}
-															>
-																{option.label}
-															</DropdownMenuItem>
-														))}
-													</DropdownMenuSubContent>
-												</DropdownMenuSub>
-												<DropdownMenuSub>
-													<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
-														WHT deduction
-													</DropdownMenuSubTrigger>
-													<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
-														{WITHHOLDING_CATEGORY_OPTIONS.map((option) => (
-															<DropdownMenuItem
-																key={option.value}
-																onClick={() =>
-																	setWithholdingCategory(option.value)
-																}
-																className={`text-xs focus:bg-paper-2 focus:text-ink ${
-																	withholdingCategory === option.value
-																		? "text-brand"
-																		: ""
-																}`}
-															>
-																{option.label}
-															</DropdownMenuItem>
-														))}
-													</DropdownMenuSubContent>
-												</DropdownMenuSub>
-												<DropdownMenuItem
-													onSelect={(event) => {
-														event.preventDefault();
-														openComplianceDialog();
-													}}
-													className="text-xs focus:bg-paper-2 focus:text-ink"
-												>
-													Compliance details
-												</DropdownMenuItem>
-											</DropdownMenuSubContent>
-										</DropdownMenuSub>
-
-										<DropdownMenuSub>
-											<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
-												<ReceiptText className="mr-2 h-3.5 w-3.5" />
-												Payments
-											</DropdownMenuSubTrigger>
-											<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
-												<DropdownMenuCheckboxItem
-													checked={showPaymentDetailsSection}
-													onCheckedChange={(checked) =>
-														setShowPaymentDetailsSection(checked === true)
-													}
-													className="text-xs focus:bg-paper-2 focus:text-ink"
-												>
-													Payment details block
-												</DropdownMenuCheckboxItem>
-												<DropdownMenuCheckboxItem
-													checked={showNoteSection}
-													onCheckedChange={(checked) =>
-														setShowNoteSection(checked === true)
-													}
-													className="text-xs focus:bg-paper-2 focus:text-ink"
-												>
-													Note block
-												</DropdownMenuCheckboxItem>
-												<DropdownMenuSeparator className="bg-rule" />
-												<DropdownMenuItem
-													onClick={() =>
-														setPaymentDetails(workspace?.paymentDetails ?? "")
-													}
-													className="text-xs focus:bg-paper-2 focus:text-ink"
-												>
-													Reset payment details
-												</DropdownMenuItem>
-												<DropdownMenuItem
-													onClick={() => setNotes(null)}
-													className="text-xs focus:bg-paper-2 focus:text-ink"
-												>
-													Reset note
-												</DropdownMenuItem>
-											</DropdownMenuSubContent>
-										</DropdownMenuSub>
-
-										<DropdownMenuSub>
-											<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
-												<Settings2 className="mr-2 h-3.5 w-3.5" />
-												Visibility
-											</DropdownMenuSubTrigger>
-											<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
-												<DropdownMenuCheckboxItem
-													checked={showFromEmail}
-													onCheckedChange={(checked) =>
-														setShowFromEmail(checked === true)
-													}
-													className="text-xs focus:bg-paper-2 focus:text-ink"
-												>
-													Show sender email
-												</DropdownMenuCheckboxItem>
-												<DropdownMenuCheckboxItem
-													checked={showCustomerEmail}
-													onCheckedChange={(checked) =>
-														setShowCustomerEmail(checked === true)
-													}
-													className="text-xs focus:bg-paper-2 focus:text-ink"
-												>
-													Show client email
-												</DropdownMenuCheckboxItem>
-											</DropdownMenuSubContent>
-										</DropdownMenuSub>
-									</DropdownMenuContent>
-								</DropdownMenu>
-
-								<DropdownMenu>
-									<DropdownMenuTrigger asChild>
-										<button type="button" className={footerGhostButtonClass}>
-											{templateName}
-											<ChevronDown className="h-3.5 w-3.5 text-ink-3" />
-										</button>
-									</DropdownMenuTrigger>
-									<DropdownMenuContent
-										side="top"
-										align="start"
-										className="min-w-55 border-rule bg-paper p-1 text-ink-2"
-									>
-										<DropdownMenuLabel className="px-2 pb-1 pt-1 text-[10px] font-normal uppercase tracking-[0.08em] text-ink-3">
-											Templates
-										</DropdownMenuLabel>
-										<DropdownMenuSeparator className="bg-rule" />
-										{TEMPLATE_OPTIONS.map((option) => (
-											<DropdownMenuItem
-												key={option.value}
-												onClick={() => setTemplateName(option.value)}
-												className={`text-xs focus:bg-paper-2 focus:text-ink ${
-													templateName === option.value ? "text-ink" : ""
-												}`}
-											>
-												{option.value}
-											</DropdownMenuItem>
-										))}
-									</DropdownMenuContent>
-								</DropdownMenu>
-							</div>
-
-							<div className="flex items-center gap-2">
-								{autosaveStatusText ? (
-									<div
-										className={cn(
-											"hidden max-w-[140px] text-right text-[12px] sm:block",
-											autosaveStatus === "error" ? "text-warn" : "text-ink-3",
-										)}
-									>
-										{autosaveStatusText}
-									</div>
-								) : null}
-								{submitBlockerText ? (
-									<div className="hidden max-w-[220px] text-right text-[12px] text-ink-3 sm:block">
-										{submitBlockerText}
-									</div>
-								) : null}
-								<Button
-									type="button"
-									variant="ghost"
-									onClick={() => {
-										if (lastCreatedToken) {
-											openInvoiceTab(lastCreatedToken);
-											return;
-										}
-										void createInvoice("open");
-									}}
-									className={footerIconButtonClass}
-									title="Open invoice"
-								>
-									<ExternalLink className="h-4 w-4" />
-								</Button>
-
-								<div className="flex overflow-hidden rounded-md border border-brand">
-									<button
-										type="button"
-										disabled={!canSubmit}
-										onClick={() => void createInvoice(deliveryType)}
-										className={cn(
-											"inline-flex h-10 items-center bg-brand px-5 text-[13px] font-medium text-brand-ink hover:bg-brand-hi disabled:cursor-not-allowed disabled:bg-rule disabled:text-ink-3",
-										)}
-									>
-										{submitting
-											? "Working..."
-											: deliveryType === "create_and_send"
-												? "Create & Send"
-												: deliveryType === "scheduled"
-													? "Schedule"
-													: "Create"}
-									</button>
+							<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-rule bg-paper px-6 py-3 md:px-7">
+								<div className="flex flex-wrap items-center gap-2">
 									<DropdownMenu>
 										<DropdownMenuTrigger asChild>
-											<button
+											<Button
 												type="button"
-												disabled={!canSubmit}
-												aria-label="Choose invoice delivery action"
-												className="inline-flex h-10 w-10 items-center justify-center border-l border-brand-line bg-brand text-brand-ink hover:bg-brand-hi disabled:bg-rule"
+												variant="ghost"
+												className={footerGhostButtonClass}
 											>
-												<ChevronDown className="h-4 w-4" />
+												<Settings2 className="h-4 w-4" />
+												Settings
+											</Button>
+										</DropdownMenuTrigger>
+										<DropdownMenuContent
+											side="top"
+											align="start"
+											className="min-w-[210px] border-rule bg-paper p-1 text-ink-2"
+										>
+											<DropdownMenuSub>
+												<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
+													<FileText className="mr-2 h-3.5 w-3.5" />
+													Invoice
+												</DropdownMenuSubTrigger>
+												<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
+													<DropdownMenuLabel className="px-2 pb-1 pt-1 text-[10px] font-normal uppercase tracking-[0.08em] text-ink-3">
+														Invoice
+													</DropdownMenuLabel>
+													<DropdownMenuSeparator className="bg-rule" />
+													<DropdownMenuSub>
+														<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
+															Invoice size
+														</DropdownMenuSubTrigger>
+														<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
+															{DOCUMENT_SIZE_OPTIONS.map((option) => (
+																<DropdownMenuItem
+																	key={option.value}
+																	onClick={() => setInvoiceSize(option.value)}
+																	className={`text-xs focus:bg-paper-2 focus:text-ink ${
+																		invoiceSize === option.value
+																			? "text-brand"
+																			: ""
+																	}`}
+																>
+																	{option.label}
+																</DropdownMenuItem>
+															))}
+														</DropdownMenuSubContent>
+													</DropdownMenuSub>
+													<DropdownMenuSub>
+														<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
+															Currency
+														</DropdownMenuSubTrigger>
+														<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
+															{INVOICE_CURRENCY_OPTIONS.map((option) => (
+																<DropdownMenuItem
+																	key={option.code}
+																	onClick={() => updateCurrency(option.code)}
+																	className={`text-xs focus:bg-paper-2 focus:text-ink ${
+																		currency === option.code ? "text-brand" : ""
+																	}`}
+																>
+																	{option.symbol} {option.label}
+																</DropdownMenuItem>
+															))}
+														</DropdownMenuSubContent>
+													</DropdownMenuSub>
+													<DropdownMenuSub>
+														<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
+															Date format
+														</DropdownMenuSubTrigger>
+														<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
+															{DATE_FORMAT_OPTIONS.map((option) => (
+																<DropdownMenuItem
+																	key={option.value}
+																	onClick={() => setDateFormat(option.value)}
+																	className={`text-xs focus:bg-paper-2 focus:text-ink ${
+																		dateFormat === option.value
+																			? "text-brand"
+																			: ""
+																	}`}
+																>
+																	{option.label}
+																</DropdownMenuItem>
+															))}
+														</DropdownMenuSubContent>
+													</DropdownMenuSub>
+													<DropdownMenuSub>
+														<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
+															Payment terms
+														</DropdownMenuSubTrigger>
+														<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
+															{PAYMENT_TERM_OPTIONS.map((days) => (
+																<DropdownMenuItem
+																	key={days}
+																	onClick={() => updatePaymentTerms(days)}
+																	className={`text-xs focus:bg-paper-2 focus:text-ink ${
+																		paymentTermDays === days ? "text-brand" : ""
+																	}`}
+																>
+																	Net {days}
+																</DropdownMenuItem>
+															))}
+														</DropdownMenuSubContent>
+													</DropdownMenuSub>
+												</DropdownMenuSubContent>
+											</DropdownMenuSub>
+
+											<DropdownMenuSub>
+												<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
+													<DollarSign className="mr-2 h-3.5 w-3.5" />
+													Tax & Pricing
+												</DropdownMenuSubTrigger>
+												<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
+													<DropdownMenuCheckboxItem
+														checked={includeDecimals}
+														onCheckedChange={(checked) =>
+															setIncludeDecimals(checked === true)
+														}
+														className="text-xs focus:bg-paper-2 focus:text-ink"
+													>
+														Decimals
+													</DropdownMenuCheckboxItem>
+													<DropdownMenuCheckboxItem
+														checked={includeUnits}
+														onCheckedChange={(checked) =>
+															setIncludeUnits(checked === true)
+														}
+														className="text-xs focus:bg-paper-2 focus:text-ink"
+													>
+														Units
+													</DropdownMenuCheckboxItem>
+													<DropdownMenuCheckboxItem
+														checked={includeDiscount}
+														onCheckedChange={(checked) =>
+															setIncludeDiscount(checked === true)
+														}
+														className="text-xs focus:bg-paper-2 focus:text-ink"
+													>
+														Discount
+													</DropdownMenuCheckboxItem>
+													<DropdownMenuCheckboxItem
+														checked={includeQr}
+														onCheckedChange={(checked) =>
+															setIncludeQr(checked === true)
+														}
+														className="text-xs focus:bg-paper-2 focus:text-ink"
+													>
+														QR code
+													</DropdownMenuCheckboxItem>
+													<DropdownMenuSeparator className="bg-rule" />
+													<DropdownMenuSub>
+														<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
+															Seller type
+														</DropdownMenuSubTrigger>
+														<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
+															<DropdownMenuItem
+																onClick={() =>
+																	updateSellerProfileType("freelancer")
+																}
+																className={`text-xs focus:bg-paper-2 focus:text-ink ${
+																	sellerProfileType === "freelancer"
+																		? "text-brand"
+																		: ""
+																}`}
+															>
+																Freelancer / individual
+															</DropdownMenuItem>
+															<DropdownMenuItem
+																onClick={() =>
+																	updateSellerProfileType("business")
+																}
+																className={`text-xs focus:bg-paper-2 focus:text-ink ${
+																	sellerProfileType === "business"
+																		? "text-brand"
+																		: ""
+																}`}
+															>
+																Registered business
+															</DropdownMenuItem>
+														</DropdownMenuSubContent>
+													</DropdownMenuSub>
+													<DropdownMenuSub>
+														<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
+															Seller tax status
+														</DropdownMenuSubTrigger>
+														<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
+															{SELLER_TAX_STATUS_OPTIONS.map((option) => (
+																<DropdownMenuItem
+																	key={option.value}
+																	onClick={() =>
+																		updateSellerTaxStatus(option.value)
+																	}
+																	className={`text-xs focus:bg-paper-2 focus:text-ink ${
+																		sellerTaxStatus === option.value
+																			? "text-brand"
+																			: ""
+																	}`}
+																>
+																	{option.label}
+																</DropdownMenuItem>
+															))}
+														</DropdownMenuSubContent>
+													</DropdownMenuSub>
+													<DropdownMenuSub>
+														<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
+															Tax treatment
+														</DropdownMenuSubTrigger>
+														<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
+															{TAX_SETTING_OPTIONS.map((option) => (
+																<DropdownMenuItem
+																	key={option.value}
+																	onClick={() => setTaxTreatment(option.value)}
+																	className={`text-xs focus:bg-paper-2 focus:text-ink ${
+																		taxTreatment === option.value
+																			? "text-brand"
+																			: ""
+																	}`}
+																>
+																	{option.label}
+																</DropdownMenuItem>
+															))}
+														</DropdownMenuSubContent>
+													</DropdownMenuSub>
+													<DropdownMenuSub>
+														<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
+															WHT deduction
+														</DropdownMenuSubTrigger>
+														<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
+															{WITHHOLDING_CATEGORY_OPTIONS.map((option) => (
+																<DropdownMenuItem
+																	key={option.value}
+																	onClick={() =>
+																		setWithholdingCategory(option.value)
+																	}
+																	className={`text-xs focus:bg-paper-2 focus:text-ink ${
+																		withholdingCategory === option.value
+																			? "text-brand"
+																			: ""
+																	}`}
+																>
+																	{option.label}
+																</DropdownMenuItem>
+															))}
+														</DropdownMenuSubContent>
+													</DropdownMenuSub>
+													<DropdownMenuItem
+														onSelect={(event) => {
+															event.preventDefault();
+															openComplianceDialog();
+														}}
+														className="text-xs focus:bg-paper-2 focus:text-ink"
+													>
+														Compliance details
+													</DropdownMenuItem>
+												</DropdownMenuSubContent>
+											</DropdownMenuSub>
+
+											<DropdownMenuSub>
+												<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
+													<ReceiptText className="mr-2 h-3.5 w-3.5" />
+													Payments
+												</DropdownMenuSubTrigger>
+												<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
+													<DropdownMenuCheckboxItem
+														checked={showPaymentDetailsSection}
+														onCheckedChange={(checked) =>
+															setShowPaymentDetailsSection(checked === true)
+														}
+														className="text-xs focus:bg-paper-2 focus:text-ink"
+													>
+														Payment details block
+													</DropdownMenuCheckboxItem>
+													<DropdownMenuCheckboxItem
+														checked={showNoteSection}
+														onCheckedChange={(checked) =>
+															setShowNoteSection(checked === true)
+														}
+														className="text-xs focus:bg-paper-2 focus:text-ink"
+													>
+														Note block
+													</DropdownMenuCheckboxItem>
+													<DropdownMenuSeparator className="bg-rule" />
+													<DropdownMenuItem
+														onClick={() =>
+															setPaymentDetails(workspace?.paymentDetails ?? "")
+														}
+														className="text-xs focus:bg-paper-2 focus:text-ink"
+													>
+														Reset payment details
+													</DropdownMenuItem>
+													<DropdownMenuItem
+														onClick={() => setNotes(null)}
+														className="text-xs focus:bg-paper-2 focus:text-ink"
+													>
+														Reset note
+													</DropdownMenuItem>
+												</DropdownMenuSubContent>
+											</DropdownMenuSub>
+
+											<DropdownMenuSub>
+												<DropdownMenuSubTrigger className="text-xs focus:bg-paper-2 data-[state=open]:bg-paper-2 focus:text-ink data-[state=open]:text-ink">
+													<Settings2 className="mr-2 h-3.5 w-3.5" />
+													Visibility
+												</DropdownMenuSubTrigger>
+												<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
+													<DropdownMenuCheckboxItem
+														checked={showFromEmail}
+														onCheckedChange={(checked) =>
+															setShowFromEmail(checked === true)
+														}
+														className="text-xs focus:bg-paper-2 focus:text-ink"
+													>
+														Show sender email
+													</DropdownMenuCheckboxItem>
+													<DropdownMenuCheckboxItem
+														checked={showCustomerEmail}
+														onCheckedChange={(checked) =>
+															setShowCustomerEmail(checked === true)
+														}
+														className="text-xs focus:bg-paper-2 focus:text-ink"
+													>
+														Show client email
+													</DropdownMenuCheckboxItem>
+												</DropdownMenuSubContent>
+											</DropdownMenuSub>
+										</DropdownMenuContent>
+									</DropdownMenu>
+
+									<DropdownMenu>
+										<DropdownMenuTrigger asChild>
+											<button type="button" className={footerGhostButtonClass}>
+												{templateName}
+												<ChevronDown className="h-3.5 w-3.5 text-ink-3" />
 											</button>
 										</DropdownMenuTrigger>
 										<DropdownMenuContent
 											side="top"
-											align="end"
-											className="w-64 border-rule bg-paper p-2"
+											align="start"
+											className="min-w-55 border-rule bg-paper p-1 text-ink-2"
 										>
-											{(
-												[
-													["create", "Create"],
-													["create_and_send", "Create & Send"],
-													["scheduled", "Schedule"],
-												] as const
-											).map(([value, label]) => (
+											<DropdownMenuLabel className="px-2 pb-1 pt-1 text-[10px] font-normal uppercase tracking-[0.08em] text-ink-3">
+												Templates
+											</DropdownMenuLabel>
+											<DropdownMenuSeparator className="bg-rule" />
+											{TEMPLATE_OPTIONS.map((option) => (
 												<DropdownMenuItem
-													key={value}
-													onClick={() => setDeliveryType(value)}
+													key={option.value}
+													onClick={() => setTemplateName(option.value)}
+													className={`text-xs focus:bg-paper-2 focus:text-ink ${
+														templateName === option.value ? "text-ink" : ""
+													}`}
 												>
-													{label}
+													{option.value}
 												</DropdownMenuItem>
 											))}
-											{deliveryType === "scheduled" ? (
-												<div className="space-y-1 border-t border-rule px-2 pt-2">
-													<label
-														htmlFor="invoice-scheduled-at"
-														className="text-xs text-ink-3"
-													>
-														Send at
-													</label>
-													<Input
-														id="invoice-scheduled-at"
-														type="datetime-local"
-														min={new Date(Date.now() + 60_000)
-															.toISOString()
-															.slice(0, 16)}
-														value={scheduledAt}
-														onChange={(event) =>
-															setScheduledAt(event.target.value)
-														}
-													/>
-												</div>
-											) : null}
 										</DropdownMenuContent>
 									</DropdownMenu>
+								</div>
+
+								<div className="ml-auto flex flex-wrap items-center justify-end gap-x-2 gap-y-2">
+									{autosaveStatusText ? (
+										<div
+											className={cn(
+												"hidden w-full text-right text-[12px] min-[560px]:w-auto sm:block",
+												autosaveStatus === "error" ? "text-warn" : "text-ink-3",
+											)}
+										>
+											{autosaveStatusText}
+										</div>
+									) : null}
+									{submitBlockerText ? (
+										<div className="hidden w-full text-right text-[12px] text-ink-3 min-[560px]:w-auto sm:block">
+											{submitBlockerText}
+										</div>
+									) : null}
+									<Button
+										type="button"
+										variant="ghost"
+										onClick={() => {
+											if (lastCreatedToken) {
+												openInvoiceTab(lastCreatedToken);
+												return;
+											}
+											void createInvoice("open");
+										}}
+										className={footerIconButtonClass}
+										title="Open invoice"
+									>
+										<ExternalLink className="h-4 w-4" />
+									</Button>
+
+									<div className="flex overflow-hidden rounded-md border border-brand">
+										<button
+											type="button"
+											disabled={!canSubmit}
+											onClick={() => void createInvoice(deliveryType)}
+											className={cn(
+												"inline-flex h-10 items-center bg-brand px-5 text-[13px] font-medium text-brand-ink transition-[background-color,border-color,color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-brand-hi disabled:cursor-not-allowed disabled:bg-rule disabled:text-ink-3",
+											)}
+										>
+											{submitting
+												? "Working..."
+												: deliveryType === "create_and_send"
+													? "Create & Send"
+													: deliveryType === "scheduled"
+														? "Schedule"
+														: "Create"}
+										</button>
+										<DropdownMenu>
+											<DropdownMenuTrigger asChild>
+												<button
+													type="button"
+													disabled={!canSubmit}
+													aria-label="Choose invoice delivery action"
+													className="inline-flex h-10 w-10 items-center justify-center border-l border-brand-line bg-brand text-brand-ink transition-[background-color,border-color,color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-brand-hi disabled:bg-rule"
+												>
+													<ChevronDown className="h-4 w-4" />
+												</button>
+											</DropdownMenuTrigger>
+											<DropdownMenuContent
+												side="top"
+												align="end"
+												className="w-64 border-rule bg-paper p-2"
+											>
+												{(
+													[
+														["create", "Create"],
+														["create_and_send", "Create & Send"],
+														["scheduled", "Schedule"],
+													] as const
+												).map(([value, label]) => (
+													<DropdownMenuItem
+														key={value}
+														onClick={() => setDeliveryType(value)}
+													>
+														{label}
+													</DropdownMenuItem>
+												))}
+												{deliveryType === "scheduled" ? (
+													<div className="space-y-1 border-t border-rule px-2 pt-2">
+														<label
+															htmlFor="invoice-scheduled-at"
+															className="text-xs text-ink-3"
+														>
+															Send at
+														</label>
+														<Input
+															id="invoice-scheduled-at"
+															type="datetime-local"
+															min={new Date(Date.now() + 60_000)
+																.toISOString()
+																.slice(0, 16)}
+															value={scheduledAt}
+															onChange={(event) =>
+																setScheduledAt(event.target.value)
+															}
+														/>
+													</div>
+												) : null}
+											</DropdownMenuContent>
+										</DropdownMenu>
+									</div>
 								</div>
 							</div>
 						</div>
@@ -3461,16 +3604,19 @@ export function CreateInvoicePanel({
 								<Button
 									type="button"
 									className="mt-4"
-									onClick={() =>
-										void saveTemplateDefaults({
-											settings: templateSettings,
-										}).then(() =>
+									onClick={() => {
+										const context = requireSupabase();
+										void saveTemplateDefaults(
+											context.client,
+											context.userId,
+											templateSettings,
+										).then(() =>
 											toast({
 												title: "Invoice defaults saved",
 												variant: "success",
 											}),
-										)
-									}
+										);
+									}}
 								>
 									Save as workspace defaults
 								</Button>
