@@ -36,7 +36,6 @@ import {
 	resumeInvoiceReminders,
 	runReminderBatch as runReminderBatchSupabase,
 	saveReminderSettings,
-	sendQueuedEmails as sendQueuedEmailsSupabase,
 } from "#/server/data/reminders";
 export const Route = createFileRoute("/settings/collections")({
 	component: PaymentRemindersSettingsPage,
@@ -195,8 +194,26 @@ function PaymentRemindersSettingsPage() {
 		return runReminderBatchSupabase(context.client, context.userId);
 	};
 	const sendQueuedEmails = async (_args: Record<string, never> = {}) => {
-		const context = requireSupabase();
-		return sendQueuedEmailsSupabase(context.client, context.userId);
+		// Delivery runs server-side (the Resend secret never leaves the
+		// server); see POST /api/reminders/send-queue.
+		const response = await fetch("/api/reminders/send-queue", {
+			method: "POST",
+		});
+		const body = (await response.json().catch(() => null)) as {
+			ok?: boolean;
+			sent?: number;
+			skipped?: number;
+			reason?: string | null;
+			error?: string;
+		} | null;
+		if (!response.ok || !body?.ok) {
+			throw new Error(body?.error ?? "Could not send the reminder queue.");
+		}
+		return {
+			sent: body.sent ?? 0,
+			skipped: body.skipped ?? 0,
+			reason: body.reason ?? undefined,
+		};
 	};
 	const [note, setNote] = useState("");
 	const [scheduleOpen, setScheduleOpen] = useState(false);

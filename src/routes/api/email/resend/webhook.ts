@@ -1,6 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { getServerConvexClient } from "#/server/convex";
-import { api } from "#convex/_generated/api";
+import { Resend } from "resend";
+import { getServerEnv } from "#/server/env";
+import {
+	RequestBodyTooLargeError,
+	readRequestText,
+} from "#/server/http-security";
+import { getSupabaseAdminClient } from "#/server/supabase";
 
 type ResendWebhookPayload = {
 	type?: string;
@@ -37,13 +42,6 @@ const EVENT_MAP: Record<string, EmailEventType> = {
 	"email.failed": "failed",
 };
 
-function hasValidSecret(request: Request, secret: string) {
-	const bearer = request.headers.get("authorization");
-	const custom = request.headers.get("x-velure-webhook-secret");
-
-	return bearer === `Bearer ${secret}` || custom === secret;
-}
-
 function normalizeEventType(value: string | undefined): EmailEventType | null {
 	if (!value) return null;
 	return EVENT_MAP[value] ?? EVENT_MAP[value.toLowerCase()] ?? null;
@@ -55,30 +53,43 @@ function recipientFromPayload(payload: ResendWebhookPayload) {
 	return to ?? payload.data?.recipient;
 }
 
-async function handle({ request }: { request: Request }) {
+export async function handle({ request }: { request: Request }) {
 	const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
 	if (!webhookSecret) {
+		console.error("Resend webhook secret is not configured");
 		return Response.json(
-			{ ok: false, error: "RESEND_WEBHOOK_SECRET is missing on the server." },
+			{ ok: false, error: "Server configuration error." },
 			{ status: 500 },
 		);
 	}
 
-	if (!hasValidSecret(request, webhookSecret)) {
-		return Response.json(
-			{ ok: false, error: "Invalid Resend webhook secret." },
-			{ status: 401 },
-		);
+	let rawBody: string;
+	try {
+		rawBody = await readRequestText(request);
+	} catch (error) {
+		if (error instanceof RequestBodyTooLargeError) {
+			return Response.json(
+				{ ok: false, error: "Request payload is too large." },
+				{ status: 413 },
+			);
+		}
+		throw error;
 	}
-
-	const rawBody = await request.text();
 	let payload: ResendWebhookPayload;
 	try {
-		payload = JSON.parse(rawBody) as ResendWebhookPayload;
+		payload = new Resend(getServerEnv("RESEND_API_KEY") ?? "").webhooks.verify({
+			payload: rawBody,
+			headers: {
+				id: request.headers.get("svix-id") ?? "",
+				timestamp: request.headers.get("svix-timestamp") ?? "",
+				signature: request.headers.get("svix-signature") ?? "",
+			},
+			webhookSecret,
+		}) as ResendWebhookPayload;
 	} catch {
 		return Response.json(
-			{ ok: false, error: "Invalid Resend payload." },
-			{ status: 400 },
+			{ ok: false, error: "Invalid Resend webhook signature or payload." },
+			{ status: 401 },
 		);
 	}
 
@@ -93,20 +104,44 @@ async function handle({ request }: { request: Request }) {
 	const providerMessageId =
 		payload.data?.email_id ?? payload.data?.emailId ?? payload.data?.id;
 
-	const convex = getServerConvexClient();
-	const result = await convex.mutation(
-		api.emailEvents.recordResendWebhookEvent,
-		{
-			internalSecret: webhookSecret,
-			providerMessageId,
-			providerEventId: payload.id,
-			eventType,
-			recipient: recipientFromPayload(payload),
-			subject: payload.data?.subject,
-			error: payload.data?.error,
-			rawEvent: rawBody.slice(0, 8000),
-		},
-	);
+	const supabase = getSupabaseAdminClient();
+	if (!providerMessageId) {
+		return Response.json({ ok: true, ignored: true });
+	}
+
+	const { data: delivery, error: deliveryError } = await supabase
+		.from("invoice_delivery_events")
+		.select("id, workspace_id, owner_id, invoice_id, recipient")
+		.eq("provider", "resend")
+		.eq("provider_message_id", providerMessageId)
+		.maybeSingle();
+	if (deliveryError) throw deliveryError;
+	if (!delivery) return Response.json({ ok: true, ignored: true });
+
+	const { data: event, error: eventError } = await supabase
+		.from("email_events")
+		.insert({
+			workspace_id: delivery.workspace_id,
+			owner_id: delivery.owner_id,
+			invoice_id: delivery.invoice_id,
+			delivery_event_id: delivery.id,
+			provider: "resend",
+			provider_message_id: providerMessageId,
+			provider_event_id: payload.id ?? null,
+			event_type: eventType,
+			recipient: recipientFromPayload(payload) ?? delivery.recipient,
+			subject: payload.data?.subject ?? null,
+			error: payload.data?.error ?? null,
+			raw_event: payload,
+		})
+		.select("id, invoice_id")
+		.single();
+	if (eventError) {
+		if (eventError.code === "23505")
+			return Response.json({ ok: true, alreadyTracked: true });
+		throw eventError;
+	}
+	const result = { ok: true, eventId: event.id, invoiceId: event.invoice_id };
 
 	return Response.json(result);
 }
