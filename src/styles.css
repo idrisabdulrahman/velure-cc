@@ -794,6 +794,17 @@ select:focus-visible {
   }
 }
 
+/* ── Lenis smooth scroll (app shell main container) ─────────────────────
+ * Lenis adds .lenis classes to the wrapper (main), not <html>, so these stay
+ * scoped and never touch marketing's ScrollSmoother world. Native touch
+ * scrolling is untouched (syncTouch off). */
+.lenis.lenis-smooth {
+  scroll-behavior: auto;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

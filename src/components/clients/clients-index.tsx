@@ -1102,7 +1102,11 @@ export function ClientsIndex() {
 									/>
 								</div>
 
-								<div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto">
+								<div
+									role="tabpanel"
+									data-lenis-prevent
+									className="min-h-0 flex-1 overflow-y-auto"
+								>
 									{tab === "overview" ? (
 										<div className="px-4 py-4">
 											{intelligenceLoading ? (

@@ -21,6 +21,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ProfileDropdown } from "#/components/dashboard/profile-dropdown";
 import { CommandPalette } from "#/components/global-search/command-palette";
 import { RouteTransition } from "#/components/navigation/RouteTransition";
+import { useLenis } from "#/components/scroll/use-lenis";
 import { TextSizeToggle } from "#/components/text-size/text-size-toggle";
 import { ThemeToggle } from "#/components/theme/theme-toggle";
 import { AppLoader } from "#/components/ui/app-loader";
@@ -167,6 +168,7 @@ export function DashboardLayout() {
 	const location = useLocation();
 	const navigate = useNavigate();
 	const mainRef = useRef<HTMLElement | null>(null);
+	const contentRef = useRef<HTMLDivElement | null>(null);
 	const workspaceEnsureAttemptedRef = useRef(false);
 	const shouldReduceMotion = useReducedMotion();
 	const [ensuringWorkspace, setEnsuringWorkspace] = useState(false);
@@ -275,15 +277,6 @@ export function DashboardLayout() {
 		useWorkspaceActions();
 
 	useEffect(() => {
-		if (location.hash) return;
-
-		mainRef.current?.scrollTo({
-			top: 0,
-			behavior: shouldReduceMotion ? "auto" : "smooth",
-		});
-	}, [location.pathname, location.search, location.hash, shouldReduceMotion]);
-
-	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
 			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
 				event.preventDefault();
@@ -353,6 +346,37 @@ export function DashboardLayout() {
 		!workspaceEnsureAttemptedRef.current;
 	const waitingForSupabaseSession =
 		!waitingForInitialSession && hasSession && !isConvexAuthenticated;
+
+	// The shell (and its main/content scroll nodes) only mounts below, so
+	// Lenis waits for this exact negation of the loader gate.
+	const shellReady =
+		!waitingForInitialSession &&
+		!isPending &&
+		!waitingForSupabaseSession &&
+		!workspaceQueriesPending &&
+		!ensuringWorkspace &&
+		!needsWorkspaceBootstrap;
+	const lenisRef = useLenis({
+		wrapperRef: mainRef,
+		contentRef,
+		ready: shellReady,
+		disabled: shouldReduceMotion ?? false,
+	});
+
+	useEffect(() => {
+		if (location.hash) return;
+
+		const lenis = lenisRef.current;
+		if (lenis) {
+			lenis.scrollTo(0, { immediate: true });
+			return;
+		}
+
+		mainRef.current?.scrollTo({
+			top: 0,
+			behavior: shouldReduceMotion ? "auto" : "smooth",
+		});
+	}, [location.pathname, location.search, location.hash, shouldReduceMotion]);
 
 	if (
 		waitingForInitialSession ||
@@ -687,7 +711,7 @@ export function DashboardLayout() {
 					ref={mainRef}
 					className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-10 lg:px-7 lg:py-7 lg:pb-12"
 				>
-					<div className="mx-auto w-full max-w-[1180px]">
+					<div ref={contentRef} className="mx-auto w-full max-w-[1180px]">
 						<RouteTransition routeKey={location.pathname}>
 							<Outlet />
 						</RouteTransition>

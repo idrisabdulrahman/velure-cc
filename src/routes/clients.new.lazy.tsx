@@ -1,5 +1,4 @@
 import { createLazyFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMutation } from "convex/react";
 import { useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
@@ -14,7 +13,9 @@ import {
 import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
-import { api } from "../../convex/_generated/api";
+import { useUnifiedAuth } from "#/lib/auth-hook";
+import { useSupabaseSession } from "#/lib/supabase-session";
+import { createClient } from "#/server/data/clients";
 
 export const Route = createLazyFileRoute("/clients/new")({
 	component: NewClient,
@@ -58,7 +59,9 @@ const initialState: FormState = {
 
 function NewClient() {
 	const navigate = useNavigate();
-	const createClient = useMutation(api.clients.create);
+	const authState = useUnifiedAuth();
+	const userId = authState.data?.user?.id;
+	const { client: supabaseClient } = useSupabaseSession(userId);
 	const [state, setState] = useState<FormState>(initialState);
 	const [submitting, setSubmitting] = useState(false);
 	const [attemptedSubmit, setAttemptedSubmit] = useState(false);
@@ -88,16 +91,16 @@ function NewClient() {
 	}, [state.company, state.name]);
 
 	const inputClass =
-		"h-10 rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-accent-line focus-visible:ring-0";
+		"h-10 rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-brand-line focus-visible:ring-0";
 
 	const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		setAttemptedSubmit(true);
-		if (!isValid || submitting) return;
+		if (!isValid || submitting || !supabaseClient || !userId) return;
 
 		setSubmitting(true);
 		try {
-			await createClient({
+			await createClient(supabaseClient, userId, {
 				name: state.name,
 				company: state.company || undefined,
 				email: state.email,
@@ -157,7 +160,7 @@ function NewClient() {
 
 			<div className="grid gap-4 lg:grid-cols-[1fr_320px]">
 				<div className="flex max-h-[calc(100vh-7rem)] flex-col overflow-hidden rounded-md border border-rule bg-paper-2">
-					<div className="flex-1 overflow-y-auto p-4 md:p-5">
+					<div data-lenis-prevent className="flex-1 overflow-y-auto p-4 md:p-5">
 						<form onSubmit={onSubmit} className="space-y-4">
 							<div className="grid gap-3 md:grid-cols-2">
 								<Field label="Client name *" error={visibleNameError}>
@@ -287,7 +290,7 @@ function NewClient() {
 											billingAddress: event.target.value,
 										}))
 									}
-									className="resize-none rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-accent-line focus-visible:ring-0"
+									className="resize-none rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-brand-line focus-visible:ring-0"
 									placeholder="Billing Address"
 								/>
 							</Field>
@@ -302,7 +305,7 @@ function NewClient() {
 											internalNotes: event.target.value,
 										}))
 									}
-									className="resize-none rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-accent-line focus-visible:ring-0"
+									className="resize-none rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-brand-line focus-visible:ring-0"
 									placeholder="Internal Notes"
 								/>
 							</Field>
