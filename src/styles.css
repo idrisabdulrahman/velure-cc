@@ -1266,7 +1266,10 @@ body {
 .invoice-paper-controls textarea:focus-visible,
 .invoice-paper-controls [role="combobox"]:focus-visible {
 	border-color: var(--hm-focus) !important;
-	box-shadow: 0 0 0 2px var(--hm-focus) !important;
+	/* No box-shadow spread: the global flush focus outline already rings the
+	 * control. A spread shadow bleeds into neighbouring cells (Price over
+	 * Quantity) in the tight line-item grid. */
+	box-shadow: none !important;
 }
 
 .invoice-paper-controls [class*="border-rule"]:has(input),
