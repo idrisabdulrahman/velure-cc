@@ -400,7 +400,7 @@ function ComplianceSettingsPage() {
 			</div>
 
 			{isDashboardLoading ? (
-				<ComplianceDashboardSkeleton />
+				<ComplianceKpiSkeleton />
 			) : (
 				<KpiStrip>
 					<Kpi
@@ -463,7 +463,7 @@ function ComplianceSettingsPage() {
 					</div>
 
 					{isDashboardLoading ? (
-						<ComplianceDashboardSkeleton />
+						<ComplianceOverviewSkeleton />
 					) : (
 						<div className="mt-5 space-y-4">
 							<div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
@@ -1289,17 +1289,90 @@ function DashboardRow({
 	);
 }
 
-function ComplianceDashboardSkeleton() {
+function ComplianceKpiSkeleton() {
 	return (
-		<div className="mt-5 space-y-4">
-			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-				{DASHBOARD_SKELETON_KEYS.map((key) => (
-					<Skeleton key={key} className="h-32 rounded-md bg-paper-3" />
-				))}
+		<div
+			role="status"
+			aria-label="Loading compliance summary"
+			className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-rule bg-rule/60 md:grid-cols-2 xl:grid-cols-4"
+		>
+			{DASHBOARD_SKELETON_KEYS.map((key) => (
+				<div key={key} className="min-w-0 bg-paper px-[18px] py-4">
+					<Skeleton className="h-3 w-24 bg-paper-3" />
+					<Skeleton className="mt-[11px] h-7 w-32 bg-paper-3" />
+					<Skeleton className="mt-[7px] h-3 w-28 bg-paper-3" />
+				</div>
+			))}
+		</div>
+	);
+}
+
+function SkeletonTableRows({ rows }: { rows: number }) {
+	return (
+		<div className="divide-y divide-rule">
+			{Array.from({ length: rows }, (_, index) => (
+				<div
+					// biome-ignore lint/suspicious/noArrayIndexKey: static placeholder rows
+					key={index}
+					className="flex items-center justify-between gap-4 py-3"
+				>
+					<Skeleton className="h-4 w-24 bg-paper-3" />
+					<div className="flex items-center gap-6">
+						<Skeleton className="h-4 w-20 bg-paper-3" />
+						<Skeleton className="hidden h-4 w-16 bg-paper-3 sm:block" />
+						<Skeleton className="h-4 w-10 bg-paper-3" />
+					</div>
+				</div>
+			))}
+		</div>
+	);
+}
+
+function SkeletonListRows({ rows }: { rows: number }) {
+	return (
+		<div className="divide-y divide-rule">
+			{Array.from({ length: rows }, (_, index) => (
+				<div
+					// biome-ignore lint/suspicious/noArrayIndexKey: static placeholder rows
+					key={index}
+					className="flex items-center gap-3 py-3"
+				>
+					<Skeleton className="h-8 w-8 shrink-0 rounded-md bg-paper-3" />
+					<div className="min-w-0 flex-1">
+						<Skeleton className="h-4 w-2/3 bg-paper-3" />
+						<Skeleton className="mt-1.5 h-3 w-1/3 bg-paper-3" />
+					</div>
+					<div className="shrink-0 text-right">
+						<Skeleton className="ml-auto h-4 w-20 bg-paper-3" />
+						<Skeleton className="ml-auto mt-1.5 h-3 w-14 bg-paper-3" />
+					</div>
+				</div>
+			))}
+		</div>
+	);
+}
+
+function ComplianceOverviewSkeleton() {
+	return (
+		<div role="status" aria-label="Loading overview" className="mt-5 space-y-4">
+			<div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+				<Panel title="Monthly obligations" sub="Loading…">
+					<SkeletonTableRows rows={3} />
+				</Panel>
+				<Panel title="Warning mix" sub="Current period">
+					<SkeletonListRows rows={2} />
+				</Panel>
 			</div>
-			<div className="grid gap-4 xl:grid-cols-2">
-				<Skeleton className="h-72 rounded-md bg-paper-3" />
-				<Skeleton className="h-72 rounded-md bg-paper-3" />
+			<div className="grid gap-4 xl:grid-cols-3">
+				<Panel title="Client context" sub="Loading…">
+					<SkeletonListRows rows={3} />
+				</Panel>
+				<Panel title="Needs review" sub="Invoices">
+					<SkeletonListRows rows={3} />
+				</Panel>
+				<Panel title="Export audit" sub="Recent">
+					<SkeletonListRows rows={3} />
+				</Panel>
 			</div>
 		</div>
 	);
