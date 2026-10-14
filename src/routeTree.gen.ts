@@ -9,89 +9,68 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TermsRouteImport } from './routes/terms'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as SecurityRouteImport } from './routes/security'
-import { Route as ReportsRouteImport } from './routes/reports'
-import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as PricingRouteImport } from './routes/pricing'
-import { Route as InvoicesRouteImport } from './routes/invoices'
-import { Route as FeaturesRouteImport } from './routes/features'
-import { Route as ComplianceRouteImport } from './routes/compliance'
-import { Route as ClientsRouteImport } from './routes/clients'
-import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as SettingsIndexRouteImport } from './routes/settings.index'
-import { Route as ReportsIndexRouteImport } from './routes/reports.index'
-import { Route as InvoicesIndexRouteImport } from './routes/invoices.index'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ClientsRouteImport } from './routes/clients'
+import { Route as ComplianceRouteImport } from './routes/compliance'
+import { Route as FeaturesRouteImport } from './routes/features'
+import { Route as InvoicesRouteImport } from './routes/invoices'
+import { Route as PricingRouteImport } from './routes/pricing'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as SecurityRouteImport } from './routes/security'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as ClientsIndexRouteImport } from './routes/clients.index'
-import { Route as SolutionsSmallBusinessRouteImport } from './routes/solutions.small-business'
-import { Route as SolutionsEnterpriseRouteImport } from './routes/solutions.enterprise'
-import { Route as SettingsSecurityRouteImport } from './routes/settings.security'
-import { Route as SettingsRecurringRouteImport } from './routes/settings.recurring'
-import { Route as SettingsIntegrationsRouteImport } from './routes/settings.integrations'
-import { Route as SettingsComplianceRouteImport } from './routes/settings.compliance'
-import { Route as SettingsCollectionsRouteImport } from './routes/settings.collections'
-import { Route as InvoicesProductsRouteImport } from './routes/invoices.products'
-import { Route as InvoicesNewRouteImport } from './routes/invoices.new'
-import { Route as ITokenRouteImport } from './routes/i.$token'
 import { Route as ClientsNewRouteImport } from './routes/clients.new'
-import { Route as InvoicesProductsNewRouteImport } from './routes/invoices.products.new'
-import { Route as InvoicesProductsIdRouteImport } from './routes/invoices.products.$id'
-import { Route as ApiAuthSupabaseSessionRouteImport } from './routes/api/auth/supabase-session'
+import { Route as ITokenRouteImport } from './routes/i.$token'
+import { Route as InvoicesIndexRouteImport } from './routes/invoices.index'
+import { Route as InvoicesNewRouteImport } from './routes/invoices.new'
+import { Route as InvoicesProductsRouteImport } from './routes/invoices.products'
+import { Route as ReportsIndexRouteImport } from './routes/reports.index'
+import { Route as SettingsIndexRouteImport } from './routes/settings.index'
+import { Route as SettingsCollectionsRouteImport } from './routes/settings.collections'
+import { Route as SettingsComplianceRouteImport } from './routes/settings.compliance'
+import { Route as SettingsIntegrationsRouteImport } from './routes/settings.integrations'
+import { Route as SettingsRecurringRouteImport } from './routes/settings.recurring'
+import { Route as SettingsSecurityRouteImport } from './routes/settings.security'
+import { Route as SolutionsEnterpriseRouteImport } from './routes/solutions.enterprise'
+import { Route as SolutionsSmallBusinessRouteImport } from './routes/solutions.small-business'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
-import { Route as ApiSecurityLinkStepupVerifyRouteImport } from './routes/api/security/link-stepup/verify'
-import { Route as ApiSecurityLinkStepupStatusRouteImport } from './routes/api/security/link-stepup/status'
-import { Route as ApiSecurityLinkStepupRequestRouteImport } from './routes/api/security/link-stepup/request'
-import { Route as ApiPaymentsPaystackWebhookRouteImport } from './routes/api/payments/paystack/webhook'
-import { Route as ApiPaymentsPaystackInitializeRouteImport } from './routes/api/payments/paystack/initialize'
-import { Route as ApiInvoiceSendIdRouteImport } from './routes/api/invoice/send/$id'
-import { Route as ApiInvoiceDownloadIdRouteImport } from './routes/api/invoice/download/$id'
-import { Route as ApiIntegrationsXeroConnectRouteImport } from './routes/api/integrations/xero/connect'
-import { Route as ApiIntegrationsXeroCallbackRouteImport } from './routes/api/integrations/xero/callback'
-import { Route as ApiIntegrationsQuickbooksConnectRouteImport } from './routes/api/integrations/quickbooks/connect'
-import { Route as ApiIntegrationsQuickbooksCallbackRouteImport } from './routes/api/integrations/quickbooks/callback'
-import { Route as ApiEmailResendWebhookRouteImport } from './routes/api/email/resend/webhook'
+import { Route as ApiAuthSupabaseSessionRouteImport } from './routes/api/auth/supabase-session'
+import { Route as ApiInvoiceScheduledRouteImport } from './routes/api/invoice/scheduled'
+import { Route as ApiRemindersSendQueueRouteImport } from './routes/api/reminders/send-queue'
+import { Route as ApiTestFixturesRouteImport } from './routes/api/test/fixtures'
+import { Route as InvoicesProductsIdRouteImport } from './routes/invoices.products.$id'
+import { Route as InvoicesProductsNewRouteImport } from './routes/invoices.products.new'
 import { Route as ApiAuthFirstSecondRouteImport } from './routes/api/auth/$first/$second'
+import { Route as ApiEmailResendWebhookRouteImport } from './routes/api/email/resend/webhook'
+import { Route as ApiIntegrationsQuickbooksCallbackRouteImport } from './routes/api/integrations/quickbooks/callback'
+import { Route as ApiIntegrationsQuickbooksConnectRouteImport } from './routes/api/integrations/quickbooks/connect'
+import { Route as ApiIntegrationsXeroCallbackRouteImport } from './routes/api/integrations/xero/callback'
+import { Route as ApiIntegrationsXeroConnectRouteImport } from './routes/api/integrations/xero/connect'
+import { Route as ApiInvoiceDownloadIdRouteImport } from './routes/api/invoice/download/$id'
+import { Route as ApiInvoicePublicTokenRouteImport } from './routes/api/invoice/public/$token'
+import { Route as ApiInvoiceSendIdRouteImport } from './routes/api/invoice/send/$id'
+import { Route as ApiPaymentsPaystackInitializeRouteImport } from './routes/api/payments/paystack/initialize'
+import { Route as ApiPaymentsPaystackWebhookRouteImport } from './routes/api/payments/paystack/webhook'
+import { Route as ApiSecurityLinkStepupRequestRouteImport } from './routes/api/security/link-stepup/request'
+import { Route as ApiSecurityLinkStepupStatusRouteImport } from './routes/api/security/link-stepup/status'
+import { Route as ApiSecurityLinkStepupVerifyRouteImport } from './routes/api/security/link-stepup/verify'
 
-const TermsRoute = TermsRouteImport.update({
-  id: '/terms',
-  path: '/terms',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
-} as any)
-const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
+} as any).lazy(() => import('./routes/index.lazy').then((d) => d.Route))
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
-} as any)
-const SecurityRoute = SecurityRouteImport.update({
-  id: '/security',
-  path: '/security',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ReportsRoute = ReportsRouteImport.update({
-  id: '/reports',
-  path: '/reports',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PrivacyRoute = PrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PricingRoute = PricingRouteImport.update({
-  id: '/pricing',
-  path: '/pricing',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const InvoicesRoute = InvoicesRouteImport.update({
-  id: '/invoices',
-  path: '/invoices',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FeaturesRoute = FeaturesRouteImport.update({
-  id: '/features',
-  path: '/features',
+} as any).lazy(() => import('./routes/auth.lazy').then((d) => d.Route))
+const ClientsRoute = ClientsRouteImport.update({
+  id: '/clients',
+  path: '/clients',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ComplianceRoute = ComplianceRouteImport.update({
@@ -99,31 +78,61 @@ const ComplianceRoute = ComplianceRouteImport.update({
   path: '/compliance',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ClientsRoute = ClientsRouteImport.update({
-  id: '/clients',
-  path: '/clients',
+const FeaturesRoute = FeaturesRouteImport.update({
+  id: '/features',
+  path: '/features',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
+const InvoicesRoute = InvoicesRouteImport.update({
+  id: '/invoices',
+  path: '/invoices',
   getParentRoute: () => rootRouteImport,
-} as any).lazy(() => import('./routes/auth.lazy').then((d) => d.Route))
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any).lazy(() => import('./routes/index.lazy').then((d) => d.Route))
-const SettingsIndexRoute = SettingsIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => SettingsRoute,
 } as any)
-const ReportsIndexRoute = ReportsIndexRouteImport.update({
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SecurityRoute = SecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClientsIndexRoute = ClientsIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => ReportsRoute,
-} as any).lazy(() => import('./routes/reports.index.lazy').then((d) => d.Route))
+  getParentRoute: () => ClientsRoute,
+} as any).lazy(() => import('./routes/clients.index.lazy').then((d) => d.Route))
+const ClientsNewRoute = ClientsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => ClientsRoute,
+} as any).lazy(() => import('./routes/clients.new.lazy').then((d) => d.Route))
+const ITokenRoute = ITokenRouteImport.update({
+  id: '/i/$token',
+  path: '/i/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InvoicesIndexRoute = InvoicesIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -131,39 +140,24 @@ const InvoicesIndexRoute = InvoicesIndexRouteImport.update({
 } as any).lazy(() =>
   import('./routes/invoices.index.lazy').then((d) => d.Route),
 )
-const ClientsIndexRoute = ClientsIndexRouteImport.update({
+const InvoicesNewRoute = InvoicesNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => InvoicesRoute,
+} as any).lazy(() => import('./routes/invoices.new.lazy').then((d) => d.Route))
+const InvoicesProductsRoute = InvoicesProductsRouteImport.update({
+  id: '/products',
+  path: '/products',
+  getParentRoute: () => InvoicesRoute,
+} as any)
+const ReportsIndexRoute = ReportsIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => ClientsRoute,
-} as any).lazy(() => import('./routes/clients.index.lazy').then((d) => d.Route))
-const SolutionsSmallBusinessRoute = SolutionsSmallBusinessRouteImport.update({
-  id: '/solutions/small-business',
-  path: '/solutions/small-business',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SolutionsEnterpriseRoute = SolutionsEnterpriseRouteImport.update({
-  id: '/solutions/enterprise',
-  path: '/solutions/enterprise',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SettingsSecurityRoute = SettingsSecurityRouteImport.update({
-  id: '/security',
-  path: '/security',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsRecurringRoute = SettingsRecurringRouteImport.update({
-  id: '/recurring',
-  path: '/recurring',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsIntegrationsRoute = SettingsIntegrationsRouteImport.update({
-  id: '/integrations',
-  path: '/integrations',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsComplianceRoute = SettingsComplianceRouteImport.update({
-  id: '/compliance',
-  path: '/compliance',
+  getParentRoute: () => ReportsRoute,
+} as any).lazy(() => import('./routes/reports.index.lazy').then((d) => d.Route))
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsCollectionsRoute = SettingsCollectionsRouteImport.update({
@@ -171,39 +165,34 @@ const SettingsCollectionsRoute = SettingsCollectionsRouteImport.update({
   path: '/collections',
   getParentRoute: () => SettingsRoute,
 } as any)
-const InvoicesProductsRoute = InvoicesProductsRouteImport.update({
-  id: '/products',
-  path: '/products',
-  getParentRoute: () => InvoicesRoute,
+const SettingsComplianceRoute = SettingsComplianceRouteImport.update({
+  id: '/compliance',
+  path: '/compliance',
+  getParentRoute: () => SettingsRoute,
 } as any)
-const InvoicesNewRoute = InvoicesNewRouteImport.update({
-  id: '/new',
-  path: '/new',
-  getParentRoute: () => InvoicesRoute,
-} as any).lazy(() => import('./routes/invoices.new.lazy').then((d) => d.Route))
-const ITokenRoute = ITokenRouteImport.update({
-  id: '/i/$token',
-  path: '/i/$token',
+const SettingsIntegrationsRoute = SettingsIntegrationsRouteImport.update({
+  id: '/integrations',
+  path: '/integrations',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsRecurringRoute = SettingsRecurringRouteImport.update({
+  id: '/recurring',
+  path: '/recurring',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsSecurityRoute = SettingsSecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SolutionsEnterpriseRoute = SolutionsEnterpriseRouteImport.update({
+  id: '/solutions/enterprise',
+  path: '/solutions/enterprise',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ClientsNewRoute = ClientsNewRouteImport.update({
-  id: '/new',
-  path: '/new',
-  getParentRoute: () => ClientsRoute,
-} as any).lazy(() => import('./routes/clients.new.lazy').then((d) => d.Route))
-const InvoicesProductsNewRoute = InvoicesProductsNewRouteImport.update({
-  id: '/new',
-  path: '/new',
-  getParentRoute: () => InvoicesProductsRoute,
-} as any)
-const InvoicesProductsIdRoute = InvoicesProductsIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => InvoicesProductsRoute,
-} as any)
-const ApiAuthSupabaseSessionRoute = ApiAuthSupabaseSessionRouteImport.update({
-  id: '/api/auth/supabase-session',
-  path: '/api/auth/supabase-session',
+const SolutionsSmallBusinessRoute = SolutionsSmallBusinessRouteImport.update({
+  id: '/solutions/small-business',
+  path: '/solutions/small-business',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -211,56 +200,50 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiSecurityLinkStepupVerifyRoute =
-  ApiSecurityLinkStepupVerifyRouteImport.update({
-    id: '/api/security/link-stepup/verify',
-    path: '/api/security/link-stepup/verify',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiSecurityLinkStepupStatusRoute =
-  ApiSecurityLinkStepupStatusRouteImport.update({
-    id: '/api/security/link-stepup/status',
-    path: '/api/security/link-stepup/status',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiSecurityLinkStepupRequestRoute =
-  ApiSecurityLinkStepupRequestRouteImport.update({
-    id: '/api/security/link-stepup/request',
-    path: '/api/security/link-stepup/request',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPaymentsPaystackWebhookRoute =
-  ApiPaymentsPaystackWebhookRouteImport.update({
-    id: '/api/payments/paystack/webhook',
-    path: '/api/payments/paystack/webhook',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPaymentsPaystackInitializeRoute =
-  ApiPaymentsPaystackInitializeRouteImport.update({
-    id: '/api/payments/paystack/initialize',
-    path: '/api/payments/paystack/initialize',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiInvoiceSendIdRoute = ApiInvoiceSendIdRouteImport.update({
-  id: '/api/invoice/send/$id',
-  path: '/api/invoice/send/$id',
+const ApiAuthSupabaseSessionRoute = ApiAuthSupabaseSessionRouteImport.update({
+  id: '/api/auth/supabase-session',
+  path: '/api/auth/supabase-session',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiInvoiceDownloadIdRoute = ApiInvoiceDownloadIdRouteImport.update({
-  id: '/api/invoice/download/$id',
-  path: '/api/invoice/download/$id',
+const ApiInvoiceScheduledRoute = ApiInvoiceScheduledRouteImport.update({
+  id: '/api/invoice/scheduled',
+  path: '/api/invoice/scheduled',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiIntegrationsXeroConnectRoute =
-  ApiIntegrationsXeroConnectRouteImport.update({
-    id: '/api/integrations/xero/connect',
-    path: '/api/integrations/xero/connect',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiIntegrationsXeroCallbackRoute =
-  ApiIntegrationsXeroCallbackRouteImport.update({
-    id: '/api/integrations/xero/callback',
-    path: '/api/integrations/xero/callback',
+const ApiRemindersSendQueueRoute = ApiRemindersSendQueueRouteImport.update({
+  id: '/api/reminders/send-queue',
+  path: '/api/reminders/send-queue',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTestFixturesRoute = ApiTestFixturesRouteImport.update({
+  id: '/api/test/fixtures',
+  path: '/api/test/fixtures',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InvoicesProductsIdRoute = InvoicesProductsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => InvoicesProductsRoute,
+} as any)
+const InvoicesProductsNewRoute = InvoicesProductsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => InvoicesProductsRoute,
+} as any)
+const ApiAuthFirstSecondRoute = ApiAuthFirstSecondRouteImport.update({
+  id: '/api/auth/$first/$second',
+  path: '/api/auth/$first/$second',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEmailResendWebhookRoute = ApiEmailResendWebhookRouteImport.update({
+  id: '/api/email/resend/webhook',
+  path: '/api/email/resend/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiIntegrationsQuickbooksCallbackRoute =
+  ApiIntegrationsQuickbooksCallbackRouteImport.update({
+    id: '/api/integrations/quickbooks/callback',
+    path: '/api/integrations/quickbooks/callback',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiIntegrationsQuickbooksConnectRoute =
@@ -269,22 +252,63 @@ const ApiIntegrationsQuickbooksConnectRoute =
     path: '/api/integrations/quickbooks/connect',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiIntegrationsQuickbooksCallbackRoute =
-  ApiIntegrationsQuickbooksCallbackRouteImport.update({
-    id: '/api/integrations/quickbooks/callback',
-    path: '/api/integrations/quickbooks/callback',
+const ApiIntegrationsXeroCallbackRoute =
+  ApiIntegrationsXeroCallbackRouteImport.update({
+    id: '/api/integrations/xero/callback',
+    path: '/api/integrations/xero/callback',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiEmailResendWebhookRoute = ApiEmailResendWebhookRouteImport.update({
-  id: '/api/email/resend/webhook',
-  path: '/api/email/resend/webhook',
+const ApiIntegrationsXeroConnectRoute =
+  ApiIntegrationsXeroConnectRouteImport.update({
+    id: '/api/integrations/xero/connect',
+    path: '/api/integrations/xero/connect',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiInvoiceDownloadIdRoute = ApiInvoiceDownloadIdRouteImport.update({
+  id: '/api/invoice/download/$id',
+  path: '/api/invoice/download/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAuthFirstSecondRoute = ApiAuthFirstSecondRouteImport.update({
-  id: '/api/auth/$first/$second',
-  path: '/api/auth/$first/$second',
+const ApiInvoicePublicTokenRoute = ApiInvoicePublicTokenRouteImport.update({
+  id: '/api/invoice/public/$token',
+  path: '/api/invoice/public/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiInvoiceSendIdRoute = ApiInvoiceSendIdRouteImport.update({
+  id: '/api/invoice/send/$id',
+  path: '/api/invoice/send/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPaymentsPaystackInitializeRoute =
+  ApiPaymentsPaystackInitializeRouteImport.update({
+    id: '/api/payments/paystack/initialize',
+    path: '/api/payments/paystack/initialize',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPaymentsPaystackWebhookRoute =
+  ApiPaymentsPaystackWebhookRouteImport.update({
+    id: '/api/payments/paystack/webhook',
+    path: '/api/payments/paystack/webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiSecurityLinkStepupRequestRoute =
+  ApiSecurityLinkStepupRequestRouteImport.update({
+    id: '/api/security/link-stepup/request',
+    path: '/api/security/link-stepup/request',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiSecurityLinkStepupStatusRoute =
+  ApiSecurityLinkStepupStatusRouteImport.update({
+    id: '/api/security/link-stepup/status',
+    path: '/api/security/link-stepup/status',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiSecurityLinkStepupVerifyRoute =
+  ApiSecurityLinkStepupVerifyRouteImport.update({
+    id: '/api/security/link-stepup/verify',
+    path: '/api/security/link-stepup/verify',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -316,6 +340,9 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/auth/supabase-session': typeof ApiAuthSupabaseSessionRoute
+  '/api/invoice/scheduled': typeof ApiInvoiceScheduledRoute
+  '/api/reminders/send-queue': typeof ApiRemindersSendQueueRoute
+  '/api/test/fixtures': typeof ApiTestFixturesRoute
   '/invoices/products/$id': typeof InvoicesProductsIdRoute
   '/invoices/products/new': typeof InvoicesProductsNewRoute
   '/api/auth/$first/$second': typeof ApiAuthFirstSecondRoute
@@ -325,6 +352,7 @@ export interface FileRoutesByFullPath {
   '/api/integrations/xero/callback': typeof ApiIntegrationsXeroCallbackRoute
   '/api/integrations/xero/connect': typeof ApiIntegrationsXeroConnectRoute
   '/api/invoice/download/$id': typeof ApiInvoiceDownloadIdRoute
+  '/api/invoice/public/$token': typeof ApiInvoicePublicTokenRoute
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
   '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
   '/api/payments/paystack/webhook': typeof ApiPaymentsPaystackWebhookRoute
@@ -358,6 +386,9 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/auth/supabase-session': typeof ApiAuthSupabaseSessionRoute
+  '/api/invoice/scheduled': typeof ApiInvoiceScheduledRoute
+  '/api/reminders/send-queue': typeof ApiRemindersSendQueueRoute
+  '/api/test/fixtures': typeof ApiTestFixturesRoute
   '/invoices/products/$id': typeof InvoicesProductsIdRoute
   '/invoices/products/new': typeof InvoicesProductsNewRoute
   '/api/auth/$first/$second': typeof ApiAuthFirstSecondRoute
@@ -367,6 +398,7 @@ export interface FileRoutesByTo {
   '/api/integrations/xero/callback': typeof ApiIntegrationsXeroCallbackRoute
   '/api/integrations/xero/connect': typeof ApiIntegrationsXeroConnectRoute
   '/api/invoice/download/$id': typeof ApiInvoiceDownloadIdRoute
+  '/api/invoice/public/$token': typeof ApiInvoicePublicTokenRoute
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
   '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
   '/api/payments/paystack/webhook': typeof ApiPaymentsPaystackWebhookRoute
@@ -405,6 +437,9 @@ export interface FileRoutesById {
   '/settings/': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/auth/supabase-session': typeof ApiAuthSupabaseSessionRoute
+  '/api/invoice/scheduled': typeof ApiInvoiceScheduledRoute
+  '/api/reminders/send-queue': typeof ApiRemindersSendQueueRoute
+  '/api/test/fixtures': typeof ApiTestFixturesRoute
   '/invoices/products/$id': typeof InvoicesProductsIdRoute
   '/invoices/products/new': typeof InvoicesProductsNewRoute
   '/api/auth/$first/$second': typeof ApiAuthFirstSecondRoute
@@ -414,6 +449,7 @@ export interface FileRoutesById {
   '/api/integrations/xero/callback': typeof ApiIntegrationsXeroCallbackRoute
   '/api/integrations/xero/connect': typeof ApiIntegrationsXeroConnectRoute
   '/api/invoice/download/$id': typeof ApiInvoiceDownloadIdRoute
+  '/api/invoice/public/$token': typeof ApiInvoicePublicTokenRoute
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
   '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
   '/api/payments/paystack/webhook': typeof ApiPaymentsPaystackWebhookRoute
@@ -453,6 +489,9 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/api/auth/$'
     | '/api/auth/supabase-session'
+    | '/api/invoice/scheduled'
+    | '/api/reminders/send-queue'
+    | '/api/test/fixtures'
     | '/invoices/products/$id'
     | '/invoices/products/new'
     | '/api/auth/$first/$second'
@@ -462,6 +501,7 @@ export interface FileRouteTypes {
     | '/api/integrations/xero/callback'
     | '/api/integrations/xero/connect'
     | '/api/invoice/download/$id'
+    | '/api/invoice/public/$token'
     | '/api/invoice/send/$id'
     | '/api/payments/paystack/initialize'
     | '/api/payments/paystack/webhook'
@@ -495,6 +535,9 @@ export interface FileRouteTypes {
     | '/settings'
     | '/api/auth/$'
     | '/api/auth/supabase-session'
+    | '/api/invoice/scheduled'
+    | '/api/reminders/send-queue'
+    | '/api/test/fixtures'
     | '/invoices/products/$id'
     | '/invoices/products/new'
     | '/api/auth/$first/$second'
@@ -504,6 +547,7 @@ export interface FileRouteTypes {
     | '/api/integrations/xero/callback'
     | '/api/integrations/xero/connect'
     | '/api/invoice/download/$id'
+    | '/api/invoice/public/$token'
     | '/api/invoice/send/$id'
     | '/api/payments/paystack/initialize'
     | '/api/payments/paystack/webhook'
@@ -541,6 +585,9 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/api/auth/$'
     | '/api/auth/supabase-session'
+    | '/api/invoice/scheduled'
+    | '/api/reminders/send-queue'
+    | '/api/test/fixtures'
     | '/invoices/products/$id'
     | '/invoices/products/new'
     | '/api/auth/$first/$second'
@@ -550,6 +597,7 @@ export interface FileRouteTypes {
     | '/api/integrations/xero/callback'
     | '/api/integrations/xero/connect'
     | '/api/invoice/download/$id'
+    | '/api/invoice/public/$token'
     | '/api/invoice/send/$id'
     | '/api/payments/paystack/initialize'
     | '/api/payments/paystack/webhook'
@@ -576,6 +624,9 @@ export interface RootRouteChildren {
   SolutionsSmallBusinessRoute: typeof SolutionsSmallBusinessRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiAuthSupabaseSessionRoute: typeof ApiAuthSupabaseSessionRoute
+  ApiInvoiceScheduledRoute: typeof ApiInvoiceScheduledRoute
+  ApiRemindersSendQueueRoute: typeof ApiRemindersSendQueueRoute
+  ApiTestFixturesRoute: typeof ApiTestFixturesRoute
   ApiAuthFirstSecondRoute: typeof ApiAuthFirstSecondRoute
   ApiEmailResendWebhookRoute: typeof ApiEmailResendWebhookRoute
   ApiIntegrationsQuickbooksCallbackRoute: typeof ApiIntegrationsQuickbooksCallbackRoute
@@ -583,6 +634,7 @@ export interface RootRouteChildren {
   ApiIntegrationsXeroCallbackRoute: typeof ApiIntegrationsXeroCallbackRoute
   ApiIntegrationsXeroConnectRoute: typeof ApiIntegrationsXeroConnectRoute
   ApiInvoiceDownloadIdRoute: typeof ApiInvoiceDownloadIdRoute
+  ApiInvoicePublicTokenRoute: typeof ApiInvoicePublicTokenRoute
   ApiInvoiceSendIdRoute: typeof ApiInvoiceSendIdRoute
   ApiPaymentsPaystackInitializeRoute: typeof ApiPaymentsPaystackInitializeRoute
   ApiPaymentsPaystackWebhookRoute: typeof ApiPaymentsPaystackWebhookRoute
@@ -593,74 +645,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/terms': {
-      id: '/terms'
-      path: '/terms'
-      fullPath: '/terms'
-      preLoaderRoute: typeof TermsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/security': {
-      id: '/security'
-      path: '/security'
-      fullPath: '/security'
-      preLoaderRoute: typeof SecurityRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reports': {
-      id: '/reports'
-      path: '/reports'
-      fullPath: '/reports'
-      preLoaderRoute: typeof ReportsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/privacy': {
-      id: '/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/pricing': {
-      id: '/pricing'
-      path: '/pricing'
-      fullPath: '/pricing'
-      preLoaderRoute: typeof PricingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/invoices': {
-      id: '/invoices'
-      path: '/invoices'
-      fullPath: '/invoices'
-      preLoaderRoute: typeof InvoicesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/features': {
-      id: '/features'
-      path: '/features'
-      fullPath: '/features'
-      preLoaderRoute: typeof FeaturesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/compliance': {
-      id: '/compliance'
-      path: '/compliance'
-      fullPath: '/compliance'
-      preLoaderRoute: typeof ComplianceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/clients': {
-      id: '/clients'
-      path: '/clients'
-      fullPath: '/clients'
-      preLoaderRoute: typeof ClientsRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -670,33 +659,75 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/clients': {
+      id: '/clients'
+      path: '/clients'
+      fullPath: '/clients'
+      preLoaderRoute: typeof ClientsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/settings/': {
-      id: '/settings/'
-      path: '/'
-      fullPath: '/settings/'
-      preLoaderRoute: typeof SettingsIndexRouteImport
-      parentRoute: typeof SettingsRoute
+    '/compliance': {
+      id: '/compliance'
+      path: '/compliance'
+      fullPath: '/compliance'
+      preLoaderRoute: typeof ComplianceRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/reports/': {
-      id: '/reports/'
-      path: '/'
-      fullPath: '/reports/'
-      preLoaderRoute: typeof ReportsIndexRouteImport
-      parentRoute: typeof ReportsRoute
+    '/features': {
+      id: '/features'
+      path: '/features'
+      fullPath: '/features'
+      preLoaderRoute: typeof FeaturesRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/invoices/': {
-      id: '/invoices/'
-      path: '/'
-      fullPath: '/invoices/'
-      preLoaderRoute: typeof InvoicesIndexRouteImport
-      parentRoute: typeof InvoicesRoute
+    '/invoices': {
+      id: '/invoices'
+      path: '/invoices'
+      fullPath: '/invoices'
+      preLoaderRoute: typeof InvoicesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pricing': {
+      id: '/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/security': {
+      id: '/security'
+      path: '/security'
+      fullPath: '/security'
+      preLoaderRoute: typeof SecurityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/clients/': {
       id: '/clients/'
@@ -705,60 +736,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClientsIndexRouteImport
       parentRoute: typeof ClientsRoute
     }
-    '/solutions/small-business': {
-      id: '/solutions/small-business'
-      path: '/solutions/small-business'
-      fullPath: '/solutions/small-business'
-      preLoaderRoute: typeof SolutionsSmallBusinessRouteImport
+    '/clients/new': {
+      id: '/clients/new'
+      path: '/new'
+      fullPath: '/clients/new'
+      preLoaderRoute: typeof ClientsNewRouteImport
+      parentRoute: typeof ClientsRoute
+    }
+    '/i/$token': {
+      id: '/i/$token'
+      path: '/i/$token'
+      fullPath: '/i/$token'
+      preLoaderRoute: typeof ITokenRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/solutions/enterprise': {
-      id: '/solutions/enterprise'
-      path: '/solutions/enterprise'
-      fullPath: '/solutions/enterprise'
-      preLoaderRoute: typeof SolutionsEnterpriseRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/settings/security': {
-      id: '/settings/security'
-      path: '/security'
-      fullPath: '/settings/security'
-      preLoaderRoute: typeof SettingsSecurityRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/recurring': {
-      id: '/settings/recurring'
-      path: '/recurring'
-      fullPath: '/settings/recurring'
-      preLoaderRoute: typeof SettingsRecurringRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/integrations': {
-      id: '/settings/integrations'
-      path: '/integrations'
-      fullPath: '/settings/integrations'
-      preLoaderRoute: typeof SettingsIntegrationsRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/compliance': {
-      id: '/settings/compliance'
-      path: '/compliance'
-      fullPath: '/settings/compliance'
-      preLoaderRoute: typeof SettingsComplianceRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/collections': {
-      id: '/settings/collections'
-      path: '/collections'
-      fullPath: '/settings/collections'
-      preLoaderRoute: typeof SettingsCollectionsRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/invoices/products': {
-      id: '/invoices/products'
-      path: '/products'
-      fullPath: '/invoices/products'
-      preLoaderRoute: typeof InvoicesProductsRouteImport
+    '/invoices/': {
+      id: '/invoices/'
+      path: '/'
+      fullPath: '/invoices/'
+      preLoaderRoute: typeof InvoicesIndexRouteImport
       parentRoute: typeof InvoicesRoute
     }
     '/invoices/new': {
@@ -768,39 +764,74 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InvoicesNewRouteImport
       parentRoute: typeof InvoicesRoute
     }
-    '/i/$token': {
-      id: '/i/$token'
-      path: '/i/$token'
-      fullPath: '/i/$token'
-      preLoaderRoute: typeof ITokenRouteImport
+    '/invoices/products': {
+      id: '/invoices/products'
+      path: '/products'
+      fullPath: '/invoices/products'
+      preLoaderRoute: typeof InvoicesProductsRouteImport
+      parentRoute: typeof InvoicesRoute
+    }
+    '/reports/': {
+      id: '/reports/'
+      path: '/'
+      fullPath: '/reports/'
+      preLoaderRoute: typeof ReportsIndexRouteImport
+      parentRoute: typeof ReportsRoute
+    }
+    '/settings/': {
+      id: '/settings/'
+      path: '/'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/collections': {
+      id: '/settings/collections'
+      path: '/collections'
+      fullPath: '/settings/collections'
+      preLoaderRoute: typeof SettingsCollectionsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/compliance': {
+      id: '/settings/compliance'
+      path: '/compliance'
+      fullPath: '/settings/compliance'
+      preLoaderRoute: typeof SettingsComplianceRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/integrations': {
+      id: '/settings/integrations'
+      path: '/integrations'
+      fullPath: '/settings/integrations'
+      preLoaderRoute: typeof SettingsIntegrationsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/recurring': {
+      id: '/settings/recurring'
+      path: '/recurring'
+      fullPath: '/settings/recurring'
+      preLoaderRoute: typeof SettingsRecurringRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/security': {
+      id: '/settings/security'
+      path: '/security'
+      fullPath: '/settings/security'
+      preLoaderRoute: typeof SettingsSecurityRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/solutions/enterprise': {
+      id: '/solutions/enterprise'
+      path: '/solutions/enterprise'
+      fullPath: '/solutions/enterprise'
+      preLoaderRoute: typeof SolutionsEnterpriseRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/clients/new': {
-      id: '/clients/new'
-      path: '/new'
-      fullPath: '/clients/new'
-      preLoaderRoute: typeof ClientsNewRouteImport
-      parentRoute: typeof ClientsRoute
-    }
-    '/invoices/products/new': {
-      id: '/invoices/products/new'
-      path: '/new'
-      fullPath: '/invoices/products/new'
-      preLoaderRoute: typeof InvoicesProductsNewRouteImport
-      parentRoute: typeof InvoicesProductsRoute
-    }
-    '/invoices/products/$id': {
-      id: '/invoices/products/$id'
-      path: '/$id'
-      fullPath: '/invoices/products/$id'
-      preLoaderRoute: typeof InvoicesProductsIdRouteImport
-      parentRoute: typeof InvoicesProductsRoute
-    }
-    '/api/auth/supabase-session': {
-      id: '/api/auth/supabase-session'
-      path: '/api/auth/supabase-session'
-      fullPath: '/api/auth/supabase-session'
-      preLoaderRoute: typeof ApiAuthSupabaseSessionRouteImport
+    '/solutions/small-business': {
+      id: '/solutions/small-business'
+      path: '/solutions/small-business'
+      fullPath: '/solutions/small-business'
+      preLoaderRoute: typeof SolutionsSmallBusinessRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -810,81 +841,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/security/link-stepup/verify': {
-      id: '/api/security/link-stepup/verify'
-      path: '/api/security/link-stepup/verify'
-      fullPath: '/api/security/link-stepup/verify'
-      preLoaderRoute: typeof ApiSecurityLinkStepupVerifyRouteImport
+    '/api/auth/supabase-session': {
+      id: '/api/auth/supabase-session'
+      path: '/api/auth/supabase-session'
+      fullPath: '/api/auth/supabase-session'
+      preLoaderRoute: typeof ApiAuthSupabaseSessionRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/security/link-stepup/status': {
-      id: '/api/security/link-stepup/status'
-      path: '/api/security/link-stepup/status'
-      fullPath: '/api/security/link-stepup/status'
-      preLoaderRoute: typeof ApiSecurityLinkStepupStatusRouteImport
+    '/api/invoice/scheduled': {
+      id: '/api/invoice/scheduled'
+      path: '/api/invoice/scheduled'
+      fullPath: '/api/invoice/scheduled'
+      preLoaderRoute: typeof ApiInvoiceScheduledRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/security/link-stepup/request': {
-      id: '/api/security/link-stepup/request'
-      path: '/api/security/link-stepup/request'
-      fullPath: '/api/security/link-stepup/request'
-      preLoaderRoute: typeof ApiSecurityLinkStepupRequestRouteImport
+    '/api/reminders/send-queue': {
+      id: '/api/reminders/send-queue'
+      path: '/api/reminders/send-queue'
+      fullPath: '/api/reminders/send-queue'
+      preLoaderRoute: typeof ApiRemindersSendQueueRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/payments/paystack/webhook': {
-      id: '/api/payments/paystack/webhook'
-      path: '/api/payments/paystack/webhook'
-      fullPath: '/api/payments/paystack/webhook'
-      preLoaderRoute: typeof ApiPaymentsPaystackWebhookRouteImport
+    '/api/test/fixtures': {
+      id: '/api/test/fixtures'
+      path: '/api/test/fixtures'
+      fullPath: '/api/test/fixtures'
+      preLoaderRoute: typeof ApiTestFixturesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/payments/paystack/initialize': {
-      id: '/api/payments/paystack/initialize'
-      path: '/api/payments/paystack/initialize'
-      fullPath: '/api/payments/paystack/initialize'
-      preLoaderRoute: typeof ApiPaymentsPaystackInitializeRouteImport
-      parentRoute: typeof rootRouteImport
+    '/invoices/products/$id': {
+      id: '/invoices/products/$id'
+      path: '/$id'
+      fullPath: '/invoices/products/$id'
+      preLoaderRoute: typeof InvoicesProductsIdRouteImport
+      parentRoute: typeof InvoicesProductsRoute
     }
-    '/api/invoice/send/$id': {
-      id: '/api/invoice/send/$id'
-      path: '/api/invoice/send/$id'
-      fullPath: '/api/invoice/send/$id'
-      preLoaderRoute: typeof ApiInvoiceSendIdRouteImport
-      parentRoute: typeof rootRouteImport
+    '/invoices/products/new': {
+      id: '/invoices/products/new'
+      path: '/new'
+      fullPath: '/invoices/products/new'
+      preLoaderRoute: typeof InvoicesProductsNewRouteImport
+      parentRoute: typeof InvoicesProductsRoute
     }
-    '/api/invoice/download/$id': {
-      id: '/api/invoice/download/$id'
-      path: '/api/invoice/download/$id'
-      fullPath: '/api/invoice/download/$id'
-      preLoaderRoute: typeof ApiInvoiceDownloadIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/integrations/xero/connect': {
-      id: '/api/integrations/xero/connect'
-      path: '/api/integrations/xero/connect'
-      fullPath: '/api/integrations/xero/connect'
-      preLoaderRoute: typeof ApiIntegrationsXeroConnectRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/integrations/xero/callback': {
-      id: '/api/integrations/xero/callback'
-      path: '/api/integrations/xero/callback'
-      fullPath: '/api/integrations/xero/callback'
-      preLoaderRoute: typeof ApiIntegrationsXeroCallbackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/integrations/quickbooks/connect': {
-      id: '/api/integrations/quickbooks/connect'
-      path: '/api/integrations/quickbooks/connect'
-      fullPath: '/api/integrations/quickbooks/connect'
-      preLoaderRoute: typeof ApiIntegrationsQuickbooksConnectRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/integrations/quickbooks/callback': {
-      id: '/api/integrations/quickbooks/callback'
-      path: '/api/integrations/quickbooks/callback'
-      fullPath: '/api/integrations/quickbooks/callback'
-      preLoaderRoute: typeof ApiIntegrationsQuickbooksCallbackRouteImport
+    '/api/auth/$first/$second': {
+      id: '/api/auth/$first/$second'
+      path: '/api/auth/$first/$second'
+      fullPath: '/api/auth/$first/$second'
+      preLoaderRoute: typeof ApiAuthFirstSecondRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/email/resend/webhook': {
@@ -894,11 +897,88 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiEmailResendWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/auth/$first/$second': {
-      id: '/api/auth/$first/$second'
-      path: '/api/auth/$first/$second'
-      fullPath: '/api/auth/$first/$second'
-      preLoaderRoute: typeof ApiAuthFirstSecondRouteImport
+    '/api/integrations/quickbooks/callback': {
+      id: '/api/integrations/quickbooks/callback'
+      path: '/api/integrations/quickbooks/callback'
+      fullPath: '/api/integrations/quickbooks/callback'
+      preLoaderRoute: typeof ApiIntegrationsQuickbooksCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/integrations/quickbooks/connect': {
+      id: '/api/integrations/quickbooks/connect'
+      path: '/api/integrations/quickbooks/connect'
+      fullPath: '/api/integrations/quickbooks/connect'
+      preLoaderRoute: typeof ApiIntegrationsQuickbooksConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/integrations/xero/callback': {
+      id: '/api/integrations/xero/callback'
+      path: '/api/integrations/xero/callback'
+      fullPath: '/api/integrations/xero/callback'
+      preLoaderRoute: typeof ApiIntegrationsXeroCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/integrations/xero/connect': {
+      id: '/api/integrations/xero/connect'
+      path: '/api/integrations/xero/connect'
+      fullPath: '/api/integrations/xero/connect'
+      preLoaderRoute: typeof ApiIntegrationsXeroConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/invoice/download/$id': {
+      id: '/api/invoice/download/$id'
+      path: '/api/invoice/download/$id'
+      fullPath: '/api/invoice/download/$id'
+      preLoaderRoute: typeof ApiInvoiceDownloadIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/invoice/public/$token': {
+      id: '/api/invoice/public/$token'
+      path: '/api/invoice/public/$token'
+      fullPath: '/api/invoice/public/$token'
+      preLoaderRoute: typeof ApiInvoicePublicTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/invoice/send/$id': {
+      id: '/api/invoice/send/$id'
+      path: '/api/invoice/send/$id'
+      fullPath: '/api/invoice/send/$id'
+      preLoaderRoute: typeof ApiInvoiceSendIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/payments/paystack/initialize': {
+      id: '/api/payments/paystack/initialize'
+      path: '/api/payments/paystack/initialize'
+      fullPath: '/api/payments/paystack/initialize'
+      preLoaderRoute: typeof ApiPaymentsPaystackInitializeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/payments/paystack/webhook': {
+      id: '/api/payments/paystack/webhook'
+      path: '/api/payments/paystack/webhook'
+      fullPath: '/api/payments/paystack/webhook'
+      preLoaderRoute: typeof ApiPaymentsPaystackWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/security/link-stepup/request': {
+      id: '/api/security/link-stepup/request'
+      path: '/api/security/link-stepup/request'
+      fullPath: '/api/security/link-stepup/request'
+      preLoaderRoute: typeof ApiSecurityLinkStepupRequestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/security/link-stepup/status': {
+      id: '/api/security/link-stepup/status'
+      path: '/api/security/link-stepup/status'
+      fullPath: '/api/security/link-stepup/status'
+      preLoaderRoute: typeof ApiSecurityLinkStepupStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/security/link-stepup/verify': {
+      id: '/api/security/link-stepup/verify'
+      path: '/api/security/link-stepup/verify'
+      fullPath: '/api/security/link-stepup/verify'
+      preLoaderRoute: typeof ApiSecurityLinkStepupVerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -997,6 +1077,9 @@ const rootRouteChildren: RootRouteChildren = {
   SolutionsSmallBusinessRoute: SolutionsSmallBusinessRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiAuthSupabaseSessionRoute: ApiAuthSupabaseSessionRoute,
+  ApiInvoiceScheduledRoute: ApiInvoiceScheduledRoute,
+  ApiRemindersSendQueueRoute: ApiRemindersSendQueueRoute,
+  ApiTestFixturesRoute: ApiTestFixturesRoute,
   ApiAuthFirstSecondRoute: ApiAuthFirstSecondRoute,
   ApiEmailResendWebhookRoute: ApiEmailResendWebhookRoute,
   ApiIntegrationsQuickbooksCallbackRoute:
@@ -1005,6 +1088,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiIntegrationsXeroCallbackRoute: ApiIntegrationsXeroCallbackRoute,
   ApiIntegrationsXeroConnectRoute: ApiIntegrationsXeroConnectRoute,
   ApiInvoiceDownloadIdRoute: ApiInvoiceDownloadIdRoute,
+  ApiInvoicePublicTokenRoute: ApiInvoicePublicTokenRoute,
   ApiInvoiceSendIdRoute: ApiInvoiceSendIdRoute,
   ApiPaymentsPaystackInitializeRoute: ApiPaymentsPaystackInitializeRoute,
   ApiPaymentsPaystackWebhookRoute: ApiPaymentsPaystackWebhookRoute,

@@ -1,8 +1,10 @@
-import { useGSAP } from "@gsap/react";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { useEffect, useLayoutEffect } from "react";
+import { type GsapClient, loadGsapClient } from "./gsap-client";
 
-gsap.registerPlugin(useGSAP, ScrollTrigger);
+// Layout-effect timing on the client (no animation flash), inert on the
+// server where effect callbacks never run.
+const useIsoLayoutEffect =
+	typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 const REVEAL_FROM = { opacity: 0, y: 8 } as const;
 const REVEAL_TO = {
@@ -15,17 +17,26 @@ const REVEAL_TO = {
 } as const;
 
 export function useMarketingMotion(): void {
-	useGSAP(() => {
-		const mm = gsap.matchMedia();
+	useIsoLayoutEffect(() => {
+		let cancelled = false;
+		let mm: ReturnType<GsapClient["gsap"]["matchMedia"]> | undefined;
 
-		mm.add("(prefers-reduced-motion: no-preference)", () => {
-			ScrollTrigger.batch("[data-fade-scroll]", {
-				start: "top 88%",
-				once: true,
-				onEnter: (batch) => gsap.fromTo(batch, REVEAL_FROM, REVEAL_TO),
+		void loadGsapClient().then(({ gsap, ScrollTrigger }) => {
+			if (cancelled) return;
+			mm = gsap.matchMedia();
+
+			mm.add("(prefers-reduced-motion: no-preference)", () => {
+				ScrollTrigger.batch("[data-fade-scroll]", {
+					start: "top 88%",
+					once: true,
+					onEnter: (batch) => gsap.fromTo(batch, REVEAL_FROM, REVEAL_TO),
+				});
 			});
 		});
 
-		return () => mm.revert();
-	});
+		return () => {
+			cancelled = true;
+			mm?.revert();
+		};
+	}, []);
 }
