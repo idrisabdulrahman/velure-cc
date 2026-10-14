@@ -1,0 +1,72 @@
+import { describe, expect, it } from "vitest";
+import {
+	INVOICE_LIST_PAGE_SIZE,
+	paginateInvoiceRows,
+	rowToInvoiceDoc,
+} from "./invoices";
+
+describe("invoice list contracts", () => {
+	it("coerces string numerics from JSON columns in rowToInvoiceDoc", () => {
+		// Supabase JSON columns can deliver numeric fields as strings; the
+		// document contract declares them as numbers. Money math downstream
+		// (totals, PDF rendering) breaks on strings — regression: the Cloudflare
+		// PDF fallback crashed on `item.price.toFixed is not a function`.
+		const doc = rowToInvoiceDoc({
+			id: "inv-1",
+			token: "pub-token",
+			document_type: "standard",
+			invoice_number: "INV-001",
+			customer_name: "Acme",
+			currency: "NGN",
+			issue_date: "2026-01-01",
+			due_date: "2026-02-01",
+			status: "draft",
+			line_items: [
+				{ id: "li-1", name: "Item", quantity: "3", price: "2500.5" },
+			],
+			compliance: { subtotal: "7501.5", grandTotal: "8251.65" },
+			created_at: 1,
+			updated_at: 2,
+		} as never);
+		expect(doc.lineItems[0]?.quantity).toBe(3);
+		expect(doc.lineItems[0]?.price).toBe(2500.5);
+		expect(doc.compliance?.subtotal).toBe(7501.5);
+		expect(doc.compliance?.grandTotal).toBe(8251.65);
+	});
+
+	it("uses Midday's bounded invoice page size", () => {
+		expect(INVOICE_LIST_PAGE_SIZE).toBe(25);
+		const rows = Array.from({ length: 52 }, (_, index) => ({
+			id: String(index),
+			lineItems: [],
+			status: "draft",
+			currency: "NGN",
+			invoiceNumber: `INV-${index}`,
+			customerName: "Test",
+			issueDate: "2026-08-25",
+			dueDate: "2026-09-25",
+			createdAt: index,
+			updatedAt: index,
+		}));
+		const first = paginateInvoiceRows(rows, {}, INVOICE_LIST_PAGE_SIZE);
+		const second = paginateInvoiceRows(
+			rows,
+			{ cursor: first.continueCursor },
+			INVOICE_LIST_PAGE_SIZE,
+		);
+		expect(first.page).toHaveLength(25);
+		expect(second.page).toHaveLength(25);
+		expect(
+			new Set([...first.page, ...second.page].map((row) => row.id)).size,
+		).toBe(50);
+		console.log("pagination contract passed");
+	});
+
+	it("keeps deleted rows out of normal reads", async () => {
+		const source = await import("node:fs/promises").then((fs) =>
+			fs.readFile(new URL("./invoices.ts", import.meta.url), "utf8"),
+		);
+		expect(source).toContain('.is("deleted_at", null)');
+		console.log("deletion visibility contract passed");
+	});
+});

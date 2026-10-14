@@ -9,7 +9,7 @@ import {
 	NIGERIA_TAX_RULE_SET_VERSION,
 	NIGERIA_VAT_RATE,
 	normalizeNigeriaPhone,
-} from "../../../convex/nigeria";
+} from "./nigeria";
 import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
 
 /**
@@ -205,6 +205,8 @@ export type InvoiceListArgs = {
 	pageSize?: number;
 };
 
+export const INVOICE_LIST_PAGE_SIZE = 25;
+
 const MAX_INVOICE_IMPORT_ROWS = 2_000;
 const INVOICE_IMPORT_INSERT_CHUNK_SIZE = 50;
 
@@ -221,6 +223,42 @@ function epoch(value?: string | null): number | undefined {
 function iso(value?: number | null): string | null {
 	if (!value) return null;
 	return new Date(value).toISOString();
+}
+
+// JSON columns (`line_items`, `compliance`) can carry numeric fields as
+// strings depending on the writer path. The document contract declares them
+// as numbers, so normalize at the DB boundary — money math downstream
+// (invoice totals, PDF rendering) assumes real numbers.
+function coerceMoney(value: unknown): number {
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeLineItems(items: unknown): LineItem[] {
+	if (!Array.isArray(items)) return [];
+	return items.map((item) => ({
+		...(item as LineItem),
+		quantity: coerceMoney((item as LineItem)?.quantity),
+		price: coerceMoney((item as LineItem)?.price),
+	}));
+}
+
+function normalizeCompliance(value: unknown) {
+	if (!value || typeof value !== "object") return undefined;
+	const compliance = value as Record<string, unknown>;
+	const normalized: Record<string, unknown> = { ...compliance };
+	for (const key of [
+		"subtotal",
+		"totalTax",
+		"netPayable",
+		"grandTotal",
+		"withholdingTaxAmount",
+	]) {
+		if (compliance[key] !== undefined) {
+			normalized[key] = coerceMoney(compliance[key]);
+		}
+	}
+	return normalized;
 }
 
 // ---------------------------------------------------------------------------
@@ -546,7 +584,9 @@ function sequenceFromInvoiceNumber(
 async function getWorkspaceNumbering(client: Supabase, workspaceId: string) {
 	const { data, error } = await client
 		.from("workspaces")
-		.select("name, invoice_number_mode, invoice_number_prefix, next_invoice_sequence")
+		.select(
+			"name, invoice_number_mode, invoice_number_prefix, next_invoice_sequence",
+		)
 		.eq("id", workspaceId)
 		.maybeSingle();
 	if (error) throw error;
@@ -662,8 +702,7 @@ async function prepareInvoiceNumberForInsert(
 		if (error) throw error;
 		existing = data;
 	}
-	const requestedCollides =
-		existing && existing.id !== args.exceptId;
+	const requestedCollides = existing && existing.id !== args.exceptId;
 
 	if (
 		!hasValidRequestedNumber ||
@@ -741,16 +780,14 @@ type InvoiceRow = {
 };
 
 /** Supabase row -> the Convex-doc shape mapInvoice expects. */
-function rowToInvoiceDoc(row: InvoiceRow) {
+export function rowToInvoiceDoc(row: InvoiceRow) {
 	const lifecycle = row.lifecycle ?? {};
 	return {
 		id: row.id,
 		token: row.token,
 		tokenRevokedAt: epoch(row.token_revoked_at),
 		documentType: row.document_type,
-		convertedToInvoiceId: lifecycle.convertedToInvoiceId as
-			| string
-			| undefined,
+		convertedToInvoiceId: lifecycle.convertedToInvoiceId as string | undefined,
 		shipmentDetails: (row.shipment_details as ShipmentDetails) ?? undefined,
 		depositRequest: (lifecycle.depositRequest as DepositRequest) ?? undefined,
 		invoiceNumber: row.invoice_number,
@@ -764,7 +801,8 @@ function rowToInvoiceDoc(row: InvoiceRow) {
 		dateFormat: (row.date_format ?? "ng") as DateFormat,
 		paymentTermsDays: row.payment_terms_days ?? 14,
 		template: row.template ?? "Default",
-		templateSettings: (row.template_settings as InvoiceTemplateSettings) ?? undefined,
+		templateSettings:
+			(row.template_settings as InvoiceTemplateSettings) ?? undefined,
 		topBlock: row.top_block ?? undefined,
 		bottomBlock: row.bottom_block ?? undefined,
 		issueDate: row.issue_date,
@@ -784,8 +822,8 @@ function rowToInvoiceDoc(row: InvoiceRow) {
 		notes: row.notes ?? undefined,
 		internalNotes: row.internal_notes ?? undefined,
 		deletedAt: epoch(row.deleted_at),
-		lineItems: row.line_items ?? [],
-		compliance: row.compliance ?? undefined,
+		lineItems: normalizeLineItems(row.line_items),
+		compliance: normalizeCompliance(row.compliance) ?? undefined,
 		fiscalization: row.fiscalization ?? undefined,
 		reminder: row.reminder ?? undefined,
 		sync: row.sync ?? undefined,
@@ -855,10 +893,10 @@ export function mapInvoice(invoice: any): Invoice {
 				customerName: invoice.customerName,
 				lineItems: invoice.lineItems ?? [],
 			}),
-		fiscalization:
-			invoice.fiscalization ??
-			(invoice.compliance?.fiscalization as Record<string, unknown>) ??
-			{ status: "not_configured" },
+		fiscalization: invoice.fiscalization ??
+			(invoice.compliance?.fiscalization as Record<string, unknown>) ?? {
+				status: "not_configured",
+			},
 		reminder: invoice.reminder ?? defaultReminder(),
 		sync: invoice.sync ?? defaultSync(),
 		lifecycle: invoice.lifecycle ?? {},
@@ -1008,12 +1046,15 @@ async function fetchWorkspaceInvoiceRows(
 		.from("invoices")
 		.select("*")
 		.eq("workspace_id", workspaceId)
+		.is("deleted_at", null)
 		.order("updated_at", { ascending: false });
 	if (error) throw error;
-	return (data ?? []).map((row) => rowToInvoiceDoc(row as unknown as InvoiceRow));
+	return (data ?? []).map((row) =>
+		rowToInvoiceDoc(row as unknown as InvoiceRow),
+	);
 }
 
-function paginateInvoiceRows(
+export function paginateInvoiceRows(
 	rows: any[],
 	args: InvoiceListArgs,
 	pageSize: number,
@@ -1230,7 +1271,11 @@ export function buildInvoiceListSummary(rows: any[]) {
 // Queries
 // ---------------------------------------------------------------------------
 
-export async function list(client: Supabase, userId: string, args: InvoiceListArgs = {}) {
+export async function list(
+	client: Supabase,
+	userId: string,
+	args: InvoiceListArgs = {},
+) {
 	const workspaceId = await resolveActiveWorkspaceId(client, userId);
 	if (!workspaceId) return [];
 	const rows = await fetchWorkspaceInvoiceRows(client, workspaceId);
@@ -1252,13 +1297,17 @@ export async function listPage(
 	}
 
 	const pageSize = Math.min(
-		Math.max(Math.floor(args.pageSize ?? 50), 10),
+		Math.max(Math.floor(args.pageSize ?? INVOICE_LIST_PAGE_SIZE), 10),
 		100,
 	);
 	const rows = await fetchWorkspaceInvoiceRows(client, workspaceId);
 
 	if (hasInvoiceListPostFilters(args)) {
-		return paginateInvoiceRows(filterInvoiceListRows(rows, args), args, pageSize);
+		return paginateInvoiceRows(
+			filterInvoiceListRows(rows, args),
+			args,
+			pageSize,
+		);
 	}
 
 	return paginateInvoiceRows(rows, args, pageSize);
@@ -1277,7 +1326,9 @@ export async function listSummary(
 		};
 	}
 	const rows = await fetchWorkspaceInvoiceRows(client, workspaceId);
-	return buildInvoiceListSummary(filterInvoiceListRows(rows, args).map(mapInvoice));
+	return buildInvoiceListSummary(
+		filterInvoiceListRows(rows, args).map(mapInvoice),
+	);
 }
 
 export async function listWithSummary(
@@ -1314,6 +1365,7 @@ export async function getById(
 		.select("*")
 		.eq("id", id)
 		.eq("workspace_id", workspaceId)
+		.is("deleted_at", null)
 		.maybeSingle();
 	if (error) throw error;
 	if (!data) return null;
@@ -1339,10 +1391,7 @@ export async function getByToken(
 	return mapInvoice(rowToInvoiceDoc(data as unknown as InvoiceRow));
 }
 
-export async function getPublicByToken(
-	client: Supabase,
-	token: string,
-) {
+export async function getPublicByToken(client: Supabase, token: string) {
 	const { data, error } = await client
 		.from("invoices")
 		.select("*")
@@ -1516,9 +1565,7 @@ export async function createDraft(
 	const now = Date.now();
 	const compliance = args.compliance ?? defaultCompliance(args);
 	const documentType = args.documentType ?? "standard";
-	const existingDraft = args.id
-		? await getById(client, userId, args.id)
-		: null;
+	const existingDraft = args.id ? await getById(client, userId, args.id) : null;
 	if (args.id) {
 		if (!existingDraft) {
 			throw new Error("Draft invoice not found.");
@@ -1606,10 +1653,10 @@ export async function createDraft(
 		internalNotes: args.internalNotes,
 		lineItems: args.lineItems,
 		compliance: normalizedCompliance,
-		fiscalization:
-			(args.fiscalization as Record<string, unknown>) ??
-			(normalizedCompliance.fiscalization as Record<string, unknown>) ??
-			{ status: "not_configured" },
+		fiscalization: (args.fiscalization as Record<string, unknown>) ??
+			(normalizedCompliance.fiscalization as Record<string, unknown>) ?? {
+				status: "not_configured",
+			},
 		reminder,
 		sync,
 		lifecycle: {},
@@ -1742,10 +1789,10 @@ export async function autosaveDraft(
 		internalNotes: args.internalNotes,
 		lineItems,
 		compliance: normalizedCompliance,
-		fiscalization:
-			(args.fiscalization as Record<string, unknown>) ??
-			(normalizedCompliance.fiscalization as Record<string, unknown>) ??
-			{ status: "not_configured" },
+		fiscalization: (args.fiscalization as Record<string, unknown>) ??
+			(normalizedCompliance.fiscalization as Record<string, unknown>) ?? {
+				status: "not_configured",
+			},
 		reminder: args.reminder ?? defaultReminder(),
 		sync: args.sync ?? defaultSync(),
 		lifecycle: {},
@@ -2138,11 +2185,12 @@ export async function reschedule(
 	return { ok: true, scheduledAt };
 }
 
-async function invoiceHasRelatedRecords(
-	client: Supabase,
-	invoiceId: string,
-) {
-	for (const table of ["payment_transactions", "payment_charges", "invoice_delivery_events"] as const) {
+async function invoiceHasRelatedRecords(client: Supabase, invoiceId: string) {
+	for (const table of [
+		"payment_transactions",
+		"payment_charges",
+		"invoice_delivery_events",
+	] as const) {
 		const { data, error } = await client
 			.from(table)
 			.select("id")
@@ -2168,10 +2216,7 @@ function invoiceHasExternalHistory(invoice: any) {
 	);
 }
 
-function cleanupSummary(
-	invoice: any,
-	action: "hard-delete" | "archive",
-) {
+function cleanupSummary(invoice: any, action: "hard-delete" | "archive") {
 	return {
 		id: invoice.id,
 		invoiceNumber: invoice.invoiceNumber,
@@ -2186,7 +2231,10 @@ async function cleanupPlanForInvoice(client: Supabase, invoice: any) {
 	const hasExternalHistory =
 		hasRelatedRecords || invoiceHasExternalHistory(invoice);
 
-	if (getDerivedInvoiceStatus(invoice) === "draft" && !hasExternalHistory) {
+	if (
+		["draft", "canceled"].includes(getDerivedInvoiceStatus(invoice)) &&
+		!hasExternalHistory
+	) {
 		return cleanupSummary(invoice, "hard-delete");
 	}
 
@@ -2437,10 +2485,10 @@ export async function duplicate(
 		compliance:
 			(source.compliance as Record<string, unknown>) ??
 			defaultCompliance(source),
-		fiscalization:
-			(source.fiscalization as Record<string, unknown>) ??
-			(source.compliance?.fiscalization as Record<string, unknown>) ??
-			{ status: "not_configured" },
+		fiscalization: (source.fiscalization as Record<string, unknown>) ??
+			(source.compliance?.fiscalization as Record<string, unknown>) ?? {
+				status: "not_configured",
+			},
 		reminder: defaultReminder(),
 		sync: defaultSync(),
 		lifecycle: {},
@@ -2527,10 +2575,10 @@ export async function convertProformaToInvoice(
 		compliance:
 			(source.compliance as Record<string, unknown>) ??
 			defaultCompliance(source),
-		fiscalization:
-			(source.fiscalization as Record<string, unknown>) ??
-			(source.compliance?.fiscalization as Record<string, unknown>) ??
-			{ status: "not_configured" },
+		fiscalization: (source.fiscalization as Record<string, unknown>) ??
+			(source.compliance?.fiscalization as Record<string, unknown>) ?? {
+				status: "not_configured",
+			},
 		reminder:
 			carriedPaymentAmount >= total && total > 0
 				? {
@@ -2614,7 +2662,11 @@ export async function importCsv(
 	client: Supabase,
 	userId: string,
 	rows: InvoiceImportRow[],
-): Promise<{ created: number; skipped: number; errors: Array<{ row: number; message: string }> }> {
+): Promise<{
+	created: number;
+	skipped: number;
+	errors: Array<{ row: number; message: string }>;
+}> {
 	const workspaceId = await resolveActiveWorkspaceId(client, userId);
 	if (!workspaceId) throw new Error("No active workspace.");
 	if (rows.length > MAX_INVOICE_IMPORT_ROWS) {
@@ -2844,7 +2896,11 @@ export async function importCsv(
 		docs.push(invoiceDoc);
 	}
 
-	for (let index = 0; index < docs.length; index += INVOICE_IMPORT_INSERT_CHUNK_SIZE) {
+	for (
+		let index = 0;
+		index < docs.length;
+		index += INVOICE_IMPORT_INSERT_CHUNK_SIZE
+	) {
 		const chunk = docs.slice(index, index + INVOICE_IMPORT_INSERT_CHUNK_SIZE);
 		const { data, error } = await client
 			.from("invoices")
@@ -2907,43 +2963,6 @@ export async function markInvoiceSent(
 	if (error) throw error;
 
 	return { ok: true };
-}
-
-export async function recordInvoiceViewed(
-	client: Supabase,
-	token: string,
-): Promise<{ ok: boolean; alreadyTracked: boolean }> {
-	const { data, error } = await client
-		.from("invoices")
-		.select("*")
-		.eq("token", token)
-		.maybeSingle();
-	if (error) throw error;
-	if (!data) return { ok: false, alreadyTracked: false };
-	const invoice = rowToInvoiceDoc(data as unknown as InvoiceRow);
-	if (!isPublicInvoiceAvailable(invoice)) return { ok: false, alreadyTracked: false };
-
-	const currentLifecycle = invoice.lifecycle ?? {};
-	const now = Date.now();
-	const alreadyTracked = Boolean(currentLifecycle.firstViewedAt);
-
-	if (!alreadyTracked) {
-		const { error: updateError } = await client
-			.from("invoices")
-			.update(
-				toUpdate({
-					lifecycle: json({
-						...currentLifecycle,
-						firstViewedAt: now,
-					}),
-					updated_at: iso(now),
-				}),
-			)
-			.eq("id", invoice.id);
-		if (updateError) throw updateError;
-	}
-
-	return { ok: true, alreadyTracked };
 }
 
 export async function recordDeliveryEvent(

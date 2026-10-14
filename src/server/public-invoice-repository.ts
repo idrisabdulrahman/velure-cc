@@ -28,17 +28,36 @@ async function getInvoiceByTokenWithClient(
 			: (raw as Parameters<typeof rowToInvoiceDoc>[0]);
 	if (!rpcRow || typeof rpcRow !== "object" || !("token" in rpcRow))
 		return null;
-	const invoice = mapPublicInvoice(
-		rowToInvoiceDoc({
-			...rpcRow,
-			token_revoked_at: null,
-			customer_id: null,
-			internal_notes: null,
-			deleted_at: null,
-			reminder: null,
-			sync: null,
-		}),
-	) as Invoice;
+	// The hardened RPC returns the camelCase invoice doc directly; legacy
+	// deployments return the flat snake_case DB row. Detect and route each
+	// shape through its mapper — feeding camel rows into rowToInvoiceDoc
+	// yields an empty husk (every snake_case read is undefined).
+	// Note: probe via a detached view so control-flow narrowing does not
+	// collapse rpcRow (snake keys are required on InvoiceRow).
+	const candidate = rpcRow as unknown as Record<string, unknown>;
+	const isSnakeRow =
+		typeof candidate.invoice_number === "string" ||
+		Array.isArray(candidate.line_items);
+	const doc = isSnakeRow
+		? rowToInvoiceDoc({
+				...rpcRow,
+				token_revoked_at: null,
+				customer_id: null,
+				internal_notes: null,
+				deleted_at: null,
+				reminder: null,
+				sync: null,
+			})
+		: {
+				...candidate,
+				tokenRevokedAt: undefined,
+				customerId: undefined,
+				internalNotes: undefined,
+				deletedAt: undefined,
+				reminder: undefined,
+				sync: undefined,
+			};
+	const invoice = mapPublicInvoice(doc) as Invoice;
 	return {
 		invoice,
 		countryCode: typeof raw.countryCode === "string" ? raw.countryCode : null,
