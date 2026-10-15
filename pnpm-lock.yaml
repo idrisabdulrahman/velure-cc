@@ -23,6 +23,12 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.6)
+      '@fontsource/geist-mono':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/geist-sans':
+        specifier: 5.3.0
+        version: 5.3.0
       '@fontsource/ibm-plex-sans-condensed':
         specifier: ^5.2.8
         version: 5.2.8
@@ -866,6 +872,12 @@ packages:
 
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
+
+  '@fontsource/geist-mono@5.3.0':
+    resolution: {integrity: sha512-UtJ1BBBCVpMYdIcW7nEB45UAoAw5M53ZXs2t0ciPW+IokuAAIc56M8+kW5tXbRJCTpDw4XTtU7proT6NdQAHTg==}
+
+  '@fontsource/geist-sans@5.3.0':
+    resolution: {integrity: sha512-AmG7cE1AvE4NHROPaOl1sN+a02cB5xy6pA/ZV76HXqWTCsJTV2SCBc9DTFHfJqnVOODm7HhXIYtUIb75NP5QXQ==}
 
   '@fontsource/ibm-plex-sans-condensed@5.2.8':
     resolution: {integrity: sha512-FpGhTq7Yja1E4fz3HKhjSJadNQCuE45e4YhznhsQ2FaReuv4lV+IrTTRJne2O35tXL4EP3lD7vb19rW6qG9iUw==}
@@ -5808,6 +5820,10 @@ snapshots:
   '@floating-ui/utils@0.2.11': {}
 
   '@floating-ui/utils@0.2.12': {}
+
+  '@fontsource/geist-mono@5.3.0': {}
+
+  '@fontsource/geist-sans@5.3.0': {}
 
   '@fontsource/ibm-plex-sans-condensed@5.2.8': {}
 

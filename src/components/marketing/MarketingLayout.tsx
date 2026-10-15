@@ -32,13 +32,27 @@ const navItems = [
 	{ to: "/pricing", label: "Pricing" },
 ] as const;
 
-// Topics folded into landing-page sections — reachable from the footer as
-// hash anchors on the home route (the standalone pages now redirect here).
+// The nav row, verbatim from design/landing.html: Features · Reminders ·
+// Compliance · Security. It mixes route links and section anchors, so it can't
+// be one of the two shape-typed lists above.
+//
+// `navItems` still carries Pricing, but only for the footer — the mock's nav
+// has four links and a fifth changes the row's rhythm. They route through `/`
+// where they're anchors, so the nav also works from /features and /pricing.
+const primaryNav = [
+	{ label: "Features", to: "/features" },
+	{ label: "Reminders", hash: "reminders" },
+	{ label: "Compliance", hash: "compliance" },
+	{ label: "Security", hash: "security" },
+] as const;
+
+// Footer topics. Security and Compliance are real landing sections;
+// Small business and Enterprise used to be, until SolutionsTrack was removed
+// to match design/landing.html (which has no solutions section) — their links
+// would now be dead anchors, so they are gone with it.
 const sectionLinks = [
-	{ hash: "small-business", label: "Small business" },
-	{ hash: "enterprise", label: "Enterprise" },
-	{ hash: "security", label: "Security" },
 	{ hash: "compliance", label: "Compliance" },
+	{ hash: "security", label: "Security" },
 ] as const;
 
 const iconMap = {
@@ -89,6 +103,7 @@ export function Wordmark() {
 export function MarketingNav() {
 	return (
 		<header
+			id="nav"
 			className="sticky top-0 z-40 backdrop-blur"
 			style={{
 				borderBottom: "1px solid var(--hm-rule)",
@@ -99,11 +114,12 @@ export function MarketingNav() {
 				<Wordmark />
 
 				<nav className="mx-auto hidden items-center gap-1 lg:flex">
-					{navItems.map((item) => (
+					{primaryNav.map((item) => (
 						<Link
-							key={item.to}
-							to={item.to}
-							className="hm-label rounded-full px-3 py-2 transition-colors hover:bg-[var(--hm-paper-2)] hover:text-[var(--hm-ink)]"
+							key={item.label}
+							to={"to" in item ? item.to : "/"}
+							hash={"hash" in item ? item.hash : undefined}
+							className="hm-navlink rounded-full px-3 py-2 transition-colors hover:text-[var(--hm-ink)]"
 						>
 							{item.label}
 						</Link>
@@ -122,15 +138,20 @@ export function MarketingNav() {
 			</div>
 
 			<details className="px-5 pb-3 lg:hidden">
-				<summary className="hm-chip w-fit cursor-pointer list-none">
+				{/* design/landing.html has no mobile menu — it drops `.nav-links`
+				    outright. We keep one so section links stay reachable under
+				    1024px, sized to a 44px touch target instead of the reference's
+				    28px `.eyebrow` chip. */}
+				<summary className="hm-label inline-flex min-h-11 w-fit cursor-pointer list-none items-center rounded-full border border-[var(--hm-accent-line)] bg-[var(--hm-accent-soft)] px-4 text-[var(--hm-accent-on-soft)]">
 					Menu
 				</summary>
 				<div className="mt-3 grid gap-1">
-					{navItems.map((item) => (
+					{primaryNav.map((item) => (
 						<Link
-							key={item.to}
-							to={item.to}
-							className="hm-label flex min-h-11 items-center rounded-lg px-3 hover:bg-[var(--hm-paper-2)]"
+							key={item.label}
+							to={"to" in item ? item.to : "/"}
+							hash={"hash" in item ? item.hash : undefined}
+							className="hm-navlink flex min-h-11 items-center rounded-lg px-3 hover:bg-[var(--hm-paper-3)]"
 						>
 							{item.label}
 						</Link>
@@ -349,44 +370,68 @@ export function MetricsStrip({ metrics }: { metrics: MarketingMetric[] }) {
 
 export function MarketingFooter() {
 	return (
-		<footer className="hm-rule-t relative isolate overflow-hidden">
+		<footer
+			id="cta"
+			className="hm-rule-t relative isolate overflow-hidden px-5 pb-9 pt-[150px] text-center lg:px-8"
+		>
 			<div className="hm-wash hm-wash--footer" aria-hidden="true" />
-			<div className="relative mx-auto max-w-7xl px-5 py-16 lg:px-8 lg:py-20">
-				<p
+			<div className="relative mx-auto max-w-7xl">
+				<h2
 					data-fade-scroll
-					className="hm-display max-w-[38ch] text-[clamp(1.75rem,4vw,2.75rem)]"
+					className="hm-display mx-auto max-w-[15ch] text-[clamp(2.375rem,6.4vw,5.25rem)] font-medium leading-none tracking-[-0.045em]"
 				>
-					Send the invoice, then stop wondering where it went.
-				</p>
-				<div className="mt-8 flex flex-wrap items-center gap-4">
-					<Link to="/auth" className="hm-btn hm-btn--primary">
+					Send the invoice,{" "}
+					<span style={{ color: "var(--hm-ink-2)" }}>
+						then stop wondering where it went.
+					</span>
+				</h2>
+				<div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+					<Link
+						to="/auth"
+						data-magnetic
+						className="hm-btn hm-btn--primary hm-btn--xl"
+					>
 						Open app
 						<ArrowRight className="h-4 w-4" />
 					</Link>
-					<Wordmark />
 				</div>
 
-				<div className="hm-rule-t mt-10 flex flex-wrap items-center gap-x-5 gap-y-2 pt-5">
-					{navItems.map((item) => (
-						<Link key={item.to} to={item.to} className="hm-label">
-							{item.label}
+				<div className="mt-[130px] flex flex-wrap items-center gap-x-5 gap-y-4 border-t border-[var(--hm-rule-soft)] py-6 text-left text-[13.5px] text-[var(--hm-ink-3)]">
+					<Wordmark />
+					<nav className="flex flex-wrap gap-x-[22px] gap-y-2">
+						{navItems.map((item) => (
+							<Link
+								key={item.to}
+								to={item.to}
+								className="transition-colors hover:text-[var(--hm-ink)]"
+							>
+								{item.label}
+							</Link>
+						))}
+						{sectionLinks.map((item) => (
+							<Link
+								key={item.hash}
+								to="/"
+								hash={item.hash}
+								className="transition-colors hover:text-[var(--hm-ink)]"
+							>
+								{item.label}
+							</Link>
+						))}
+						<Link
+							to="/privacy"
+							className="transition-colors hover:text-[var(--hm-ink)]"
+						>
+							Privacy
 						</Link>
-					))}
-					{sectionLinks.map((item) => (
-						<Link key={item.hash} to="/" hash={item.hash} className="hm-label">
-							{item.label}
+						<Link
+							to="/terms"
+							className="transition-colors hover:text-[var(--hm-ink)]"
+						>
+							Terms
 						</Link>
-					))}
-					<Link to="/privacy" className="hm-label">
-						Privacy
-					</Link>
-					<Link to="/terms" className="hm-label">
-						Terms
-					</Link>
-					<span
-						className="hm-label sm:ml-auto"
-						style={{ color: "var(--hm-ink-3)" }}
-					>
+					</nav>
+					<span className="sm:ml-auto">
 						Velure 2026 · Invoicing for Nigerian businesses
 					</span>
 				</div>

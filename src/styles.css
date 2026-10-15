@@ -9,6 +9,16 @@
 @import "@fontsource/inter/500.css";
 @import "@fontsource/inter/600.css";
 @import "@fontsource/inter/700.css";
+/* Geist + Geist Mono — the marketing scope's faces (design/landing.html,
+ * design/auth.html token table). Self-hosted through fontsource like every
+ * other face in this repo, so the Cloudflare Pages build carries no runtime
+ * third-party font dependency. Scoped to `.hm` below: the authenticated
+ * workbench keeps Inter + IBM Plex Sans Condensed. */
+@import "@fontsource/geist-sans/400.css";
+@import "@fontsource/geist-sans/500.css";
+@import "@fontsource/geist-sans/600.css";
+@import "@fontsource/geist-mono/400.css";
+@import "@fontsource/geist-mono/500.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -877,11 +887,17 @@ body {
   --hm-paper: oklch(98.2% 0.006 70);
   --hm-paper-2: oklch(95.8% 0.008 70);
   --hm-paper-3: oklch(92% 0.012 70);
+  /* Fourth surface step, added with the marketing palette (raised pill / toast
+   * / toggle). One step below paper-3 in light, one step above in dark. */
+  --hm-paper-4: oklch(86% 0.016 65);
   /* ink — near-black */
   --hm-ink: oklch(18% 0.018 50);
   --hm-ink-2: oklch(38% 0.022 50);
   --hm-ink-3: oklch(50% 0.018 50); /* 4.7:1 on paper — the de-emphasis floor */
   --hm-rule: oklch(86% 0.014 60);
+  /* Row divider — a softer line than --hm-rule, added with the marketing
+   * palette. Lighter than the rule in light mode, darker in dark mode. */
+  --hm-rule-soft: oklch(91% 0.012 64);
   /* accent — warm red, the only functional accent */
   --hm-accent: oklch(62% 0.21 27);
   --hm-accent-hi: oklch(56% 0.22 27);
@@ -949,19 +965,21 @@ body {
 
 /* The workbench honours the app's existing dark/light toggle. `.dark` is the
  * global scope so Radix-portaled content (sheets, dialogs, popovers) outside
- * `.hm-app` also inherits the dark palette. Marketing stays light because the
- * `.hm` scope below re-declares the :root values — design.md's "marketing
- * default light, app default dark" rule. */
+ * `.hm-app` also inherits the dark palette. The marketing `.hm` scope below
+ * declares its own near-black palette unconditionally, so it is dark in both
+ * themes and this block no longer leaks into it (design.md § Theme). */
 .dark,
 .dark .hm-app,
 .hm-app.dark {
   --hm-paper: oklch(16% 0.012 50);
   --hm-paper-2: oklch(12% 0.012 50);
   --hm-paper-3: oklch(20% 0.014 50);
+  --hm-paper-4: oklch(24% 0.015 50);
   --hm-ink: oklch(95% 0.008 70);
   --hm-ink-2: oklch(82% 0.014 70);
   --hm-ink-3: oklch(66% 0.014 60); /* 4.6:1 on dark paper */
   --hm-rule: oklch(28% 0.014 50);
+  --hm-rule-soft: oklch(23% 0.014 50);
   --hm-accent: oklch(65% 0.2 27);
   --hm-accent-hi: oklch(72% 0.18 27);
   --hm-accent-ink: oklch(16% 0.012 50);
@@ -997,40 +1015,85 @@ body {
   --hm-scrim: oklch(8% 0.005 50 / 0.78);
 }
 
-/* Marketing `.hm` must never go dark — restore the :root light palette so
- * `.dark` on `<html>` doesn't cascade into the marketing surface. */
+/* Marketing `.hm` — design/landing.html + design/auth.html token table.
+ *
+ * The marketing surface is dark in BOTH themes (user decision 2026-10-14),
+ * so this block no longer reverts the `:root` light palette: it declares the
+ * mock's near-black surface outright. Previously it re-declared `:root`'s
+ * cream values purely to keep `<html class="dark">` from cascading in. The
+ * authenticated `.hm-app` keeps its own light/dark ramps above and is not
+ * affected — toggling the theme still only re-paints the workbench.
+ *
+ * Surface ramp: the mock has four levels (bg / surface / surface-2 /
+ * surface-3) where the editorial family has three, so `--hm-paper-4` and
+ * `--hm-rule-soft` were added to the family (also declared for `:root` and
+ * `.dark .hm-app` above, so every scope has the same token names). */
 .hm {
   background-color: var(--hm-paper);
   color: var(--hm-ink);
-  --hm-paper: oklch(98.2% 0.006 70);
-  --hm-paper-2: oklch(95.8% 0.008 70);
-  --hm-paper-3: oklch(92% 0.012 70);
-  --hm-ink: oklch(18% 0.018 50);
-  --hm-ink-2: oklch(38% 0.022 50);
-  --hm-ink-3: oklch(50% 0.018 50);
-  --hm-rule: oklch(86% 0.014 60);
-  --hm-accent: oklch(62% 0.21 27);
-  --hm-accent-hi: oklch(56% 0.22 27);
-  --hm-accent-ink: oklch(98.5% 0.005 70);
-  --hm-accent-soft: oklch(94% 0.04 27);
-  --hm-accent-line: oklch(78% 0.08 27);
-  --hm-wash-2: oklch(78% 0.12 75);
-  --hm-wash-3: oklch(72% 0.1 215);
-  --hm-focus: oklch(62% 0.21 27);
-  --hm-ok: oklch(50% 0.1 162);
-  --hm-ok-soft: oklch(94% 0.03 162);
-  --hm-ok-line: oklch(80% 0.06 162);
-  --hm-warn: oklch(62% 0.12 75);
-  --hm-warn-soft: oklch(95% 0.04 78);
-  --hm-warn-line: oklch(82% 0.07 76);
-  --hm-danger: oklch(55% 0.16 22);
-  --hm-danger-soft: oklch(94% 0.03 22);
-  --hm-danger-line: oklch(80% 0.07 22);
-  --hm-info: oklch(55% 0.1 215);
-  --hm-info-soft: oklch(94% 0.03 215);
-  --hm-info-line: oklch(80% 0.06 215);
-  --hm-shadow: 0 8px 24px -10px oklch(18% 0.018 50 / 0.18);
-  --hm-shadow-lift: 0 14px 34px -12px oklch(18% 0.018 50 / 0.26);
+  /* design/landing.html `body{font:16px/1.55}` — every role below inherits this.
+     It is safe here because line-height only *inherits*: any element carrying
+     its own `leading-*` utility or role rule still overrides it directly. */
+  line-height: 1.55;
+
+  /* surfaces — page → card → hover → raised pill / toast / toggle */
+  --hm-paper: #0a0706;
+  --hm-paper-2: #110d0c;
+  --hm-paper-3: #171211;
+  --hm-paper-4: #1e1817;
+  /* lines — border → row divider */
+  --hm-rule: #2a2220;
+  --hm-rule-soft: #201918;
+
+  /* text tiers */
+  --hm-ink: #f5eee9;
+  --hm-ink-2: #9b8d85;
+  --hm-ink-3: #6a5e57;
+
+  /* accent — the single functional colour */
+  --hm-accent: #e5483b;
+  --hm-accent-hi: #f0584b;
+  --hm-accent-ink: #ffffff;
+  --hm-accent-soft: rgba(229, 72, 59, 0.11);
+  --hm-accent-line: rgba(229, 72, 59, 0.38);
+  /* accent text sitting *on* `--hm-accent-soft` — the reference's hardcoded
+   * `#ff9186` in `.eyebrow`, `.av` and `.logo`. Not a second accent: same hue,
+   * only lifted so 11–13px accent text clears contrast on the soft tint. */
+  --hm-accent-on-soft: #ff9186;
+  /* wash stops — the mock's hero/section radial gradients */
+  --hm-wash-2: rgba(229, 72, 59, 0.22);
+  --hm-wash-3: rgba(229, 72, 59, 0.07);
+  --hm-focus: rgba(229, 72, 59, 0.38);
+
+  /* status triples — fill / tint / hairline */
+  --hm-ok: #52c48f;
+  --hm-ok-soft: rgba(82, 196, 143, 0.12);
+  --hm-ok-line: rgba(82, 196, 143, 0.4);
+  --hm-warn: #e9ab43;
+  --hm-warn-soft: rgba(233, 171, 67, 0.1);
+  --hm-warn-line: rgba(233, 171, 67, 0.4);
+  --hm-danger: #ff8a7f;
+  --hm-danger-soft: rgba(229, 72, 59, 0.11);
+  --hm-danger-line: rgba(255, 138, 127, 0.4);
+  --hm-info: #5db3d6;
+  --hm-info-soft: rgba(93, 179, 214, 0.11);
+  --hm-info-line: rgba(93, 179, 214, 0.4);
+
+  /* faces — Geist for UI, Geist Mono (tabular) for money, invoice numbers,
+   * dates and counts. Both self-hosted via fontsource, imported at the top of
+   * this file. The workbench keeps Inter + IBM Plex Sans Condensed. */
+  --hm-font-display: "Geist Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --hm-font-body: "Geist Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --hm-font-label: "Geist Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --hm-font-num: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* radii — the mock's r-lg / r-md / r-sm */
+  --hm-r-card: 14px;
+  --hm-r-btn: 10px;
+  --hm-r-input: 8px;
+
+  --hm-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.72);
+  --hm-shadow-lift: 0 40px 120px -32px rgba(0, 0, 0, 0.82);
 }
 
 /* ScrollSmoother transforms this layer out of normal flow; paint it so
@@ -1295,47 +1358,113 @@ body {
 
 /* ── Type roles ─────────────────────────────────────────────────────────── */
 
-.hm-display {
-  font-family: var(--hm-font-display);
-  font-weight: 800;
-  font-style: normal;
-  line-height: 1.02;
-  letter-spacing: -0.032em;
-  color: var(--hm-ink);
-  overflow-wrap: anywhere;
-  min-width: 0;
-  text-wrap: balance;
+/* Display and title are declared in `@layer base` on purpose. They are
+ * *defaults*: design/landing.html varies weight, tracking and leading per
+ * heading (`.hero h1` 500/-0.05em/0.98, `h2.h` 500/-0.035em/1.04, `.final h2`
+ * 500/-0.045em/1, `.cta-card h3` 500/-0.03em/1.1), and those values travel as
+ * `font-*` / `tracking-*` / `leading-*` utilities on each element. Unlayered
+ * CSS outranks every layer, so leaving them unlayered silently swallowed all
+ * of them. Consumers with no utility (the /features and /pricing headings)
+ * still get exactly these fallbacks. */
+@layer base {
+  .hm-display {
+    font-family: var(--hm-font-display);
+    font-weight: 800;
+    font-style: normal;
+    line-height: 1.02;
+    letter-spacing: -0.032em;
+    color: var(--hm-ink);
+    overflow-wrap: anywhere;
+    min-width: 0;
+    text-wrap: balance;
+  }
+
+  .hm-title {
+    font-family: var(--hm-font-display);
+    font-weight: 700;
+    font-style: normal;
+    line-height: 1.16;
+    letter-spacing: -0.02em;
+    color: var(--hm-ink);
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
 }
 
-.hm-title {
-  font-family: var(--hm-font-display);
-  font-weight: 700;
-  font-style: normal;
-  line-height: 1.16;
-  letter-spacing: -0.02em;
-  color: var(--hm-ink);
-  overflow-wrap: anywhere;
-  min-width: 0;
+/* label role — grotesque, sentence case (never uppercase, never tracked out).
+ * Layered as `base` for the same reason as display/title above: it is a
+ * *default*, so an element's own `text-*` / `tracking-*` / colour utility can
+ * still refine it. Left unlayered it was silently swallowing five of them
+ * (three `text-xs` table headers, and the auth page's `text-brand` /
+ * `text-ink-3`), because unlayered CSS outranks every layer. */
+@layer base {
+  .hm-label {
+    font-family: var(--hm-font-label);
+    font-weight: 500;
+    font-size: 0.8125rem;
+    line-height: 1.3;
+    letter-spacing: 0.005em;
+    text-transform: none;
+    color: var(--hm-ink-2);
+  }
+
+  .hm-label--accent {
+    color: var(--hm-accent);
+  }
 }
 
-/* label role — grotesque, sentence case (never uppercase, never tracked out) */
-.hm-label {
+/* kicker role — design/landing.html `.kicker`: 12px uppercase, .1em tracking,
+ * accent. Separate from `.hm-label`, which is deliberately sentence case; both
+ * are marketing-scope only. */
+.hm-kicker {
   font-family: var(--hm-font-label);
   font-weight: 500;
-  font-size: 0.8125rem;
+  font-size: 12px;
   line-height: 1.3;
-  letter-spacing: 0.005em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--hm-accent);
+}
+
+/* caps table/group header role — design/landing.html `.m-tr.h` and `.wr.h`
+ * (10.5px / 400) plus `.m-side b` (11px / 500), all .08em tracked and faint.
+ *
+ * It is a role class rather than Tailwind's `uppercase` + `tracking-*`
+ * utilities because the `[class*="uppercase"]` guard further down deliberately
+ * neutralises those utilities in both scopes (design.md's sentence-case label
+ * rule) with `!important`. That guard stays untouched — it still governs ad-hoc
+ * utility usage on /features, /pricing and the whole workbench — so caps labels
+ * that the reference does use are expressed here instead. The class name must
+ * not contain the literal string "uppercase" or the guard catches it. */
+.hm-caps {
+  font-family: var(--hm-font-label);
+  font-weight: 400;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--hm-ink-3);
+}
+
+.hm-caps--side {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* nav link — design/landing.html `.nav-links`: 14.5px, regular, muted,
+ * sentence case, no tracking. */
+.hm-navlink {
+  font-family: var(--hm-font-display);
+  font-weight: 400;
+  font-size: 14.5px;
+  letter-spacing: normal;
   text-transform: none;
   color: var(--hm-ink-2);
 }
 
-.hm-label--accent {
-  color: var(--hm-accent);
-}
-
 .hm-lede {
   color: var(--hm-ink-2);
-  line-height: 1.65;
+  /* design/landing.html `body{font:16px/1.55}` — every lead inherits 1.55 */
+  line-height: 1.55;
 }
 
 .hm-num {
@@ -1346,23 +1475,29 @@ body {
 
 /* ── Surfaces ───────────────────────────────────────────────────────────── */
 
+/* Marketing bands sit on the page colour — in the mock every section shares
+ * `--bg` and only the tiles step up to `--surface`. */
 .hm-band {
-  background: var(--hm-paper-2);
+  background: var(--hm-paper);
 }
 
 .hm-rule-t {
   border-top: 1px solid var(--hm-rule);
 }
 
+/* Two-level card scheme, matching design/landing.html: an outer tile sits one
+ * step above the page (`--surface`), and a `--soft` card is the *inset* step
+ * inside it (`--bg`) — the same direction light mode takes, where soft is
+ * darker than card. */
 .hm-card {
   border: 1px solid var(--hm-rule);
   border-radius: var(--hm-r-card);
-  background: var(--hm-paper);
+  background: var(--hm-paper-2);
   color: var(--hm-ink);
 }
 
 .hm-card--soft {
-  background: var(--hm-paper-2);
+  background: var(--hm-paper);
 }
 
 .hm-card--raised {
@@ -1380,19 +1515,25 @@ body {
   transform: translateY(-2px);
   box-shadow: var(--hm-shadow-lift);
   border-color: var(--hm-accent-soft);
+  /* mock `.tile:hover` also steps the fill up to --surface-2 */
+  background: var(--hm-paper-3);
 }
 
+/* design/landing.html `.eyebrow` — hero chip: 28px tall, 12.5px, accent-on-soft
+ * text, and the inset accent-line ring the previous version was missing. */
 .hm-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  height: 28px;
   border-radius: var(--hm-r-pill);
   background: var(--hm-accent-soft);
-  color: var(--hm-accent-hi);
-  padding: 0.4rem 0.85rem;
+  box-shadow: inset 0 0 0 1px var(--hm-accent-line);
+  color: var(--hm-accent-on-soft);
+  padding: 0 0.75rem;
   font-family: var(--hm-font-label);
   font-weight: 500;
-  font-size: 0.8125rem;
+  font-size: 12.5px;
 }
 
 .hm-input {
@@ -1441,8 +1582,22 @@ body {
 }
 
 .hm-btn--ghost:hover {
-  background: var(--hm-paper-2);
+  background: var(--hm-paper-3);
   border-color: var(--hm-ink-3);
+}
+
+/* Button heights from design/landing.html: `.btn.sm` 36px, `.btn.xl` 54px.
+ * `.hm-btn` itself already sits on the mock's 44px base (min-height 2.75rem). */
+.hm-btn--sm {
+  min-height: 2.25rem;
+  padding-inline: 0.9375rem;
+  font-size: 0.84375rem;
+}
+
+.hm-btn--xl {
+  min-height: 3.375rem;
+  padding-inline: 1.75rem;
+  font-size: 1rem;
 }
 
 /* softer press than the app's scale(0.94) brutalist punch */

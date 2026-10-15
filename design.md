@@ -6,25 +6,40 @@ system needs to grow.
 
 Implemented as a token block in [`src/styles.css`](src/styles.css) (search for the
 `Hallmark ·` stamp). Tokens live on `:root`; two scope classes consume them —
-`.hm` for marketing and `.hm-app` for the dashboard. `.hm-app` is the only scope
-that re-points tokens for dark mode, so marketing stays pure-white paper in
-either theme.
+`.hm` for marketing and `.hm-app` for the dashboard. Both scopes re-point
+tokens: `.hm` declares the dark marketing palette unconditionally, and
+`.hm-app` is the only scope that follows `<html class="dark">`.
 
 ## Genre
 
-**editorial** — dark editorial paper as the workbench canvas, warm-red accent
-as the single functional colour, italic display emphasis with mono caps labels,
-departure-board tables and ticket-stamp status chips. The reference register
-is the Wayfare travel site: not the literal copy or layout, but the visual DNA
-— warm cream paper in the marketing scope, deep editorial paper in the app
-scope, a warm red `#EA373E` as the single accent that carries every CTA, link,
-focus ring, and 'live' indicator.
+**editorial · instrument** — dark editorial paper as the workbench canvas,
+warm-red accent as the single functional colour, italic display emphasis with
+mono caps labels, departure-board tables and ticket-stamp status chips. The
+reference register is the Wayfare travel site: not the literal copy or layout,
+but the visual DNA — warm cream paper in the marketing scope, deep editorial
+paper in the app scope, a warm red `#EA373E` as the single accent that carries
+every CTA, link, focus ring, and 'live' indicator.
+
+The **instrument** half governs data-visualisation surfaces only: charts read
+as instrumentation, not illustration. Hairline grids on the ledger grid pitch,
+tabular condensed numerals, crosshair readouts that track the pointer, axis
+labels as tracked micro-caps. Reference register for this half is the Bklit
+chart system — its structure and interaction model, never its palette. The
+editorial half still governs every non-chart surface.
 
 Genre bans that stay in force: saturated consumer pinks/purples as *fills*,
-emoji-as-ornament, bouncy/overshoot easings, glassmorphism, gradient text,
+emoji-as-ornament, bouncy/overshoot easings on UI state, gradient text,
 italic *display* type (italic is reserved for the emphasis slot inside an
 otherwise-upright heading), rotated ticket stamps, N5 floating pill nav, N6
 newspaper masthead, Ft6 letter close.
+
+**Glassmorphism — overlays only.** Translucent fill plus backdrop blur is
+permitted on transient layers that float above the canvas: tooltip, dropdown
+menu, popover, sheet, dialog. It is still banned on panels, cards, stat tiles,
+tables, and anything holding working data. A chart tooltip may be glass; the
+panel the chart sits in may not. The blur stays ≤ 12 px so the scrim reads as
+dimming rather than a milky wash (see `--hm-scrim` in
+[`src/styles.css`](src/styles.css)).
 
 ## Macrostructure family
 
@@ -43,10 +58,11 @@ newspaper masthead, Ft6 letter close.
 ## Theme
 
 Custom (tuned) · axes: **light / grotesque / warm-red**.
-Vibe: *editorial ledger* — warm cream paper in marketing, deep editorial paper
-in the workbench, warm red `#EA373E` as the single functional accent, status
-triples in a muted gold / rose / cyan / paper palette. Inspired by the Wayfare
-travel-site reference register, not a copy of it.
+Vibe: *editorial ledger* — warm near-black paper in marketing, deep editorial
+paper in the workbench, a single warm-red functional accent (`#E5483B` on the
+marketing scope, `#EA373E` on the workbench — see "Marketing scope" below),
+status triples in a muted gold / rose / cyan / paper palette. Inspired by the
+Wayfare travel-site reference register, not a copy of it.
 
 ### Editorial palette (light mode, `:root`)
 
@@ -94,10 +110,50 @@ Status triples follow the same shape but shifted for dark paper
 
 ### Marketing scope (`.hm`)
 
-The marketing surface is always light. When `<html>` carries `.dark`, the
-`.hm` block re-declares every light-mode token so the marketing surface never
-goes dark — only the authenticated app scope does. The user's persisted toggle
-wins on the app scope; the marketing scope is light in both directions.
+The marketing surface is **always dark, in both theme directions.** The `.hm`
+block in [`src/styles.css`](src/styles.css) declares the mock's
+[`design/landing.html`](design/landing.html) palette unconditionally, so it no
+longer reverts `:root` and `<html class="dark">` cannot re-point it either way.
+The user's persisted toggle therefore only re-paints the authenticated
+`.hm-app`; toggling the workbench leaves marketing untouched.
+
+*This amends the earlier "marketing always light" rule. The decision and its
+confirmation are recorded in
+[`prompts/landing-and-auth-redesign.md`](prompts/landing-and-auth-redesign.md).*
+
+| Role | Value |
+| --- | --- |
+| `--hm-paper` | `#0a0706` (page) |
+| `--hm-paper-2` | `#110d0c` (tile / `--surface`) |
+| `--hm-paper-3` | `#171211` (tile hover / `--surface-2`) |
+| `--hm-paper-4` | `#1e1817` (raised pill, toast, toggle) |
+| `--hm-rule` | `#2a2220` |
+| `--hm-rule-soft` | `#201918` (row divider) |
+| `--hm-ink` | `#f5eee9` |
+| `--hm-ink-2` | `#9b8d85` |
+| `--hm-ink-3` | `#6a5e57` (de-emphasis floor) |
+| `--hm-accent` / `--hm-accent-hi` | `#e5483b` / `#f0584b` |
+| `--hm-accent-soft` / `--hm-accent-line` | accent @ 11% / 38% |
+| `--hm-accent-on-soft` | `#ff9186` (accent text/icon on the soft tint) |
+| `--hm-ok` / `warn` / `info` | `#52c48f` / `#e9ab43` / `#5db3d6` |
+| `--hm-r-card` / `btn` / `input` | `14px` / `10px` / `8px` |
+
+`--hm-paper-4` and `--hm-rule-soft` are additive: the mock has four surface
+levels where the editorial family had three, so they were declared for `:root`
+and `.dark .hm-app` too, keeping one set of token names across all scopes. No
+pre-existing value changed.
+
+**Cards follow the mock's two levels.** A `.hm-card` outer tile sits on
+`--hm-paper-2` (`--surface`), a `.hm-card--soft` inset sits on `--hm-paper`
+(`--bg`) *inside* it, and `.hm-card--lift:hover` steps to `--hm-paper-3`
+(`--surface-2`) — the same "soft is the inset direction" reading light mode
+takes. `.hm-band` sits on `--hm-paper`, because every mock section shares
+`--bg` and only tiles step up.
+
+**The two scopes carry two warm reds, deliberately.** `.hm` uses the mock's
+`#e5483b`; `.dark .hm-app` keeps `#EA373E`. Each is the single functional
+accent *within its own scope* — never two accents inside one scope, and never a
+`dark:` variant for colour.
 
 ### Status triples
 
@@ -125,7 +181,7 @@ viewport.
 
 ### Editorial utility classes (new)
 
-- `.hm-ts-board` — departure-board table treatment. Sticky grotesque head,
+- `.hm-ts-board` — departure-board table treatment. Sticky micro-caps head,
   paper-rule row hairlines, status column left-bordered in the row's status
   line colour (`.is-draft` / `.is-sent` / `.is-partial` / `.is-paid` /
   `.is-overdue` / `.is-canceled` modifiers, or `data-status` attribute).
@@ -142,17 +198,74 @@ viewport.
 
 ## Typography
 
-- Display: **Plus Jakarta Sans 800**, roman, `line-height: 1.02`,
-  `letter-spacing: -0.032em`
-- Title: Plus Jakarta Sans 700, `1.16` / `-0.02em`
-- Body: Plus Jakarta Sans 400 — same family, regular weight
-- Label: **Space Grotesk 500**, `0.8125rem`, **sentence case** —
-  `text-transform: none`, `letter-spacing: 0.005em`. Never uppercase, never
-  tracked out.
-- Numerals: **IBM Plex Sans Condensed** (already in the project), with
-  `font-variant-numeric: tabular-nums` and `"cv05" 1`
+A single neutral grotesque carries display, title, body, and label. The
+editorial voice now comes from weight, rule-work, and the numeral face rather
+than from three competing families — which is also what lets a chart axis and a
+table header read as the same system.
+
+- Display: **Inter 700**, roman, `line-height: 1.02`, `letter-spacing: -0.032em`
+- Title: Inter 600, `1.16` / `-0.02em`
+- Body: Inter 400 — same family, regular weight
+- Label: **Inter 500**, `0.8125rem`, sentence case by default —
+  `letter-spacing: 0.005em`
+- Numerals: **IBM Plex Sans Condensed** (unchanged), with
+  `font-variant-numeric: tabular-nums` and `"cv05" 1`. This is the one face
+  that stays, and it is load-bearing: every money column, chart axis, and stat
+  value depends on condensed tabular figures.
 - Type scale anchor: display = `clamp(2.75rem, 7.5vw, 4.75rem)` on the landing
   hero, `clamp(2.5rem, 7vw, 4.25rem)` on secondary heroes
+
+**Marketing scope (`.hm`).** Signed-off redesign scope; this list describes the
+workbench (`.hm-app`), which is unchanged. Following `design/landing.html`, the
+marketing surface runs on its own two families — `@fontsource/geist-sans`
+(registered as `Geist Sans`) for display, title, body and label, and
+`@fontsource/geist-mono` (`Geist Mono`) for the numeral role. The workbench
+keeps Inter plus IBM Plex Sans Condensed, so both families still load once
+across the app. Two consequences for `.hm` only:
+
+- **Weight 500, not 700/600.** The reference sets every heading at 500
+  (`.hero h1`, `h2.h`, `.final h2`, `.cta-card h3`), and varies tracking and
+  leading per heading: `-0.05em`/`0.98` hero, `-0.035em`/`1.04` section,
+  `-0.045em`/`1` closing, `-0.03em`/`1.1` card. `.hm-display` and `.hm-title`
+  are therefore declared in `@layer base` and stay *defaults* — weight,
+  tracking, leading and colour travel as `font-*`, `tracking-*`, `leading-*`
+  and `text-*` utilities on each element. Unlayered CSS outranks every layer,
+  so keeping them unlayered would have silently swallowed all of that; consumers
+  with no utility (the `/features` and `/pricing` headings) still get the role
+  fallbacks. Title roles follow the reference at 500/`1.55` on the landing.
+- **The base line-height is 1.55**, from the reference's `body{font:16px/1.55}`.
+  It is set on `.hm`, and because line-height only *inherits*, any element
+  carrying its own `leading-*` or role rule still overrides it directly.
+- **The numeral role is still tabular, but its face is Geist Mono**, and the
+  reference's one display figure — the `7.5%` in the compliance diptych — is
+  deliberately *not* numeral-role: `design/landing.html` sets `.big` in display
+  sans at 500, `-0.07em`, `0.85`. Money stays mono-tabular everywhere.
+
+Plus Jakarta Sans and Space Grotesk are retired. Their `@fontsource` imports
+come out of [`src/styles.css`](src/styles.css) with the token change — a
+retired family left loading is dead weight on every route. Geist is added the
+same way, for the marketing scope only.
+
+**Micro-caps label — instrument surfaces only.** `0.625rem`–`0.6875rem`,
+weight 600, `text-transform: uppercase`, `letter-spacing: 0.18em`–`0.24em`. Its
+scope is exactly: chart axis ticks, chart legend labels, stat-tile captions, and
+the sidebar/header section eyebrows. It is a *structural* label, not an
+emphasis device — it never appears in body copy, never as a heading.
+Everywhere else the sentence-case label role above still holds. This legalises
+the treatment already shipping at `DashboardLayout.tsx:256` and resolves the
+contradiction flagged in the `styles.css` comment at the legacy-label block.
+
+The `never on a marketing surface` clause is retired with the redesign: the
+signed-off `design/landing.html` does use caps on marketing, in two lighter
+shapes than the workbench's micro-caps. They are role classes, not utilities —
+`.hm-kicker` (12 px / `0.1em`, accent — the reference's `.kicker`) and
+`.hm-caps` (10.5 px / `0.08em`, faint, plus `.hm-caps--side` at 11 px / 500 —
+the reference's `.m-tr.h`, `.wr.h`, `.m-side b`). The
+`[class*="uppercase"]` guard below deliberately stays on both scopes, so ad-hoc
+`uppercase`/`tracking-*` utilities are still re-voiced as the sentence-case
+label role; caps that the reference does ask for are expressed through those two
+classes. A caps role class must not contain the literal string `uppercase` or
+the guard catches it.
 
 Headings are always roman. Emphasis is carried by weight or accent colour —
 never italic, never a gradient.
@@ -163,10 +276,25 @@ never italic, never a gradient.
 Section rhythm: `py-16` mobile, `py-20`–`py-24` at `lg`. Gutters `px-5` mobile,
 `px-8` at `lg`. Content max width `max-w-7xl`.
 
-Radius: cards **8 px** (`--hm-r-card`), inputs **6 px** (`--hm-r-input`),
-pills **999 px** (`--hm-r-pill`). 8 px is the genre ceiling — do not exceed it.
-The previous `--radius: 0` brutalist system has been deleted along with the
+Radius: cards **12 px** (`--hm-r-card`), buttons **8 px** (`--hm-r-btn`), inputs
+**6 px** (`--hm-r-input`), pills **999 px** (`--hm-r-pill`). 12 px is the genre
+ceiling — do not exceed it. Cards moved 8 px → 12 px with the instrument
+amendment; inputs deliberately did *not*, so a control still reads tighter than
+the panel containing it. Buttons sit between the two: they used to borrow the
+input radius, which made a primary action read like a text field. The pill
+radius is reserved for the marketing CTA (`.hm-btn`) — an in-app button is never
+a pill, and `.hm-ts-stamp` keeps its tight 4 px stamp corners on purpose. The
+original `--radius: 0` brutalist system has been deleted along with the
 generated remap layer; nothing in the codebase depends on zero radius.
+
+**Marketing scope (`.hm`).** Signed-off redesign scope; the values above are the
+workbench's and are unchanged. `design/landing.html` sets `--r-lg:14px`,
+`--r-md:10px`, `--r-sm:8px`, so `.hm` overrides the three steps to **cards
+14 px, buttons 10 px, inputs 8 px** — one step softer than the workbench at
+every tier, which is why the marketing 12 px genre ceiling above is lifted to
+14 px for `.hm` only. `--hm-r-pill` is shared. The relative rule is what
+matters and still holds in both scopes: an input reads tighter than the button,
+which reads tighter than the panel containing it.
 
 ## Motion
 
@@ -184,6 +312,21 @@ generated remap layer; nothing in the codebase depends on zero radius.
 - Press: `translateY(1px)`, no scale.
 - Reduced motion: reveal and lift are removed, `saturate()` on the wash is
   dropped. Opacity-only, ≤ 150 ms.
+
+**Chart internals — spring permitted.** Inside a chart's own drawing surface,
+spring and staggered physics are allowed: path draw-on, clip reveals, animated
+y-domain transitions, series stagger, marker settle, crosshair tracking. This is
+the one exception to the no-spring rule, and it is scoped to marks *within* the
+plot area.
+
+It does not extend to the chart's container, its card, its legend, its tooltip
+box, or any control that changes app state — those keep `--hm-ease` and the
+no-overshoot rule. A tooltip's *position* may track the pointer with spring
+damping; the tooltip *appearing* is a UI state change and fades on `--hm-ease`.
+
+Reduced motion still wins outright: charts render at their final frame with no
+draw-on, no stagger, no domain animation. A chart must be readable on first
+paint — animation is never load-bearing for comprehension.
 
 ## Microinteractions stance
 
@@ -228,16 +371,24 @@ so `.dark .hm-app` re-points every token to a dark ramp. Write one utility —
 themes. **Never write a `dark:` variant for colour.** If a colour needs a `dark:`
 override, the token is wrong; fix the token.
 
+This applies to **vendored third-party components too**. Registry components
+(shadcn, kokonutui, Bklit) are written for a `dark:`-variant world and arrive
+full of them, often with a whole duplicate element set gated on `dark:block`.
+Porting one means converting those to tokens, not preserving them — otherwise
+every registry add re-introduces a second, divergent theme system that the
+toggle only half-controls. A vendored file is not exempt because someone else
+wrote it.
+
 Structure:
 
 - **Canvas** `--hm-paper-2`. **Panels** `--hm-paper` with a `--hm-rule` hairline
-  and 8 px radius. One elevation step only — panels do not stack on panels.
+  and 12 px radius. One elevation step only — panels do not stack on panels.
 - **Sidebar** `.hm-side`, 260 px, paper with a right hairline. Active item is
   `--hm-accent-soft` fill + `--hm-accent-line` border + `--hm-accent-hi` label.
   No inset accent bar — that was the brutalist tell. The header above the
   sidebar uses `.hm-ts-ticker` for the active workspace chrome.
-- **Tables** `.hm-ts-board`: `--hm-paper-2` sticky head with grotesque
-  sentence-case labels, `--hm-rule` row hairlines, `--hm-paper-2` row hover.
+- **Tables** `.hm-ts-board`: `--hm-paper-2` sticky head with micro-caps
+  labels, `--hm-rule` row hairlines, `--hm-paper-2` row hover.
   The status column is left-bordered in the row's status line colour (see
   `.hm-ts-board .is-paid` etc. in [`src/styles.css`](src/styles.css)). Money
   and dates are `.hm-num-cell` — IBM Plex Sans Condensed, tabular, right-aligned.
@@ -247,12 +398,63 @@ Structure:
   `.is-warn`. Never bare text colour on a status — always a stamp chip.
 - **Stat tiles** `.hm-stat`, a left 3 px accent edge and a `.hm-stat-value`
   numeral. Status modifiers only where the number *is* a warning.
+- **Charts** — see "Charts" below. Panels hold charts; charts never restyle the
+  panel around them.
 - **Empty states** `.hm-empty` — a dashed hairline block with a label and one
   action. Per the honest-copy rule: an em-dash, never an invented figure.
 
 The accent budget still applies. On a dense table page the primary action, the
 active sidebar item, and focus rings are the whole budget — status pills are
 semantic colour and do not count, but they are the only other chroma allowed.
+
+## Charts
+
+Charts are the instrument surface. Structure and interaction follow the
+shadcn chart system on Recharts (`src/components/ui/chart.tsx` wrapper plus
+`src/components/ui/chart-format.ts` date formatters); **colour follows this
+document and nothing else.**
+
+**Series mapping is fixed**, so a quantity reads the same colour on every route:
+
+| Series | Token |
+| --- | --- |
+| Paid / collected revenue | `--hm-ok` |
+| Open / unpaid / outstanding | `--hm-warn` |
+| Overdue | `--hm-danger` |
+| Billed (total invoiced) | `--hm-accent` |
+| Secondary / comparison series | `--hm-info` |
+| Crosshair, active point | `--hm-accent` |
+| Grid, axis rules | `--hm-rule` |
+| Axis + legend labels | `--hm-ink-3` |
+
+**No hex in chart code, ever.** Every stroke, fill, gradient stop, and dot
+border resolves from a `--hm-*` token through the semantic `--chart-*` bridge in
+[`src/styles.css`](src/styles.css). This is not stylistic — hardcoded hex is
+what silently broke light mode in the Recharts implementation this system
+replaces, and a hex value cannot follow the theme toggle.
+
+**A vendored chart's own palette is not authoritative.** Registry components
+ship their own `--chart-*` values (Bklit's are a grayscale ramp). Those are
+overridden at the bridge; never let a registry write colour vars into
+`styles.css`.
+
+Structure rules:
+
+- Grid: hairline `--hm-rule`, horizontal rules only unless the chart is a
+  scatter. Pitch aligns to the 48 px ledger grid where the plot height allows.
+- Axes: micro-caps label role. No axis line where a grid rule already reads as
+  one — one rule per edge, not two.
+- Numerals: `--hm-font-num`, tabular, on every tick, tooltip value, and legend
+  figure. A chart is a numeric surface; proportional figures make columns dance.
+- Tooltip: glass is permitted here (overlay). `--hm-paper` at ≥ 90 % opacity,
+  `--hm-rule` hairline, blur ≤ 12 px, card radius.
+- Legend: sentence-case or micro-caps label, swatch colour **identical** to the
+  series stroke it names. A swatch that disagrees with its line is a bug.
+- Empty and loading states are required, not optional. Empty follows the
+  honest-copy rule — an em-dash and a labelled block, never a zeroed axis
+  implying real data.
+- Accent budget: the crosshair and one primary series are the chart's whole
+  allowance. Status colours are semantic and exempt, as elsewhere.
 
 ## What pages MUST share
 
@@ -261,8 +463,7 @@ semantic colour and do not count, but they are the only other chroma allowed.
 - `MarketingNav` (N1b SaaS three-section) and `MarketingFooter` (Ft5 Statement).
   The landing page imports both — it does not roll its own header.
 - The accent colour and its ≤ 5 % placement rule.
-- Plus Jakarta Sans display + body, Space Grotesk labels, IBM Plex Sans
-  Condensed numerals.
+- Inter display + body + labels, IBM Plex Sans Condensed numerals.
 - The CTA voice above — shape, radius, height, padding rhythm, arrow discipline.
 - Section heading rhythm: accent label (`.hm-label--accent`) → display heading
   → lede.
@@ -318,9 +519,9 @@ Drop-in formats for re-using this design system in other projects.
   --color-info-soft:   oklch(94% 0.03 215);
   --color-info-line:   oklch(80% 0.06 215);
 
-  --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-body:    "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-outlier: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-body:    "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-outlier: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-num:     "IBM Plex Sans Condensed", ui-sans-serif, system-ui, sans-serif;
 
   --space-3xs: 0.25rem;  --space-2xs: 0.5rem;  --space-xs: 0.75rem;
@@ -334,7 +535,7 @@ Drop-in formats for re-using this design system in other projects.
   --dur-short: 150ms;
   --dur-base:  260ms;
 
-  --radius-card: 8px; --radius-input: 6px; --radius-pill: 999px;
+  --radius-card: 12px; --radius-input: 6px; --radius-pill: 999px;
 
   --shadow-soft: 0 8px 24px -10px oklch(18% 0.018 50 / 0.18);
   --shadow-lift: 0 14px 34px -12px oklch(18% 0.018 50 / 0.26);
@@ -354,9 +555,9 @@ Drop-in formats for re-using this design system in other projects.
   --color-accent-soft: oklch(94% 0.04 27);
   --color-focus:       oklch(62% 0.21 27);
 
-  --font-display: "Plus Jakarta Sans", sans-serif;
-  --font-body:    "Plus Jakarta Sans", sans-serif;
-  --font-label:   "Space Grotesk", sans-serif;
+  --font-display: "Inter", sans-serif;
+  --font-body:    "Inter", sans-serif;
+  --font-label:   "Inter", sans-serif;
 
   --spacing-sm:  1rem;
   --spacing-md:  1.5rem;
@@ -366,7 +567,7 @@ Drop-in formats for re-using this design system in other projects.
   --spacing-3xl: 7rem;
 
   --text-md: 1.125rem;
-  --radius-card: 8px;
+  --radius-card: 12px;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 ```
@@ -387,9 +588,9 @@ Drop-in formats for re-using this design system in other projects.
     "focus":       { "$value": "oklch(62% 0.21 27)",    "$type": "color" }
   },
   "font": {
-    "display": { "$value": "Plus Jakarta Sans", "$type": "fontFamily" },
-    "body":    { "$value": "Plus Jakarta Sans", "$type": "fontFamily" },
-    "label":   { "$value": "Space Grotesk",     "$type": "fontFamily" }
+    "display": { "$value": "Inter", "$type": "fontFamily" },
+    "body":    { "$value": "Inter", "$type": "fontFamily" },
+    "label":   { "$value": "Inter", "$type": "fontFamily" }
   },
   "space": {
     "sm": { "$value": "1rem",   "$type": "dimension" },
@@ -398,7 +599,7 @@ Drop-in formats for re-using this design system in other projects.
     "xl": { "$value": "3rem",   "$type": "dimension" }
   },
   "radius": {
-    "card":  { "$value": "8px",   "$type": "dimension" },
+    "card":  { "$value": "12px",  "$type": "dimension" },
     "input": { "$value": "6px",   "$type": "dimension" },
     "pill":  { "$value": "999px", "$type": "dimension" }
   }
@@ -425,6 +626,6 @@ tokens, so Dialog / Select / Sheet / Tooltip primitives resolve correctly.
   --border:              86%   0.014 60;
   --input:               86%   0.014 60;
   --ring:                62%   0.21  27;   /* focus */
-  --radius:              8px;
+  --radius:              12px;
 }
 ```
