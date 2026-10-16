@@ -1,40 +1,50 @@
-import { ConvexHttpClient } from "convex/browser";
+import { createClient } from "@supabase/supabase-js";
 import type { InvoiceRecord } from "#/features/invoices/types";
-import { firstServerEnv } from "#/server/env";
-import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
+import { getById, recordDeliveryEvent } from "#/server/data/invoices";
+import { mintSupabaseAccessToken } from "#/server/supabase-session";
+import type { Database } from "#/types/database.types";
 
 export type Invoice = InvoiceRecord;
 
-function getAuthenticatedConvexClient(sessionToken: string) {
-	const deploymentUrl = firstServerEnv(
-		"CONVEX_URL",
-		"VITE_CONVEX_URL",
-		"CONVEX_SITE_URL",
-	);
+async function createUserContext(request: Request) {
+	const minted = await mintSupabaseAccessToken(request);
+	if (!minted) return null;
+	const url = process.env.VITE_SUPABASE_URL;
+	const key =
+		process.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
+		process.env.SUPABASE_PUBLISHABLE_KEY;
+	if (!url || !key)
+		throw new Error("Supabase publishable configuration is missing.");
+	return {
+		userId: minted.velureUserId,
+		client: createClient<Database>(url, key, {
+			global: { headers: { Authorization: `Bearer ${minted.accessToken}` } },
+			auth: {
+				autoRefreshToken: false,
+				detectSessionInUrl: false,
+				persistSession: false,
+			},
+		}),
+	};
+}
 
-	if (!deploymentUrl) {
-		throw new Error("Missing CONVEX_URL or VITE_CONVEX_URL");
-	}
+export type InvoiceUserContext = NonNullable<
+	Awaited<ReturnType<typeof createUserContext>>
+>;
 
-	const client = new ConvexHttpClient(deploymentUrl);
-	client.setAuth(sessionToken);
-	return client;
+export function getInvoiceUserContext(request: Request) {
+	return createUserContext(request);
 }
 
 export async function getAuthenticatedInvoiceById(
 	id: string,
-	sessionToken: string,
+	context: InvoiceUserContext,
 ) {
-	const convex = getAuthenticatedConvexClient(sessionToken);
-
-	return (await convex.query(api.invoices.getById, {
-		id: id as Id<"invoices">,
-	})) as Invoice | null;
+	return (await getById(context.client, context.userId, id)) as Invoice | null;
 }
 
 export async function recordInvoiceDeliveryEvent(
-	sessionToken: string,
+	context: InvoiceUserContext,
 	input: {
 		invoiceId: string;
 		recipient: string;
@@ -44,16 +54,9 @@ export async function recordInvoiceDeliveryEvent(
 		publicUrl?: string;
 	},
 ) {
-	const convex = getAuthenticatedConvexClient(sessionToken);
-
-	return await convex.mutation(api.invoices.recordDeliveryEvent, {
-		invoiceId: input.invoiceId as Id<"invoices">,
+	return recordDeliveryEvent(context.client, context.userId, {
+		...input,
 		channel: "email",
-		recipient: input.recipient,
 		provider: "resend",
-		status: input.status,
-		providerMessageId: input.providerMessageId,
-		error: input.error,
-		publicUrl: input.publicUrl,
 	});
 }

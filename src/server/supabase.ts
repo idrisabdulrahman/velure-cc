@@ -7,9 +7,14 @@ export function getSupabaseAdminClient() {
 	if (adminClient) return adminClient;
 
 	const url = process.env.VITE_SUPABASE_URL;
-	const secretKey = process.env.SUPABASE_SECRET_KEY;
+	const secretKey =
+		process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY;
 	if (!url) throw new Error("VITE_SUPABASE_URL is missing.");
-	if (!secretKey) throw new Error("SUPABASE_SECRET_KEY is missing.");
+	if (!secretKey) {
+		throw new Error(
+			"SUPABASE_SERVICE_ROLE_KEY (or legacy SUPABASE_SECRET_KEY) is missing.",
+		);
+	}
 
 	adminClient = createClient<Database>(url, secretKey, {
 		auth: {

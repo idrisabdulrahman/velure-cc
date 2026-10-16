@@ -17,6 +17,7 @@ import {
 	Trash2,
 	Upload,
 	Wrench,
+	X,
 	XCircle,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -549,6 +550,13 @@ function InvoicesIndex() {
 		() => rows.filter((invoice) => isEmptyDraftRow(invoice)),
 		[rows],
 	);
+	// When every empty draft is selected, the red bulk bar is the single delete
+	// affordance; the amber callout stands down so two rows don't compete.
+	const allEmptyDraftsSelected =
+		emptyDrafts.length > 0 &&
+		emptyDrafts.every((invoice) =>
+			selectedInvoiceIds.has(invoice.id as Id<"invoices">),
+		);
 	const paymentScoreStatusLabel = {
 		no_data: "No paid history",
 		excellent: "Excellent",
@@ -1028,7 +1036,12 @@ function InvoicesIndex() {
 					</DropdownMenuSubContent>
 				</DropdownMenuSub>
 				<DropdownMenuItem
-					onClick={() => void onStatusChange(invoice.id, "canceled")}
+					onClick={() => {
+						// `onStatusChange` rethrows after toasting; swallow here
+						// so the fire-and-forget menu item has no unhandled
+						// rejection (the sheet keeps its own guard).
+						void onStatusChange(invoice.id, "canceled").catch(() => undefined);
+					}}
 					className="text-danger focus:bg-danger-soft focus:text-danger"
 				>
 					<XCircle className="mr-2 h-4 w-4" />
@@ -1197,7 +1210,18 @@ function InvoicesIndex() {
 		details?: { paidAt?: number; paymentReference?: string },
 	) => {
 		const { client, userId } = requireSupabase();
-		await updateStatus(client, userId, { id, status, ...details });
+		try {
+			await updateStatus(client, userId, { id, status, ...details });
+		} catch (error) {
+			toast({
+				title: "Status update failed",
+				description: error instanceof Error ? error.message : "Try again.",
+				variant: "error",
+			});
+			// Rethrow so optimistic callers skip their local state update.
+			throw error;
+		}
+		await queryClient.invalidateQueries({ queryKey: ["supabase-invoices"] });
 		toast({
 			title: "Status updated",
 			description: `Marked as ${status}.`,
@@ -1208,11 +1232,21 @@ function InvoicesIndex() {
 	const onRecordFullPayment = async (invoice: InvoiceRow) => {
 		const amount = invoice.balance > 0 ? invoice.balance : invoice.amount;
 		const { client, userId } = requireSupabase();
-		await recordPayment(client, userId, {
-			invoiceId: invoice.id,
-			amount,
-			reference: invoice.paymentReference,
-		});
+		try {
+			await recordPayment(client, userId, {
+				invoiceId: invoice.id,
+				amount,
+				reference: invoice.paymentReference,
+			});
+		} catch (error) {
+			toast({
+				title: "Couldn't mark as paid",
+				description: error instanceof Error ? error.message : "Try again.",
+				variant: "error",
+			});
+			return;
+		}
+		await queryClient.invalidateQueries({ queryKey: ["supabase-invoices"] });
 		toast({
 			title: "Payment recorded",
 			description: `Recorded ${formatMoney(amount, invoice.currency)}.`,
@@ -1417,7 +1451,7 @@ function InvoicesIndex() {
 				/>
 			</KpiStrip>
 
-			{emptyDrafts.length > 0 ? (
+			{emptyDrafts.length > 0 && !allEmptyDraftsSelected ? (
 				<Callout
 					tone="warn"
 					title={`${emptyDrafts.length} empty draft${emptyDrafts.length === 1 ? "" : "s"}`}
@@ -1514,48 +1548,55 @@ function InvoicesIndex() {
 										{selectedCount} selected
 									</strong>
 									<span className="flex-1" />
-									<Button
-										type="button"
-										variant="ghost"
-										size="sm"
-										title="Renumber selected"
-										aria-label="Renumber selected invoices"
-										onClick={() =>
-											void onRenumberInvoices(
-												selectedRows.map(
-													(invoice) => invoice.id as Id<"invoices">,
-												),
-											)
-										}
-										disabled={bulkActionPending}
-									>
-										<Wrench className="h-4 w-4" />
-										Renumber
-									</Button>
-									<Button
-										type="button"
-										variant="ghost"
-										size="sm"
-										aria-label="Delete selected invoices"
-										onClick={() =>
-											void openCleanupConfirmation(
-												selectedRows.map(
-													(invoice) => invoice.id as Id<"invoices">,
-												),
-											)
-										}
-										disabled={bulkActionPending}
-									>
-										<Trash2 className="h-4 w-4" />
-										Delete
-									</Button>
-									<button
-										type="button"
-										onClick={clearSelection}
-										className="rounded-md px-2 py-1 text-[13px] font-medium text-ink-2 transition-colors hover:bg-paper-3 hover:text-ink"
-									>
-										Clear
-									</button>
+									<div className="flex items-center gap-1">
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon"
+											className="h-8 w-8"
+											title="Renumber selected"
+											aria-label="Renumber selected invoices"
+											onClick={() =>
+												void onRenumberInvoices(
+													selectedRows.map(
+														(invoice) => invoice.id as Id<"invoices">,
+													),
+												)
+											}
+											disabled={bulkActionPending}
+										>
+											<Wrench className="h-4 w-4" />
+										</Button>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon"
+											className="h-8 w-8 text-ink-2 hover:bg-danger-soft hover:text-danger"
+											title="Delete selected"
+											aria-label="Delete selected invoices"
+											onClick={() =>
+												void openCleanupConfirmation(
+													selectedRows.map(
+														(invoice) => invoice.id as Id<"invoices">,
+													),
+												)
+											}
+											disabled={bulkActionPending}
+										>
+											<Trash2 className="h-4 w-4" />
+										</Button>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon"
+											className="h-8 w-8"
+											title="Clear selection"
+											aria-label="Clear selection"
+											onClick={clearSelection}
+										>
+											<X className="h-4 w-4" />
+										</Button>
+									</div>
 								</>
 							) : undefined
 						}
@@ -1587,10 +1628,29 @@ function InvoicesIndex() {
 				}}
 				onRecordPayment={async (id, amount, reference) => {
 					const { client, userId } = requireSupabase();
-					await recordPayment(client, userId, {
-						invoiceId: id,
-						amount,
-						reference,
+					try {
+						await recordPayment(client, userId, {
+							invoiceId: id,
+							amount,
+							reference,
+						});
+					} catch (error) {
+						toast({
+							title: "Couldn't mark as paid",
+							description:
+								error instanceof Error ? error.message : "Try again.",
+							variant: "error",
+						});
+						// Rethrow so the sheet skips its optimistic paid state.
+						throw error;
+					}
+					await queryClient.invalidateQueries({
+						queryKey: ["supabase-invoices"],
+					});
+					toast({
+						title: "Payment recorded",
+						description: "Invoice marked as paid.",
+						variant: "success",
 					});
 				}}
 			/>

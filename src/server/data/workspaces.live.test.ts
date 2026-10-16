@@ -42,6 +42,7 @@ const PASSWORD = "A10BridgePass-2026!";
 let mgmtToken = "";
 let anonKey = "";
 let serviceKey = "";
+let providerPreExisted = false;
 let userA: { issuerUserId: string; jwt: string } | null = null;
 let userB: { issuerUserId: string; jwt: string } | null = null;
 let wsBId: string | null = null;
@@ -220,7 +221,10 @@ async function ensureProvider() {
 	const existing = (listBody.providers ?? []).find(
 		(p) => p.identifier === PROVIDER_IDENTIFIER,
 	);
-	if (existing) return;
+	if (existing) {
+		providerPreExisted = true;
+		return;
+	}
 	const res = await fetch(`${API}/auth/v1/admin/custom-providers`, {
 		method: "POST",
 		headers: {
@@ -282,20 +286,22 @@ describe.skipIf(!LIVE)("A10 workspaces domain (live velure-cc)", () => {
 	}, 120_000);
 
 	afterAll(async () => {
-		try {
-			const res = await fetch(
-				`${API}/auth/v1/admin/custom-providers/${PROVIDER_IDENTIFIER}`,
-				{
-					method: "DELETE",
-					headers: {
-						apikey: serviceKey,
-						authorization: `Bearer ${serviceKey}`,
+		if (!providerPreExisted) {
+			try {
+				const res = await fetch(
+					`${API}/auth/v1/admin/custom-providers/${PROVIDER_IDENTIFIER}`,
+					{
+						method: "DELETE",
+						headers: {
+							apikey: serviceKey,
+							authorization: `Bearer ${serviceKey}`,
+						},
 					},
-				},
-			);
-			console.log(`cleanup: delete provider -> ${res.status}`);
-		} catch (error) {
-			console.error("cleanup: provider failed:", (error as Error).message);
+				);
+				console.log(`cleanup: delete provider -> ${res.status}`);
+			} catch (error) {
+				console.error("cleanup: provider failed:", (error as Error).message);
+			}
 		}
 		try {
 			await mgmtSql(`
@@ -320,21 +326,21 @@ describe.skipIf(!LIVE)("A10 workspaces domain (live velure-cc)", () => {
 			const adminBody = (await adminList.json()) as {
 				users?: { id: string; email: string }[];
 			};
-		for (const u of adminBody.users ?? []) {
-			if (u.email === EMAIL_A || u.email === EMAIL_B) {
-				const res = await fetch(`${API}/auth/v1/admin/users/${u.id}`, {
-					method: "DELETE",
-					headers: {
-						apikey: serviceKey,
-						authorization: `Bearer ${serviceKey}`,
-					},
-				});
-				console.log(`cleanup: delete auth user ${u.email} -> ${res.status}`);
+			for (const u of adminBody.users ?? []) {
+				if (u.email === EMAIL_A || u.email === EMAIL_B) {
+					const res = await fetch(`${API}/auth/v1/admin/users/${u.id}`, {
+						method: "DELETE",
+						headers: {
+							apikey: serviceKey,
+							authorization: `Bearer ${serviceKey}`,
+						},
+					});
+					console.log(`cleanup: delete auth user ${u.email} -> ${res.status}`);
+				}
 			}
+		} catch (error) {
+			console.error("cleanup: auth users failed:", (error as Error).message);
 		}
-	} catch (error) {
-		console.error("cleanup: auth users failed:", (error as Error).message);
-	}
 	}, 120_000);
 	it("bootstraps a workspace through the authenticated RLS path", async () => {
 		const client = userScopedClient(userA!.jwt);

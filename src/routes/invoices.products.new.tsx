@@ -1,5 +1,4 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMutation } from "convex/react";
 import { useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
@@ -19,7 +18,9 @@ import {
 	UNIT_OPTIONS,
 	validateProductForm,
 } from "#/features/products/product-form-utils";
-import { api } from "../../convex/_generated/api";
+import { useUnifiedAuth } from "#/lib/auth-hook";
+import { useSupabaseSession } from "#/lib/supabase-session";
+import { createProduct } from "#/server/data/products";
 
 export const Route = createFileRoute("/invoices/products/new")({
 	component: NewProductPage,
@@ -41,7 +42,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
 		const timeoutId = window.setTimeout(() => {
 			reject(
 				new Error(
-					"Product creation timed out. Check your Convex connection and try again.",
+					"Product creation timed out. Check your connection and try again.",
 				),
 			);
 		}, timeoutMs);
@@ -61,7 +62,9 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
 
 function NewProductPage() {
 	const navigate = useNavigate();
-	const createProduct = useMutation(api.products.create);
+	const authState = useUnifiedAuth();
+	const userId = authState.data?.user?.id;
+	const { client: supabaseClient } = useSupabaseSession(userId);
 	const [state, setState] = useState<FormState>(initialState);
 	const [submitting, setSubmitting] = useState(false);
 	const [attemptedSubmit, setAttemptedSubmit] = useState(false);
@@ -75,18 +78,18 @@ function NewProductPage() {
 		previewUnitPrice >= 0;
 
 	const inputClass =
-		"h-10 rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-accent-line focus-visible:ring-0";
+		"h-10 rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-brand-line focus-visible:ring-0";
 
 	const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		setAttemptedSubmit(true);
-		if (!isValid || submitting) return;
+		if (!isValid || submitting || !supabaseClient || !userId) return;
 
 		setSubmitting(true);
 		try {
 			const trimmedName = state.name.trim();
 			await withTimeout(
-				createProduct({
+				createProduct(supabaseClient, userId, {
 					type: state.type,
 					name: trimmedName,
 					description: state.description.trim() || undefined,
@@ -195,7 +198,7 @@ function NewProductPage() {
 											description: event.target.value,
 										}))
 									}
-									className="resize-none rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-accent-line focus-visible:ring-0"
+									className="resize-none rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-brand-line focus-visible:ring-0"
 									placeholder="Optional description"
 								/>
 							</Field>

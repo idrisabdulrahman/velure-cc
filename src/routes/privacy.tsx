@@ -14,9 +14,7 @@ function PrivacyPage() {
 				</h1>
 				<div className="mt-8 space-y-6 text-sm leading-7 text-ink-3">
 					<section className="rounded-md border border-rule bg-paper-2 p-5">
-						<h2 className="text-base font-medium text-ink">
-							Data we store
-						</h2>
+						<h2 className="text-base font-medium text-ink">Data we store</h2>
 						<p className="mt-2">
 							Velure stores account profile data, client records, invoices, tax
 							fields, payment details you enter, and export history needed to
@@ -24,9 +22,7 @@ function PrivacyPage() {
 						</p>
 					</section>
 					<section className="rounded-md border border-rule bg-paper-2 p-5">
-						<h2 className="text-base font-medium text-ink">
-							How data is used
-						</h2>
+						<h2 className="text-base font-medium text-ink">How data is used</h2>
 						<p className="mt-2">
 							Data is used to create invoices, generate PDFs, send invoice
 							emails, prepare exports, and keep your workspace secure. We do not

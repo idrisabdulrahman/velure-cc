@@ -1,7 +1,5 @@
-import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMutation } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
@@ -23,8 +21,9 @@ import {
 	UNIT_OPTIONS,
 	validateProductForm,
 } from "#/features/products/product-form-utils";
-import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
+import { useUnifiedAuth } from "#/lib/auth-hook";
+import { useSupabaseSession } from "#/lib/supabase-session";
+import { getProductById, updateProduct } from "#/server/data/products";
 
 export const Route = createFileRoute("/invoices/products/$id")({
 	component: ProductDetailPage,
@@ -33,10 +32,18 @@ export const Route = createFileRoute("/invoices/products/$id")({
 function ProductDetailPage() {
 	const { id } = Route.useParams();
 	const navigate = useNavigate();
-	const updateProduct = useMutation(api.products.update);
-	const { data: product, isPending } = useQuery(
-		convexQuery(api.products.getById, { id: id as Id<"products"> }),
-	);
+	const authState = useUnifiedAuth();
+	const userId = authState.data?.user?.id;
+	const { client: supabaseClient } = useSupabaseSession(userId);
+	const { data: product, isPending } = useQuery({
+		queryKey: ["supabase-product", userId ?? "none", id],
+		queryFn: () => {
+			if (!supabaseClient || !userId)
+				throw new Error("Supabase session unavailable.");
+			return getProductById(supabaseClient, userId, id);
+		},
+		enabled: Boolean(supabaseClient && userId),
+	});
 	const [state, setState] = useState<FormState | null>(null);
 	const [submitting, setSubmitting] = useState(false);
 	const [attemptedSubmit, setAttemptedSubmit] = useState(false);
@@ -71,9 +78,7 @@ function ProductDetailPage() {
 		return (
 			<div className="flex h-full items-center justify-center">
 				<div className="text-center">
-					<p className="text-sm font-medium text-ink">
-						Product not found
-					</p>
+					<p className="text-sm font-medium text-ink">Product not found</p>
 					<button
 						type="button"
 						onClick={() => navigate({ to: "/invoices/products" })}
@@ -94,13 +99,12 @@ function ProductDetailPage() {
 	const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		setAttemptedSubmit(true);
-		if (!isValid || submitting) return;
+		if (!isValid || submitting || !supabaseClient || !userId) return;
 
 		setSubmitting(true);
 		try {
 			const trimmedName = state.name.trim();
-			await updateProduct({
-				id: id as Id<"products">,
+			await updateProduct(supabaseClient, userId, id, {
 				type: state.type,
 				name: trimmedName,
 				description: state.description.trim() || undefined,
@@ -157,7 +161,7 @@ function ProductDetailPage() {
 			</div>
 
 			<div className="grid gap-6 lg:grid-cols-2">
-				<div className="ui-panel rounded-md border border-rule bg-paper-2">
+				<div className="ui-panel rounded-lg border border-rule bg-paper-2">
 					<div className="border-b border-rule px-5 py-4">
 						<h2 className="text-sm font-medium text-ink">
 							Product information
@@ -316,10 +320,8 @@ function ProductDetailPage() {
 					</form>
 				</div>
 
-				<div className="ui-panel rounded-md border border-rule bg-paper-2 p-5">
-					<h2 className="text-sm font-medium text-ink">
-						Catalog summary
-					</h2>
+				<div className="ui-panel rounded-lg border border-rule bg-paper-2 p-5">
+					<h2 className="text-sm font-medium text-ink">Catalog summary</h2>
 					<div className="mt-4 rounded-md border border-rule bg-paper p-4">
 						<p className="text-sm font-medium text-ink">
 							{state.name || "Product name"}

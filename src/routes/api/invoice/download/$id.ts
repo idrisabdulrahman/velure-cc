@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { safeErrorDetails } from "#/server/http-security";
 import { renderInvoicePdf } from "#/server/pdf";
 import { getInvoiceByToken } from "#/server/public-invoice-repository";
 
@@ -13,7 +14,8 @@ function safePdfFileName(invoiceNumber: string) {
 	return `${normalized}.pdf`;
 }
 
-async function handle({ params }: { params: { id: string } }) {
+export async function handle({ params }: { params: { id: string } }) {
+	let invoiceId: string | undefined;
 	try {
 		const token = decodeURIComponent(params.id);
 		const invoice = await getInvoiceByToken(token);
@@ -21,6 +23,7 @@ async function handle({ params }: { params: { id: string } }) {
 		if (!invoice) {
 			return new Response("Invoice not found", { status: 404 });
 		}
+		invoiceId = invoice.id;
 
 		const pdf = await renderInvoicePdf(invoice);
 		const fileName = safePdfFileName(invoice.invoiceNumber);
@@ -34,8 +37,8 @@ async function handle({ params }: { params: { id: string } }) {
 		});
 	} catch (error) {
 		console.error("PDF download error:", {
-			token: params.id,
-			error,
+			invoiceId,
+			...safeErrorDetails(error),
 		});
 		return new Response("Failed to generate PDF", { status: 500 });
 	}

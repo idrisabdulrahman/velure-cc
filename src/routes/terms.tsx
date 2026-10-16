@@ -12,9 +12,7 @@ function TermsPage() {
 				<h1 className="text-4xl font-semibold tracking-[-0.03em]">Terms</h1>
 				<div className="mt-8 space-y-6 text-sm leading-7 text-ink-3">
 					<section className="rounded-md border border-rule bg-paper-2 p-5">
-						<h2 className="text-base font-medium text-ink">
-							Product use
-						</h2>
+						<h2 className="text-base font-medium text-ink">Product use</h2>
 						<p className="mt-2">
 							Velure helps businesses create invoices, manage clients, send
 							reminders, and export finance records. You are responsible for

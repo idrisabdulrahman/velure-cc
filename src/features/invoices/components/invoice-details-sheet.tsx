@@ -13,7 +13,7 @@ import {
 	verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "@tanstack/react-query";
 import {
 	ArrowDownToLine,
 	CalendarClock,
@@ -72,9 +72,11 @@ import { NotesEditor } from "#/features/invoices/components/editor/notes-editor"
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import { toEditorDoc } from "#/features/invoices/midday-adapter";
 import type { InvoiceLineItem, InvoiceRecord } from "#/features/invoices/types";
-import { authClient } from "#/lib/auth-client";
+import { useUnifiedAuth } from "#/lib/auth-hook";
 import type { EditorDoc } from "#/lib/midday-invoice/types";
-import { api } from "../../../../convex/_generated/api";
+import { useSupabaseSession } from "#/lib/supabase-session";
+import { cancelSchedule, reschedule } from "#/server/data/invoices";
+import { getInvoiceWorkspaceSettings } from "#/server/data/workspaces";
 
 type Props = {
 	open: boolean;
@@ -304,6 +306,7 @@ function NumberStepperInput({
 				min={min}
 				step={step}
 				value={value}
+				onFocus={(event) => event.currentTarget.select()}
 				onChange={(event) => apply(Number(event.target.value) || min)}
 				className="h-full w-full border-0 bg-transparent px-3 text-center text-sm text-ink [appearance:textfield] outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
 			/>
@@ -330,7 +333,7 @@ function Section({
 	children: ReactNode;
 }) {
 	return (
-		<section className="ui-panel rounded-md border border-rule bg-paper-2">
+		<section className="ui-panel rounded-lg border border-rule bg-paper-2">
 			<div className="border-b border-rule px-5 py-4">
 				<h3 className="text-sm font-medium text-ink">{title}</h3>
 				{subtitle ? (
@@ -383,7 +386,7 @@ function InvoiceDetailsSkeleton() {
 
 			<div className="flex-1 overflow-hidden px-6 py-6">
 				<div className="space-y-6">
-					<section className="ui-panel rounded-md border border-rule bg-paper-2">
+					<section className="ui-panel rounded-lg border border-rule bg-paper-2">
 						<div className="border-b border-rule px-5 py-4">
 							<SkeletonBlock className="h-4 w-32" />
 							<SkeletonBlock className="mt-2 h-3 w-52" />
@@ -413,7 +416,7 @@ function InvoiceDetailsSkeleton() {
 						</div>
 					</section>
 
-					<section className="ui-panel rounded-md border border-rule bg-paper-2">
+					<section className="ui-panel rounded-lg border border-rule bg-paper-2">
 						<div className="border-b border-rule px-5 py-4">
 							<SkeletonBlock className="h-4 w-24" />
 							<SkeletonBlock className="mt-2 h-3 w-64 max-w-full" />
@@ -495,7 +498,22 @@ export function InvoiceDetailsSheet({
 	onStatusChange,
 	onRecordPayment,
 }: Props) {
-	const workspace = useQuery(api.compliance.getWorkspaceSettings, {});
+	const authState = useUnifiedAuth();
+	const userId = authState.data?.user?.id;
+	const { client: supabaseClient } = useSupabaseSession(userId);
+	const requireSupabase = () => {
+		if (!supabaseClient || !userId) throw new Error("Session unavailable");
+		return { client: supabaseClient, userId };
+	};
+	const workspaceQuery = useQuery({
+		queryKey: ["invoice-details-workspace", userId],
+		queryFn: () => {
+			const context = requireSupabase();
+			return getInvoiceWorkspaceSettings(context.client, context.userId);
+		},
+		enabled: Boolean(supabaseClient && userId),
+	});
+	const workspace = workspaceQuery.data;
 	const [draft, setDraft] = useState<InvoiceRecord | null>(
 		invoice ? withDerivedCompliance(invoice) : null,
 	);
@@ -509,8 +527,6 @@ export function InvoiceDetailsSheet({
 	const [recipientEmail, setRecipientEmail] = useState("");
 	const [paymentReference, setPaymentReference] = useState("");
 	const [isSendingEmail, setIsSendingEmail] = useState(false);
-	const cancelSchedule = useMutation(api.invoices.cancelSchedule);
-	const reschedule = useMutation(api.invoices.reschedule);
 	const [rescheduleAt, setRescheduleAt] = useState("");
 	const [emailStatus, setEmailStatus] = useState<string | null>(null);
 	const [showCompliance, setShowCompliance] = useState(false);
@@ -784,7 +800,6 @@ export function InvoiceDetailsSheet({
 					credentials: "include",
 					headers: {
 						"Content-Type": "application/json",
-						"X-Better-Auth-Cookie": authClient.getCookie(),
 					},
 					body: JSON.stringify({ to }),
 				},
@@ -894,8 +909,8 @@ export function InvoiceDetailsSheet({
 			<Sheet open={open} onOpenChange={onOpenChange}>
 				<SheetContent
 					side="right"
-					contentClassName="w-full sm:max-w-[820px] p-0"
-					className="flex h-full min-h-0 flex-col border-rule bg-paper p-0 text-ink [background-image:none]"
+					contentClassName="w-full sm:max-w-[600px] p-0"
+					className="flex h-full min-h-0 flex-col border-rule bg-paper p-0 text-ink bg-none"
 					title={draft ? `Edit ${draft.invoiceNumber}` : "Edit invoice"}
 				>
 					{draft ? (
@@ -935,7 +950,7 @@ export function InvoiceDetailsSheet({
 										title="Invoice details"
 										subtitle="Core billing information and dates."
 									>
-										<div className="mb-5 grid gap-3 md:grid-cols-4">
+										<div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 											<CompactMetric
 												label="Issue date"
 												value={formatDate(draft.issueDate)}
@@ -954,7 +969,7 @@ export function InvoiceDetailsSheet({
 											/>
 										</div>
 
-										<div className="grid gap-4 md:grid-cols-2">
+										<div className="grid min-w-0 gap-4 sm:grid-cols-2">
 											<div>
 												<FieldLabel>Invoice number</FieldLabel>
 												<Input
@@ -1114,12 +1129,17 @@ export function InvoiceDetailsSheet({
 																	type="button"
 																	onClick={async () => {
 																		try {
-																			await reschedule({
-																				invoiceId: draft.id as never,
-																				scheduledAt: new Date(
-																					rescheduleAt,
-																				).toISOString(),
-																			});
+																			const context = requireSupabase();
+																			await reschedule(
+																				context.client,
+																				context.userId,
+																				{
+																					invoiceId: draft.id,
+																					scheduledAt: new Date(
+																						rescheduleAt,
+																					).toISOString(),
+																				},
+																			);
 																			setDraft((p) =>
 																				p
 																					? {
@@ -1153,9 +1173,12 @@ export function InvoiceDetailsSheet({
 																	type="button"
 																	variant="ghost"
 																	onClick={async () => {
-																		await cancelSchedule({
-																			invoiceId: draft.id as never,
-																		});
+																		const context = requireSupabase();
+																		await cancelSchedule(
+																			context.client,
+																			context.userId,
+																			draft.id,
+																		);
 																		setDraft((p) =>
 																			p
 																				? {
@@ -1545,7 +1568,7 @@ export function InvoiceDetailsSheet({
 										title="Line items"
 										subtitle="Update quantities, pricing, and descriptions."
 									>
-										<div className="hidden grid-cols-[minmax(0,1fr)_132px_132px_160px_44px] gap-3 px-1 text-xs font-medium text-ink-2 md:grid">
+										<div className="hidden grid-cols-[minmax(0,1.35fr)_72px_minmax(0,1fr)_minmax(0,1.15fr)_32px] gap-2 px-1 text-xs font-medium text-ink-2 md:grid">
 											<span>Description</span>
 											<span>Quantity</span>
 											<span>Unit price</span>
@@ -1569,7 +1592,7 @@ export function InvoiceDetailsSheet({
 													{draft.lineItems.map((item) => (
 														<SortableLineItem key={item.id} id={item.id}>
 															<div className="rounded-md border border-rule bg-paper p-3 md:border-0 md:bg-transparent md:p-0">
-																<div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_132px_132px_160px_44px] md:items-center">
+																<div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1.35fr)_72px_minmax(0,1fr)_minmax(0,1.15fr)_32px] md:items-center">
 																	<div>
 																		<div className="mb-2 text-[11px] text-ink-3 md:hidden">
 																			Description
@@ -1726,11 +1749,16 @@ export function InvoiceDetailsSheet({
 														disabled={!onRecordPayment || draft.balance <= 0}
 														onClick={async () => {
 															if (!onRecordPayment) return;
-															await onRecordPayment(
-																draft.id,
-																draft.balance,
-																paymentReference.trim() || undefined,
-															);
+															try {
+																await onRecordPayment(
+																	draft.id,
+																	draft.balance,
+																	paymentReference.trim() || undefined,
+																);
+															} catch {
+																// The route already toasted the reason; keep the sheet honest.
+																return;
+															}
 															setDraft((prev) =>
 																prev
 																	? {
@@ -1757,7 +1785,12 @@ export function InvoiceDetailsSheet({
 														}
 														onClick={async () => {
 															if (!onStatusChange) return;
-															await onStatusChange(draft.id, "canceled");
+															try {
+																await onStatusChange(draft.id, "canceled");
+															} catch {
+																// The route already toasted the reason; keep the sheet honest.
+																return;
+															}
 															setDraft((prev) =>
 																prev
 																	? {

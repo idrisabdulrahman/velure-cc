@@ -1,6 +1,12 @@
 import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { confirmPaystackWebhookPayment } from "#/server/data/payments";
+import { MAX_WEBHOOK_BODY_BYTES } from "#/server/http-security";
 import { handle, verifyPaystackSignature } from "./webhook";
+
+vi.mock("#/server/data/payments", () => ({
+	confirmPaystackWebhookPayment: vi.fn(),
+}));
 
 const originalSecret = process.env.PAYSTACK_SECRET_KEY;
 
@@ -9,6 +15,7 @@ function signature(secret: string, body: string) {
 }
 
 afterEach(() => {
+	vi.clearAllMocks();
 	vi.unstubAllEnvs();
 	if (originalSecret === undefined) {
 		delete process.env.PAYSTACK_SECRET_KEY;
@@ -73,6 +80,18 @@ describe("Paystack webhook route", () => {
 		});
 	});
 
+	it("rejects an oversized body before signature verification", async () => {
+		vi.stubEnv("PAYSTACK_SECRET_KEY", "sk_test_route_secret");
+		const response = await handle({
+			request: new Request("http://localhost/api/payments/paystack/webhook", {
+				method: "POST",
+				body: "x".repeat(MAX_WEBHOOK_BODY_BYTES + 1),
+			}),
+		});
+		expect(response.status).toBe(413);
+		expect(confirmPaystackWebhookPayment).not.toHaveBeenCalled();
+	});
+
 	it("rejects malformed JSON only after a valid signature", async () => {
 		vi.stubEnv("PAYSTACK_SECRET_KEY", "sk_test_route_secret");
 		const invalidJsonBody = "{";
@@ -119,5 +138,44 @@ describe("Paystack webhook route", () => {
 			ok: false,
 			error: "Incomplete request payload.",
 		});
+	});
+
+	it("passes a webhook replay through the same reference for idempotent handling", async () => {
+		vi.stubEnv("PAYSTACK_SECRET_KEY", "sk_test_route_secret");
+		const body = JSON.stringify({
+			event: "charge.success",
+			data: {
+				reference: "velure-replay-ref",
+				status: "success",
+				amount: 100000,
+				currency: "NGN",
+			},
+		});
+		const confirm = vi.mocked(confirmPaystackWebhookPayment);
+		confirm
+			.mockResolvedValueOnce({ ok: true, duplicate: false })
+			.mockResolvedValueOnce({ ok: true, duplicate: true });
+
+		const request = () =>
+			handle({
+				request: new Request("http://localhost/api/payments/paystack/webhook", {
+					method: "POST",
+					headers: {
+						"x-paystack-signature": signature("sk_test_route_secret", body),
+					},
+					body,
+				}),
+			});
+
+		await expect((await request()).json()).resolves.toMatchObject({
+			ok: true,
+			duplicate: false,
+		});
+		await expect((await request()).json()).resolves.toMatchObject({
+			ok: true,
+			duplicate: true,
+		});
+		expect(confirm).toHaveBeenCalledTimes(2);
+		expect(confirm.mock.calls[0]?.[0]).toEqual(confirm.mock.calls[1]?.[0]);
 	});
 });

@@ -96,10 +96,7 @@ const ToastTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
 	<ToastPrimitives.Title
 		ref={ref}
-		className={cn(
-			"text-sm font-medium tracking-[0.01em] text-ink",
-			className,
-		)}
+		className={cn("text-sm font-medium tracking-[0.01em] text-ink", className)}
 		{...props}
 	/>
 ));

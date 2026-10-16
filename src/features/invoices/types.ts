@@ -1,4 +1,5 @@
-import type { Id } from "../../../convex/_generated/dataModel";
+type Id<_Table extends string> = string;
+
 import type { EditorDoc } from "../../lib/midday-invoice/types";
 import type {
 	FiscalizationSnapshot,

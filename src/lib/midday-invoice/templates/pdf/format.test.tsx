@@ -7,7 +7,7 @@ vi.mock("@react-pdf/renderer", () => {
 				Object.entries(s ?? {})
 					.map(([k, v]) => `${k}=${String(v)}`)
 					.join(",");
-			const label = `[${name}${src ? ` href=${String(src)}` : ""}${style ? ` ${renderStyle(style)}` : ""}]`;
+			const label = `[${name}${src ? ` href=${String(src)}` : ""}${style ? ` ${renderStyle(style as Record<string, unknown>)}` : ""}]`;
 			return (
 				<>
 					{label}

@@ -80,7 +80,7 @@ function PricingPage() {
 								type="button"
 								onClick={() => setAnnual(false)}
 								className={`px-4 py-3 text-sm font-black transition-colors duration-150 ease-out ${
-									annual ? "bg-paper text-ink-3" : "bg-brand text-accent-ink"
+									annual ? "bg-paper text-ink-3" : "bg-brand text-brand-ink"
 								}`}
 							>
 								Monthly
@@ -89,7 +89,7 @@ function PricingPage() {
 								type="button"
 								onClick={() => setAnnual(true)}
 								className={`px-4 py-3 text-sm font-black transition-colors duration-150 ease-out ${
-									annual ? "bg-brand text-accent-ink" : "bg-paper text-ink-3"
+									annual ? "bg-brand text-brand-ink" : "bg-paper text-ink-3"
 								}`}
 							>
 								Annual
@@ -99,7 +99,7 @@ function PricingPage() {
 					</div>
 					<div className="grid grid-cols-3 gap-2">
 						{plans.map((plan) => (
-							<div key={plan.name} className="bg-brand p-3 text-accent-ink">
+							<div key={plan.name} className="bg-brand p-3 text-brand-ink">
 								<p className="text-xs font-black uppercase">{plan.name}</p>
 								<p className="mt-2 text-lg font-black">
 									{money(annual ? plan.annual : plan.monthly)}
@@ -117,7 +117,7 @@ function PricingPage() {
 							key={plan.name}
 							className={`rounded-[var(--hm-r-card)] border p-6 ${
 								plan.featured
-									? "border-brand bg-accent-soft"
+									? "border-brand bg-brand-soft"
 									: "border-rule bg-paper-2"
 							}`}
 						>
@@ -131,7 +131,7 @@ function PricingPage() {
 							<p className="mt-5 min-h-14 text-sm leading-7 text-ink-2">
 								{plan.blurb}
 							</p>
-							<Button className="mt-6 h-11 w-full bg-brand font-black text-accent-ink hover:bg-brand-hi">
+							<Button className="mt-6 h-11 w-full bg-brand font-black text-brand-ink hover:bg-brand-hi">
 								Start {plan.name}
 							</Button>
 							<div className="mt-6 space-y-3">

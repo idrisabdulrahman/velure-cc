@@ -135,7 +135,7 @@ function SecuritySettingsPage() {
 				</p>
 			</div>
 
-			<section className="ui-panel rounded-md border border-rule bg-paper-2">
+			<section className="ui-panel rounded-lg border border-rule bg-paper-2">
 				<div className="flex items-center justify-between gap-3 border-b border-rule px-5 py-4">
 					<p className="text-sm font-medium text-ink">
 						Linked sign-in providers

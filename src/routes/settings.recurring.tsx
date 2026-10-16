@@ -1,7 +1,5 @@
-import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useAction, useMutation } from "convex/react";
 import {
 	CalendarClock,
 	Loader2,
@@ -31,15 +29,16 @@ import {
 import { Sheet, SheetContent } from "#/components/ui/sheet";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
-import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
+import { useUnifiedAuth } from "#/lib/auth-hook";
+import { useSupabaseSession } from "#/lib/supabase-session";
+import {
+	createSchedule,
+	deleteSchedule,
+	listSchedules,
+	setScheduleStatus,
+	updateSchedule,
+} from "#/server/data/recurring";
 export const Route = createFileRoute("/settings/recurring")({
-	beforeLoad: ({ context }) => {
-		// Fire-and-forget: warm the cache without blocking the transition.
-		void context.queryClient
-			.prefetchQuery(convexQuery(api.compliance.getWorkspaceSettings, {}))
-			.catch(() => undefined);
-	},
 	component: RecurringBillingSettingsPage,
 });
 
@@ -93,23 +92,32 @@ const initialForm = (workspace?: {
 });
 
 function RecurringBillingSettingsPage() {
-	const { data: workspace } = useQuery(
-		convexQuery(api.compliance.getWorkspaceSettings, {}),
-	);
-	const { data: schedulesRaw } = useQuery(
-		convexQuery(api.recurring.listSchedules, { status: "all" }),
-	);
+	const authState = useUnifiedAuth();
+	const userId = authState.data?.user?.id;
+	const { client: supabaseClient } = useSupabaseSession(userId);
+	const canRead = Boolean(supabaseClient && userId);
+	const { data: schedulesRaw } = useQuery({
+		queryKey: ["supabase-recurring-schedules", userId ?? "none"],
+		queryFn: () => listSchedules(supabaseClient!, userId!, "all"),
+		enabled: canRead,
+	});
+	const workspace = undefined;
 	const schedules = schedulesRaw ?? [];
-	const createSchedule = useMutation(api.recurring.createSchedule);
-	const updateSchedule = useMutation(api.recurring.updateSchedule);
-	const deleteSchedule = useMutation(api.recurring.deleteSchedule);
-	const setScheduleStatus = useMutation(api.recurring.setScheduleStatus);
-	const runRecurringGeneration = useAction(
-		api.recurring.runRecurringGeneration,
-	);
+	const runRecurringGeneration = async (
+		_args?: object,
+	): Promise<{
+		createdCount: number;
+		skippedCount: number;
+		failedCount: number;
+	}> => {
+		throw new Error(
+			"Recurring generation remains a server job and is not available in the Supabase UI yet.",
+		);
+	};
 	const [form, setForm] = useState<ScheduleForm>(() => initialForm());
-	const [editingScheduleId, setEditingScheduleId] =
-		useState<Id<"recurring_invoice_schedules"> | null>(null);
+	const [editingScheduleId, setEditingScheduleId] = useState<string | null>(
+		null,
+	);
 	const [editorOpen, setEditorOpen] = useState(false);
 	const [busyAction, setBusyAction] = useState<BusyAction>(null);
 
@@ -154,12 +162,14 @@ function RecurringBillingSettingsPage() {
 		setBusyAction(editingScheduleId ? "update" : "create");
 		try {
 			if (editingScheduleId) {
-				await updateSchedule({
-					scheduleId: editingScheduleId,
-					...schedulePayload(),
-				});
+				await updateSchedule(
+					supabaseClient!,
+					userId!,
+					editingScheduleId,
+					schedulePayload(),
+				);
 			} else {
-				await createSchedule(schedulePayload());
+				await createSchedule(supabaseClient!, userId!, schedulePayload());
 			}
 			setForm(initialForm(workspace));
 			setEditingScheduleId(null);
@@ -204,12 +214,10 @@ function RecurringBillingSettingsPage() {
 		setEditorOpen(true);
 	}
 
-	async function handleDeleteSchedule(
-		scheduleId: Id<"recurring_invoice_schedules">,
-	) {
+	async function handleDeleteSchedule(scheduleId: string) {
 		setBusyAction(`delete:${scheduleId}`);
 		try {
-			const result = await deleteSchedule({ scheduleId });
+			const result = await deleteSchedule(supabaseClient!, userId!, scheduleId);
 			if (editingScheduleId === scheduleId) {
 				setEditingScheduleId(null);
 				setForm(initialForm(workspace));
@@ -235,7 +243,13 @@ function RecurringBillingSettingsPage() {
 	async function handleRunDueSchedules() {
 		setBusyAction("run");
 		try {
-			const result = await runRecurringGeneration({});
+			const result = await (
+				runRecurringGeneration as () => Promise<{
+					createdCount: number;
+					skippedCount: number;
+					failedCount: number;
+				}>
+			)();
 			toast({
 				title: "Recurring invoice scan complete",
 				description: `${result.createdCount} created, ${result.skippedCount} skipped, ${result.failedCount} failed.`,
@@ -253,12 +267,12 @@ function RecurringBillingSettingsPage() {
 	}
 
 	async function handleStatusChange(
-		scheduleId: Id<"recurring_invoice_schedules">,
+		scheduleId: string,
 		status: "active" | "paused" | "ended",
 	) {
 		setBusyAction(`status:${scheduleId}`);
 		try {
-			await setScheduleStatus({ scheduleId, status });
+			await setScheduleStatus(supabaseClient!, userId!, scheduleId, status);
 			toast({
 				title: "Schedule updated",
 				description: `Schedule is now ${status}.`,

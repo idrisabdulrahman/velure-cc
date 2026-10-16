@@ -1,0 +1,6 @@
+#!/bin/sh
+
+set -eu
+
+echo "pre-commit: checking staged files (format/lint), typecheck, tests"
+pnpm run hooks:pre-commit

@@ -4,11 +4,13 @@ import {
 	useLocation,
 	useNavigate,
 } from "@tanstack/react-router";
-import { Loader2 } from "lucide-react";
+import { Keyboard, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ThemeToggle } from "#/components/theme/theme-toggle";
+import { AppLoader } from "#/components/ui/app-loader";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
+import { Icons } from "#/components/ui/icons";
 import { Input } from "#/components/ui/input";
 import { authClient } from "#/lib/auth-client";
 import { useWorkspaceActions } from "#/lib/auth-hook";
@@ -191,6 +193,34 @@ function AuthPage() {
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
 	const [hydrated, setHydrated] = useState(false);
+
+	// Caps Lock awareness for the password fields. Chromium draws its own
+	// native, unstyled tooltip for `type="password"` (the clipped floating
+	// pill) and exposes no page-level way to disable it, so the warning is
+	// rendered here instead, in the Wayfare warn tokens.
+	// `capsLockOn` and `capsField` are deliberately separate state: a click
+	// into a field fires `pointerdown` (which reads Caps Lock) before `blur`
+	// and `focus` (which move `capsField`), so a single combined value would
+	// be wiped by that event order.
+	const [capsLockOn, setCapsLockOn] = useState(false);
+	const [capsField, setCapsField] = useState<string | null>(null);
+
+	// `getModifierState` is authoritative on key events; `pointerdown` carries
+	// it too, so a field focused with Caps Lock already on shows the warning
+	// immediately instead of waiting for the first keystroke.
+	const readCapsLock = (
+		event:
+			| React.KeyboardEvent<HTMLInputElement>
+			| React.PointerEvent<HTMLInputElement>,
+	) => {
+		setCapsLockOn(event.getModifierState("CapsLock"));
+	};
+	const focusCapsField = (event: React.FocusEvent<HTMLInputElement>) => {
+		setCapsField(event.currentTarget.id);
+	};
+	const blurCapsField = () => {
+		setCapsField(null);
+	};
 
 	useEffect(() => {
 		setHydrated(true);
@@ -440,9 +470,10 @@ function AuthPage() {
 					: "Enter your account details to continue.";
 
 	if (!hydrated || sessionPending || session?.user) {
+		// Transient pre-redirect gate, never provisioning: bare spinner.
 		return (
 			<div className="hm-app flex min-h-screen items-center justify-center bg-paper">
-				<Loader2 className="h-8 w-8 animate-spin text-accent" />
+				<AppLoader label={null} />
 			</div>
 		);
 	}
@@ -461,7 +492,7 @@ function AuthPage() {
 								className="inline-flex items-center gap-2.5 text-sm font-medium text-ink"
 							>
 								<span
-									className="flex h-7 w-7 items-center justify-center text-[13px] font-extrabold text-accent-ink"
+									className="flex h-7 w-7 items-center justify-center text-[13px] font-extrabold text-brand-ink"
 									style={{
 										borderRadius: "8px",
 										background: "var(--hm-accent)",
@@ -493,7 +524,7 @@ function AuthPage() {
 								breaking away from it.
 							</p>
 
-							<div className="hm-ts-tape mt-10 pt-5">
+							<div className="mt-10 border-t border-rule pt-5">
 								<InfoRow label="Environment" value="Private workspace" />
 								<InfoRow
 									label="Security"
@@ -508,7 +539,7 @@ function AuthPage() {
 						<div className="mx-auto max-w-[420px]">
 							<div className="mb-7">
 								<p
-									className="hm-label mb-2 text-accent"
+									className="hm-label mb-2 text-brand"
 									style={{ letterSpacing: "0.005em" }}
 								>
 									{pageTitle}
@@ -546,7 +577,7 @@ function AuthPage() {
 										onClick={() => setMode("sign-in")}
 										className={`rounded-full px-4 py-1.5 transition-colors duration-150 ${
 											mode === "sign-in"
-												? "bg-accent text-accent-ink shadow-(--hm-shadow-soft)"
+												? "bg-brand text-brand-ink shadow-(--hm-shadow-soft)"
 												: "text-ink-3 hover:text-ink"
 										}`}
 									>
@@ -559,7 +590,7 @@ function AuthPage() {
 										onClick={() => setMode("sign-up")}
 										className={`rounded-full px-4 py-1.5 transition-colors duration-150 ${
 											mode === "sign-up"
-												? "bg-accent text-accent-ink shadow-(--hm-shadow-soft)"
+												? "bg-brand text-brand-ink shadow-(--hm-shadow-soft)"
 												: "text-ink-3 hover:text-ink"
 										}`}
 									>
@@ -585,7 +616,10 @@ function AuthPage() {
 												Opening Google
 											</>
 										) : (
-											"Continue with Google"
+											<>
+												<Icons.Google className="mr-2 h-4 w-4" />
+												Continue with Google
+											</>
 										)}
 									</Button>
 									<p className="text-xs leading-5 text-ink-3">
@@ -611,7 +645,7 @@ function AuthPage() {
 											value={name}
 											onChange={(event) => setName(event.target.value)}
 											placeholder="Jane Doe"
-											className="h-10 rounded-(--hm-r-input) border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-accent-line"
+											className="h-10 rounded-(--hm-r-input) border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-brand-line"
 										/>
 									</Field>
 								) : null}
@@ -623,7 +657,7 @@ function AuthPage() {
 											value={businessName}
 											onChange={(event) => setBusinessName(event.target.value)}
 											placeholder="Acme Ventures Ltd"
-											className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-accent-line"
+											className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-brand-line"
 										/>
 									</Field>
 								) : null}
@@ -636,30 +670,51 @@ function AuthPage() {
 											value={email}
 											onChange={(event) => setEmail(event.target.value)}
 											placeholder="name@domain.com"
-											className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-accent-line"
+											className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-brand-line"
 										/>
 									</Field>
 								) : null}
 
 								{mode !== "forgot" ? (
-									<Field label="Password" htmlFor="password">
+									<Field
+										label="Password"
+										htmlFor="password"
+										hint={
+											<CapsLockBadge
+												active={capsLockOn && capsField === "password"}
+											/>
+										}
+									>
 										<Input
 											id="password"
 											type="password"
 											value={password}
 											onChange={(event) => setPassword(event.target.value)}
+											onKeyDown={readCapsLock}
+											onKeyUp={readCapsLock}
+											onPointerDown={readCapsLock}
+											onFocus={focusCapsField}
+											onBlur={blurCapsField}
 											placeholder={
 												mode === "reset"
 													? "Enter a new password"
 													: "Enter your password"
 											}
-											className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-accent-line"
+											className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-brand-line"
 										/>
 									</Field>
 								) : null}
 
 								{mode === "sign-up" || mode === "reset" ? (
-									<Field label="Confirm password" htmlFor="confirmPassword">
+									<Field
+										label="Confirm password"
+										htmlFor="confirmPassword"
+										hint={
+											<CapsLockBadge
+												active={capsLockOn && capsField === "confirmPassword"}
+											/>
+										}
+									>
 										<Input
 											id="confirmPassword"
 											type="password"
@@ -667,8 +722,13 @@ function AuthPage() {
 											onChange={(event) =>
 												setConfirmPassword(event.target.value)
 											}
+											onKeyDown={readCapsLock}
+											onKeyUp={readCapsLock}
+											onPointerDown={readCapsLock}
+											onFocus={focusCapsField}
+											onBlur={blurCapsField}
 											placeholder="Confirm your password"
-											className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-accent-line"
+											className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-brand-line"
 										/>
 									</Field>
 								) : null}
@@ -685,7 +745,7 @@ function AuthPage() {
 												onCheckedChange={(checked) =>
 													setRememberMe(checked === true)
 												}
-												className="h-3.5 w-3.5 border-accent-line bg-paper text-accent-ink data-[state=checked]:border-accent data-[state=checked]:bg-accent"
+												className="h-3.5 w-3.5 border-brand-line bg-paper text-brand-ink data-[state=checked]:border-brand data-[state=checked]:bg-brand"
 											/>
 											Keep me signed in
 										</label>
@@ -696,7 +756,7 @@ function AuthPage() {
 												setErrorMessage(null);
 												setSuccessMessage(null);
 											}}
-											className="text-accent transition-colors duration-150 hover:text-accent-hi"
+											className="text-brand-hi underline-offset-2 transition-colors duration-150 hover:underline"
 										>
 											Forgot password?
 										</button>
@@ -744,14 +804,14 @@ function AuthPage() {
 											setErrorMessage(null);
 											setSuccessMessage(null);
 										}}
-										className="block w-full text-center text-sm text-ink-3 transition-colors duration-150 hover:text-accent"
+										className="block w-full text-center text-sm text-ink-3 transition-colors duration-150 hover:text-brand"
 									>
 										Back to sign in
 									</button>
 								) : null}
 							</form>
 
-							<div className="hm-ts-tape mt-8 pt-5 text-xs text-ink-3">
+							<div className="mt-8 border-t border-rule pt-5 text-xs text-ink-3">
 								{mode === "sign-in" ? (
 									<p>
 										Need an account?{" "}
@@ -762,7 +822,7 @@ function AuthPage() {
 												setErrorMessage(null);
 												setSuccessMessage(null);
 											}}
-											className="text-accent transition-colors duration-150 hover:text-accent-hi"
+											className="text-brand-hi underline-offset-2 transition-colors duration-150 hover:underline"
 										>
 											Request access
 										</button>
@@ -772,14 +832,14 @@ function AuthPage() {
 										By continuing you agree to our{" "}
 										<a
 											href="/terms"
-											className="text-accent transition-colors duration-150 hover:text-accent-hi"
+											className="text-brand-hi underline-offset-2 transition-colors duration-150 hover:underline"
 										>
 											Terms
 										</a>{" "}
 										and{" "}
 										<a
 											href="/privacy"
-											className="text-accent transition-colors duration-150 hover:text-accent-hi"
+											className="text-brand-hi underline-offset-2 transition-colors duration-150 hover:underline"
 										>
 											Privacy
 										</a>
@@ -795,20 +855,43 @@ function AuthPage() {
 	);
 }
 
+// Rendered in the Field label row (never inside the <label>, which would
+// fold it into the input's accessible name). `leading-none` keeps the pill
+// within the text-sm line height so the row does not shift on mount.
+function CapsLockBadge({ active }: { active: boolean }) {
+	if (!active) return null;
+	return (
+		<span
+			role="status"
+			className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-warn-line bg-warn-soft px-2 py-0.5 text-[11px] font-medium leading-none text-warn"
+		>
+			<Keyboard className="size-3.5" aria-hidden="true" />
+			Caps Lock is on
+		</span>
+	);
+}
+
 function Field({
 	label,
 	htmlFor,
 	children,
+	hint,
 }: {
 	label: string;
 	htmlFor?: string;
 	children: React.ReactNode;
+	hint?: React.ReactNode;
 }) {
 	return (
-		<label htmlFor={htmlFor} className="block">
-			<span className="mb-2 block text-sm text-ink-2">{label}</span>
+		<div className="block">
+			<div className="mb-2 flex items-center justify-between gap-3">
+				<label htmlFor={htmlFor} className="text-sm text-ink-2">
+					{label}
+				</label>
+				{hint}
+			</div>
 			{children}
-		</label>
+		</div>
 	);
 }
 

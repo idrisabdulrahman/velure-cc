@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { parse, serialize } from "cookie";
+import { upsertConnection } from "#/server/data/integrations";
+import { getSupabaseAdminClient } from "#/server/supabase";
 
 const INTEGRATION_OAUTH_COOKIE = "velure_integration_oauth";
 
@@ -218,6 +220,26 @@ export async function exchangeXeroCode(request: Request, code: string) {
 		refresh_token?: string;
 		expires_in?: number;
 	};
+}
+
+export async function completeOAuthConnectionOnServer(args: {
+	userId: string;
+	provider: "quickbooks" | "xero";
+	externalAccountId?: string;
+	accessToken: string;
+	refreshToken?: string;
+	expiresAt?: number;
+	configJson?: string;
+}) {
+	return upsertConnection(getSupabaseAdminClient(), args.userId, {
+		provider: args.provider,
+		authType: "oauth",
+		externalAccountId: args.externalAccountId,
+		accessToken: args.accessToken,
+		refreshToken: args.refreshToken,
+		expiresAt: args.expiresAt,
+		configJson: args.configJson,
+	});
 }
 
 export async function getXeroTenant(accessToken: string) {

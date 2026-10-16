@@ -1039,6 +1039,24 @@ export type Database = {
           },
         ]
       }
+      public_rate_limit_windows: {
+        Row: {
+          key_hash: string
+          request_count: number
+          window_start: string
+        }
+        Insert: {
+          key_hash: string
+          request_count?: number
+          window_start: string
+        }
+        Update: {
+          key_hash?: string
+          request_count?: number
+          window_start?: string
+        }
+        Relationships: []
+      }
       recurring_invoice_runs: {
         Row: {
           created_at: string
@@ -1708,6 +1726,28 @@ export type Database = {
       }
     }
     Functions: {
+      confirm_paystack_payment: {
+        Args: {
+          input_amount: number
+          input_currency: string
+          input_customer_email?: string
+          input_event_type: string
+          input_provider_payment_id?: string
+          input_provider_status: string
+          input_raw_event?: Json
+          input_reference: string
+        }
+        Returns: Json
+      }
+      custom_access_token_hook: { Args: { event: Json }; Returns: Json }
+      consume_public_rate_limit: {
+        Args: {
+          input_key_hash: string
+          input_limit: number
+          input_window_start: string
+        }
+        Returns: boolean
+      }
       public_invoice_by_token: { Args: { input_token: string }; Returns: Json }
     }
     Enums: {

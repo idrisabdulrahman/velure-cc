@@ -5,25 +5,29 @@ export const env = createEnv({
 	server: {
 		SERVER_URL: z.url().optional(),
 		BETTER_AUTH_SECRET: z.string().min(1),
-		CONVEX_URL: z.string().url().optional(),
-		CONVEX_SITE_URL: z.string().url().optional(),
+		SUPABASE_JWT_PRIVATE_JWK: z.string().min(1).optional(),
+		SUPABASE_JWT_KEY_ID: z.string().min(1).optional(),
+		SUPABASE_JWT_SECRET: z.string().min(1).optional(),
 		RESEND_API_KEY: z.string().min(1),
-		RESEND_FROM_EMAIL: z.email().optional(),
+		RESEND_FROM_EMAIL: z
+			.string()
+			.regex(
+				/^(?:[^<>]+\s*)?<[^<>@\s]+@[^<>@\s]+\.[^<>@\s]+>$/,
+				"Use Name <email@domain> for RESEND_FROM_EMAIL",
+			)
+			.optional(),
 		RESEND_WEBHOOK_SECRET: z.string().min(1).optional(),
+		INVOICE_SCHEDULER_SECRET: z.string().min(32).optional(),
 		SITE_URL: z.url().optional(),
 		PAYSTACK_SECRET_KEY: z.string().min(1).optional(),
 		PAYSTACK_PUBLIC_KEY: z.string().min(1).optional(),
 		SUPABASE_URL: z.url().optional(),
 		SUPABASE_PUBLISHABLE_KEY: z.string().min(1).optional(),
 		SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
-		ISSUER_URL: z.url().optional(),
-		BRIDGE_ADMIN_TOKEN: z.string().min(1).optional(),
 	},
 
 	client: {
 		VITE_APP_TITLE: z.string().min(1).optional(),
-		VITE_CONVEX_URL: z.url(),
-		VITE_CONVEX_SITE_URL: z.url(),
 		VITE_SUPABASE_URL: z.url().optional(),
 		VITE_SUPABASE_PUBLISHABLE_KEY: z.string().min(1).optional(),
 	},

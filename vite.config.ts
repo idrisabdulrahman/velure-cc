@@ -42,6 +42,12 @@ const config = defineConfig({
 	test: {
 		exclude: ["**/node_modules/**", "**/dist/**", "**/tests/e2e/**"],
 	},
+	ssr: {
+		// @visx 4.0.1-alpha.0 ships an ESM build with extensionless internal
+		// imports (`export … from './scales/band'`), which Node's ESM resolver
+		// rejects during SSR. Bundling them through Vite resolves the paths.
+		noExternal: [/^@visx\//],
+	},
 	plugins: [
 		!isTest ? nitro({ rollupConfig: { external: [/^@sentry\//] } }) : null,
 		tsconfigPaths({ projects: ["./tsconfig.json"] }),

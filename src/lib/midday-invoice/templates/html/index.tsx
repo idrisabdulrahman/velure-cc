@@ -199,7 +199,7 @@ export function HtmlTemplate({
 	if (isPublicAppearance) {
 		return (
 			<div
-				className="overflow-hidden border bg-[var(--invoice-bg)] text-[var(--invoice-text)] shadow-[0_38px_120px_-64px_rgba(0,0,0,0.95)] [&_*]:text-inherit"
+				className="max-h-[100dvh] overflow-y-auto border bg-[var(--invoice-bg)] text-[var(--invoice-text)] shadow-[0_38px_120px_-64px_rgba(0,0,0,0.95)] [scrollbar-width:none] [&_*]:text-inherit"
 				style={{
 					width,
 					minWidth: width,

@@ -27,7 +27,6 @@ export function TextSizeToggle({ className }: { className?: string }) {
 						className={className}
 						onClick={cycleSize}
 						aria-label={`Text size: ${currentLabel}`}
-						title={`Text size: ${currentLabel}`}
 					>
 						<Type className="h-4 w-4" />
 					</Button>

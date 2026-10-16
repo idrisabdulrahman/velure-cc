@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { completeOAuthConnectionOnServer } from "#/server/convex";
 import {
 	clearOAuthStateCookie,
+	completeOAuthConnectionOnServer,
 	exchangeXeroCode,
 	getXeroTenant,
 	readOAuthStateCookie,
@@ -37,7 +37,8 @@ async function handle({ request }: { request: Request }) {
 	try {
 		const token = await exchangeXeroCode(request, code);
 		const tenant = await getXeroTenant(token.access_token);
-		await completeOAuthConnectionOnServer(session.session.token, {
+		await completeOAuthConnectionOnServer({
+			userId: session.user.id,
 			provider: "xero",
 			externalAccountId: tenant?.tenantId,
 			accessToken: token.access_token,

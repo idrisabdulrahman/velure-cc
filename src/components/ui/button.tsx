@@ -4,18 +4,25 @@ import * as React from "react";
 import { cn } from "../../utils";
 
 const buttonVariants = cva(
-	"inline-flex items-center justify-center rounded-[var(--hm-r-input)] text-sm font-medium transition-[transform,opacity,background-color,border-color,color] duration-[110ms] ease-out focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus)] disabled:pointer-events-none disabled:opacity-50",
+	"inline-flex items-center justify-center rounded-[var(--hm-r-btn)] text-sm font-medium transition-[transform,opacity,background-color,border-color,color] duration-[110ms] ease-out focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_var(--color-focus)] disabled:pointer-events-none disabled:opacity-50",
 	{
 		variants: {
+			// Hovers move the surface one step, they don't tint it brand — the accent
+			// budget is ≤5% per viewport (design.md § Accent), and a toolbar of
+			// brand-tinting ghost buttons spends it on hover alone.
 			variant: {
 				default:
-					"border border-brand bg-brand font-bold text-brand-ink hover:bg-brand-hi",
+					"border border-brand bg-brand font-semibold text-brand-ink hover:bg-brand-hi",
 				destructive:
-					"bg-destructive text-destructive-foreground hover:bg-destructive/90",
+					"border border-destructive bg-destructive font-semibold text-destructive-foreground hover:brightness-110",
 				outline:
-					"border border-rule bg-paper-2 text-ink-2 hover:border-brand/50 hover:bg-brand-soft hover:text-ink",
-				secondary: "border border-rule bg-paper-3 text-ink-2 hover:bg-paper-3",
-				ghost: "text-ink-2 hover:bg-brand-soft hover:text-ink",
+					"border border-rule bg-paper-2 text-ink-2 hover:border-ink-3/45 hover:bg-paper-3 hover:text-ink",
+				// Base is paper-2, not paper-3: the old base sat on paper-3 with a
+				// `hover:bg-paper-3` that resolved to the same colour, so this variant
+				// had no hover state at all.
+				secondary:
+					"border border-rule bg-paper-2 text-ink-2 hover:bg-paper-3 hover:text-ink",
+				ghost: "text-ink-2 hover:bg-paper-2 hover:text-ink",
 				link: "text-brand underline-offset-4 hover:underline",
 			},
 			size: {

@@ -36,4 +36,17 @@ describe("create invoice money and localization contract", () => {
 			expect(source).toContain(`event.key === "${key}"`);
 		}
 	});
+
+	it("guides first-run users to add a client and complete the invoice", () => {
+		expect(source).toContain("Create your first invoice in three steps");
+		for (const step of [
+			"Choose a client",
+			"Add a priced item",
+			"Create and send",
+		]) {
+			expect(source).toContain(step);
+		}
+		expect(source).toContain("Add your first client");
+		expect(source).toContain("setCreateClientOpen(true)");
+	});
 });

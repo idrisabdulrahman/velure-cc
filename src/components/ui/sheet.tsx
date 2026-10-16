@@ -19,7 +19,7 @@ const SheetOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
 	<SheetPrimitive.Overlay
 		className={cn(
-			"fixed inset-0 z-50 bg-[var(--hm-scrim)] transition-[opacity,background-color] data-[state=open]:opacity-100 data-[state=closed]:opacity-0 data-[state=open]:duration-[160ms] data-[state=closed]:duration-[120ms]",
+			"fixed inset-0 z-50 bg-[var(--hm-scrim)] transition-[background-color] ui-overlay-fade",
 			className,
 		)}
 		{...props}
@@ -28,24 +28,20 @@ const SheetOverlay = React.forwardRef<
 ));
 SheetOverlay.displayName = SheetPrimitive.Overlay.displayName;
 
-const sheetVariants = cva(
-	"fixed z-50 transition-transform data-[state=open]:duration-[220ms] data-[state=open]:ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:duration-[180ms] data-[state=closed]:ease-out",
-	{
-		variants: {
-			side: {
-				top: "inset-x-0 top-0 data-[state=open]:translate-y-0 data-[state=closed]:-translate-y-full",
-				bottom:
-					"inset-x-0 bottom-0 data-[state=open]:translate-y-0 data-[state=closed]:translate-y-full",
-				left: "inset-y-0 left-0 h-full w-3/4 data-[state=open]:translate-x-0 data-[state=closed]:-translate-x-full sm:max-w-sm",
-				right:
-					"inset-y-0 right-0 h-full w-3/4 data-[state=open]:translate-x-0 data-[state=closed]:translate-x-full sm:max-w-[520px]",
-			},
-		},
-		defaultVariants: {
-			side: "right",
+const sheetVariants = cva("fixed z-50", {
+	variants: {
+		side: {
+			top: "inset-x-0 top-0 ui-sheet-in-top",
+			bottom: "inset-x-0 bottom-0 ui-sheet-in-bottom",
+			left: "inset-y-0 left-0 h-full w-3/4 ui-sheet-in-left sm:max-w-sm",
+			right:
+				"inset-y-0 right-0 h-full w-[90vw] ui-sheet-in-right sm:max-w-[540px]",
 		},
 	},
-);
+	defaultVariants: {
+		side: "right",
+	},
+});
 
 interface SheetContentProps
 	extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>,
@@ -81,7 +77,7 @@ const SheetContent = React.forwardRef<
 			>
 				<div
 					className={cn(
-						"vl-ledger-bg relative h-full w-full overflow-hidden border border-rule bg-paper p-6 text-ink shadow-[0_24px_80px_rgba(0,0,0,0.38)]",
+						" relative h-full w-full overflow-hidden border border-rule bg-paper p-6 text-ink shadow-[0_24px_80px_rgba(0,0,0,0.38)]",
 						className,
 					)}
 				>

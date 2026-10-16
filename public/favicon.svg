@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256"><title>Velure</title><g transform="translate(5.12 5.12) scale(0.96)">
+  <title id="t">Velure app icon, small size</title>
+  <rect width="256" height="256" rx="44" fill="#180F0A"/>
+  <g transform="translate(-4.40,-5.29) scale(1.0344)">
+    <path fill="#FCF8F5" d="M32 45.72 L78.19 45.72 L128 132 L177.81 45.72 L224 45.72 L128 212 Z"/>
+    <path fill="#EA373E" d="M69.11 110 L128 212 L186.89 110 L140.70 110 L128 132 L115.30 110 Z"/>
+  </g>
+</g></svg>

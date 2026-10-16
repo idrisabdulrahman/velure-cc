@@ -27,7 +27,7 @@ export function CreateInvoiceSheet({
 		<Sheet open={open} onOpenChange={onOpenChange}>
 			<SheetContent
 				side="right"
-				contentClassName="w-full p-0 md:p-0 sm:max-w-[940px]"
+				contentClassName="w-full p-0 md:p-0 sm:max-w-[600px]"
 				className="flex h-full min-h-0 flex-col border-rule bg-paper p-0 text-ink"
 				title="Create invoice"
 			>

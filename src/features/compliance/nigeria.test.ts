@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import * as server from "../../../convex/nigeria";
-import type { WithholdingCategory } from "./types";
+import * as server from "../../server/data/nigeria";
 import * as client from "./nigeria";
+import type { WithholdingCategory } from "./types";
 
 const EXPECTED_WHT_MATRIX: Record<
 	WithholdingCategory,

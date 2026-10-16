@@ -1,7 +1,10 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
-import { getServerConvexClient } from "#/server/convex";
-import { api } from "#convex/_generated/api";
+import { confirmPaystackWebhookPayment } from "#/server/data/payments";
+import {
+	RequestBodyTooLargeError,
+	readRequestText,
+} from "#/server/http-security";
 
 type PaystackWebhookPayload = {
 	event?: string;
@@ -51,7 +54,18 @@ export async function handle({ request }: { request: Request }) {
 		);
 	}
 
-	const rawBody = await request.text();
+	let rawBody: string;
+	try {
+		rawBody = await readRequestText(request);
+	} catch (error) {
+		if (error instanceof RequestBodyTooLargeError) {
+			return Response.json(
+				{ ok: false, error: "Request payload is too large." },
+				{ status: 413 },
+			);
+		}
+		throw error;
+	}
 	if (
 		!verifyPaystackSignature(
 			secretKey,
@@ -89,26 +103,21 @@ export async function handle({ request }: { request: Request }) {
 		);
 	}
 
-	const convex = getServerConvexClient();
 	if (payload.event !== "charge.success" || data.status !== "success") {
 		return Response.json({ ok: true, ignored: true });
 	}
 
-	const result = await convex.mutation(
-		api.payments.confirmPaystackWebhookPayment,
-		{
-			webhookSecret: secretKey,
-			eventType: payload.event,
-			providerStatus: data.status,
-			reference,
-			amount: Math.round((data.amount / 100) * 100) / 100,
-			currency: data.currency ?? "NGN",
-			providerPaymentId:
-				typeof data.id === "number" ? String(data.id) : undefined,
-			customerEmail: data.customer?.email,
-			rawEvent: rawBody.slice(0, 8000),
-		},
-	);
+	const result = await confirmPaystackWebhookPayment({
+		eventType: payload.event,
+		providerStatus: data.status,
+		reference,
+		amount: Math.round((data.amount / 100) * 100) / 100,
+		currency: data.currency ?? "NGN",
+		providerPaymentId:
+			typeof data.id === "number" ? String(data.id) : undefined,
+		customerEmail: data.customer?.email,
+		rawEvent: rawBody.slice(0, 8000),
+	});
 
 	return Response.json(result);
 }

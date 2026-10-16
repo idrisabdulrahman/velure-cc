@@ -1,4 +1,5 @@
-import { assertValidTin, normalizeNigeriaPhone } from "../../../convex/nigeria";
+import { buildClientIntelligence } from "./client-intelligence";
+import { assertValidTin, normalizeNigeriaPhone } from "./nigeria";
 import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
 
 export type { Supabase } from "./workspaces";
@@ -136,6 +137,26 @@ type ClientRow = {
 	updated_at: string | null;
 };
 
+type IntelligenceInvoice = {
+	sentAt?: number;
+	emailDeliveredAt?: number;
+	paymentReceivedAt?: number;
+};
+
+type IntelligenceCompliance = {
+	buyer?: { email?: string };
+	netPayable?: number;
+	grandTotal?: number;
+	withholdingTaxAmount?: number;
+};
+
+type IntelligenceLineItem = {
+	name: string;
+	quantity: number;
+	price: number;
+	productId?: string;
+};
+
 function toClientRecord(row: ClientRow): ClientRecord {
 	return {
 		id: row.id,
@@ -239,6 +260,61 @@ export async function getClientById(
 		.maybeSingle();
 	if (error) throw error;
 	return data ? toClientRecord(data as ClientRow) : null;
+}
+
+/** RLS-scoped port of convex/clients.ts `getIntelligence`. */
+export async function getClientIntelligence(
+	client: Supabase,
+	userId: string,
+	id: string,
+) {
+	const selected = await getClientById(client, userId, id);
+	if (!selected) return null;
+
+	const workspaceId = await resolveActiveWorkspaceId(client, userId);
+	if (!workspaceId) return null;
+	const { data, error } = await client
+		.from("invoices")
+		.select(
+			"id, invoice_number, customer_name, currency, issue_date, due_date, status, payment_amount, paid_at, delivered_at, canceled_at, updated_at, lifecycle, compliance, line_items",
+		)
+		.eq("workspace_id", workspaceId);
+	if (error) throw error;
+
+	return buildClientIntelligence({
+		client: {
+			name: selected.name,
+			email: selected.email,
+			currency: selected.currency,
+		},
+		invoices: (data ?? []).map((row) => ({
+			id: row.id,
+			invoiceNumber: row.invoice_number,
+			customerName: row.customer_name,
+			currency: row.currency,
+			issueDate: row.issue_date,
+			dueDate: row.due_date,
+			status: row.status,
+			paymentAmount: row.payment_amount ?? 0,
+			paidAt: row.paid_at ? new Date(row.paid_at).getTime() : undefined,
+			deliveredAt: row.delivered_at
+				? new Date(row.delivered_at).getTime()
+				: undefined,
+			canceledAt: row.canceled_at
+				? new Date(row.canceled_at).getTime()
+				: undefined,
+			updatedAt: row.updated_at
+				? new Date(row.updated_at).getTime()
+				: undefined,
+			lifecycle: (row.lifecycle ?? undefined) as
+				| IntelligenceInvoice
+				| undefined,
+			compliance: (row.compliance ?? undefined) as
+				| IntelligenceCompliance
+				| undefined,
+			lineItems: (row.line_items ?? []) as IntelligenceLineItem[],
+		})),
+	});
 }
 
 /** Port of convex/clients.ts `create`. Returns the new client's id. */

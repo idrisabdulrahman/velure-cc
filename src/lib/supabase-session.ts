@@ -88,12 +88,18 @@ export function useSupabaseSession(userId: string | null | undefined) {
 			return null;
 		}
 	}, [data?.accessToken]);
+	const clientConfigError =
+		data?.accessToken &&
+		(!import.meta.env.VITE_SUPABASE_URL ||
+			!import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY)
+			? new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY")
+			: null;
 
 	return {
 		client,
 		velureUserId: data?.velureUserId ?? null,
 		isPending,
 		isError,
-		error,
+		error: error ?? clientConfigError,
 	};
 }

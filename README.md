@@ -1,9 +1,5 @@
 # Velure
 
-Velure is a Nigerian-first invoice operations workspace for small and
-mid-sized businesses. It helps teams create professional invoices, manage
-clients, collect payments, generate PDFs, send invoice emails, handle VAT/WHT
-context, and keep product sales records close to the billing workflow.
 
 Velure is intentionally not an ERP. Product, inventory, reporting, and
 integration work stays tied to invoicing, collections, compliance, and

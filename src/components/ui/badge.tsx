@@ -18,8 +18,7 @@ const badgeVariants = cva(
 				tag: "text-ink-3 bg-brand-soft text-[10px] dark:bg-brand-soft border-none font-normal rounded-none",
 				"tag-rounded":
 					"text-ink-3 bg-brand-soft text-[12px] dark:bg-brand-soft font-normal px-3 py-1 border-none",
-				"tag-outline":
-					"border-rule bg-paper text-ink-2 hover:bg-brand-soft",
+				"tag-outline": "border-rule bg-paper text-ink-2 hover:bg-brand-soft",
 			},
 		},
 		defaultVariants: {

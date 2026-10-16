@@ -17,7 +17,7 @@ const AlertDialogOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
 	<AlertDialogPrimitive.Overlay
 		className={cn(
-			"fixed inset-0 z-50 bg-ink/60 transition-[opacity,background-color] data-[state=open]:opacity-100 data-[state=closed]:opacity-0 data-[state=open]:duration-[220ms] data-[state=closed]:duration-[180ms] data-[state=open]:ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:ease-out dark:bg-ink/80",
+			"fixed inset-0 z-50 bg-[var(--hm-scrim)] transition-[background-color] ui-overlay-fade",
 			className,
 		)}
 		{...props}
@@ -35,7 +35,7 @@ const AlertDialogContent = React.forwardRef<
 		<AlertDialogPrimitive.Content
 			ref={ref}
 			className={cn(
-				"vl-ledger-bg fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-rule bg-paper p-6 text-ink shadow-[0_24px_80px_rgba(0,0,0,0.42)] transition-[transform,opacity,background-color,border-color,color] data-[state=open]:translate-x-[-50%] data-[state=open]:translate-y-[-50%] data-[state=open]:opacity-100 data-[state=closed]:translate-x-[-50%] data-[state=closed]:translate-y-[calc(-50%+8px)] data-[state=closed]:opacity-0 data-[state=open]:duration-[220ms] data-[state=closed]:duration-[180ms] data-[state=open]:ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:ease-out md:w-full",
+				"fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg gap-4 border border-rule bg-paper p-6 text-ink shadow-[0_24px_80px_rgba(0,0,0,0.42)] transition-[background-color,border-color,color] ui-dialog-pop md:w-full",
 				className,
 			)}
 			{...props}

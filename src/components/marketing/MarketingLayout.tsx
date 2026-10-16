@@ -83,19 +83,23 @@ export function MarketingShell({ children }: { children: ReactNode }) {
 
 export function Wordmark() {
 	return (
-		<Link to="/" className="flex items-center gap-2.5">
-			<span
-				className="flex h-8 w-8 items-center justify-center text-sm font-extrabold"
-				style={{
-					borderRadius: "10px",
-					background: "var(--hm-accent)",
-					color: "var(--hm-accent-ink)",
-					fontFamily: "var(--hm-font-display)",
-				}}
-			>
-				V
-			</span>
-			<span className="hm-title text-lg">Velure</span>
+		<Link to="/" className="block">
+			{/*
+				Horizontal lockup (Level V symbol + Velure wordmark), cropped to
+				its ink so the asset sizes directly. Height is in em so the logo
+				tracks the app's persisted text-size setting. Masters and
+				guidelines: design/brand/kit/ and design/brand/guidelines.md.
+			*/}
+			<img
+				src="/velure-lockup-horizontal.svg"
+				alt="Velure"
+				width={464}
+				height={110}
+				// object-contain: if a narrow viewport squeezes the box, the
+				// lockup scales down as a whole instead of squashing.
+				className="w-auto object-contain"
+				style={{ height: "1.9em" }}
+			/>
 		</Link>
 	);
 }

@@ -19,7 +19,7 @@ const DialogOverlay = React.forwardRef<
 	<DialogPrimitive.Overlay
 		ref={ref}
 		className={cn(
-			"fixed inset-0 z-50 bg-[var(--hm-scrim)] transition-[opacity,background-color] data-[state=open]:opacity-100 data-[state=closed]:opacity-0 data-[state=open]:duration-[220ms] data-[state=closed]:duration-[180ms] data-[state=open]:ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:ease-out",
+			"fixed inset-0 z-50 bg-[var(--hm-scrim)] transition-[background-color] ui-overlay-fade",
 			className,
 		)}
 		{...props}
@@ -38,7 +38,7 @@ const DialogContent = React.forwardRef<
 		<DialogPrimitive.Content
 			ref={ref}
 			className={cn(
-				"vl-ledger-bg fixed left-1/2 top-1/2 z-50 max-h-[calc(100svh-10vw)] w-[90vw] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto border border-rule bg-paper text-ink shadow-[0_24px_80px_rgba(0,0,0,0.42)] transition-[transform,opacity,background-color,border-color,color] data-[state=open]:translate-x-[-50%] data-[state=open]:translate-y-[-50%] data-[state=open]:opacity-100 data-[state=closed]:translate-x-[-50%] data-[state=closed]:translate-y-[calc(-50%+8px)] data-[state=closed]:opacity-0 data-[state=open]:duration-[220ms] data-[state=closed]:duration-[180ms] data-[state=open]:ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:ease-out dark:p-px",
+				"fixed left-1/2 top-1/2 z-50 max-h-[calc(100svh-10vw)] w-[70vw] max-w-md overflow-y-auto border border-rule bg-paper text-ink shadow-[0_24px_80px_rgba(0,0,0,0.42)] transition-[background-color,border-color,color] ui-dialog-pop dark:p-px",
 				className,
 			)}
 			{...props}
@@ -65,7 +65,7 @@ const DialogContentFrameless = React.forwardRef<
 		<DialogPrimitive.Content
 			ref={ref}
 			className={cn(
-				"vl-ledger-bg fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-xl -translate-x-1/2 -translate-y-1/2 border border-rule bg-paper text-ink transition-[transform,opacity,background-color,border-color,color] data-[state=open]:translate-x-[-50%] data-[state=open]:translate-y-[-50%] data-[state=open]:opacity-100 data-[state=closed]:translate-x-[-50%] data-[state=closed]:translate-y-[calc(-50%+8px)] data-[state=closed]:opacity-0 data-[state=open]:duration-[220ms] data-[state=closed]:duration-[180ms] data-[state=open]:ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:ease-out dark:border-none dark:p-px",
+				"fixed left-1/2 top-1/2 z-50 w-[60vw] max-w-xl border border-rule bg-paper text-ink transition-[background-color,border-color,color] ui-dialog-pop dark:border-none dark:p-px",
 				className,
 			)}
 			{...props}

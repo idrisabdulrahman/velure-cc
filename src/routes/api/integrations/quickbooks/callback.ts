@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { completeOAuthConnectionOnServer } from "#/server/convex";
 import {
 	clearOAuthStateCookie,
+	completeOAuthConnectionOnServer,
 	exchangeQuickBooksCode,
 	readOAuthStateCookie,
 } from "#/server/integrations-oauth";
@@ -36,7 +36,8 @@ async function handle({ request }: { request: Request }) {
 
 	try {
 		const token = await exchangeQuickBooksCode(request, code);
-		await completeOAuthConnectionOnServer(session.session.token, {
+		await completeOAuthConnectionOnServer({
+			userId: session.user.id,
 			provider: "quickbooks",
 			externalAccountId: realmId,
 			accessToken: token.access_token,

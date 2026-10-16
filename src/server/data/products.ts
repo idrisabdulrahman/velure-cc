@@ -1,3 +1,4 @@
+import { buildProductIntelligence } from "./product-intelligence";
 import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
 
 export type { Supabase } from "./workspaces";
@@ -199,6 +200,54 @@ export async function searchProducts(
 		unitName: p.unit_name,
 		type: p.type as ProductType,
 	}));
+}
+
+type AnalyticsLineItem = {
+	name: string;
+	quantity: number;
+	price: number;
+	productId?: string;
+};
+
+/** RLS-scoped port of convex/products.ts `getAnalytics`. */
+export async function getProductAnalytics(client: Supabase, userId: string) {
+	const workspaceId = await resolveActiveWorkspaceId(client, userId);
+	if (!workspaceId) return [];
+
+	const [products, invoicesResult] = await Promise.all([
+		listProducts(client, userId),
+		client
+			.from("invoices")
+			.select(
+				"id, invoice_number, customer_name, currency, issue_date, status, canceled_at, line_items",
+			)
+			.eq("workspace_id", workspaceId),
+	]);
+	if (invoicesResult.error) throw invoicesResult.error;
+
+	return buildProductIntelligence({
+		products: products.map((product) => ({
+			id: product.id,
+			type: product.type,
+			name: product.name,
+			sku: product.sku ?? undefined,
+			unitName: product.unitName ?? undefined,
+			defaultUnitPrice: product.defaultUnitPrice,
+			isActive: product.isActive,
+		})),
+		invoices: (invoicesResult.data ?? []).map((invoice) => ({
+			id: invoice.id,
+			invoiceNumber: invoice.invoice_number,
+			customerName: invoice.customer_name,
+			currency: invoice.currency,
+			issueDate: invoice.issue_date,
+			status: invoice.status,
+			canceledAt: invoice.canceled_at
+				? new Date(invoice.canceled_at).getTime()
+				: undefined,
+			lineItems: (invoice.line_items ?? []) as AnalyticsLineItem[],
+		})),
+	}).products;
 }
 
 /** Port of convex/products.ts `create`. Returns the new product's id. */

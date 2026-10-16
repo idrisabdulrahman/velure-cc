@@ -378,6 +378,30 @@ export function DashboardLayout() {
 		});
 	}, [location.pathname, location.search, location.hash, shouldReduceMotion]);
 
+	// Settled absence of session: every pending gate below has resolved and
+	// there is no signed-in user, so this protected route is a dead end. Send
+	// the user to /auth carrying the return path instead of rendering nothing
+	// (the previous `return null` drew an empty dark screen).
+	//
+	// The return path is captured from `window.location` — not the router's
+	// `location` — because a router transition to /auth can begin before this
+	// effect runs; reading `location.pathname` at that point yields /auth and
+	// clobbers the value, which the auth page then rejects (it refuses /auth
+	// targets) and silently drops back to /invoices. `window.location` is
+	// atomic and still holds the protected path at this settled commit.
+	const authReturnPath =
+		!isPending && !session?.user && typeof window !== "undefined"
+			? window.location.pathname + window.location.search
+			: null;
+	useEffect(() => {
+		if (authReturnPath === null) return;
+		void navigate({
+			to: "/auth",
+			search: { redirect: authReturnPath },
+			replace: true,
+		});
+	}, [authReturnPath, navigate]);
+
 	if (
 		waitingForInitialSession ||
 		isPending ||
@@ -398,6 +422,8 @@ export function DashboardLayout() {
 		);
 	}
 
+	// Transient frame while the redirect effect above fires; never a resting
+	// state. A signed-in user never reaches this line.
 	if (!session?.user) {
 		return null;
 	}
@@ -673,7 +699,13 @@ export function DashboardLayout() {
 							>
 								<Menu className="h-4 w-4" />
 							</button>
-							<p className="truncate text-[13px] text-ink-3">
+							<p className="flex min-w-0 items-center gap-2 text-[13px] text-ink-3">
+								<span
+									aria-hidden="true"
+									className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[var(--hm-r-btn)] border border-brand/45 bg-brand-soft text-[10px] font-bold text-brand"
+								>
+									V
+								</span>
 								<span className="truncate">{workspaceLabel}</span>
 								<span className="mx-2">/</span>
 								<span className="font-medium text-ink">{activePageLabel}</span>

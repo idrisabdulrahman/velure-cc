@@ -1,4 +1,5 @@
 node_modules/
+certs/
  .agents/
 .agent/
 .DS_Store

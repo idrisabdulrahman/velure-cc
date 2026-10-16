@@ -232,7 +232,7 @@ export function toMiddayInvoice(invoice: InvoiceRecord): MiddayInvoice {
 		netPayable,
 		regulatoryNotice: compliance.regulatoryNotice ?? null,
 		filePath: null,
-		status: invoice.status,
+		status: invoice.status === "scheduled" ? "draft" : invoice.status,
 		viewedAt: null,
 		fromDetails: template.fromDetails,
 		issueDate: invoice.issueDate,

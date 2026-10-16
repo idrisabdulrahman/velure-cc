@@ -1,9 +1,4 @@
 import { useQueryClient, useQuery as useTanQuery } from "@tanstack/react-query";
-import {
-	useConvexAuth,
-	useQuery as useConvexQuery,
-	useMutation,
-} from "convex/react";
 import { useCallback, useMemo } from "react";
 import {
 	ensureWorkspaceForUser,
@@ -11,7 +6,6 @@ import {
 	listWorkspaces,
 	setActiveWorkspace,
 } from "#/server/data/workspaces";
-import { api } from "../../convex/_generated/api";
 import { authClient } from "./auth-client";
 import { useSupabaseSession } from "./supabase-session";
 
@@ -20,16 +14,12 @@ import { useSupabaseSession } from "./supabase-session";
  * This resolves race conditions between:
  * - Better Auth useSession()
  * - Better Auth client.getSession()
- * - Convex useConvexAuth()
+ * - Supabase session bridge readiness
  */
 export function useUnifiedAuth() {
 	// Better Auth session from hook
 	const { data: betterAuthSession, isPending: betterAuthPending } =
 		authClient.useSession();
-
-	// Convex auth state
-	const { isLoading: convexIsLoading, isAuthenticated: convexIsAuthenticated } =
-		useConvexAuth();
 
 	// Consolidate session data - Better Auth hook is the source of truth
 	const session = useMemo(() => {
@@ -44,9 +34,7 @@ export function useUnifiedAuth() {
 	}, [betterAuthSession]);
 
 	// Determine loading state
-	const isPending = useMemo(() => {
-		return betterAuthPending || convexIsLoading;
-	}, [betterAuthPending, convexIsLoading]);
+	const isPending = betterAuthPending;
 
 	// Determine authentication state
 	const isAuthenticated = useMemo(() => {
@@ -57,7 +45,7 @@ export function useUnifiedAuth() {
 		data: session,
 		isPending,
 		isAuthenticated,
-		isConvexAuthenticated: convexIsAuthenticated,
+		isConvexAuthenticated: isAuthenticated,
 	};
 }
 
@@ -66,9 +54,8 @@ export function useUnifiedAuth() {
  *
  * A10: when the Supabase session bridge is available (minted JWT), workspaces
  * and the workspace context are read through the RLS-enforced module —
- * PostgREST carries the user's JWT and RLS decides. The Convex fallback is
- * kept so the app runs in environments where the bridge is not configured;
- * once a domain is fully cut over, the fallback is deleted.
+ * PostgREST carries the user's JWT and RLS decides. A bridge failure leaves
+ * the dashboard unavailable; it must never fall back to a second data plane.
  */
 export function useDashboardAuth() {
 	const authState = useUnifiedAuth();
@@ -86,11 +73,11 @@ export function useDashboardAuth() {
 	); // RLS-enforced reads through the typed module. `enabled` guarantees both
 	// are non-null when the query runs; narrow to satisfy the type checker.
 	const readWorkspaces = () =>
-		canReadSupabase && supabaseClient && velureUserId
+		supabaseClient && velureUserId
 			? listWorkspaces(supabaseClient, velureUserId)
 			: Promise.resolve([]);
 	const readContext = () =>
-		canReadSupabase && supabaseClient && velureUserId
+		supabaseClient && velureUserId
 			? getWorkspaceContext(supabaseClient, velureUserId)
 			: Promise.resolve(null);
 	const supabaseWorkspaces = useTanQuery({
@@ -104,48 +91,35 @@ export function useDashboardAuth() {
 		enabled: canReadSupabase,
 	});
 
-	// Convex fallback (bridge not configured / mint failed).
-	const convexWorkspaces = useConvexQuery(
-		api.account.listWorkspaces,
-		authState.isAuthenticated && !canReadSupabase ? {} : "skip",
-	);
-	const convexContext = useConvexQuery(
-		api.account.getWorkspaceContext,
-		authState.isAuthenticated && !canReadSupabase ? {} : "skip",
-	);
-
-	const workspaces = canReadSupabase
-		? (supabaseWorkspaces.data ?? [])
-		: (convexWorkspaces ?? []);
-
-	const workspaceContext = canReadSupabase
-		? (supabaseContext.data ?? null)
-		: (convexContext ?? null);
+	const workspaces = supabaseWorkspaces.data ?? [];
+	const workspaceContext = supabaseContext.data ?? null;
 
 	return {
 		...authState,
 		workspaces,
 		workspaceContext,
-		isPending: authState.isPending || sessionPending,
+		workspaceQueriesPending:
+			canReadSupabase &&
+			(supabaseWorkspaces.isPending || supabaseContext.isPending),
+		isPending:
+			authState.isPending || (authState.isAuthenticated && sessionPending),
 		canUseSupabase: canReadSupabase,
 	};
 }
 
 /**
  * Workspace mutations. When the Supabase session bridge is live, writes go
- * through the RLS-enforced module (RLS with-check rejects a forged target);
- * otherwise they fall back to the Convex mutation so the app keeps working
- * in environments without the bridge.
+ * through the RLS-enforced module (RLS with-check rejects a forged target).
  */
 export function useWorkspaceActions() {
 	const authState = useUnifiedAuth();
 	const userId = authState.data?.user?.id;
-	const { client: supabaseClient, velureUserId } = useSupabaseSession(
-		authState.isAuthenticated ? userId : null,
-	);
+	const {
+		client: supabaseClient,
+		velureUserId,
+		error: sessionError,
+	} = useSupabaseSession(authState.isAuthenticated ? userId : null);
 	const queryClient = useQueryClient();
-	const convexSetActive = useMutation(api.account.setActiveWorkspace);
-	const convexEnsure = useMutation(api.account.ensureWorkspaceContext);
 
 	const invalidateWorkspaces = useCallback(() => {
 		queryClient.invalidateQueries({ queryKey: ["supabase-workspaces"] });
@@ -156,28 +130,34 @@ export function useWorkspaceActions() {
 
 	const setActive = useCallback(
 		async ({ workspaceId }: { workspaceId: string }) => {
-			if (supabaseClient && velureUserId) {
-				await setActiveWorkspace(supabaseClient, velureUserId, workspaceId);
-				invalidateWorkspaces();
-				return { ok: true as const };
-			}
-			return convexSetActive({ workspaceId: workspaceId as never });
+			if (!supabaseClient || !velureUserId)
+				throw new Error(
+					sessionError instanceof Error
+						? sessionError.message
+						: "Supabase session unavailable.",
+				);
+			await setActiveWorkspace(supabaseClient, velureUserId, workspaceId);
+			invalidateWorkspaces();
+			return { ok: true as const };
 		},
-		[convexSetActive, invalidateWorkspaces, supabaseClient, velureUserId],
+		[invalidateWorkspaces, sessionError, supabaseClient, velureUserId],
 	);
 
 	const ensure = useCallback(
 		async ({ businessName }: { businessName?: string }) => {
-			if (supabaseClient && velureUserId) {
-				const ctx = await ensureWorkspaceForUser(supabaseClient, velureUserId, {
-					businessName,
-				});
-				invalidateWorkspaces();
-				return ctx;
-			}
-			return convexEnsure({ businessName });
+			if (!supabaseClient || !velureUserId)
+				throw new Error(
+					sessionError instanceof Error
+						? sessionError.message
+						: "Supabase session unavailable.",
+				);
+			const ctx = await ensureWorkspaceForUser(supabaseClient, velureUserId, {
+				businessName,
+			});
+			invalidateWorkspaces();
+			return ctx;
 		},
-		[convexEnsure, invalidateWorkspaces, supabaseClient, velureUserId],
+		[invalidateWorkspaces, sessionError, supabaseClient, velureUserId],
 	);
 
 	return { setActive, ensure };

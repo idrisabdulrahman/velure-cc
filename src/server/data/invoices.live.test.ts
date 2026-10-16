@@ -1,3 +1,9 @@
+import dns from "node:dns";
+
+// The ngrok tunnel advertises IPv6 AAAA records, but this machine has no IPv6
+// route — undici's Happy Eyeballs hangs on the IPv6 attempt. Force IPv4 first.
+dns.setDefaultResultOrder("ipv4first");
+
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createClient as createClientRecord } from "./clients";
@@ -50,6 +56,7 @@ const PASSWORD = "A10BridgePass-2026!";
 let mgmtToken = "";
 let anonKey = "";
 let serviceKey = "";
+let providerPreExisted = false;
 let userA: { issuerUserId: string; jwt: string } | null = null;
 let userB: { issuerUserId: string; jwt: string } | null = null;
 let draftAId: string | null = null;
@@ -169,7 +176,8 @@ async function oidcSignIn(email: string) {
 	jar.store(signup);
 	const signupBody = (await signup.json()) as { user?: { id: string } };
 	const issuerUserId = signupBody.user?.id;
-	if (!issuerUserId) throw new Error(`no user id in sign-up response for ${email}`);
+	if (!issuerUserId)
+		throw new Error(`no user id in sign-up response for ${email}`);
 
 	const verify = await fetch(`${ISSUER_URL}/__dev/verify-email`, {
 		method: "POST",
@@ -205,7 +213,8 @@ async function oidcSignIn(email: string) {
 	const fragment = handoff ? new URL(handoff).hash : "";
 	const params = new URLSearchParams(fragment.replace(/^#/, ""));
 	const token = params.get("access_token");
-	if (!token) throw new Error(`no access_token in handoff: ${handoff?.slice(0, 200)}`);
+	if (!token)
+		throw new Error(`no access_token in handoff: ${handoff?.slice(0, 200)}`);
 	const decoded = decodeJwt(token);
 	if (decoded.velure_user_id !== issuerUserId) {
 		throw new Error(
@@ -225,7 +234,10 @@ async function ensureProvider() {
 	const existing = (listBody.providers ?? []).find(
 		(p) => p.identifier === PROVIDER_IDENTIFIER,
 	);
-	if (existing) return;
+	if (existing) {
+		providerPreExisted = true;
+		return;
+	}
 	const res = await fetch(`${API}/auth/v1/admin/custom-providers`, {
 		method: "POST",
 		headers: {
@@ -243,7 +255,8 @@ async function ensureProvider() {
 			scopes: ["openid", "profile", "email"],
 		}),
 	});
-	if (!res.ok) throw new Error(`register provider: ${res.status} ${await res.text()}`);
+	if (!res.ok)
+		throw new Error(`register provider: ${res.status} ${await res.text()}`);
 }
 
 function userScopedClient(jwt: string): Supabase {
@@ -284,9 +297,7 @@ function draftInput(customerName: string, price = 250000) {
 		currency: "NGN",
 		issueDate: today(),
 		dueDate: inDays(30),
-		lineItems: [
-			{ id: "li-1", name: "Consulting", quantity: 1, price },
-		],
+		lineItems: [{ id: "li-1", name: "Consulting", quantity: 1, price }],
 		compliance: {
 			buyer: { email: `${customerName.toLowerCase()}@example.com` },
 		},
@@ -334,20 +345,22 @@ describe.skipIf(!LIVE)("A10 invoices domain (live velure-cc)", () => {
 		} catch (error) {
 			console.error("cleanup: scratch rows failed:", (error as Error).message);
 		}
-		try {
-			const res = await fetch(
-				`${API}/auth/v1/admin/custom-providers/${PROVIDER_IDENTIFIER}`,
-				{
-					method: "DELETE",
-					headers: {
-						apikey: serviceKey,
-						authorization: `Bearer ${serviceKey}`,
+		if (!providerPreExisted) {
+			try {
+				const res = await fetch(
+					`${API}/auth/v1/admin/custom-providers/${PROVIDER_IDENTIFIER}`,
+					{
+						method: "DELETE",
+						headers: {
+							apikey: serviceKey,
+							authorization: `Bearer ${serviceKey}`,
+						},
 					},
-				},
-			);
-			console.log(`cleanup: delete provider -> ${res.status}`);
-		} catch (error) {
-			console.error("cleanup: provider failed:", (error as Error).message);
+				);
+				console.log(`cleanup: delete provider -> ${res.status}`);
+			} catch (error) {
+				console.error("cleanup: provider failed:", (error as Error).message);
+			}
 		}
 		try {
 			const adminList = await fetch(
@@ -579,8 +592,12 @@ describe.skipIf(!LIVE)("A10 invoices domain (live velure-cc)", () => {
 			draftAId!,
 		]);
 		expect(bulk.archived).toBe(1);
+		// Convex parity: getById does NOT filter deletedAt — an archived
+		// invoice stays readable by id (only list views filter it out).
 		const archived = await getById(clientA, userA!.issuerUserId, draftAId!);
-		expect(archived).toBeNull();
+		expect(archived).not.toBeNull();
+		expect(archived!.deletedAt).toBeDefined();
+		expect(archived!.status).toBe("canceled");
 
 		// A brand-new empty draft IS hard-deletable.
 		const emptyDraft = await autosaveDraft(clientA, userA!.issuerUserId, {

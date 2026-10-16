@@ -29,7 +29,7 @@ const textSizeStorageKey = "velure.textSize";
 const TextSizeContext = createContext<TextSizeContextValue | null>(null);
 
 function readStoredSize(): TextSize {
-	if (typeof window === "undefined") return "base";
+	if (typeof window === "undefined") return "sm";
 
 	const stored = window.localStorage.getItem(textSizeStorageKey);
 	return TEXT_SIZE_ORDER.includes(stored as TextSize)

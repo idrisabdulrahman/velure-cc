@@ -43,6 +43,7 @@ const PASSWORD = "A10BridgePass-2026!";
 let mgmtToken = "";
 let anonKey = "";
 let serviceKey = "";
+let providerPreExisted = false;
 let userA: { issuerUserId: string; jwt: string } | null = null;
 let userB: { issuerUserId: string; jwt: string } | null = null;
 let productAId: string | null = null;
@@ -220,7 +221,10 @@ async function ensureProvider() {
 	const existing = (listBody.providers ?? []).find(
 		(p) => p.identifier === PROVIDER_IDENTIFIER,
 	);
-	if (existing) return;
+	if (existing) {
+		providerPreExisted = true;
+		return;
+	}
 	const res = await fetch(`${API}/auth/v1/admin/custom-providers`, {
 		method: "POST",
 		headers: {
@@ -300,20 +304,22 @@ describe.skipIf(!LIVE)("A10 products domain (live velure-cc)", () => {
 		} catch (error) {
 			console.error("cleanup: scratch rows failed:", (error as Error).message);
 		}
-		try {
-			const res = await fetch(
-				`${API}/auth/v1/admin/custom-providers/${PROVIDER_IDENTIFIER}`,
-				{
-					method: "DELETE",
-					headers: {
-						apikey: serviceKey,
-						authorization: `Bearer ${serviceKey}`,
+		if (!providerPreExisted) {
+			try {
+				const res = await fetch(
+					`${API}/auth/v1/admin/custom-providers/${PROVIDER_IDENTIFIER}`,
+					{
+						method: "DELETE",
+						headers: {
+							apikey: serviceKey,
+							authorization: `Bearer ${serviceKey}`,
+						},
 					},
-				},
-			);
-			console.log(`cleanup: delete provider -> ${res.status}`);
-		} catch (error) {
-			console.error("cleanup: provider failed:", (error as Error).message);
+				);
+				console.log(`cleanup: delete provider -> ${res.status}`);
+			} catch (error) {
+				console.error("cleanup: provider failed:", (error as Error).message);
+			}
 		}
 		try {
 			const adminList = await fetch(

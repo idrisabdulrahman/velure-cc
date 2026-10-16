@@ -8,6 +8,8 @@
   "scripts": {
     "dev": " vite --host 0.0.0.0 --port 3000 --strictPort",
     "build": "NODE_OPTIONS=--max-old-space-size=4096 vite build",
+    "build:pages": "NODE_OPTIONS=--max-old-space-size=4096 NITRO_PRESET=cloudflare_pages vite build",
+    "deploy:pages": "pnpm build:pages && npx wrangler pages deploy dist --project-name velure --branch main --env-file .env",
     "start": "HOST=0.0.0.0 node .output/server/index.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "supabase:types": "supabase gen types typescript --linked --schema public > src/types/database.types.ts",
@@ -16,7 +18,9 @@
     "guard:identity-continuity": "node scripts/bridge-proof/identity-continuity.mjs",
     "test:a11-removal": "node scripts/verify-a11-removal.mjs",
     "hooks:install": "git config core.hooksPath .githooks",
+    "hooks:pre-commit": "biome check --staged && pnpm typecheck && pnpm test",
     "hooks:pre-push": "pnpm build",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:a10-workspaces-live": "A10_LIVE=1 vitest run src/server/data/workspaces.live.test.ts",
     "test:a10-clients-live": "A10_LIVE=1 vitest run src/server/data/clients.live.test.ts",

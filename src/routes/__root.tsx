@@ -8,7 +8,6 @@ import { MotionConfig } from "framer-motion";
 import { TextSizeProvider } from "#/components/text-size/text-size-provider";
 import { ThemeProvider } from "#/components/theme/theme-provider";
 import { Toaster } from "../components/ui/toaster";
-import ConvexProvider from "../integrations/convex/provider";
 import TanStackQueryProvider from "../integrations/tanstack-query/root-provider";
 import appCss from "../styles.css?url";
 
@@ -38,12 +37,16 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 			{
 				rel: "icon",
 				type: "image/svg+xml",
-				href: "/favicon-outline.svg",
+				href: "/favicon.svg",
 			},
 			{
 				rel: "alternate icon",
 				type: "image/x-icon",
-				href: "/favicon-outline.ico",
+				href: "/favicon.ico",
+			},
+			{
+				rel: "apple-touch-icon",
+				href: "/apple-touch-icon.png",
 			},
 		],
 		scripts: [
@@ -70,14 +73,12 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 			<body className="bg-background text-foreground antialiased">
 				<ThemeProvider>
 					<TextSizeProvider>
-						<ConvexProvider>
-							<TanStackQueryProvider>
-								<MotionConfig reducedMotion="user">
-									{children}
-									<Toaster />
-								</MotionConfig>
-							</TanStackQueryProvider>
-						</ConvexProvider>
+						<TanStackQueryProvider>
+							<MotionConfig reducedMotion="user">
+								{children}
+								<Toaster />
+							</MotionConfig>
+						</TanStackQueryProvider>
 					</TextSizeProvider>
 				</ThemeProvider>
 				<Scripts />

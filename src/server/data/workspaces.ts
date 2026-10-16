@@ -49,6 +49,64 @@ export type WorkspaceContext = {
 	nextInvoiceSequence: number;
 };
 
+export type InvoiceWorkspaceSettings = WorkspaceContext & {
+	phone: string | null;
+	address: string | null;
+	website: string | null;
+	baseCurrency: string;
+	countryCode: string;
+	defaultPaymentTermsDays: number;
+	defaultPaymentLink: string | null;
+	logoUrl: string | null;
+	paymentDetails: string | null;
+	taxId: string | null;
+	rcNumber: string | null;
+	sellerTaxStatus: string | null;
+	taxRuleSetVersion: string | null;
+	invoiceTemplateDefaults: Record<string, unknown> | null;
+	reminderSignature: string | null;
+	remindersEnabled: boolean;
+};
+
+export async function getInvoiceWorkspaceSettings(
+	client: Supabase,
+	userId: string,
+): Promise<InvoiceWorkspaceSettings | null> {
+	const context = await getWorkspaceContext(client, userId);
+	if (!context) return null;
+	const { data, error } = await client
+		.from("workspaces")
+		.select(
+			"phone, address, website, base_currency, country_code, default_payment_terms_days, default_payment_link, logo_url, payment_details, tax_id, rc_number, seller_tax_status, tax_rule_set_version, invoice_template_defaults, reminder_signature, reminders_enabled",
+		)
+		.eq("id", context.workspaceId)
+		.maybeSingle();
+	if (error) throw error;
+	if (!data) return null;
+	return {
+		...context,
+		phone: data.phone,
+		address: data.address,
+		website: data.website,
+		baseCurrency: data.base_currency,
+		countryCode: data.country_code,
+		defaultPaymentTermsDays: data.default_payment_terms_days ?? 14,
+		defaultPaymentLink: data.default_payment_link,
+		logoUrl: data.logo_url,
+		paymentDetails: data.payment_details,
+		taxId: data.tax_id,
+		rcNumber: data.rc_number,
+		sellerTaxStatus: data.seller_tax_status,
+		taxRuleSetVersion: data.tax_rule_set_version,
+		invoiceTemplateDefaults: data.invoice_template_defaults as Record<
+			string,
+			unknown
+		> | null,
+		reminderSignature: data.reminder_signature,
+		remindersEnabled: data.reminders_enabled,
+	};
+}
+
 /**
  * Resolve the user's active workspace id (RLS-scoped read of
  * active_workspaces). Shared by the other A10 domain modules to scope their

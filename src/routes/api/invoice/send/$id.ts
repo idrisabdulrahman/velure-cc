@@ -1,15 +1,16 @@
 import { createHash } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
 import { Resend } from "resend";
-import { auth } from "#/lib/auth";
-import { getServerConvexClient } from "#/server/convex";
+import { ensurePaystackTransferCharge } from "#/server/data/payments";
 import { getServerEnv } from "#/server/env";
+import { safeErrorDetails } from "#/server/http-security";
 import {
 	getAuthenticatedInvoiceById,
+	getInvoiceUserContext,
+	type InvoiceUserContext,
 	recordInvoiceDeliveryEvent,
 } from "#/server/invoice-repository";
 import { renderInvoicePdf } from "#/server/pdf";
-import { api } from "#convex/_generated/api";
 
 function isValidEmail(value: string) {
 	return /^\S+@\S+\.\S+$/.test(value);
@@ -46,7 +47,7 @@ function invoiceEmailIdempotencyKey(input: {
 }
 
 async function recordDeliveryFailure(
-	sessionToken: string,
+	context: InvoiceUserContext,
 	input: {
 		invoiceId: string;
 		recipient: string;
@@ -54,7 +55,7 @@ async function recordDeliveryFailure(
 		publicUrl?: string;
 	},
 ) {
-	await recordInvoiceDeliveryEvent(sessionToken, {
+	await recordInvoiceDeliveryEvent(context, {
 		invoiceId: input.invoiceId,
 		recipient: input.recipient,
 		status: "failed",
@@ -84,12 +85,12 @@ function isProviderTimeout(error: unknown) {
 	);
 }
 
-function providerErrorMessage(error: unknown) {
+export function providerErrorMessage(error: unknown) {
 	if (isProviderTimeout(error)) {
 		return "Email provider timed out. The invoice was not confirmed as sent; retry in a moment or use the share/download options.";
 	}
 
-	return errorMessage(error, "Failed to send email.");
+	return "Email could not be sent. Retry or use the share/download options.";
 }
 
 async function withProviderTimeout<T>(promise: Promise<T>, timeoutMs: number) {
@@ -117,13 +118,13 @@ async function sendInvoiceEmail({
 	const resendApiKey = getServerEnv("RESEND_API_KEY");
 	if (!resendApiKey) {
 		return Response.json(
-			{ ok: false, error: "RESEND_API_KEY is missing on the server." },
-			{ status: 500 },
+			{ ok: false, error: "Email delivery is temporarily unavailable." },
+			{ status: 503 },
 		);
 	}
 
-	const authToken = await auth.getToken().catch(() => null);
-	if (!authToken) {
+	const context = await getInvoiceUserContext(request);
+	if (!context) {
 		return Response.json(
 			{ ok: false, error: "Authentication required." },
 			{ status: 401 },
@@ -148,7 +149,7 @@ async function sendInvoiceEmail({
 		);
 	}
 
-	const invoice = await getAuthenticatedInvoiceById(params.id, authToken);
+	const invoice = await getAuthenticatedInvoiceById(params.id, context);
 	if (!invoice) {
 		return Response.json(
 			{ ok: false, error: "Invoice not found." },
@@ -160,14 +161,16 @@ async function sendInvoiceEmail({
 	const safeInvoiceNumber = escapeHtml(invoice.invoiceNumber);
 	const safeCustomerName = escapeHtml(invoice.customerName);
 	const safePublicUrl = escapeHtml(publicUrl);
+	const isProforma = invoice.documentType === "proforma";
+	const mailLabel = isProforma ? "pro-forma invoice" : "invoice";
 
 	let pdfBytes: Uint8Array;
 	try {
 		pdfBytes = await renderInvoicePdf(invoice);
 	} catch (error) {
-		const message =
-			error instanceof Error ? error.message : "Failed to render invoice PDF.";
-		await recordDeliveryFailure(authToken, {
+		console.error("Invoice PDF rendering failed", safeErrorDetails(error));
+		const message = "Could not prepare the invoice attachment.";
+		await recordDeliveryFailure(context, {
 			invoiceId: invoice.id,
 			recipient: to,
 			error: message,
@@ -186,16 +189,16 @@ async function sendInvoiceEmail({
 	const result = await withProviderTimeout(
 		resend.emails.send(
 			{
-				from: sanitizeFromAddress(getServerEnv("RESEND_FROM")),
+				from: sanitizeFromAddress(getServerEnv("RESEND_FROM_EMAIL")),
 				to,
-				subject: `Invoice ${invoice.invoiceNumber}`,
-				text: `Invoice ${invoice.invoiceNumber} for ${invoice.customerName} is attached as a PDF. You can also view it online: ${publicUrl}`,
+				subject: `${isProforma ? "Pro-forma" : "Invoice"} ${invoice.invoiceNumber}`,
+				text: `Your ${mailLabel} ${invoice.invoiceNumber} for ${invoice.customerName} is attached as a PDF. You can also view it online: ${publicUrl}`,
 				html: `
         <div style="font-family: Arial, sans-serif; color: #111; line-height: 1.5;">
-          <h2 style="margin: 0 0 12px;">Invoice ${safeInvoiceNumber}</h2>
+			  <h2 style="margin: 0 0 12px;">${isProforma ? "Pro-forma invoice" : "Invoice"} ${safeInvoiceNumber}</h2>
           <p style="margin: 0 0 12px;">Hi,</p>
           <p style="margin: 0 0 12px;">
-            Your invoice for <strong>${safeCustomerName}</strong> is attached as a PDF.
+			  Your ${mailLabel} for <strong>${safeCustomerName}</strong> is attached as a PDF.
           </p>
           <p style="margin: 0 0 12px;">
             You can also view it online: <a href="${safePublicUrl}">${safePublicUrl}</a>
@@ -228,7 +231,11 @@ async function sendInvoiceEmail({
 
 	if (result.error) {
 		const message = providerErrorMessage(result.error);
-		await recordDeliveryFailure(authToken, {
+		console.error(
+			"Invoice email provider failed",
+			safeErrorDetails(result.error),
+		);
+		await recordDeliveryFailure(context, {
 			invoiceId: invoice.id,
 			recipient: to,
 			error: message,
@@ -243,23 +250,25 @@ async function sendInvoiceEmail({
 		);
 	}
 
-	await recordInvoiceDeliveryEvent(authToken, {
+	await recordInvoiceDeliveryEvent(context, {
 		invoiceId: invoice.id,
 		recipient: to,
 		status: "sent",
 		providerMessageId: result.data?.id ?? undefined,
 		publicUrl,
 	}).catch((error: unknown) => {
-		console.error("Failed to record invoice email delivery event", error);
+		console.error(
+			"Failed to record invoice email delivery event",
+			safeErrorDetails(error),
+		);
 	});
 
-	getServerConvexClient()
-		.action(api.payments.ensurePaystackTransferCharge, {
-			token: invoice.token,
-		})
-		.catch((error: unknown) => {
-			console.error("Failed to prepare Paystack transfer charge", error);
-		});
+	ensurePaystackTransferCharge(invoice.token).catch((error: unknown) => {
+		console.error(
+			"Failed to prepare Paystack transfer charge",
+			safeErrorDetails(error),
+		);
+	});
 
 	return Response.json({ ok: true, id: result.data?.id ?? null });
 }
@@ -274,11 +283,11 @@ async function handle({
 	try {
 		return await sendInvoiceEmail({ params, request });
 	} catch (error) {
-		console.error("Invoice email send failed", error);
+		console.error("Invoice email send failed", safeErrorDetails(error));
 		return Response.json(
 			{
 				ok: false,
-				error: errorMessage(error, "Failed to send invoice email."),
+				error: "Failed to send invoice email.",
 			},
 			{ status: 500 },
 		);
