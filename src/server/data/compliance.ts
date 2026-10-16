@@ -1,4 +1,6 @@
 import { buildComplianceDashboardReport } from "./compliance-dashboard";
+import type { ComplianceExportKind } from "./compliance-export";
+import { buildInvoiceExportContent } from "./compliance-export";
 import { list as listInvoices } from "./invoices";
 import type { Supabase } from "./workspaces";
 import {
@@ -219,11 +221,7 @@ export async function getComplianceDashboard(
 export async function createInvoiceExport(
 	client: Supabase,
 	userId: string,
-	kind:
-		| "invoices_csv"
-		| "tax_summary_csv"
-		| "customer_ledger_csv"
-		| "normalized_accounting",
+	kind: ComplianceExportKind,
 ) {
 	const workspaceId = await resolveActiveWorkspaceId(client, userId);
 	if (!workspaceId) throw new Error("Workspace not found.");
@@ -250,36 +248,9 @@ export async function createInvoiceExport(
 			.slice(0, 12)
 			.toUpperCase() || "VELURE";
 	const rows = invoices ?? [];
-	const csv = [
-		[
-			"invoiceNumber",
-			"customerName",
-			"currency",
-			"total",
-			"status",
-			"issueDate",
-			"dueDate",
-		].join(","),
-		...rows.map((row) =>
-			[
-				row.invoice_number,
-				row.customer_name,
-				row.currency,
-				row.payment_amount,
-				row.status,
-				row.issue_date,
-				row.due_date,
-			]
-				.map((value) => JSON.stringify(value ?? ""))
-				.join(","),
-		),
-	].join("\n");
 	const now = Date.now();
+	const content = buildInvoiceExportContent(kind, rows, now);
 	const fileName = `${prefix}-${kind}-${now}.${kind === "normalized_accounting" ? "json" : "csv"}`;
-	const content =
-		kind === "normalized_accounting"
-			? JSON.stringify({ generatedAt: now, invoices: rows }, null, 2)
-			: csv;
 	const { data, error } = await client
 		.from("invoice_exports")
 		.insert({

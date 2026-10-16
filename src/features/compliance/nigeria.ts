@@ -10,6 +10,13 @@ import type {
 
 export const NIGERIA_DEFAULT_CURRENCY = "NGN";
 export const NIGERIA_AUTHORITY_LABEL = "Nigeria Revenue Service (NRS)";
+/**
+ * Standard disclaimer for the Compliance surface and every generated
+ * tax/compliance export (e-invoicing SPEC A2). Velure has no NRS clearance
+ * integration, so no compliance output may imply one exists.
+ */
+export const NRS_INFORMATIONAL_DISCLAIMER =
+	"Informational summary. Not a tax filing and not NRS-cleared.";
 export const NIGERIA_TAX_RULE_SET_VERSION = "ng-2026-q1";
 export const NIGERIA_FOREIGN_CURRENCY_WARNING =
 	"Foreign currency invoices must be settled through a CBN-licensed financial institution. Confirm with your accountant before issuing.";
