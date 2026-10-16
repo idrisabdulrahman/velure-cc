@@ -1535,6 +1535,9 @@ export type Database = {
       workspaces: {
         Row: {
           address: string | null
+          address_lga: string | null
+          address_state: string | null
+          address_street: string | null
           atrs: Json | null
           base_currency: string
           country_code: string
@@ -1562,6 +1565,8 @@ export type Database = {
           seller_tax_status:
             | Database["public"]["Enums"]["seller_tax_status"]
             | null
+          supplier_profile_issues: Json
+          supplier_profile_status: string
           tax_id: string | null
           tax_rule_set_version: string | null
           updated_at: string
@@ -1569,6 +1574,9 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          address_lga?: string | null
+          address_state?: string | null
+          address_street?: string | null
           atrs?: Json | null
           base_currency: string
           country_code: string
@@ -1596,6 +1604,8 @@ export type Database = {
           seller_tax_status?:
             | Database["public"]["Enums"]["seller_tax_status"]
             | null
+          supplier_profile_issues?: Json
+          supplier_profile_status?: string
           tax_id?: string | null
           tax_rule_set_version?: string | null
           updated_at?: string
@@ -1603,6 +1613,9 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          address_lga?: string | null
+          address_state?: string | null
+          address_street?: string | null
           atrs?: Json | null
           base_currency?: string
           country_code?: string
@@ -1630,6 +1643,8 @@ export type Database = {
           seller_tax_status?:
             | Database["public"]["Enums"]["seller_tax_status"]
             | null
+          supplier_profile_issues?: Json
+          supplier_profile_status?: string
           tax_id?: string | null
           tax_rule_set_version?: string | null
           updated_at?: string

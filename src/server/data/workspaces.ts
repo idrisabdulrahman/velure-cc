@@ -52,6 +52,9 @@ export type WorkspaceContext = {
 export type InvoiceWorkspaceSettings = WorkspaceContext & {
 	phone: string | null;
 	address: string | null;
+	addressStreet: string | null;
+	addressLga: string | null;
+	addressState: string | null;
 	website: string | null;
 	baseCurrency: string;
 	countryCode: string;
@@ -66,6 +69,8 @@ export type InvoiceWorkspaceSettings = WorkspaceContext & {
 	invoiceTemplateDefaults: Record<string, unknown> | null;
 	reminderSignature: string | null;
 	remindersEnabled: boolean;
+	supplierProfileStatus: string;
+	supplierProfileIssues: string[];
 };
 
 export async function getInvoiceWorkspaceSettings(
@@ -77,7 +82,7 @@ export async function getInvoiceWorkspaceSettings(
 	const { data, error } = await client
 		.from("workspaces")
 		.select(
-			"phone, address, website, base_currency, country_code, default_payment_terms_days, default_payment_link, logo_url, payment_details, tax_id, rc_number, seller_tax_status, tax_rule_set_version, invoice_template_defaults, reminder_signature, reminders_enabled",
+			"phone, address, address_street, address_lga, address_state, website, base_currency, country_code, default_payment_terms_days, default_payment_link, logo_url, payment_details, tax_id, rc_number, seller_tax_status, tax_rule_set_version, invoice_template_defaults, reminder_signature, reminders_enabled, supplier_profile_status, supplier_profile_issues",
 		)
 		.eq("id", context.workspaceId)
 		.maybeSingle();
@@ -87,6 +92,9 @@ export async function getInvoiceWorkspaceSettings(
 		...context,
 		phone: data.phone,
 		address: data.address,
+		addressStreet: data.address_street,
+		addressLga: data.address_lga,
+		addressState: data.address_state,
 		website: data.website,
 		baseCurrency: data.base_currency,
 		countryCode: data.country_code,
@@ -104,6 +112,10 @@ export async function getInvoiceWorkspaceSettings(
 		> | null,
 		reminderSignature: data.reminder_signature,
 		remindersEnabled: data.reminders_enabled,
+		supplierProfileStatus: data.supplier_profile_status,
+		supplierProfileIssues: Array.isArray(data.supplier_profile_issues)
+			? (data.supplier_profile_issues as string[])
+			: [],
 	};
 }
 
