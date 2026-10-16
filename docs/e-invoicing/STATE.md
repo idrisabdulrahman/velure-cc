@@ -8,11 +8,11 @@ Status: pending | ready | implementing | auditing | fixing | merged | blocked
 
 | Package | Spec fixes | Depends on | Status | Branch | Base sha | Audit rounds | Open findings |
 |---|---|---|---|---|---|---|---|
-| WP1 | A1,A2,A3 | none | pending | einv/wp1 | 313c464 | 0 | — |
-| WP2 | B1 | none | pending | einv/wp2 | 313c464 | 0 | — |
-| WP3 | H1 | none | pending | einv/wp3 | 313c464 | 0 | — |
-| WP4 | G1 | none | pending | einv/wp4 | 313c464 | 0 | — |
-| WP5 | E2 | none | pending | einv/wp5 | 313c464 | 0 | — |
+| WP1 | A1,A2,A3 | none | implementing | einv/wp1 | 536f564 | 0 | — |
+| WP2 | B1 | none | implementing | einv/wp2 | 536f564 | 0 | — |
+| WP3 | H1 | none | ready (serialized after WP4 merge) | einv/wp3 | 536f564 | 0 | — |
+| WP4 | G1 | none | implementing | einv/wp4 | 536f564 | 0 | — |
+| WP5 | E2 | none | implementing | einv/wp5 | 536f564 | 0 | — |
 | WP6 | B2 | WP2 | pending (wave 2, out of scope this run) | — | — | 0 | — |
 | WP7 | B3 | WP5 | pending (wave 2, out of scope this run) | — | — | 0 | — |
 | WP8 | C1,C2,C3 | WP4 | pending (wave 2, out of scope this run) | — | — | 0 | — |
