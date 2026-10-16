@@ -461,6 +461,56 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_audit_log: {
+        Row: {
+          action: string
+          actor_id: string
+          actor_type: string
+          after_payload: Json | null
+          before_payload: Json | null
+          created_at: string
+          id: string
+          message: string | null
+          resource_id: string | null
+          resource_type: string
+          workspace_id: string
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          actor_type: string
+          after_payload?: Json | null
+          before_payload?: Json | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          resource_id?: string | null
+          resource_type?: string
+          workspace_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          actor_type?: string
+          after_payload?: Json | null
+          before_payload?: Json | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          resource_id?: string | null
+          resource_type?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_audit_log_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoice_delivery_events: {
         Row: {
           channel: string

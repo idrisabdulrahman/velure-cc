@@ -1,4 +1,5 @@
 import type { Database, Json } from "#/types/database.types";
+import { recordInvoiceAudit } from "./audit";
 import {
 	assertValidRcNumber,
 	assertValidTin,
@@ -1697,12 +1698,22 @@ export async function createDraft(
 			.eq("id", workspaceId);
 	}
 
-	return mapInvoice({
+	const invoice = mapInvoice({
 		id,
 		workspaceId,
 		userId,
 		...doc,
 	});
+	await recordInvoiceAudit(client, userId, {
+		action: "invoice.create",
+		resourceId: id,
+		before: existingDraft,
+		after: invoice,
+		message: args.id
+			? "Finalized an existing draft invoice."
+			: "Created an invoice draft.",
+	});
+	return invoice;
 }
 
 export async function autosaveDraft(
@@ -1841,13 +1852,21 @@ export async function autosaveDraft(
 			.eq("id", workspaceId);
 	}
 
-	return mapInvoice({
+	const invoice = mapInvoice({
 		id,
 		workspaceId,
 		userId,
 		...doc,
 		createdAt: current?.createdAt ?? now,
 	});
+	await recordInvoiceAudit(client, userId, {
+		action: args.id ? "invoice.edit" : "invoice.create",
+		resourceId: id,
+		before: current,
+		after: invoice,
+		message: args.id ? "Autosaved draft invoice." : "Created an invoice draft.",
+	});
+	return invoice;
 }
 
 export async function save(
@@ -1937,6 +1956,14 @@ export async function save(
 		.eq("workspace_id", workspaceId);
 	if (error) throw error;
 
+	await recordInvoiceAudit(client, userId, {
+		action: "invoice.edit",
+		resourceId: args.id,
+		before: current,
+		after: args,
+		message: "Saved invoice changes.",
+	});
+
 	return args;
 }
 
@@ -1989,6 +2016,22 @@ export async function saveDraftSettings(
 		.eq("workspace_id", workspaceId);
 	if (error) throw error;
 
+	await recordInvoiceAudit(client, userId, {
+		action: "invoice.edit",
+		resourceId: args.id,
+		before: current,
+		after: {
+			invoiceSize: args.invoiceSize,
+			dateFormat: args.dateFormat,
+			paymentTermsDays: args.paymentTermsDays,
+			template: args.template,
+			currency: args.currency,
+			type: args.type,
+			dueDate: args.dueDate ?? current.dueDate,
+		},
+		message: "Updated draft invoice settings.",
+	});
+
 	return { ok: true };
 }
 
@@ -2036,17 +2079,28 @@ export async function updateStatus(
 	const now = args.paidAt ?? Date.now();
 
 	if (args.status === "canceled") {
-		await client
+		const canceledAt = current.canceledAt ?? Date.now();
+		const { error } = await client
 			.from("invoices")
 			.update(
 				toUpdate({
-					canceled_at: iso(current.canceledAt ?? Date.now()),
+					canceled_at: iso(canceledAt),
 					status: "canceled",
 					updated_at: iso(Date.now()),
 				}),
 			)
 			.eq("id", args.id)
 			.eq("workspace_id", workspaceId);
+		// Was unchecked before G1; fail-closed now so the cancel audit row
+		// only records a cancel that actually committed.
+		if (error) throw error;
+		await recordInvoiceAudit(client, userId, {
+			action: "invoice.cancel",
+			resourceId: args.id,
+			before: current,
+			after: { status: "canceled", canceledAt },
+			message: "Invoice canceled.",
+		});
 		return { ok: true };
 	}
 
@@ -2150,6 +2204,14 @@ export async function cancelSchedule(
 		.eq("id", invoiceId)
 		.eq("workspace_id", workspaceId);
 	if (error) throw error;
+
+	await recordInvoiceAudit(client, userId, {
+		action: "invoice.edit",
+		resourceId: invoiceId,
+		before: invoice,
+		after: { scheduledAt: null, status: "draft" },
+		message: "Canceled the scheduled send; invoice returned to draft.",
+	});
 	return { ok: true };
 }
 
@@ -2182,6 +2244,14 @@ export async function reschedule(
 		.eq("id", args.invoiceId)
 		.eq("workspace_id", workspaceId);
 	if (error) throw error;
+
+	await recordInvoiceAudit(client, userId, {
+		action: "invoice.edit",
+		resourceId: args.invoiceId,
+		before: invoice,
+		after: { scheduledAt, status: "scheduled" },
+		message: "Rescheduled the invoice send.",
+	});
 	return { ok: true, scheduledAt };
 }
 
@@ -2402,6 +2472,13 @@ export async function renumberInvoices(
 			.from("workspaces")
 			.update({ next_invoice_sequence: generated.nextSequence })
 			.eq("id", workspaceId);
+		await recordInvoiceAudit(client, userId, {
+			action: "invoice.edit",
+			resourceId: id,
+			before: { invoiceNumber: invoice.invoiceNumber },
+			after: { invoiceNumber: generated.invoiceNumber },
+			message: "Renumbered invoice.",
+		});
 		renumbered.push({
 			id,
 			oldInvoiceNumber: invoice.invoiceNumber,
@@ -2513,6 +2590,17 @@ export async function duplicate(
 		.from("workspaces")
 		.update({ next_invoice_sequence: generated.nextSequence })
 		.eq("id", workspaceId);
+
+	await recordInvoiceAudit(client, userId, {
+		action: "invoice.create",
+		resourceId: data.id,
+		before: source,
+		after: {
+			invoiceNumber: generated.invoiceNumber,
+			duplicatedFrom: id,
+		},
+		message: `Duplicated invoice ${source.invoiceNumber}.`,
+	});
 
 	return { id: data.id };
 }
@@ -2640,6 +2728,18 @@ export async function convertProformaToInvoice(
 		.from("workspaces")
 		.update({ next_invoice_sequence: generated.nextSequence })
 		.eq("id", workspaceId);
+
+	await recordInvoiceAudit(client, userId, {
+		action: "invoice.create",
+		resourceId: convertedId,
+		before: source,
+		after: {
+			invoiceNumber: generated.invoiceNumber,
+			documentType: "standard",
+			convertedFromProformaId: id,
+		},
+		message: "Converted a pro-forma invoice to a standard invoice.",
+	});
 
 	return { id: convertedId };
 }
@@ -2919,6 +3019,19 @@ export async function importCsv(
 			.eq("id", workspaceId);
 	}
 
+	if (created.length > 0) {
+		await recordInvoiceAudit(client, userId, {
+			action: "invoice.create",
+			resourceType: "invoice_import",
+			after: {
+				created: created.length,
+				skipped,
+				failed: errors.length,
+			},
+			message: `Imported ${created.length} invoice(s) from CSV.`,
+		});
+	}
+
 	return { created: created.length, skipped, errors };
 }
 
@@ -2961,6 +3074,14 @@ export async function markInvoiceSent(
 		.eq("id", id)
 		.eq("workspace_id", workspaceId);
 	if (error) throw error;
+
+	await recordInvoiceAudit(client, userId, {
+		action: "invoice.send",
+		resourceId: id,
+		before: invoice,
+		after: patch,
+		message: "Invoice marked as sent.",
+	});
 
 	return { ok: true };
 }
@@ -3028,6 +3149,14 @@ export async function recordDeliveryEvent(
 			.eq("id", args.invoiceId)
 			.eq("workspace_id", workspaceId);
 		if (updateError) throw updateError;
+
+		await recordInvoiceAudit(client, userId, {
+			action: "invoice.send",
+			resourceId: args.invoiceId,
+			before: invoice,
+			after: patch,
+			message: `Invoice emailed to ${args.recipient}.`,
+		});
 	}
 
 	return { ok: true, deliveryEventId };

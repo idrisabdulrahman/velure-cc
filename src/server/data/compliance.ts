@@ -1,3 +1,4 @@
+import { recordInvoiceAudit } from "./audit";
 import { buildComplianceDashboardReport } from "./compliance-dashboard";
 import { list as listInvoices } from "./invoices";
 import type { Supabase } from "./workspaces";
@@ -293,6 +294,13 @@ export async function createInvoiceExport(
 		.select("id, file_name, content")
 		.single();
 	if (error) throw error;
+	await recordInvoiceAudit(client, userId, {
+		action: "invoice.export",
+		resourceType: "invoice_export",
+		resourceId: data.id,
+		after: { kind, fileName, rowCount: rows.length },
+		message: `Generated a ${kind} export.`,
+	});
 	return { id: data.id, fileName: data.file_name, content: data.content };
 }
 
