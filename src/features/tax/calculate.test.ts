@@ -6,6 +6,7 @@ import {
 	type InvoiceLineTaxInput,
 	VAT_RATE_BPS_SPEC_DEFAULT,
 	type VatCategory,
+	type WhtBase,
 } from "./calculate";
 
 describe("constants", () => {
@@ -174,7 +175,7 @@ describe("computeInvoiceTotals (table-driven)", () => {
 			{ netMinor: 2_000, discountMinor: 200, vatCategory: "standard" }, // taxable 1800, VAT 135
 		];
 
-		const totals = computeInvoiceTotals({ lines });
+		const totals = computeInvoiceTotals({ lines, whtBase: "inclusive" });
 
 		expect(totals.lineTaxes.map((line) => line.vatMinor)).toEqual([
 			750, 0, 0, 2, 135,
@@ -213,9 +214,11 @@ describe("computeInvoiceTotals (table-driven)", () => {
 				{ netMinor: 20, vatCategory: "standard" },
 				{ netMinor: 20, vatCategory: "standard" },
 			],
+			whtBase: "inclusive",
 		});
 		const oneLine = computeInvoiceTotals({
 			lines: [{ netMinor: 40, vatCategory: "standard" }],
+			whtBase: "inclusive",
 		});
 
 		// ₦0.20 per line → 1.5 kobo → 2 each → 4 total; ₦0.40 once → 3.0 → 3.
@@ -227,30 +230,87 @@ describe("computeInvoiceTotals (table-driven)", () => {
 		name: string;
 		lines: InvoiceLineTaxInput[];
 		whtRateBps?: number;
+		whtBase: WhtBase;
 		expectedGrandTotalMinor: number;
 		expectedWhtMinor: number;
 		expectedNetPayableMinor: number;
 	}> = [
 		{
-			name: "WHT at 5% on a ₦100 + ₦7.50 VAT invoice → 538 kobo deducted",
+			name: "WHT at 5% inclusive on a ₦100 + ₦7.50 VAT invoice → 538 kobo deducted",
 			lines: [{ netMinor: 10_000, vatCategory: "standard" }],
 			whtRateBps: 500,
+			whtBase: "inclusive",
 			expectedGrandTotalMinor: 10_750,
 			expectedWhtMinor: 538,
 			expectedNetPayableMinor: 10_212,
 		},
 		{
-			name: "WHT at 10% on the same invoice → 1075 kobo deducted",
+			name: "WHT at 5% exclusive on the same invoice → 500 kobo deducted",
+			lines: [{ netMinor: 10_000, vatCategory: "standard" }],
+			whtRateBps: 500,
+			whtBase: "exclusive",
+			expectedGrandTotalMinor: 10_750,
+			expectedWhtMinor: 500,
+			expectedNetPayableMinor: 10_250,
+		},
+		{
+			name: "WHT at 10% inclusive → 1075 kobo deducted",
 			lines: [{ netMinor: 10_000, vatCategory: "standard" }],
 			whtRateBps: 1_000,
+			whtBase: "inclusive",
 			expectedGrandTotalMinor: 10_750,
 			expectedWhtMinor: 1_075,
 			expectedNetPayableMinor: 9_675,
 		},
 		{
-			name: "WHT still applies on a zero-rated payment; 5% of 10 kobo is 0.5 → 1",
+			name: "WHT at 10% exclusive → 1000 kobo deducted",
+			lines: [{ netMinor: 10_000, vatCategory: "standard" }],
+			whtRateBps: 1_000,
+			whtBase: "exclusive",
+			expectedGrandTotalMinor: 10_750,
+			expectedWhtMinor: 1_000,
+			expectedNetPayableMinor: 9_750,
+		},
+		{
+			name: "WHT inclusive on a mixed invoice bases on grand total (17500+750) → 913",
+			lines: [
+				{ netMinor: 10_000, vatCategory: "standard" },
+				{ netMinor: 5_000, vatCategory: "zero_rated" },
+				{ netMinor: 2_500, vatCategory: "exempt" },
+			],
+			whtRateBps: 500,
+			whtBase: "inclusive",
+			expectedGrandTotalMinor: 18_250,
+			expectedWhtMinor: 913,
+			expectedNetPayableMinor: 17_337,
+		},
+		{
+			name: "WHT exclusive on the same mixed invoice bases on taxable net → 875",
+			lines: [
+				{ netMinor: 10_000, vatCategory: "standard" },
+				{ netMinor: 5_000, vatCategory: "zero_rated" },
+				{ netMinor: 2_500, vatCategory: "exempt" },
+			],
+			whtRateBps: 500,
+			whtBase: "exclusive",
+			expectedGrandTotalMinor: 18_250,
+			expectedWhtMinor: 875,
+			expectedNetPayableMinor: 17_375,
+		},
+		{
+			name: "WHT inclusive on a zero-rated payment: 5% of 10 kobo is 0.5 → 1",
 			lines: [{ netMinor: 10, vatCategory: "zero_rated" }],
 			whtRateBps: 500,
+			whtBase: "inclusive",
+			expectedGrandTotalMinor: 10,
+			expectedWhtMinor: 1,
+			expectedNetPayableMinor: 9,
+		},
+		{
+			name: "WHT exclusive on a zero-rated payment equals inclusive (no VAT) → 1",
+			lines: [{ netMinor: 10, vatCategory: "zero_rated" }],
+			whtRateBps: 500,
+			whtBase: "exclusive",
 			expectedGrandTotalMinor: 10,
 			expectedWhtMinor: 1,
 			expectedNetPayableMinor: 9,
@@ -258,17 +318,28 @@ describe("computeInvoiceTotals (table-driven)", () => {
 		{
 			name: "no WHT rate supplied → 0 deducted, net payable equals grand total",
 			lines: [{ netMinor: 10_000, vatCategory: "standard" }],
+			whtBase: "inclusive",
 			expectedGrandTotalMinor: 10_750,
 			expectedWhtMinor: 0,
 			expectedNetPayableMinor: 10_750,
 		},
 		{
-			name: "credit invoice: WHT rounds away from zero (−538) and increases net payable",
+			name: "credit invoice, WHT inclusive: rounds away from zero (−538)",
 			lines: [{ netMinor: -10_000, vatCategory: "standard" }],
 			whtRateBps: 500,
+			whtBase: "inclusive",
 			expectedGrandTotalMinor: -10_750,
 			expectedWhtMinor: -538,
 			expectedNetPayableMinor: -10_212,
+		},
+		{
+			name: "credit invoice, WHT exclusive: bases on −10000 net → −500",
+			lines: [{ netMinor: -10_000, vatCategory: "standard" }],
+			whtRateBps: 500,
+			whtBase: "exclusive",
+			expectedGrandTotalMinor: -10_750,
+			expectedWhtMinor: -500,
+			expectedNetPayableMinor: -10_250,
 		},
 	];
 
@@ -277,11 +348,12 @@ describe("computeInvoiceTotals (table-driven)", () => {
 		({
 			lines,
 			whtRateBps,
+			whtBase,
 			expectedGrandTotalMinor,
 			expectedWhtMinor,
 			expectedNetPayableMinor,
 		}) => {
-			const totals = computeInvoiceTotals({ lines, whtRateBps });
+			const totals = computeInvoiceTotals({ lines, whtRateBps, whtBase });
 			expect(totals.grandTotalMinor).toBe(expectedGrandTotalMinor);
 			expect(totals.totalWhtMinor).toBe(expectedWhtMinor);
 			expect(totals.netPayableMinor).toBe(expectedNetPayableMinor);
@@ -292,7 +364,7 @@ describe("computeInvoiceTotals (table-driven)", () => {
 	);
 
 	it("returns all-zero totals for an empty invoice, with all categories present", () => {
-		const totals = computeInvoiceTotals({ lines: [] });
+		const totals = computeInvoiceTotals({ lines: [], whtBase: "inclusive" });
 		expect(totals.lineTaxes).toEqual([]);
 		expect(totals.totalNetMinor).toBe(0);
 		expect(totals.totalDiscountMinor).toBe(0);
@@ -312,58 +384,65 @@ describe("computeInvoiceTotals (table-driven)", () => {
 		const nets = [1, 3, 19, 20, 99, 3_333, 12_345, -50];
 		const vatRatesBps = [0, 1, 250, 750, 3_333, 5_000, 10_000];
 		const whtRatesBps = [0, 500, 1_000];
+		const whtBases: WhtBase[] = ["inclusive", "exclusive"];
 		const categories: VatCategory[] = ["standard", "zero_rated", "exempt"];
 
 		for (const vatRateBps of vatRatesBps) {
 			for (const whtRateBps of whtRatesBps) {
-				const lines: InvoiceLineTaxInput[] = nets.map((netMinor, i) => ({
-					netMinor,
-					vatCategory: categories[i % categories.length],
-				}));
-				const totals = computeInvoiceTotals({
-					lines,
-					vatRateBps,
-					whtRateBps,
-				});
+				for (const whtBase of whtBases) {
+					const lines: InvoiceLineTaxInput[] = nets.map((netMinor, i) => ({
+						netMinor,
+						vatCategory: categories[i % categories.length],
+					}));
+					const totals = computeInvoiceTotals({
+						lines,
+						vatRateBps,
+						whtRateBps,
+						whtBase,
+					});
 
-				for (const field of [
-					totals.totalNetMinor,
-					totals.totalTaxableNetMinor,
-					totals.totalVatMinor,
-					totals.totalWhtMinor,
-					totals.grandTotalMinor,
-					totals.netPayableMinor,
-				]) {
-					expect(Number.isInteger(field)).toBe(true);
-				}
+					for (const field of [
+						totals.totalNetMinor,
+						totals.totalTaxableNetMinor,
+						totals.totalVatMinor,
+						totals.totalWhtMinor,
+						totals.grandTotalMinor,
+						totals.netPayableMinor,
+					]) {
+						expect(Number.isSafeInteger(field)).toBe(true);
+					}
 
-				const sumLineTotals = totals.lineTaxes.reduce(
-					(sum, line) => sum + line.lineTotalMinor,
-					0,
-				);
-				const sumLineVat = totals.lineTaxes.reduce(
-					(sum, line) => sum + line.vatMinor,
-					0,
-				);
-				const sumLineNet = totals.lineTaxes.reduce(
-					(sum, line) => sum + line.taxableNetMinor,
-					0,
-				);
-				expect(totals.grandTotalMinor).toBe(sumLineTotals);
-				expect(totals.totalVatMinor).toBe(sumLineVat);
-				expect(totals.totalTaxableNetMinor).toBe(sumLineNet);
-				expect(totals.totalNetMinor - totals.totalDiscountMinor).toBe(
-					totals.totalTaxableNetMinor,
-				);
-				expect(
-					totals.vatBreakdown.reduce(
-						(sum, bucket) => sum + bucket.taxableNetMinor,
+					const sumLineTotals = totals.lineTaxes.reduce(
+						(sum, line) => sum + line.lineTotalMinor,
 						0,
-					),
-				).toBe(totals.totalTaxableNetMinor);
-				expect(
-					totals.vatBreakdown.reduce((sum, bucket) => sum + bucket.vatMinor, 0),
-				).toBe(totals.totalVatMinor);
+					);
+					const sumLineVat = totals.lineTaxes.reduce(
+						(sum, line) => sum + line.vatMinor,
+						0,
+					);
+					const sumLineNet = totals.lineTaxes.reduce(
+						(sum, line) => sum + line.taxableNetMinor,
+						0,
+					);
+					expect(totals.grandTotalMinor).toBe(sumLineTotals);
+					expect(totals.totalVatMinor).toBe(sumLineVat);
+					expect(totals.totalTaxableNetMinor).toBe(sumLineNet);
+					expect(totals.totalNetMinor - totals.totalDiscountMinor).toBe(
+						totals.totalTaxableNetMinor,
+					);
+					expect(
+						totals.vatBreakdown.reduce(
+							(sum, bucket) => sum + bucket.taxableNetMinor,
+							0,
+						),
+					).toBe(totals.totalTaxableNetMinor);
+					expect(
+						totals.vatBreakdown.reduce(
+							(sum, bucket) => sum + bucket.vatMinor,
+							0,
+						),
+					).toBe(totals.totalVatMinor);
+				}
 			}
 		}
 	});
@@ -372,16 +451,19 @@ describe("computeInvoiceTotals (table-driven)", () => {
 		expect(() =>
 			computeInvoiceTotals({
 				lines: [{ netMinor: 1_500.5, vatCategory: "standard" }],
+				whtBase: "inclusive",
 			}),
 		).toThrow(RangeError);
 		expect(() =>
 			computeInvoiceTotals({
 				lines: [{ netMinor: 100, discountMinor: -1, vatCategory: "standard" }],
+				whtBase: "inclusive",
 			}),
 		).toThrow(RangeError);
 		expect(() =>
 			computeInvoiceTotals({
 				lines: [{ netMinor: 100, discountMinor: 150, vatCategory: "standard" }],
+				whtBase: "inclusive",
 			}),
 		).toThrow(RangeError);
 		expect(() =>
@@ -389,6 +471,7 @@ describe("computeInvoiceTotals (table-driven)", () => {
 				lines: [
 					{ netMinor: 100, discountMinor: 10.5, vatCategory: "standard" },
 				],
+				whtBase: "inclusive",
 			}),
 		).toThrow(RangeError);
 		expect(() =>
@@ -396,18 +479,58 @@ describe("computeInvoiceTotals (table-driven)", () => {
 				lines: [
 					{ netMinor: 100, vatCategory: "reduced" as unknown as VatCategory },
 				],
+				whtBase: "inclusive",
 			}),
 		).toThrow(TypeError);
 		expect(() =>
 			computeInvoiceTotals({
 				lines: [{ netMinor: 100, vatCategory: "standard" }],
 				vatRateBps: 10_001,
+				whtBase: "inclusive",
 			}),
 		).toThrow(RangeError);
 		expect(() =>
 			computeInvoiceTotals({
 				lines: [{ netMinor: 100, vatCategory: "standard" }],
 				whtRateBps: -1,
+				whtBase: "inclusive",
+			}),
+		).toThrow(RangeError);
+		expect(() =>
+			computeInvoiceTotals({
+				lines: [{ netMinor: 100, vatCategory: "standard" }],
+				whtRateBps: 500,
+				whtBase: "both" as unknown as WhtBase,
+			}),
+		).toThrow(TypeError);
+	});
+
+	it("throws when a single line total would exceed MAX_SAFE_INTEGER", () => {
+		// net (MAX_SAFE−1) with a 1 bps VAT keeps the product safe but pushes
+		// taxable + VAT past the safe-integer boundary.
+		expect(() =>
+			computeInvoiceTotals({
+				lines: [
+					{
+						netMinor: Number.MAX_SAFE_INTEGER - 1,
+						vatCategory: "standard",
+						vatRateBps: 1,
+					},
+				],
+				whtBase: "inclusive",
+			}),
+		).toThrow(RangeError);
+	});
+
+	it("throws when a totals summation would exceed MAX_SAFE_INTEGER", () => {
+		// Two individually-safe line nets overflow when summed.
+		expect(() =>
+			computeInvoiceTotals({
+				lines: [
+					{ netMinor: Number.MAX_SAFE_INTEGER, vatCategory: "zero_rated" },
+					{ netMinor: Number.MAX_SAFE_INTEGER, vatCategory: "zero_rated" },
+				],
+				whtBase: "exclusive",
 			}),
 		).toThrow(RangeError);
 	});

@@ -42,9 +42,20 @@ line.
 
 - The rate is always **supplied by the caller** in bps; this module bakes in
   no WHT schedule because exact current rates are unverified (spec §8).
-- WHT is deducted by the payer: computed on the **VAT-inclusive grand total**
-  (consistent with `src/features/compliance/calculate.ts`), reported as
-  `totalWhtMinor`, and `netPayableMinor = grandTotalMinor − totalWhtMinor`.
+- The **WHT base is an explicit, required parameter** (`whtBase`):
+  `"inclusive"` computes WHT on the VAT-inclusive grand total
+  (`grandTotalMinor`), `"exclusive"` on the VAT-exclusive taxable net
+  (`totalTaxableNetMinor`). The module makes no default assumption — **the
+  correct treatment must be confirmed by a tax adviser**, and the chosen base
+  is echoed back in the result (`whtBase`) for audit trails.
+- WHT is deducted by the payer: reported as `totalWhtMinor`, and
+  `netPayableMinor = grandTotalMinor − totalWhtMinor` for either base.
+
+## Safe-integer guarantees
+
+Every summation path (`sumMinor`, and the per-line / grand / net-payable
+additions via `safeAdd`) throws `RangeError` if a result would leave
+`Number.MAX_SAFE_INTEGER`, so no unsafe money value can ever be returned.
 
 ## Relationship to existing code
 

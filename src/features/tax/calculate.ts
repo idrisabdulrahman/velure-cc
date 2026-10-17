@@ -11,10 +11,13 @@
  * `grandTotalMinor === sum(lineTotalMinor)` by construction (guarded at
  * runtime).
  *
- * WHT is deducted by the payer and, matching the existing compliance
- * calculator, is computed on the VAT-inclusive grand total. The WHT rate is
- * always supplied by the caller in basis points — exact current rates are
- * unverified per spec §8, so this module deliberately bakes in no schedule.
+ * WHT is deducted by the payer. Both the WHT rate and the WHT base are
+ * **explicit, required caller inputs**: `"inclusive"` computes WHT on the
+ * VAT-inclusive grand total, `"exclusive"` on the VAT-exclusive taxable net.
+ * The correct base is a tax-adviser decision, not a code default, so this
+ * module requires it on every call (see `WhtBase`). The WHT rate is always
+ * supplied by the caller in basis points — exact current rates are unverified
+ * per spec §8, so this module deliberately bakes in no schedule.
  */
 
 /** VAT categories. Spec §8 flags unconfirmed treatment nuances; only the
@@ -51,6 +54,19 @@ function assertRateBps(value: number, name: string): void {
 	if (value < 0 || value > MAX_RATE_BPS) {
 		throw new RangeError(
 			`${name} must be between 0 and ${MAX_RATE_BPS} basis points (0–100%); received ${String(value)}.`,
+		);
+	}
+}
+
+/** The base the WHT rate is applied to. Explicit and required per call:
+ * `"inclusive"` = VAT-inclusive grand total, `"exclusive"` = VAT-exclusive
+ * taxable net. The correct treatment must be confirmed by a tax adviser. */
+export type WhtBase = "inclusive" | "exclusive";
+
+function assertWhtBase(value: WhtBase): void {
+	if (value !== "inclusive" && value !== "exclusive") {
+		throw new TypeError(
+			`Unknown WHT base "${String(value)}"; expected "inclusive" or "exclusive".`,
 		);
 	}
 }
@@ -149,6 +165,8 @@ export type InvoiceTotalsResult = {
 	totalVatMinor: number;
 	/** Caller-supplied; 0 when WHT does not apply. */
 	whtRateBps: number;
+	/** Echoed back for audit trails: which base the WHT was computed on. */
+	whtBase: WhtBase;
 	totalWhtMinor: number;
 	/** totalTaxableNetMinor + totalVatMinor (VAT-exclusive pricing + VAT). */
 	grandTotalMinor: number;
@@ -162,6 +180,9 @@ export type InvoiceTotalsInput = {
 	vatRateBps?: number;
 	/** WHT rate in basis points, supplied by the caller. Defaults to 0. */
 	whtRateBps?: number;
+	/** Required: whether `whtRateBps` applies to the VAT-inclusive grand
+	 * total or the VAT-exclusive taxable net. A tax-adviser decision. */
+	whtBase: WhtBase;
 };
 
 function sumMinor(values: readonly number[], label: string): number {
@@ -173,12 +194,25 @@ function sumMinor(values: readonly number[], label: string): number {
 	return sum;
 }
 
+/** Integer addition that throws if the result leaves the safe-integer range;
+ * every summation path in this module goes through it or `sumMinor`. */
+function safeAdd(a: number, b: number, label: string): number {
+	const sum = a + b;
+	assertSafeInteger(sum, label);
+	return sum;
+}
+
 /**
  * Computes per-line taxes and invoice totals for a set of lines. Totals are
  * exact integer sums of the per-line rounded values, so
  * `grandTotalMinor === Σ lineTotalMinor` and
  * `totalVatMinor === Σ lineTax.vatMinor` hold by construction (the grand
- * total invariant is also asserted before returning).
+ * total invariant is also asserted before returning). Every summation path
+ * throws `RangeError` if it would leave `Number.MAX_SAFE_INTEGER`.
+ *
+ * `whtBase` is required: `"inclusive"` applies `whtRateBps` to
+ * `grandTotalMinor`, `"exclusive"` to `totalTaxableNetMinor`. Confirm the
+ * correct treatment with a tax adviser; this module makes no assumption.
  */
 export function computeInvoiceTotals(
 	input: InvoiceTotalsInput,
@@ -187,6 +221,7 @@ export function computeInvoiceTotals(
 	assertRateBps(invoiceRateBps, "vatRateBps");
 	const whtRateBps = input.whtRateBps ?? 0;
 	assertRateBps(whtRateBps, "whtRateBps");
+	assertWhtBase(input.whtBase);
 
 	const lineTaxes: InvoiceLineTaxResult[] = input.lines.map(
 		(line: InvoiceLineTaxInput, index: number) => {
@@ -218,7 +253,11 @@ export function computeInvoiceTotals(
 				vatCategory: line.vatCategory,
 				vatRateBps,
 				vatMinor,
-				lineTotalMinor: taxableNetMinor + vatMinor,
+				lineTotalMinor: safeAdd(
+					taxableNetMinor,
+					vatMinor,
+					`lines[${index}].lineTotalMinor`,
+				),
 			};
 		},
 	);
@@ -259,7 +298,11 @@ export function computeInvoiceTotals(
 		},
 	);
 
-	const grandTotalMinor = totalTaxableNetMinor + totalVatMinor;
+	const grandTotalMinor = safeAdd(
+		totalTaxableNetMinor,
+		totalVatMinor,
+		"grandTotalMinor",
+	);
 	const sumOfLineTotals = sumMinor(
 		lineTaxes.map((line) => line.lineTotalMinor),
 		"sumOfLineTotals",
@@ -270,8 +313,17 @@ export function computeInvoiceTotals(
 		);
 	}
 
-	const totalWhtMinor = applyBps(grandTotalMinor, whtRateBps);
-	const netPayableMinor = grandTotalMinor - totalWhtMinor;
+	// WHT base is an explicit caller decision: the VAT-inclusive grand total
+	// or the VAT-exclusive taxable net. Both are exact integer sums already
+	// safe-checked above; only the rounding rule (applyBps) applies here.
+	const whtBaseMinor =
+		input.whtBase === "inclusive" ? grandTotalMinor : totalTaxableNetMinor;
+	const totalWhtMinor = applyBps(whtBaseMinor, whtRateBps);
+	const netPayableMinor = safeAdd(
+		grandTotalMinor,
+		-totalWhtMinor,
+		"netPayableMinor",
+	);
 
 	return {
 		lineTaxes,
@@ -281,6 +333,7 @@ export function computeInvoiceTotals(
 		vatBreakdown,
 		totalVatMinor,
 		whtRateBps,
+		whtBase: input.whtBase,
 		totalWhtMinor,
 		grandTotalMinor,
 		netPayableMinor,
