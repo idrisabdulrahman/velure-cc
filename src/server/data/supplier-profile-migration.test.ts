@@ -2,6 +2,11 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import {
+	NIGERIA_RC_PATTERN,
+	NIGERIA_TIN_PATTERN,
+	PLACEHOLDER_TIN_VALUES,
+} from "#/features/compliance/supplier-profile";
 
 /**
  * B1 migration contract: existing invalid supplier profiles are FLAGGED, not
@@ -93,5 +98,65 @@ describe("supplier profile flag migration", () => {
 			.filter((line) => line.trim().length > 0)
 			.filter((line) => !line.trim().startsWith("--"));
 		expect(reversalStatements).toEqual([]);
+	});
+});
+
+/**
+ * B1 validator/migration parity: the app validator
+ * (src/features/compliance/supplier-profile.ts) is the save-path rule; the
+ * SQL backfill is a one-time classifier for rows that predate the structured
+ * columns. Rules that decide accept-vs-flag must stay in lockstep, and the
+ * deliberate differences are pinned below so neither side drifts silently.
+ */
+describe("supplier profile validator / migration parity", () => {
+	// Postgres POSIX regex spells `\d` as `[0-9]`; everything else has to
+	// match the app patterns byte for byte, or this pin fails and forces a
+	// deliberate decision on both sides.
+	const sqlShape = (pattern: RegExp) => pattern.source.replace(/\\d/g, "[0-9]");
+
+	it("rejects the same placeholder TINs in both places", () => {
+		const sqlPlaceholders = [...upSql.matchAll(/'(\d{10})'/g)]
+			.map((match) => match[1])
+			.sort();
+		expect(sqlPlaceholders).toEqual([...PLACEHOLDER_TIN_VALUES].sort());
+	});
+
+	it("uses the same TIN shape rule", () => {
+		expect(upSql).toContain(`~ '${sqlShape(NIGERIA_TIN_PATTERN)}'`);
+	});
+
+	it("uses the same CAC RC shape rule (SQL matches case-insensitively; the app uppercases first)", () => {
+		expect(upSql).toContain(`~* '${sqlShape(NIGERIA_RC_PATTERN)}'`);
+	});
+
+	it("checks the TIN shape before the all-same-digit rule, like the app", () => {
+		// The backfill's CASE evaluates in order, so the all-same-digit regex
+		// only ever sees 10-digit values — the same order as validateSupplierTin
+		// (format check, then placeholder check).
+		expect(upSql).toContain("'^(.)\\1{9}$'");
+		expect(upSql.indexOf(sqlShape(NIGERIA_TIN_PATTERN))).toBeLessThan(
+			upSql.indexOf("^(.)\\1{9}$"),
+		);
+	});
+
+	it("documents the intended validator/migration differences", () => {
+		// 1. address_not_structured is backfill-only: the migration reads the
+		//    legacy free-text `address` column, which the structured form never
+		//    writes again. The app validator only sees the structured columns
+		//    (added by this same migration, NULL for every pre-existing row) and
+		//    never emits this code.
+		expect(upSql).toContain("'address_not_structured'");
+		// 2. The backfill only trims ends: it classifies legacy text and never
+		//    normalises or rewrites it (the UPDATE writes flag columns only).
+		//    The app validator additionally compacts internal whitespace, so a
+		//    stored "RC 1234567" is flagged cac_rc_format by the backfill but
+		//    accepted and normalised on the next save.
+		expect(upSql).toMatch(/btrim\(/);
+		expect(upSql).not.toMatch(/regexp_replace/);
+		// 3. The backfill never audits the structured state/country columns —
+		//    they are NULL for every pre-existing row, so the app validator
+		//    re-audits them on the first save after the migration.
+		expect(upSql).not.toContain("address_state_required");
+		expect(upSql).not.toContain("address_country_required");
 	});
 });

@@ -11,15 +11,25 @@
 
 export const NIGERIA_TIN_DIGITS = 10;
 
+/** 10-digit TIN shape (SPEC 6.2 item 4: exact format unconfirmed). */
+export const NIGERIA_TIN_PATTERN = new RegExp(`^\\d{${NIGERIA_TIN_DIGITS}}$`);
+
 /** Canonical CAC RC shape the settings UI hints at: RC-1234567. */
-const NIGERIA_RC_PATTERN = /^RC-?\d{7}$/;
+export const NIGERIA_RC_PATTERN = /^RC-?\d{7}$/;
 const NIGERIA_RC_CANONICAL = /^RC-\d{7}$/;
 
 /**
  * Obvious placeholder TINs. SPEC P6 observed the product accepting
  * `1234567890`; all-same-digit strings are rejected separately below.
+ * Exported so the migration-parity test can pin the SQL backfill's copy of
+ * this list — both sides must reject the same placeholders.
  */
-const PLACEHOLDER_TINS = new Set(["1234567890", "0123456789", "9876543210"]);
+export const PLACEHOLDER_TIN_VALUES: readonly string[] = [
+	"1234567890",
+	"0123456789",
+	"9876543210",
+];
+const PLACEHOLDER_TINS = new Set(PLACEHOLDER_TIN_VALUES);
 
 const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/;
 
@@ -59,7 +69,7 @@ export function validateSupplierTin(value?: string | null): TinValidation {
 			message: "TIN is required (10 digits).",
 		};
 	}
-	if (!new RegExp(`^\\d{${NIGERIA_TIN_DIGITS}}$`).test(tin)) {
+	if (!NIGERIA_TIN_PATTERN.test(tin)) {
 		return {
 			ok: false,
 			code: "tin_format",
@@ -259,4 +269,40 @@ export function supplierProfileIssueMessage(
 	code: SupplierProfileIssueCode,
 ): string {
 	return ISSUE_MESSAGES[code] ?? code;
+}
+
+export type StoredSupplierProfileFlag = {
+	status?: string | null;
+	issues?: readonly string[] | null;
+};
+
+export type SupplierProfileBannerState = {
+	flagged: boolean;
+	/** Raw issue codes, ready for `supplierProfileIssueMessage`. */
+	codes: string[];
+};
+
+/**
+ * Settings-page banner state for the supplier profile.
+ *
+ * `stored` is the flag columns as last read from the workspace row; `saved` is
+ * the validation of the values from the most recent successful save (null when
+ * nothing has been saved this session). The server write path rejects every
+ * invalid profile, so a successful save supersedes a stored `needs_review`
+ * flag immediately — without this, the query cache keeps showing the pre-save
+ * banner until the follow-up refetch lands.
+ */
+export function supplierProfileBanner(
+	stored: StoredSupplierProfileFlag | null | undefined,
+	saved: SupplierProfileValidation | null,
+): SupplierProfileBannerState {
+	if (saved) {
+		const flagged = saved.status === "needs_review";
+		return {
+			flagged,
+			codes: flagged ? saved.issues.map((issue) => issue.code) : [],
+		};
+	}
+	const flagged = stored?.status === "needs_review";
+	return { flagged, codes: flagged ? [...(stored?.issues ?? [])] : [] };
 }

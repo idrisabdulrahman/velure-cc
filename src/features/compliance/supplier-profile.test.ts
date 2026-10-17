@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type { SupplierProfileInput } from "./supplier-profile";
 import {
 	composeSupplierAddress,
+	supplierProfileBanner,
 	validateSupplierProfile,
 	validateSupplierRcNumber,
 	validateSupplierTin,
@@ -60,6 +62,16 @@ describe("validateSupplierRcNumber (B1 required CAC RC)", () => {
 		["surrounding whitespace tolerated", " RC-1234567 "],
 	])("accepts and normalizes %s", (_label, value) => {
 		const result = validateSupplierRcNumber(value);
+		expect(result.ok).toBe(true);
+		if (result.ok) expect(result.rcNumber).toBe("RC-1234567");
+	});
+
+	it("compacts internal whitespace (the migration backfill deliberately does not)", () => {
+		// Intended validator/migration difference: the app normalises on save,
+		// the one-time SQL backfill only trims ends and flags, so a stored
+		// "RC 1234567" is flagged cac_rc_format there but accepted and
+		// rewritten to RC-1234567 here on the next save.
+		const result = validateSupplierRcNumber("RC 1234567");
 		expect(result.ok).toBe(true);
 		if (result.ok) expect(result.rcNumber).toBe("RC-1234567");
 	});
@@ -176,5 +188,76 @@ describe("validateSupplierProfile structured address (B1)", () => {
 			}),
 		).toBe("12 Wetheral Road, Apapa, Lagos");
 		expect(composeSupplierAddress({ street: "", lga: "", state: "" })).toBe("");
+	});
+
+	it("never emits address_not_structured (reserved for the migration backfill)", () => {
+		// Intended validator/migration difference: address_not_structured is
+		// produced only by the one-time SQL backfill, which can read the legacy
+		// free-text `address` column. The app validator only sees the
+		// structured columns, so it always names the missing part instead.
+		const cases: SupplierProfileInput[] = [
+			validNg,
+			{ ...validNg, tin: "", rcNumber: "" },
+			{ ...validNg, tin: "1234567890" },
+			{ ...validNg, rcNumber: "LTD-1234" },
+			{ ...validNg, address: { ...validNg.address, street: "" } },
+			{ ...validNg, address: { ...validNg.address, state: "" } },
+			{ ...validNg, address: { ...validNg.address, countryCode: "" } },
+		];
+		for (const input of cases) {
+			const codes = validateSupplierProfile(input).issues.map(
+				(issue) => issue.code,
+			);
+			expect(codes).not.toContain("address_not_structured");
+		}
+	});
+});
+
+describe("supplierProfileBanner (settings flag recomputed after save)", () => {
+	const validNg: SupplierProfileInput = {
+		tin: "1234560000",
+		rcNumber: "RC-1234567",
+		address: {
+			street: "12 Wetheral Road",
+			lga: "Apapa",
+			state: "Lagos",
+			countryCode: "NG",
+		},
+	};
+
+	it("shows the stored flag when nothing has been saved this session", () => {
+		const banner = supplierProfileBanner(
+			{ status: "needs_review", issues: ["tin_placeholder", "tin_required"] },
+			null,
+		);
+		expect(banner).toEqual({
+			flagged: true,
+			codes: ["tin_placeholder", "tin_required"],
+		});
+	});
+
+	it("clears a stale stored flag once the profile has been re-saved", () => {
+		// Regression (audit round 1): after a successful save the query cache
+		// still held the pre-save needs_review flag, so the banner stayed up.
+		// The just-saved validation supersedes it until the refetch lands.
+		const banner = supplierProfileBanner(
+			{ status: "needs_review", issues: ["tin_placeholder"] },
+			validateSupplierProfile(validNg),
+		);
+		expect(banner).toEqual({ flagged: false, codes: [] });
+	});
+
+	it("keeps the banner hidden for a complete stored profile", () => {
+		expect(
+			supplierProfileBanner({ status: "complete", issues: [] }, null),
+		).toEqual({ flagged: false, codes: [] });
+	});
+
+	it("still flags a saved profile that fails validation", () => {
+		const banner = supplierProfileBanner(
+			{ status: "complete", issues: [] },
+			validateSupplierProfile({ ...validNg, tin: "1234567890" }),
+		);
+		expect(banner).toEqual({ flagged: true, codes: ["tin_placeholder"] });
 	});
 });

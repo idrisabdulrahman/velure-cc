@@ -82,6 +82,18 @@ describe("buildSupplierProfileUpdate (B1 server boundary)", () => {
 		expect(columns.supplier_profile_status).toBe("complete");
 	});
 
+	it("treats an empty LGA as an explicit clear, not as 'keep the stored value'", () => {
+		// Regression (audit round 1): the settings form coerced a cleared LGA
+		// to undefined, so the clear never persisted. Contract: undefined keeps
+		// the stored value, "" clears it.
+		const omitted = buildSupplierProfileUpdate(validRow, {});
+		expect(omitted.address_lga).toBe("Apapa");
+
+		const cleared = buildSupplierProfileUpdate(validRow, { addressLga: "" });
+		expect(cleared.address_lga).toBeNull();
+		expect(cleared.address).toBe("12 Wetheral Road, Lagos");
+	});
+
 	it("refuses to persist a stored placeholder that the edit leaves in place", () => {
 		const legacyPlaceholderRow = { ...validRow, tax_id: "1234567890" };
 		expect(() =>

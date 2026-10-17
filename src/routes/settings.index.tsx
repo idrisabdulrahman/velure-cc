@@ -21,9 +21,11 @@ import { Input } from "#/components/ui/input";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
 import { NIGERIA_TAX_RULE_SET_VERSION } from "#/features/compliance/nigeria";
-import type { SupplierProfileIssueCode } from "#/features/compliance/supplier-profile";
 import {
 	composeSupplierAddress,
+	type SupplierProfileIssueCode,
+	type SupplierProfileValidation,
+	supplierProfileBanner,
 	supplierProfileIssueMessage,
 	validateSupplierProfile,
 } from "#/features/compliance/supplier-profile";
@@ -141,6 +143,19 @@ const PROFILE_ISSUE_FIELDS: Partial<
 	address_country_required: "country",
 };
 
+function profileValidationFor(form: BusinessForm): SupplierProfileValidation {
+	return validateSupplierProfile({
+		tin: form.taxId,
+		rcNumber: form.rcNumber,
+		address: {
+			street: form.addressStreet,
+			lga: form.addressLga,
+			state: form.addressState,
+			countryCode: form.country,
+		},
+	});
+}
+
 function validate(form: BusinessForm): FormErrors {
 	const errors: FormErrors = {};
 
@@ -154,16 +169,7 @@ function validate(form: BusinessForm): FormErrors {
 	// B1 supplier profile: validated TIN, required CAC RC, structured address.
 	// Same rules the server enforces — the client check is UX, the server is
 	// the boundary.
-	const profile = validateSupplierProfile({
-		tin: form.taxId,
-		rcNumber: form.rcNumber,
-		address: {
-			street: form.addressStreet,
-			lga: form.addressLga,
-			state: form.addressState,
-			countryCode: form.country,
-		},
-	});
+	const profile = profileValidationFor(form);
 	for (const issue of profile.issues) {
 		const field = PROFILE_ISSUE_FIELDS[issue.code];
 		if (field && !errors[field]) errors[field] = issue.message;
@@ -204,6 +210,11 @@ function SettingsPage() {
 
 	const [form, setForm] = useState<BusinessForm>(initialForm);
 	const [savedForm, setSavedForm] = useState<BusinessForm>(initialForm);
+	// Validation of the values from the last successful save; recomputes the
+	// flagged-for-review banner immediately after saving instead of waiting
+	// for the workspace refetch. Null until something is saved this session.
+	const [savedProfile, setSavedProfile] =
+		useState<SupplierProfileValidation | null>(null);
 	const [errors, setErrors] = useState<FormErrors>({});
 	const [logoPreview, setLogoPreview] = useState<string | null>(() => {
 		if (typeof window === "undefined") return null;
@@ -242,6 +253,9 @@ function SettingsPage() {
 
 		setForm(nextForm);
 		setSavedForm(nextForm);
+		// A fresh workspace read carries the authoritative flag columns, so it
+		// supersedes any local post-save recomputation.
+		setSavedProfile(null);
 	}, [workspace, session?.user.email]);
 
 	const updateField = (field: keyof BusinessForm, value: string) => {
@@ -297,7 +311,10 @@ function SettingsPage() {
 				taxId: form.taxId.trim(),
 				rcNumber: form.rcNumber.trim(),
 				addressStreet: form.addressStreet.trim(),
-				addressLga: form.addressLga.trim() || undefined,
+				// Empty string is an explicit clear; only `undefined` means "keep
+				// the stored value" on the server, so never coerce a cleared LGA
+				// back to undefined here.
+				addressLga: form.addressLga.trim(),
 				addressState: form.addressState.trim(),
 				countryCode: form.country.trim().toUpperCase(),
 				baseCurrency: form.defaultCurrency,
@@ -336,6 +353,11 @@ function SettingsPage() {
 			});
 			setSavedForm(form);
 			setSavedLogo(logoPreview);
+			// Recompute the flagged-for-review banner from the values that were
+			// just persisted (the server only accepts valid profiles), then
+			// refresh the workspace so the stored flag columns catch up too.
+			setSavedProfile(profileValidationFor(form));
+			await refetchSettings();
 			toast({ title: "Profile updated", variant: "success" });
 		} catch (error) {
 			toast({
@@ -397,8 +419,14 @@ function SettingsPage() {
 	const emailError =
 		errors.email ??
 		(loaded && !form.email.trim() ? "Business email is required." : undefined);
-	const profileFlagged =
-		loaded && workspace?.supplierProfileStatus === "needs_review";
+	const profileBanner = supplierProfileBanner(
+		{
+			status: workspace?.supplierProfileStatus,
+			issues: workspace?.supplierProfileIssues,
+		},
+		savedProfile,
+	);
+	const profileFlagged = profileBanner.flagged;
 	const previewAddress = composeSupplierAddress({
 		street: form.addressStreet,
 		lga: form.addressLga,
@@ -466,9 +494,9 @@ function SettingsPage() {
 										placeholder. Complete the TIN, CAC RC number and structured
 										address below, then save. Nothing was deleted.
 									</p>
-									{workspace?.supplierProfileIssues?.length ? (
+									{profileBanner.codes.length ? (
 										<ul className="mt-2 list-disc pl-5 text-xs text-ink-2">
-											{workspace.supplierProfileIssues.map((code) => (
+											{profileBanner.codes.map((code) => (
 												<li key={code}>
 													{supplierProfileIssueMessage(
 														code as SupplierProfileIssueCode,
