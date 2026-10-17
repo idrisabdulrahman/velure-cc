@@ -16,6 +16,7 @@
 			"vite.config.ts",
 			"!extracted",
 			"!packages",
+			"!.worktrees",
 			"!convex/_generated",
 			"!src/routeTree.gen.ts",
 			"!src/types/database.types.ts",
