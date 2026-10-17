@@ -33,6 +33,7 @@ import {
 	NIGERIA_AUTHORITY_LABEL,
 	NIGERIA_TAX_RULE_SET_VERSION,
 	NIGERIA_VAT_RATE,
+	NRS_INFORMATIONAL_DISCLAIMER,
 	resolveNigeriaRuleSet,
 	SELLER_TAX_STATUS_OPTIONS,
 	WITHHOLDING_CATEGORY_OPTIONS,
@@ -397,6 +398,16 @@ function ComplianceSettingsPage() {
 						</SelectContent>
 					</Select>
 				</div>
+			</div>
+
+			<div
+				role="note"
+				aria-label="Compliance disclaimer"
+				className="rounded-md border border-warn-line/35 bg-warn-soft px-4 py-3 text-xs leading-5 text-warn"
+			>
+				{NRS_INFORMATIONAL_DISCLAIMER} Velure is not an NRS-certified
+				e-invoicing provider and does not submit invoices to the NRS for
+				clearance.
 			</div>
 
 			{isDashboardLoading ? (

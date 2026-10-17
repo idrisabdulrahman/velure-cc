@@ -10,7 +10,7 @@ export const Route = createFileRoute("/")({
 			{
 				name: "description",
 				content:
-					"Invoices, clients, tax lines, reminders, PDFs and exports in one workspace for Nigerian businesses.",
+					"Invoices, clients, VAT and WHT fields, reminders, PDFs and exports in one workspace for Nigerian businesses.",
 			},
 		],
 	}),
