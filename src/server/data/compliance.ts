@@ -37,11 +37,20 @@ export type SupplierProfileColumns = {
 };
 
 /**
+ * Prefix of the error thrown when a supplier profile fails validation. The
+ * settings page matches it to surface the per-field messages (e.g. the
+ * 300/200/200 address caps) instead of a generic save-failure toast.
+ */
+export const SUPPLIER_PROFILE_REJECTION_PREFIX =
+	"Supplier profile is incomplete or invalid:";
+
+/**
  * B1 server boundary for the supplier profile. A provided (non-undefined)
  * value replaces the stored one; omitted values fall back to what is already
  * stored so unrelated settings edits never wipe registration details. Throws
- * on malformed or placeholder TIN/CAC RC values and on an incomplete profile
- * (SPEC §5.B row B1: validated TIN, required CAC RC, structured address).
+ * on malformed or placeholder TIN/CAC RC values, on an over-long structured
+ * address (the DB CHECK caps) and on an incomplete profile (SPEC §5.B row B1:
+ * validated TIN, required CAC RC, structured address).
  *
  * Pure so the write path can be unit-tested without a Supabase client; the
  * returned columns include the non-destructive flag columns, never deletes.
@@ -72,7 +81,7 @@ export function buildSupplierProfileUpdate(
 	});
 	if (!result.valid) {
 		throw new Error(
-			`Supplier profile is incomplete or invalid: ${result.issues
+			`${SUPPLIER_PROFILE_REJECTION_PREFIX} ${result.issues
 				.map((issue) => issue.message)
 				.join(" ")}`,
 		);

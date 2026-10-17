@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { SupplierProfileInput } from "./supplier-profile";
 import {
 	composeSupplierAddress,
+	SUPPLIER_ADDRESS_MAX_LENGTHS,
 	supplierProfileBanner,
 	validateSupplierProfile,
 	validateSupplierRcNumber,
@@ -97,6 +98,18 @@ describe("validateSupplierRcNumber (B1 required CAC RC)", () => {
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe("cac_rc_format");
 	});
+
+	it.each([
+		["all zeros", "RC-0000000"],
+		["all ones", "RC-1111111"],
+		["all nines without hyphen", "RC9999999"],
+	])("rejects the placeholder class: %s", (_label, value) => {
+		// Round 2: the TIN path already rejects all-same-digit placeholders;
+		// the RC digits get the same rule (SPEC B1: no placeholder values).
+		const result = validateSupplierRcNumber(value);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("cac_rc_placeholder");
+	});
 });
 
 describe("validateSupplierProfile structured address (B1)", () => {
@@ -145,6 +158,50 @@ describe("validateSupplierProfile structured address (B1)", () => {
 		});
 		expect(result.valid).toBe(true);
 	});
+
+	it("accepts address parts exactly at the DB CHECK caps (300/200/200)", () => {
+		const result = validateSupplierProfile({
+			...validNg,
+			address: {
+				...validNg.address,
+				street: "s".repeat(SUPPLIER_ADDRESS_MAX_LENGTHS.street),
+				lga: "l".repeat(SUPPLIER_ADDRESS_MAX_LENGTHS.lga),
+				state: "t".repeat(SUPPLIER_ADDRESS_MAX_LENGTHS.state),
+			},
+		});
+		expect(result.valid).toBe(true);
+		expect(result.issues).toEqual([]);
+	});
+
+	it.each([
+		[
+			"street one over the cap",
+			{ street: "s".repeat(SUPPLIER_ADDRESS_MAX_LENGTHS.street + 1) },
+			"address_street_too_long",
+		],
+		[
+			"LGA one over the cap",
+			{ lga: "l".repeat(SUPPLIER_ADDRESS_MAX_LENGTHS.lga + 1) },
+			"address_lga_too_long",
+		],
+		[
+			"state one over the cap",
+			{ state: "t".repeat(SUPPLIER_ADDRESS_MAX_LENGTHS.state + 1) },
+			"address_state_too_long",
+		],
+	])(
+		"rejects an address part %s before Postgres sees it",
+		(_label, part, code) => {
+			// Round 2: the DB CHECKs cap these columns; without an app-layer
+			// check a 301-char save failed with an opaque constraint error.
+			const result = validateSupplierProfile({
+				...validNg,
+				address: { ...validNg.address, ...part },
+			});
+			expect(result.valid).toBe(false);
+			expect(result.issues.map((issue) => issue.code)).toContain(code);
+		},
+	);
 
 	it("requires TIN and CAC RC for Nigeria workspaces", () => {
 		const result = validateSupplierProfile({
@@ -232,8 +289,35 @@ describe("supplierProfileBanner (settings flag recomputed after save)", () => {
 		);
 		expect(banner).toEqual({
 			flagged: true,
+			setupRequired: false,
 			codes: ["tin_placeholder", "tin_required"],
 		});
+	});
+
+	it("shows neutral setup state for a never-saved workspace, not the flagged wording", () => {
+		// Round 2: a brand-new workspace has the column default (needs_review,
+		// empty issue list) — nothing was ever saved, so nothing was flagged.
+		expect(
+			supplierProfileBanner({ status: "needs_review", issues: [] }, null),
+		).toEqual({ flagged: false, setupRequired: true, codes: [] });
+		expect(
+			supplierProfileBanner({ status: "needs_review", issues: null }, null),
+		).toEqual({ flagged: false, setupRequired: true, codes: [] });
+		// Unknown status (settings still loading) keeps both states off.
+		expect(supplierProfileBanner({}, null)).toEqual({
+			flagged: false,
+			setupRequired: false,
+			codes: [],
+		});
+	});
+
+	it("reserves the flagged state for real issue codes", () => {
+		expect(
+			supplierProfileBanner(
+				{ status: "needs_review", issues: ["tin_required"] },
+				null,
+			),
+		).toEqual({ flagged: true, setupRequired: false, codes: ["tin_required"] });
 	});
 
 	it("clears a stale stored flag once the profile has been re-saved", () => {
@@ -244,13 +328,17 @@ describe("supplierProfileBanner (settings flag recomputed after save)", () => {
 			{ status: "needs_review", issues: ["tin_placeholder"] },
 			validateSupplierProfile(validNg),
 		);
-		expect(banner).toEqual({ flagged: false, codes: [] });
+		expect(banner).toEqual({
+			flagged: false,
+			setupRequired: false,
+			codes: [],
+		});
 	});
 
 	it("keeps the banner hidden for a complete stored profile", () => {
 		expect(
 			supplierProfileBanner({ status: "complete", issues: [] }, null),
-		).toEqual({ flagged: false, codes: [] });
+		).toEqual({ flagged: false, setupRequired: false, codes: [] });
 	});
 
 	it("still flags a saved profile that fails validation", () => {
@@ -258,6 +346,10 @@ describe("supplierProfileBanner (settings flag recomputed after save)", () => {
 			{ status: "complete", issues: [] },
 			validateSupplierProfile({ ...validNg, tin: "1234567890" }),
 		);
-		expect(banner).toEqual({ flagged: true, codes: ["tin_placeholder"] });
+		expect(banner).toEqual({
+			flagged: true,
+			setupRequired: false,
+			codes: ["tin_placeholder"],
+		});
 	});
 });

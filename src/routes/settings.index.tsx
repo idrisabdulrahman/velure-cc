@@ -23,6 +23,7 @@ import { toast } from "#/components/ui/use-toast";
 import { NIGERIA_TAX_RULE_SET_VERSION } from "#/features/compliance/nigeria";
 import {
 	composeSupplierAddress,
+	SUPPLIER_ADDRESS_MAX_LENGTHS,
 	type SupplierProfileIssueCode,
 	type SupplierProfileValidation,
 	supplierProfileBanner,
@@ -33,6 +34,7 @@ import { authClient } from "#/lib/auth-client";
 import { useSupabaseSession } from "#/lib/supabase-session";
 import {
 	getWorkspaceSettings,
+	SUPPLIER_PROFILE_REJECTION_PREFIX,
 	upsertWorkspaceSettings,
 } from "#/server/data/compliance";
 export const Route = createFileRoute("/settings/")({
@@ -138,8 +140,12 @@ const PROFILE_ISSUE_FIELDS: Partial<
 	tin_placeholder: "taxId",
 	cac_rc_required: "rcNumber",
 	cac_rc_format: "rcNumber",
+	cac_rc_placeholder: "rcNumber",
 	address_street_required: "addressStreet",
+	address_street_too_long: "addressStreet",
+	address_lga_too_long: "addressLga",
 	address_state_required: "addressState",
+	address_state_too_long: "addressState",
 	address_country_required: "country",
 };
 
@@ -360,9 +366,20 @@ function SettingsPage() {
 			await refetchSettings();
 			toast({ title: "Profile updated", variant: "success" });
 		} catch (error) {
+			const message = error instanceof Error ? error.message : "Unknown error";
+			// A rejected registration profile names the failing fields and
+			// limits (e.g. the 300/200/200 address caps); surface that text
+			// directly instead of a generic save-failure message.
+			const profileRejected = message.startsWith(
+				SUPPLIER_PROFILE_REJECTION_PREFIX,
+			);
 			toast({
-				title: "Could not update profile",
-				description: error instanceof Error ? error.message : "Unknown error",
+				title: profileRejected
+					? "Check your registration details"
+					: "Could not update profile",
+				description: profileRejected
+					? message.slice(SUPPLIER_PROFILE_REJECTION_PREFIX.length).trim()
+					: message,
 				variant: "error",
 			});
 		} finally {
@@ -481,6 +498,20 @@ function SettingsPage() {
 						sub="Shown on every invoice you send."
 					>
 						<div className="grid gap-5">
+							{profileBanner.setupRequired ? (
+								<div
+									role="status"
+									className="rounded-md border border-rule bg-paper-2 px-4 py-3"
+								>
+									<p className="text-sm font-medium text-ink">
+										Complete your business profile
+									</p>
+									<p className="mt-1 text-sm text-ink-3">
+										Add your TIN, CAC RC number and structured address below,
+										then save. They print on every invoice you send.
+									</p>
+								</div>
+							) : null}
 							{profileFlagged ? (
 								<div
 									role="status"
@@ -782,9 +813,14 @@ function SettingsPage() {
 						sub="Structured address, printed in the invoice header."
 					>
 						<div className="grid gap-5">
-							<FormField label="Street address *" error={errors.addressStreet}>
+							<FormField
+								label="Street address *"
+								error={errors.addressStreet}
+								hint={`Up to ${SUPPLIER_ADDRESS_MAX_LENGTHS.street} characters.`}
+							>
 								<Textarea
 									value={form.addressStreet}
+									maxLength={SUPPLIER_ADDRESS_MAX_LENGTHS.street}
 									onChange={(event) =>
 										updateField("addressStreet", event.target.value)
 									}
@@ -792,9 +828,14 @@ function SettingsPage() {
 								/>
 							</FormField>
 							<div className="grid gap-5 sm:grid-cols-3">
-								<FormField label="LGA" error={errors.addressLga}>
+								<FormField
+									label="LGA"
+									error={errors.addressLga}
+									hint={`Up to ${SUPPLIER_ADDRESS_MAX_LENGTHS.lga} characters.`}
+								>
 									<Input
 										value={form.addressLga}
+										maxLength={SUPPLIER_ADDRESS_MAX_LENGTHS.lga}
 										onChange={(event) =>
 											updateField("addressLga", event.target.value)
 										}
@@ -802,9 +843,14 @@ function SettingsPage() {
 										className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
 									/>
 								</FormField>
-								<FormField label="State / region *" error={errors.addressState}>
+								<FormField
+									label="State / region *"
+									error={errors.addressState}
+									hint={`Up to ${SUPPLIER_ADDRESS_MAX_LENGTHS.state} characters.`}
+								>
 									<Input
 										value={form.addressState}
+										maxLength={SUPPLIER_ADDRESS_MAX_LENGTHS.state}
 										onChange={(event) =>
 											updateField("addressState", event.target.value)
 										}

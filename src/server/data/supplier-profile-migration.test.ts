@@ -158,5 +158,16 @@ describe("supplier profile validator / migration parity", () => {
 		//    re-audits them on the first save after the migration.
 		expect(upSql).not.toContain("address_state_required");
 		expect(upSql).not.toContain("address_country_required");
+		// 4. Round-2 rules are app-only: the backfill is immutable and predates
+		//    the address max-length issue codes and the all-same-digit RC
+		//    placeholder rule. The DB CHECK caps exist on both sides; only the
+		//    flag codes differ, and the app re-audits every value on save.
+		expect(upSql).not.toContain("cac_rc_placeholder");
+		expect(upSql).not.toContain("address_street_too_long");
+		expect(upSql).not.toContain("address_lga_too_long");
+		expect(upSql).not.toContain("address_state_too_long");
+		expect(upSql).toMatch(/char_length\(address_street\) <= 300/);
+		expect(upSql).toMatch(/char_length\(address_lga\) <= 200/);
+		expect(upSql).toMatch(/char_length\(address_state\) <= 200/);
 	});
 });

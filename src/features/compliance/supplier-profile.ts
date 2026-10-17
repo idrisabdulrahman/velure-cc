@@ -19,6 +19,18 @@ export const NIGERIA_RC_PATTERN = /^RC-?\d{7}$/;
 const NIGERIA_RC_CANONICAL = /^RC-\d{7}$/;
 
 /**
+ * App-layer caps for the structured address columns, mirroring the DB CHECK
+ * lengths in supabase/migrations/20261016000000_supplier_profile_validation_flags.sql
+ * (`char_length <= 300/200/200`). Enforced here so an over-long save fails as
+ * an actionable field error instead of an opaque Postgres CHECK violation.
+ */
+export const SUPPLIER_ADDRESS_MAX_LENGTHS = {
+	street: 300,
+	lga: 200,
+	state: 200,
+} as const;
+
+/**
  * Obvious placeholder TINs. SPEC P6 observed the product accepting
  * `1234567890`; all-same-digit strings are rejected separately below.
  * Exported so the migration-parity test can pin the SQL backfill's copy of
@@ -97,13 +109,14 @@ export type RcValidation =
 	| { ok: true; rcNumber: string }
 	| {
 			ok: false;
-			code: "cac_rc_required" | "cac_rc_format";
+			code: "cac_rc_required" | "cac_rc_format" | "cac_rc_placeholder";
 			message: string;
 	  };
 
 /**
  * Validates a Nigerian CAC company registration number and normalizes it to
- * the canonical `RC-1234567` form the invoices print.
+ * the canonical `RC-1234567` form the invoices print. All-same-digit numbers
+ * (e.g. `RC-0000000`) are rejected as placeholders, like the TIN path.
  */
 export function validateSupplierRcNumber(value?: string | null): RcValidation {
 	const rc = compact(value).toUpperCase().replace(/\s+/g, "");
@@ -121,8 +134,16 @@ export function validateSupplierRcNumber(value?: string | null): RcValidation {
 			message: "CAC RC number must use the RC-1234567 format.",
 		};
 	}
-	if (NIGERIA_RC_CANONICAL.test(rc)) return { ok: true, rcNumber: rc };
 	const digits = rc.replace(/\D/g, "");
+	if (isAllSameDigit(digits)) {
+		return {
+			ok: false,
+			code: "cac_rc_placeholder",
+			message:
+				"That looks like a placeholder CAC RC number. Enter your real registration number.",
+		};
+	}
+	if (NIGERIA_RC_CANONICAL.test(rc)) return { ok: true, rcNumber: rc };
 	return { ok: true, rcNumber: `RC-${digits}` };
 }
 
@@ -155,6 +176,9 @@ export function composeSupplierAddress(
 
 export type SupplierProfileIssueCode =
 	| "address_street_required"
+	| "address_street_too_long"
+	| "address_lga_too_long"
+	| "address_state_too_long"
 	| "address_state_required"
 	| "address_country_required"
 	| "address_not_structured"
@@ -162,7 +186,8 @@ export type SupplierProfileIssueCode =
 	| "tin_format"
 	| "tin_placeholder"
 	| "cac_rc_required"
-	| "cac_rc_format";
+	| "cac_rc_format"
+	| "cac_rc_placeholder";
 
 export type SupplierProfileIssue = {
 	code: SupplierProfileIssueCode;
@@ -209,11 +234,27 @@ export function validateSupplierProfile(
 			code: "address_street_required",
 			message: "Street address is required.",
 		});
+	} else if (street.length > SUPPLIER_ADDRESS_MAX_LENGTHS.street) {
+		push({
+			code: "address_street_too_long",
+			message: `Street address must be ${SUPPLIER_ADDRESS_MAX_LENGTHS.street} characters or fewer.`,
+		});
+	}
+	if (lga.length > SUPPLIER_ADDRESS_MAX_LENGTHS.lga) {
+		push({
+			code: "address_lga_too_long",
+			message: `LGA must be ${SUPPLIER_ADDRESS_MAX_LENGTHS.lga} characters or fewer.`,
+		});
 	}
 	if (!state) {
 		push({
 			code: "address_state_required",
 			message: "State or region is required.",
+		});
+	} else if (state.length > SUPPLIER_ADDRESS_MAX_LENGTHS.state) {
+		push({
+			code: "address_state_too_long",
+			message: `State or region must be ${SUPPLIER_ADDRESS_MAX_LENGTHS.state} characters or fewer.`,
 		});
 	}
 	if (!COUNTRY_CODE_PATTERN.test(countryCode)) {
@@ -253,6 +294,9 @@ export function validateSupplierProfile(
 
 const ISSUE_MESSAGES: Record<SupplierProfileIssueCode, string> = {
 	address_street_required: "Street address is required.",
+	address_street_too_long: "Street address is too long.",
+	address_lga_too_long: "LGA is too long.",
+	address_state_too_long: "State or region is too long.",
 	address_state_required: "State or region is required.",
 	address_country_required: "Country (2-letter code) is required.",
 	address_not_structured:
@@ -262,6 +306,7 @@ const ISSUE_MESSAGES: Record<SupplierProfileIssueCode, string> = {
 	tin_placeholder: "Placeholder TINs are not accepted.",
 	cac_rc_required: "CAC RC number is required.",
 	cac_rc_format: "CAC RC number must use the RC-1234567 format.",
+	cac_rc_placeholder: "Placeholder CAC RC numbers are not accepted.",
 };
 
 /** Human-readable text for a stored/derived issue code (UI banner). */
@@ -278,6 +323,12 @@ export type StoredSupplierProfileFlag = {
 
 export type SupplierProfileBannerState = {
 	flagged: boolean;
+	/**
+	 * A brand-new workspace: status `needs_review` with an empty issue list,
+	 * i.e. nothing was ever saved and flagged — the settings page shows
+	 * neutral "complete your profile" copy instead of the flagged wording.
+	 */
+	setupRequired: boolean;
 	/** Raw issue codes, ready for `supplierProfileIssueMessage`. */
 	codes: string[];
 };
@@ -291,6 +342,10 @@ export type SupplierProfileBannerState = {
  * invalid profile, so a successful save supersedes a stored `needs_review`
  * flag immediately — without this, the query cache keeps showing the pre-save
  * banner until the follow-up refetch lands.
+ *
+ * A stored `needs_review` with no issue codes means the workspace has never
+ * been saved through the validated path (the column default), not that saved
+ * data was flagged — that is `setupRequired`, never `flagged`.
  */
 export function supplierProfileBanner(
 	stored: StoredSupplierProfileFlag | null | undefined,
@@ -300,9 +355,15 @@ export function supplierProfileBanner(
 		const flagged = saved.status === "needs_review";
 		return {
 			flagged,
+			setupRequired: false,
 			codes: flagged ? saved.issues.map((issue) => issue.code) : [],
 		};
 	}
-	const flagged = stored?.status === "needs_review";
-	return { flagged, codes: flagged ? [...(stored?.issues ?? [])] : [] };
+	const needsReview = stored?.status === "needs_review";
+	const codes = needsReview ? [...(stored?.issues ?? [])] : [];
+	return {
+		flagged: needsReview && codes.length > 0,
+		setupRequired: needsReview && codes.length === 0,
+		codes,
+	};
 }

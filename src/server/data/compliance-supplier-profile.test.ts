@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildSupplierProfileUpdate } from "./compliance";
+import {
+	buildSupplierProfileUpdate,
+	SUPPLIER_PROFILE_REJECTION_PREFIX,
+} from "./compliance";
 
 const validRow = {
 	tax_id: "1234560000",
@@ -69,6 +72,51 @@ describe("buildSupplierProfileUpdate (B1 server boundary)", () => {
 		expect(() =>
 			buildSupplierProfileUpdate(validRow, { addressStreet: "" }),
 		).toThrow(/Street address is required/);
+	});
+
+	it("rejects address parts one character over the DB CHECK caps with an actionable message", () => {
+		// Round 2: the 300/200/200 caps live in the migration CHECKs; the
+		// validator must fail first with a named field + limit, never let a
+		// 301-char value reach Postgres as an opaque constraint violation.
+		expect(() =>
+			buildSupplierProfileUpdate(validRow, {
+				addressStreet: "s".repeat(301),
+			}),
+		).toThrow(/Street address must be 300 characters or fewer/);
+		expect(() =>
+			buildSupplierProfileUpdate(validRow, { addressLga: "l".repeat(201) }),
+		).toThrow(/LGA must be 200 characters or fewer/);
+		expect(() =>
+			buildSupplierProfileUpdate(validRow, { addressState: "t".repeat(201) }),
+		).toThrow(/State or region must be 200 characters or fewer/);
+	});
+
+	it("accepts address parts exactly at the DB CHECK caps", () => {
+		const columns = buildSupplierProfileUpdate(validRow, {
+			addressStreet: "s".repeat(300),
+			addressLga: "l".repeat(200),
+			addressState: "t".repeat(200),
+		});
+		expect(columns.address_street).toHaveLength(300);
+		expect(columns.address_lga).toHaveLength(200);
+		expect(columns.address_state).toHaveLength(200);
+	});
+
+	it("rejects an all-same-digit placeholder CAC RC number", () => {
+		expect(() =>
+			buildSupplierProfileUpdate(validRow, { rcNumber: "RC-0000000" }),
+		).toThrow(/placeholder CAC RC number/i);
+	});
+
+	it("throws with the exported rejection prefix so the UI toast stays actionable", () => {
+		let message = "";
+		try {
+			buildSupplierProfileUpdate(validRow, { taxId: "12345" });
+		} catch (error) {
+			message = error instanceof Error ? error.message : "";
+		}
+		expect(message.startsWith(SUPPLIER_PROFILE_REJECTION_PREFIX)).toBe(true);
+		expect(message).toMatch(/exactly 10 digits/);
 	});
 
 	it("keeps stored registration details when an edit omits them", () => {
