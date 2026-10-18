@@ -5,8 +5,11 @@ import { describe, expect, it } from "vitest";
 /**
  * WP3 — coverage guard for tenant isolation.
  *
- * Every named export of every `src/server/data/*.ts` module must be
- * classified here with the mechanism that prevents cross-tenant access:
+ * Every named export of every `src/server/data/*.ts` module, plus the two
+ * server repository modules that issue queries themselves
+ * (`src/server/invoice-repository.ts`, `src/server/public-invoice-repository.ts`),
+ * must be classified here with the mechanism that prevents cross-tenant
+ * access:
  *
  * - `app-scoped`: the query carries a workspace/owner filter resolved from
  *   the verified session. Proven by `tenant-isolation.test.ts` against the
@@ -30,7 +33,17 @@ import { describe, expect, it } from "vitest";
  *   mounted in production builds.
  *
  * A new export without a classification fails this suite, forcing the
- * author to state (and test) its isolation story.
+ * author to state (and test) its isolation story. The scan is
+ * form-independent: declaration exports (`export function/const/class`,
+ * including indented ones), named list exports (`export { a, b as c }`,
+ * single-line or multiline, with or without a `from` clause), and namespace
+ * re-exports (`export * as ns from`) all resolve to a name that must be
+ * classified. Any export shape the scanner cannot resolve to a name — bare
+ * `export * from`, `export default`, destructuring exports, or anything
+ * else unrecognized — fails outright, so a new export form cannot evade the
+ * guard. `export type` / `export interface` declarations are the deliberate
+ * exception: they are erased at runtime, carry no query surface, and are
+ * caught by `pnpm typecheck`.
  */
 
 type Classification =
@@ -230,50 +243,169 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	resolveActiveWorkspaceId: "session",
 	listWorkspaces: "app-scoped",
 	setActiveWorkspace: "session",
+	// invoice-repository.ts (src/server — third query surface)
+	// identity client is minted from the verified request session
+	getInvoiceUserContext: "session",
+	// thin wrapper over data/invoices.getById(sessionClient, sessionUser, id)
+	getAuthenticatedInvoiceById: "app-scoped",
+	// thin wrapper over data/invoices.recordDeliveryEvent(sessionClient,
+	// sessionUser, …); the scoping inside the wrapper target is probed by
+	// tenant-isolation.test.ts, the route consumes this seam
+	// (src/routes/api/-tenant-isolation.test.ts)
+	recordInvoiceDeliveryEvent: "app-scoped",
+	// public-invoice-repository.ts (src/server — third query surface)
+	// Admin client, but every read resolves the invoice through the
+	// token-scoped `public_invoice_by_token` RPC first: no tenant id is ever
+	// supplied by the caller. `public-invoice-repository.test.ts` proves the
+	// RPC-only lookup never touches a table directly and drops private
+	// fields; the payment sub-reads are the classified `public-token`
+	// functions in data/payments.ts above; route behavior for
+	// GET /api/invoice/public/$token and /invoice/download/$id is probed by
+	// the route suite.
+	getPublicInvoicePage: "public-token",
+	getInvoiceByToken: "public-token",
+	// Admin client UPDATE on invoices: the target id comes from the RPC result
+	// for the caller's own share token, never from input, so the write stays
+	// on that one invoice.
+	recordPublicInvoiceView: "public-token",
 };
 
 const DATA_DIR = join(import.meta.dirname);
 
-function moduleFiles(): string[] {
-	return readdirSync(DATA_DIR)
+/**
+ * Third query surface: these two `src/server/*.ts` repositories issue their
+ * own queries (session-minted client and Supabase admin client) outside
+ * `src/server/data/`, so they are enumerated alongside the data layer.
+ */
+const SERVER_REPOSITORIES = [
+	"invoice-repository.ts",
+	"public-invoice-repository.ts",
+];
+
+type GuardedModule = { label: string; path: string };
+
+function guardedModules(): GuardedModule[] {
+	const dataModules = readdirSync(DATA_DIR)
 		.filter(
 			(file) =>
 				file.endsWith(".ts") &&
 				!file.includes(".test.") &&
 				!file.startsWith("testing"),
 		)
-		.sort();
+		.sort()
+		.map((file) => ({
+			label: `src/server/data/${file}`,
+			path: join(DATA_DIR, file),
+		}));
+	const serverModules = SERVER_REPOSITORIES.map((file) => ({
+		label: `src/server/${file}`,
+		path: join(DATA_DIR, "..", file),
+	}));
+	return [...dataModules, ...serverModules];
 }
 
-function namedExports(source: string): string[] {
+type ExportScan = {
+	/** Exports resolved to a concrete runtime name; each must be classified. */
+	names: string[];
+	/** Export forms the scanner cannot resolve to a name; each fails. */
+	opaque: string[];
+};
+
+/**
+ * Form-independent export scanner. Resolves every runtime export shape to a
+ * name — indented declarations, named list exports (single or multiline,
+ * with or without `from`), and `export * as ns` — and reports any export
+ * shape it cannot resolve (`export * from`, `export default`, destructuring,
+ * unknown syntax) as `opaque` so a new export form fails the guard instead
+ * of slipping past it. `export type` / `export interface` are skipped: they
+ * are erased at runtime and carry no query surface.
+ */
+function scanExports(source: string): ExportScan {
 	const names = new Set<string>();
-	const patterns = [
-		/^export\s+(?:async\s+)?function\s+([A-Za-z0-9_]+)/gm,
-		/^export\s+const\s+([A-Za-z0-9_]+)/gm,
-		/^export\s+class\s+([A-Za-z0-9_]+)/gm,
-	];
-	for (const pattern of patterns) {
-		for (const match of source.matchAll(pattern)) names.add(match[1]);
+	const opaque: string[] = [];
+	const lines = source.split(/\r?\n/);
+
+	const addNamedList = (chunk: string) => {
+		const open = chunk.indexOf("{");
+		const close = chunk.lastIndexOf("}");
+		if (open === -1 || close <= open) {
+			opaque.push(chunk.trim());
+			return;
+		}
+		for (const part of chunk.slice(open + 1, close).split(",")) {
+			const item = part.trim();
+			if (!item || item.startsWith("type ")) continue; // inline type export
+			const renamed = /^([A-Za-z0-9_$]+)\s+as\s+([A-Za-z0-9_$]+)$/.exec(item);
+			names.add(renamed ? renamed[2] : item);
+		}
+	};
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		if (!/^[ \t]*export\b/.test(line)) continue;
+		const rest = line.replace(/^[ \t]*export/, "");
+		// compile-time only — no runtime binding, no query surface
+		if (/^\s*(?:declare\s+)?(?:type|interface)\b/.test(rest)) continue;
+		// named list export, possibly spread over several lines
+		if (/^\s*\{/.test(rest)) {
+			let chunk = rest;
+			while (!/}/.test(chunk) && i + 1 < lines.length) {
+				i += 1;
+				chunk += ` ${lines[i]}`;
+			}
+			addNamedList(chunk);
+			continue;
+		}
+		// `export * as ns from …` names its namespace; bare `export * from`
+		// re-exports an unenumerable set and must be expanded by the author.
+		if (/^\s*\*/.test(rest)) {
+			const namespaced = /^\s*\*\s+as\s+([A-Za-z0-9_$]+)/.exec(rest);
+			if (namespaced) names.add(namespaced[1]);
+			else opaque.push(line.trim());
+			continue;
+		}
+		const declaration =
+			/^\s*(?:default\s+|abstract\s+)?(?:async\s+)?(?:function\s*\*?\s*|class\s+|const\s+|let\s+|var\s+)([A-Za-z0-9_$]+)/.exec(
+				rest,
+			);
+		if (declaration && !/^\s*default\b/.test(rest)) {
+			names.add(declaration[1]);
+			continue;
+		}
+		// `export default …`, `export const { a } = …`, or anything else the
+		// scanner does not recognise: fail loudly rather than ignore it.
+		opaque.push(line.trim());
 	}
-	return [...names];
+
+	return { names: [...names], opaque };
 }
 
 describe("tenant isolation coverage guard", () => {
-	it("classifies every data-layer export", () => {
+	it("classifies every data-layer and server-repository export", () => {
 		const unclassified: string[] = [];
+		const opaque: string[] = [];
 		const stale = new Set(Object.keys(CLASSIFICATIONS));
-		for (const file of moduleFiles()) {
-			const source = readFileSync(join(DATA_DIR, file), "utf8");
-			for (const name of namedExports(source)) {
+		for (const mod of guardedModules()) {
+			const source = readFileSync(mod.path, "utf8");
+			const scan = scanExports(source);
+			for (const name of scan.names) {
 				stale.delete(name);
-				if (!(name in CLASSIFICATIONS)) unclassified.push(`${file}:${name}`);
+				if (!(name in CLASSIFICATIONS))
+					unclassified.push(`${mod.label}:${name}`);
 			}
+			opaque.push(...scan.opaque.map((entry) => `${mod.label}: ${entry}`));
 		}
 		expect(
 			unclassified,
 			`Unclassified data-layer exports — add each to CLASSIFICATIONS ` +
 				`with its isolation mechanism (app-scoped / rls-only / public-token / ` +
 				`pure / server-admin / session):\n${unclassified.join("\n")}`,
+		).toEqual([]);
+		expect(
+			opaque,
+			`Export forms the coverage guard cannot resolve to a name — expand ` +
+				`them (or classify the resolved names) so no export can evade the ` +
+				`classification guard:\n${opaque.join("\n")}`,
 		).toEqual([]);
 		expect(
 			[...stale],
