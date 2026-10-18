@@ -1,7 +1,11 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { NRS_INFORMATIONAL_DISCLAIMER } from "./nigeria";
+import {
+	NRS_INFORMATIONAL_DISCLAIMER,
+	NRS_OFFICIAL_SOURCES,
+	NRS_OFFICIAL_SOURCES_INTRO,
+} from "./nigeria";
 
 /* E-invoicing SPEC fixes A1–A3: the product has no NRS clearance
  * integration, so no UI copy may imply one and no "FIRS" reference may
@@ -58,5 +62,86 @@ describe("NRS honesty claims (e-invoicing SPEC A1-A3)", () => {
 		// …and the compliance section states the missing clearance explicitly.
 		expect(landing).toContain("not an NRS-certified e-invoicing provider");
 		expect(landing).toMatch(/cannot get invoices\s+cleared through the MBS/);
+	});
+});
+
+/* Official-sources grounding for the same copy. The URLs were fetched live
+ * and verified genuine; these tests pin them, their scheme, the
+ * non-affiliation wording, and the absence of claim words so the
+ * "further reading" block can never drift into a compliance claim. */
+
+const NRS_OFFICIAL_SOURCE_URLS = [
+	"https://community.nrsmbs.com/kb/what-is-mbs-e-invoicing",
+	"https://community.nrsmbs.com/kb/clearance-reporting",
+	"https://einvoice.nrs.gov.ng/",
+	"https://nrs.gov.ng/",
+];
+
+const NON_AFFILIATION_PHRASE = "not connected to or endorsed by the NRS";
+
+/* Banned in the official-sources copy. Scoped to claim words that would
+ * turn a reference list into a compliance/clearance/certification claim;
+ * "endorsed" is only ever allowed inside the non-affiliation phrase, which
+ * is pinned separately. */
+const BANNED_SOURCE_CLAIM_PATTERNS: RegExp[] = [
+	/\bcompliant\b/i,
+	/\bcertified\b/i,
+	/\bcertification\b/i,
+	/\baccredited\b/i,
+	/\bcleared by\b/i,
+	/\bcleared with\b/i,
+	/\bapproved by\b/i,
+	/\bofficial partner\b/i,
+	/\bpartner(ed|ship) with\b/i,
+	/\bauthori[sz]ed (agent|reseller|integrator)\b/i,
+	/\bworks? (closely )?with the nrs\b/i,
+];
+
+function officialSourcesCopy(): string {
+	return [
+		NRS_OFFICIAL_SOURCES_INTRO,
+		...NRS_OFFICIAL_SOURCES.flatMap((source) => [
+			source.title,
+			source.description,
+		]),
+	].join("\n");
+}
+
+describe("NRS official sources grounding", () => {
+	it("pins the four verified official source URLs, all https", () => {
+		expect(NRS_OFFICIAL_SOURCES.map((source) => source.url)).toEqual(
+			NRS_OFFICIAL_SOURCE_URLS,
+		);
+		for (const url of NRS_OFFICIAL_SOURCE_URLS) {
+			expect(url.startsWith("https://")).toBe(true);
+		}
+	});
+
+	it("lists every source on the Compliance surface with new-tab-safe links", () => {
+		// The URLs live in the shared constant, so pin the constant plus the
+		// route's render wiring: the surface must import and map over it, and
+		// the anchors must open a new tab safely.
+		const route = readRoute("settings.compliance.tsx");
+		expect(route).toContain("NRS_OFFICIAL_SOURCES");
+		expect(route).toContain("NRS_OFFICIAL_SOURCES_INTRO");
+		expect(route).toContain('target="_blank"');
+		expect(route).toContain('rel="noopener noreferrer"');
+		// The banner stays above it, untouched.
+		expect(route).toContain("NRS_INFORMATIONAL_DISCLAIMER");
+	});
+
+	it("states that Velure is not connected to or endorsed by the NRS", () => {
+		expect(NRS_OFFICIAL_SOURCES_INTRO).toContain(NON_AFFILIATION_PHRASE);
+	});
+
+	it("keeps claim words out of the official-sources copy", () => {
+		const copy = officialSourcesCopy();
+		for (const pattern of BANNED_SOURCE_CLAIM_PATTERNS) {
+			expect(copy, pattern.source).not.toMatch(pattern);
+		}
+		// "endorsed" survives only inside the negated phrase.
+		expect(
+			copy.replace(new RegExp(NON_AFFILIATION_PHRASE, "gi"), ""),
+		).not.toMatch(/\bendorsed\b/i);
 	});
 });

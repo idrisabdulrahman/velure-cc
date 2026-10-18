@@ -34,6 +34,8 @@ import {
 	NIGERIA_TAX_RULE_SET_VERSION,
 	NIGERIA_VAT_RATE,
 	NRS_INFORMATIONAL_DISCLAIMER,
+	NRS_OFFICIAL_SOURCES,
+	NRS_OFFICIAL_SOURCES_INTRO,
 	resolveNigeriaRuleSet,
 	SELLER_TAX_STATUS_OPTIONS,
 	WITHHOLDING_CATEGORY_OPTIONS,
@@ -409,6 +411,35 @@ function ComplianceSettingsPage() {
 				e-invoicing provider and does not submit invoices to the NRS for
 				clearance.
 			</div>
+
+			<section aria-label="Official sources">
+				<h2 className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-3">
+					Official sources
+				</h2>
+				<p className="mt-2 max-w-2xl text-xs leading-5 text-ink-3">
+					{NRS_OFFICIAL_SOURCES_INTRO}
+				</p>
+				<ul className="mt-3 grid gap-3 md:grid-cols-2">
+					{NRS_OFFICIAL_SOURCES.map((source) => (
+						<li
+							key={source.url}
+							className="rounded-md border border-rule bg-paper px-4 py-3"
+						>
+							<a
+								href={source.url}
+								target="_blank"
+								rel="noopener noreferrer"
+								className="text-sm font-medium text-brand underline underline-offset-2 hover:text-brand-hi"
+							>
+								{source.title}
+							</a>
+							<p className="mt-1 text-xs leading-5 text-ink-3">
+								{source.description}
+							</p>
+						</li>
+					))}
+				</ul>
+			</section>
 
 			{isDashboardLoading ? (
 				<ComplianceKpiSkeleton />
