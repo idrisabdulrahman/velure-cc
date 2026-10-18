@@ -26,6 +26,13 @@ Status: pending | ready | implementing | auditing | fixing | merged | blocked
 | WP15 | H2 | WP13 | pending | — | — | 0 | — |
 | WP16 | D5,D7,C4 | WP14 | pending | — | — | 0 | — |
 
+## Coordination notes (wave-1 session, 2026-10-18 evening)
+
+- **Auditor subagent registered.** The main checkout's `.opencode/agents/auditor.md` had invalid YAML in its frontmatter (a 5-space-indented `"pnpm typecheck"` rule inside the permission map), so OpenCode never registered the `auditor` agent id — audits had to run via `general`. Fixed to consistent indentation with `pnpm test*`/`pnpm check*`/`pnpm typecheck*` wildcard rules; registration probed OK. The integration copy (lines 21–23) was already correct; only the running session's project file differed (main checkout keeps `webfetch: ask`, integration has `deny`).
+- **Live-test branch `v2` created.** From `origin/main` (be5b8e4, an ancestor of `einv-base`), fast-forwarded to this integration tip. Worktree: `/home/asys/.local/share/opencode/worktree/f96efc/v2`. Green there: test 390 passed / 86 skipped, typecheck 0, check 0 errors / 356 warnings, `pnpm build` ✓. Refresh after each integration merge with `git -C <v2-path> merge einv/integration` (fast-forward expected). Never pushed anywhere; remote push needs the user's explicit go-ahead.
+- **Home-directory migration:** the machine moved `/home/atlas` → `/home/asys` mid-session (~21:19–22:30 today). Git re-resolved every worktree record, but absolute `/home/atlas/...` paths in older prompts and shells are dead — use `/home/asys/...` from now on.
+- **WP-SOURCES (non-WP copy task):** implementer dispatched on `einv/sources` (worktree `.worktrees/sources`, base 2c1e610) to back the informational-disclaimer compliance copy with genuine official sources (community.nrsmbs.com KB articles ×2, einvoice.nrs.gov.ng, nrs.gov.ng — all fetched live and verified 2026-10-18). Status: implementing. Audits of this package use the now-registered `auditor` agent.
+
 ## Baseline (einv-base, 313c464)
 
 - stack: TanStack Start (React 19, Vite 7, Nitro/Cloudflare Pages) + Supabase Postgres (pg/kysely/drizzle available) + Better Auth + Tailwind 4 + Biome + Vitest 4 + Playwright.
