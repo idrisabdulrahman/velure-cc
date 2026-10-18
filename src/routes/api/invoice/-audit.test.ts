@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Supabase } from "#/server/data/workspaces";
-import { getInvoiceUserContext } from "#/server/invoice-repository";
+import {
+	getAuthenticatedInvoiceById,
+	getInvoiceUserContext,
+} from "#/server/invoice-repository";
 import { getSupabaseAdminClient } from "#/server/supabase";
 import { handle } from "./audit";
 
 vi.mock("#/server/invoice-repository", () => ({
 	getInvoiceUserContext: vi.fn(),
+	getAuthenticatedInvoiceById: vi.fn(),
 }));
 vi.mock("#/server/supabase", () => ({
 	getSupabaseAdminClient: vi.fn(),
@@ -15,9 +19,11 @@ vi.mock("#/server/supabase", () => ({
  * G1 — contract tests for POST /api/invoice/audit, the ONLY server entry
  * point for browser-initiated audit writes.
  *
- * The session and the database are faked; the handler, its validation
- * schema and the real `recordInvoiceAudit` service run unmocked, so these
- * tests exercise the real server path a UI-driven write takes.
+ * The session and the database are faked — including the session-scoped
+ * invoice lookup (`getAuthenticatedInvoiceById`) that gates `invoice`
+ * resource references — the handler, its validation schema and the real
+ * `recordInvoiceAudit` service run unmocked, so these tests exercise the
+ * real server path a UI-driven write takes.
  */
 
 const USER_ID = "session-user-1";
@@ -70,6 +76,13 @@ function post(body: string, headers: Record<string, string> = {}) {
 beforeEach(() => {
 	vi.mocked(getInvoiceUserContext).mockReset();
 	vi.mocked(getSupabaseAdminClient).mockReset();
+	// Default: the session-scoped invoice lookup resolves any id in the
+	// caller's workspace (the DB is faked like the session); the tenancy
+	// tests below override it per case.
+	vi.mocked(getAuthenticatedInvoiceById).mockReset();
+	vi.mocked(getAuthenticatedInvoiceById).mockResolvedValue({
+		id: "inv-1",
+	} as never);
 });
 
 describe("POST /api/invoice/audit", () => {
@@ -220,5 +233,114 @@ describe("POST /api/invoice/audit", () => {
 
 		expect(response.status).toBe(500);
 		expect(admin.rows).toHaveLength(0);
+	});
+
+	it("accepts an invoice entry referencing the caller's own invoice", async () => {
+		const admin = installAdminCapture();
+		const client = createSessionClient([
+			{ data: { workspace_id: WORKSPACE_ID } },
+		]);
+		vi.mocked(getInvoiceUserContext).mockResolvedValue({
+			userId: USER_ID,
+			client,
+		} as never);
+
+		const response = await handle({
+			request: post(
+				JSON.stringify({ action: "invoice.edit", resourceId: "inv-own" }),
+			),
+		});
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({ ok: true });
+		// The lookup runs with the session-scoped context, never with a
+		// client-supplied identity.
+		expect(getAuthenticatedInvoiceById).toHaveBeenCalledWith("inv-own", {
+			userId: USER_ID,
+			client,
+		});
+		expect(admin.rows).toHaveLength(1);
+		expect(admin.rows[0]).toMatchObject({ resource_id: "inv-own" });
+	});
+
+	it("rejects an invoice entry referencing a foreign or unknown invoice with 404", async () => {
+		const admin = installAdminCapture();
+		// The session-scoped lookup misses: the id belongs to another
+		// workspace, or does not exist — indistinguishable to the caller.
+		vi.mocked(getAuthenticatedInvoiceById).mockResolvedValue(null);
+		const client = createSessionClient([
+			{ data: { workspace_id: WORKSPACE_ID } },
+		]);
+		vi.mocked(getInvoiceUserContext).mockResolvedValue({
+			userId: USER_ID,
+			client,
+		} as never);
+
+		const response = await handle({
+			request: post(
+				JSON.stringify({
+					action: "invoice.edit",
+					resourceId: "inv-foreign",
+					before: { status: "draft" },
+				}),
+			),
+		});
+
+		expect(response.status).toBe(404);
+		expect(await response.json()).toEqual({
+			ok: false,
+			error: "Invoice not found.",
+		});
+		expect(admin.rows).toHaveLength(0);
+	});
+
+	it("enforces the invoice check even when resourceType is omitted", async () => {
+		const admin = installAdminCapture();
+		vi.mocked(getAuthenticatedInvoiceById).mockResolvedValue(null);
+		const client = createSessionClient([
+			{ data: { workspace_id: WORKSPACE_ID } },
+		]);
+		vi.mocked(getInvoiceUserContext).mockResolvedValue({
+			userId: USER_ID,
+			client,
+		} as never);
+
+		const response = await handle({
+			request: post(
+				JSON.stringify({ action: "invoice.create", resourceId: "inv-x" }),
+			),
+		});
+
+		expect(response.status).toBe(404);
+		expect(admin.rows).toHaveLength(0);
+	});
+
+	it("leaves non-invoice resource types unchanged (no lookup, no 404)", async () => {
+		const admin = installAdminCapture();
+		const client = createSessionClient([
+			{ data: { workspace_id: WORKSPACE_ID } },
+		]);
+		vi.mocked(getInvoiceUserContext).mockResolvedValue({
+			userId: USER_ID,
+			client,
+		} as never);
+
+		const response = await handle({
+			request: post(
+				JSON.stringify({
+					action: "invoice.export",
+					resourceType: "invoice_export",
+					resourceId: "batch-1",
+				}),
+			),
+		});
+
+		expect(response.status).toBe(200);
+		expect(getAuthenticatedInvoiceById).not.toHaveBeenCalled();
+		expect(admin.rows).toHaveLength(1);
+		expect(admin.rows[0]).toMatchObject({
+			resource_type: "invoice_export",
+			resource_id: "batch-1",
+		});
 	});
 });
