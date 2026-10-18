@@ -30,6 +30,7 @@
     "test:a10-reminders-live": "A10_LIVE=1 vitest run src/server/data/reminders.live.test.ts",
     "test:a10-integrations-live": "A10_LIVE=1 vitest run src/server/data/integrations.live.test.ts",
     "test:a10-tenancy-live": "A10_LIVE=1 vitest run src/server/data/rls-tenancy.live.test.ts",
+    "test:wp3-tenant-isolation-live": "A10_LIVE=1 vitest run src/server/data/tenant-isolation.live.test.ts",
     "format": "biome format",
     "lint": "biome lint",
     "check": "biome check",
