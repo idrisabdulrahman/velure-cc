@@ -6,7 +6,10 @@ import {
 	readRequestText,
 	safeErrorDetails,
 } from "#/server/http-security";
-import { getInvoiceUserContext } from "#/server/invoice-repository";
+import {
+	getAuthenticatedInvoiceById,
+	getInvoiceUserContext,
+} from "#/server/invoice-repository";
 
 /**
  * G1 — the server entry point for browser-initiated invoice audit writes.
@@ -21,8 +24,10 @@ import { getInvoiceUserContext } from "#/server/invoice-repository";
  * the ONE server service (`#/server/data/audit`) with the service-role
  * client — anon/authenticated hold no INSERT grant on the table.
  *
- * Fail-closed: 401 without a session, 400 for an invalid entry, 500 when
- * the write did not land (the caller's mutation then reports failure).
+ * Fail-closed: 401 without a session, 400 for an invalid entry, 404 when an
+ * `invoice` entry references an invoice the caller's own workspace cannot
+ * see (rows may only reference the caller's own invoices), 500 when the
+ * write did not land (the caller's mutation then reports failure).
  */
 
 const invoiceAuditEntrySchema = z.object({
@@ -78,7 +83,26 @@ export async function handle({ request }: { request: Request }) {
 			);
 		}
 
-		await recordInvoiceAudit(context.client, context.userId, parsed.data);
+		// Tenancy: an `invoice` entry may only reference an invoice the
+		// caller's own workspace can read — otherwise any authenticated user
+		// could append rows naming a foreign tenant's invoice id. Resolution
+		// goes through the session-scoped RLS client; a miss answers 404,
+		// matching the sibling send/download routes.
+		const entry = parsed.data;
+		if ((entry.resourceType ?? "invoice") === "invoice" && entry.resourceId) {
+			const invoice = await getAuthenticatedInvoiceById(
+				entry.resourceId,
+				context,
+			);
+			if (!invoice) {
+				return Response.json(
+					{ ok: false, error: "Invoice not found." },
+					{ status: 404 },
+				);
+			}
+		}
+
+		await recordInvoiceAudit(context.client, context.userId, entry);
 		return Response.json({ ok: true });
 	} catch (error) {
 		console.error("Invoice audit write failed", safeErrorDetails(error));

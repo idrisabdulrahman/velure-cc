@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handle as handleAuditWrite } from "#/routes/api/invoice/audit";
-import { getInvoiceUserContext } from "#/server/invoice-repository";
+import {
+	getAuthenticatedInvoiceById,
+	getInvoiceUserContext,
+} from "#/server/invoice-repository";
 import { getSupabaseAdminClient } from "#/server/supabase";
 import {
 	buildInvoiceAuditRow,
@@ -26,6 +29,7 @@ vi.mock("#/server/supabase", () => ({
 }));
 vi.mock("#/server/invoice-repository", () => ({
 	getInvoiceUserContext: vi.fn(),
+	getAuthenticatedInvoiceById: vi.fn(),
 }));
 
 const USER_ID = "user-1";
@@ -135,6 +139,13 @@ function installAuditEndpoint(client: Supabase) {
 beforeEach(() => {
 	vi.mocked(getSupabaseAdminClient).mockReset();
 	vi.mocked(getInvoiceUserContext).mockReset();
+	// Default: the session-scoped invoice lookup used by the audit route
+	// resolves any id in the caller's workspace (the DB is faked like the
+	// session), so lifecycle tests keep exercising their real write path.
+	vi.mocked(getAuthenticatedInvoiceById).mockReset();
+	vi.mocked(getAuthenticatedInvoiceById).mockResolvedValue({
+		id: "inv-1",
+	} as never);
 });
 
 afterEach(() => {
@@ -899,5 +910,65 @@ describe("invoice_audit_log delete guard migration", () => {
 		// Comment-only correction: the original migration's SQL is untouched.
 		expect(original).toContain("create table public.invoice_audit_log (");
 		expect(original).toContain("create trigger invoice_audit_log_append_only");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Post-final-audit fix: TRUNCATE (which row triggers never see) is rejected
+// by a BEFORE STATEMENT trigger, and the audit service comment matches
+// ---------------------------------------------------------------------------
+
+describe("invoice_audit_log truncate guard migration", () => {
+	const truncateGuard = readFileSync(
+		new URL(
+			"../../../supabase/migrations/20261018000000_einvoice_g1_invoice_audit_log_truncate_guard.sql",
+			import.meta.url,
+		),
+		"utf8",
+	);
+
+	it("rejects a TRUNCATE of the audit table for every role", () => {
+		expect(truncateGuard).toMatch(
+			/create trigger invoice_audit_log_block_truncate\s+before truncate on public\.invoice_audit_log\s+for each statement\s+execute function public\.invoice_audit_log_block_truncate\(\);/,
+		);
+		expect(truncateGuard).toContain(
+			"create or replace function public.invoice_audit_log_block_truncate()",
+		);
+		// Unconditional raise: unlike DELETE there is no nested/cascade case
+		// (the workspaces FK cascade is a DELETE, never a TRUNCATE).
+		expect(truncateGuard).toMatch(
+			/raise exception[\s\S]*TRUNCATE is not permitted[\s\S]*using errcode = 'insufficient_privilege';/,
+		);
+	});
+
+	it("touches only the guard objects and ships a reversible down section", () => {
+		expect(truncateGuard).not.toMatch(/^\s*grant\s/im);
+		expect(truncateGuard).not.toMatch(/^\s*create policy/im);
+		expect(truncateGuard).not.toMatch(/^\s*alter table/im);
+		expect(truncateGuard).toContain("-- down (reversible)");
+		expect(truncateGuard).toContain(
+			"drop trigger if exists invoice_audit_log_block_truncate on public.invoice_audit_log;",
+		);
+		expect(truncateGuard).toContain(
+			"drop function if exists public.invoice_audit_log_block_truncate();",
+		);
+	});
+
+	it("pins the audit service guarantee comment to the enforced reality", () => {
+		const source = readFileSync(new URL("./audit.ts", import.meta.url), "utf8");
+		// The service claims the service-role key cannot remove history; that
+		// claim is only true because a named guard covers each removal path —
+		// UPDATE, DELETE and TRUNCATE. If the TRUNCATE guard (or either other
+		// guard) is un-named while the claim stands, this test fails.
+		expect(source).toContain(
+			"20261016000000_einvoice_g1_invoice_audit_log.sql",
+		);
+		expect(source).toContain(
+			"20261017000000_einvoice_g1_invoice_audit_log_delete_guard.sql",
+		);
+		expect(source).toContain(
+			"20261018000000_einvoice_g1_invoice_audit_log_truncate_guard.sql",
+		);
+		expect(source).toMatch(/BEFORE TRUNCATE statement raise/);
 	});
 });

@@ -22,7 +22,9 @@
 --     a direct removal of rows for every role (service-role key included).
 --     The only delete that can touch rows is the workspaces FK ON DELETE
 --     CASCADE (account deletion), which that guard passes through while the
---     removal is nested, matching public.audit_logs.
+--     removal is nested, matching public.audit_logs. TRUNCATE, which row
+--     triggers never see, is separately rejected by
+--     20261018000000_einvoice_g1_invoice_audit_log_truncate_guard.sql.
 --
 -- Deliberately separate from public.audit_logs (A5): that table is the
 -- Convex-ported general event trail whose `action` is a Postgres enum —

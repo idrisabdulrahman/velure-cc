@@ -20,7 +20,7 @@ const NIGERIA_RC_CANONICAL = /^RC-\d{7}$/;
 
 /**
  * App-layer caps for the structured address columns, mirroring the DB CHECK
- * lengths in supabase/migrations/20261016000000_supplier_profile_validation_flags.sql
+ * lengths in supabase/migrations/20261016000001_supplier_profile_validation_flags.sql
  * (`char_length <= 300/200/200`). Enforced here so an over-long save fails as
  * an actionable field error instead of an opaque Postgres CHECK violation.
  */

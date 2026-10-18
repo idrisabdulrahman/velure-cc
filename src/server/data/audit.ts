@@ -24,13 +24,16 @@ import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
  * No other module inserts into `invoice_audit_log`.
  *
  * Append-only is enforced in the database, not by convention: migrations
- * `20261016000000_einvoice_g1_invoice_audit_log.sql` (BEFORE UPDATE raise)
- * plus `20261017000000_einvoice_g1_invoice_audit_log_delete_guard.sql`
+ * `20261016000000_einvoice_g1_invoice_audit_log.sql` (BEFORE UPDATE raise),
+ * `20261017000000_einvoice_g1_invoice_audit_log_delete_guard.sql`
  * (BEFORE DELETE raise for direct deletes, `pg_trigger_depth()` passthrough
- * for the workspaces FK ON DELETE CASCADE). This module exposes exactly one
- * write plus pure row/payload helpers — deliberately no update or delete
- * call exists here — so no application code can rewrite or remove history,
- * and neither can the service-role key through the API.
+ * for the workspaces FK ON DELETE CASCADE) and
+ * `20261018000000_einvoice_g1_invoice_audit_log_truncate_guard.sql`
+ * (BEFORE TRUNCATE statement raise — row triggers never fire on TRUNCATE).
+ * This module exposes exactly one write plus pure row/payload helpers —
+ * deliberately no update or delete call exists here — so no application
+ * code can rewrite or remove history, and neither can the service-role key
+ * through the API.
  *
  * Tenancy: the workspace id is always resolved server-side through the
  * caller's user-scoped RLS client (`resolveActiveWorkspaceId`) — never
