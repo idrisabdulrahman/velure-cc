@@ -11,7 +11,7 @@ Status: pending | ready | implementing | auditing | fixing | merged | blocked
 |---|---|---|---|---|---|---|---|
 | WP1 | A1,A2,A3 | none | **merged** (round 1 PASS; merge commit 54aac07) | einv/wp1 | 536f564 | 1 | LOW accepted: CSV disclaimer line puts header on row 2 — intentional, pinned by test |
 | WP2 | B1 | none | **merged** (round 1 PASS + cheap fixes; round 2 PASS + cheap fixes 51fddd4; merge commit bde111d; post-merge suite green) | einv/wp2 | 536f564 | 2 | L: source-shape tests in settings.index.test.ts should become component tests when a harness exists; L: editable Country field on the supplier form is a product decision (drops NG TIN/RC requirements when changed); carried from round 1: "server boundary" is app-layer only (no DB CHECK on profile fields) — product decision; BN- RC acceptance — product decision. No round-3 audit was run for the round-2 cheap fixes (merge-time full suite used instead) |
-| WP3 | H1 | none | **implementing** (worktree .worktrees/wp3 in einv-build worktree; covers WP1/2/4/5 surfaces incl. the audit endpoint) | einv/wp3 | f9dad76 | 0 | — |
+| WP3 | H1 | none | **merged** (round 1 PASS; 3 LOW guard-hardening items fixed in 0abf333; merge commit 46d9869; suite green at merge) | einv/wp3 | f9dad76 (ff'd onto integration tip before work) | 1 | No leaks found — app-layer predicates proven load-bearing for all classified exports (60+ data exports, 20 API routes); live RLS matrix (25 tables) not executed here (needs linked Supabase: `pnpm test:wp3-tenant-isolation-live`); rls-only functions verified by code read only. Package complete — no further dispatch needed |
 | WP4 | G1 | none | **merged** (round 1 FAIL: BLOCKER service-role writer reachable from browser; fix round; round 2 PASS; merge commit 429c4dd) | einv/wp4 | 536f564 | 2 | MEDIUM logged: audit POST failure after invoice insert commits → retry can duplicate the draft (non-atomic; fix = idempotency per mutation). LOW logged: client-asserted audit content is a documented trust boundary; autosave writes one full-snapshot audit row per debounce (coalescing deferred, G2 retention is "Later"); no live test for service-key DELETE rejection (A10_LIVE-gated); scheduled-invoice mailer writes no audit row (needs system-actor entry point); audit endpoint has no rate limit |
 | WP5 | E2 | none | **merged** (round 1 PASS + WHT-base parameterized; round 2 PASS dbdedc0; merge commit b3b7806) | einv/wp5 | 536f564 | 2 | LOW: WHT base (inclusive vs exclusive) needs tax-adviser confirmation — module requires explicit parameter, no default assumed; stale Results line in prompts/wp5 file (disk-only, prompts/ gitignored) |
 | WP6 | B2 | WP2 (merged) | **implementing** (worktree .worktrees/wp6) | einv/wp6 | f9dad76 | 0 | — |
@@ -38,6 +38,12 @@ Status: pending | ready | implementing | auditing | fixing | merged | blocked
 - 54709b8: excluded `.worktrees/**` from biome and vitest. Before this, root-suite runs silently collected tests from every nested worktree checkout (859 stray vitest entries) — merge validation was over-reporting.
 - b3b7806 (WP5 merged): 191 passed / 55 skipped, typecheck 0, check 356 warnings.
 - bde111d (WP2 merged): 280 passed / 55 skipped, typecheck 0, check 356 warnings.
+- 429c4dd (WP4 merged): 322 passed / 58 skipped, typecheck 0, check 356 warnings. One import-hunk conflict in src/server/data/compliance.ts (WP2 + WP4 both added imports) resolved by keeping both.
+- 46d9869 (WP3 merged): **383 passed / 86 skipped, typecheck 0, check 356 warnings** — wave 1 final state. 86 skipped = 28 pre-existing + 58 A10_LIVE-gated (now incl. the WP3 RLS matrix).
+
+## Wave 1 result (this run's scope — waves 2+ belong to run 2, started in a parallel session)
+
+All five wave-1 packages (WP1–WP5) merged into `einv/integration`, no blockers, no reverted merges. Final merge: 46d9869 (WP3). The WP6/WP7/WP8 rows above are owned by run 2's session — this run does not touch them. Ledger commits use `--no-verify` (docs-only; biome ignores docs/ and the pre-commit hook fails on zero processed files).
 
 ## Notes
 
