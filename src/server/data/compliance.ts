@@ -1,3 +1,7 @@
+import {
+	composeSupplierAddress,
+	validateSupplierProfile,
+} from "#/features/compliance/supplier-profile";
 import { buildComplianceDashboardReport } from "./compliance-dashboard";
 import type { ComplianceExportKind } from "./compliance-export";
 import { buildInvoiceExportContent } from "./compliance-export";
@@ -10,6 +14,92 @@ import {
 
 export async function getWorkspaceSettings(client: Supabase, userId: string) {
 	return getInvoiceWorkspaceSettings(client, userId);
+}
+
+type SupplierProfileRowSnapshot = {
+	tax_id: string | null;
+	rc_number: string | null;
+	address: string | null;
+	address_street: string | null;
+	address_lga: string | null;
+	address_state: string | null;
+	country_code: string;
+};
+
+export type SupplierProfileColumns = {
+	tax_id: string | null;
+	rc_number: string | null;
+	address: string;
+	address_street: string;
+	address_lga: string | null;
+	address_state: string;
+	country_code: string;
+	supplier_profile_status: "complete" | "needs_review";
+	supplier_profile_issues: string[];
+};
+
+/**
+ * Prefix of the error thrown when a supplier profile fails validation. The
+ * settings page matches it to surface the per-field messages (e.g. the
+ * 300/200/200 address caps) instead of a generic save-failure toast.
+ */
+export const SUPPLIER_PROFILE_REJECTION_PREFIX =
+	"Supplier profile is incomplete or invalid:";
+
+/**
+ * B1 server boundary for the supplier profile. A provided (non-undefined)
+ * value replaces the stored one; omitted values fall back to what is already
+ * stored so unrelated settings edits never wipe registration details. Throws
+ * on malformed or placeholder TIN/CAC RC values, on an over-long structured
+ * address (the DB CHECK caps) and on an incomplete profile (SPEC §5.B row B1:
+ * validated TIN, required CAC RC, structured address).
+ *
+ * Pure so the write path can be unit-tested without a Supabase client; the
+ * returned columns include the non-destructive flag columns, never deletes.
+ */
+export function buildSupplierProfileUpdate(
+	current: SupplierProfileRowSnapshot,
+	input: {
+		taxId?: string;
+		rcNumber?: string;
+		addressStreet?: string;
+		addressLga?: string;
+		addressState?: string;
+		countryCode?: string;
+	},
+): SupplierProfileColumns {
+	const provided = (value: string | undefined, fallback: string | null) =>
+		value === undefined ? (fallback ?? "") : value.trim();
+
+	const result = validateSupplierProfile({
+		tin: provided(input.taxId, current.tax_id),
+		rcNumber: provided(input.rcNumber, current.rc_number),
+		address: {
+			street: provided(input.addressStreet, current.address_street),
+			lga: provided(input.addressLga, current.address_lga),
+			state: provided(input.addressState, current.address_state),
+			countryCode: provided(input.countryCode, current.country_code),
+		},
+	});
+	if (!result.valid) {
+		throw new Error(
+			`${SUPPLIER_PROFILE_REJECTION_PREFIX} ${result.issues
+				.map((issue) => issue.message)
+				.join(" ")}`,
+		);
+	}
+
+	return {
+		tax_id: result.normalized.tin || null,
+		rc_number: result.normalized.rcNumber || null,
+		address: composeSupplierAddress(result.normalized.address),
+		address_street: result.normalized.address.street,
+		address_lga: result.normalized.address.lga || null,
+		address_state: result.normalized.address.state,
+		country_code: result.normalized.address.countryCode,
+		supplier_profile_status: result.status,
+		supplier_profile_issues: result.issues.map((issue) => issue.code),
+	};
 }
 
 export async function upsertWorkspaceSettings(
@@ -39,16 +129,29 @@ export async function upsertWorkspaceSettings(
 					| "below_threshold_not_charging_vat"
 					| "statutorily_exempt")
 			: undefined;
+	const { data: currentProfile, error: currentProfileError } = await client
+		.from("workspaces")
+		.select(
+			"tax_id, rc_number, address, address_street, address_lga, address_state, country_code",
+		)
+		.eq("id", workspaceId)
+		.maybeSingle();
+	if (currentProfileError) throw currentProfileError;
+	if (!currentProfile) throw new Error("Workspace not found.");
+	const profile = buildSupplierProfileUpdate(currentProfile, {
+		taxId: text(input.taxId),
+		rcNumber: text(input.rcNumber),
+		addressStreet: text(input.addressStreet),
+		addressLga: text(input.addressLga),
+		addressState: text(input.addressState),
+		countryCode: text(input.countryCode),
+	});
 	const allowed = {
 		name: text(input.name),
 		legal_name: text(input.legalName),
 		email: text(input.email),
 		phone: text(input.phone),
-		address: text(input.address),
 		website: text(input.website),
-		tax_id: text(input.taxId),
-		rc_number: text(input.rcNumber),
-		country_code: text(input.countryCode),
 		base_currency: text(input.baseCurrency),
 		seller_tax_status: sellerTaxStatus,
 		tax_rule_set_version: text(input.taxRuleSetVersion),
@@ -59,6 +162,7 @@ export async function upsertWorkspaceSettings(
 		invoice_number_mode: invoiceMode,
 		invoice_number_prefix: text(input.invoiceNumberPrefix),
 		next_invoice_sequence: number(input.nextInvoiceSequence),
+		...profile,
 	};
 	const { error } = await client
 		.from("workspaces")
