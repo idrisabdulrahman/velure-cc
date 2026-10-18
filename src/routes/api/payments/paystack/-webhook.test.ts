@@ -1,10 +1,10 @@
 import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { confirmPaystackWebhookPayment } from "#/server/data/payments";
+import { confirmPaystackWebhookPayment } from "#/server/data/paystack-server";
 import { MAX_WEBHOOK_BODY_BYTES } from "#/server/http-security";
 import { handle, verifyPaystackSignature } from "./webhook";
 
-vi.mock("#/server/data/payments", () => ({
+vi.mock("#/server/data/paystack-server", () => ({
 	confirmPaystackWebhookPayment: vi.fn(),
 }));
 

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ensurePaystackTransferCharge } from "#/server/data/payments";
+import { ensurePaystackTransferCharge } from "#/server/data/paystack-server";
 import {
 	consumeFixedWindowRateLimit,
 	getClientIp,

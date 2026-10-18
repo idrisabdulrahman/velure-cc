@@ -38,6 +38,7 @@ import { Route as SolutionsEnterpriseRouteImport } from './routes/solutions.ente
 import { Route as SolutionsSmallBusinessRouteImport } from './routes/solutions.small-business'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiAuthSupabaseSessionRouteImport } from './routes/api/auth/supabase-session'
+import { Route as ApiInvoiceAuditRouteImport } from './routes/api/invoice/audit'
 import { Route as ApiInvoiceScheduledRouteImport } from './routes/api/invoice/scheduled'
 import { Route as ApiRemindersSendQueueRouteImport } from './routes/api/reminders/send-queue'
 import { Route as ApiTestFixturesRouteImport } from './routes/api/test/fixtures'
@@ -205,6 +206,11 @@ const ApiAuthSupabaseSessionRoute = ApiAuthSupabaseSessionRouteImport.update({
   path: '/api/auth/supabase-session',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiInvoiceAuditRoute = ApiInvoiceAuditRouteImport.update({
+  id: '/api/invoice/audit',
+  path: '/api/invoice/audit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiInvoiceScheduledRoute = ApiInvoiceScheduledRouteImport.update({
   id: '/api/invoice/scheduled',
   path: '/api/invoice/scheduled',
@@ -340,6 +346,7 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/auth/supabase-session': typeof ApiAuthSupabaseSessionRoute
+  '/api/invoice/audit': typeof ApiInvoiceAuditRoute
   '/api/invoice/scheduled': typeof ApiInvoiceScheduledRoute
   '/api/reminders/send-queue': typeof ApiRemindersSendQueueRoute
   '/api/test/fixtures': typeof ApiTestFixturesRoute
@@ -386,6 +393,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/auth/supabase-session': typeof ApiAuthSupabaseSessionRoute
+  '/api/invoice/audit': typeof ApiInvoiceAuditRoute
   '/api/invoice/scheduled': typeof ApiInvoiceScheduledRoute
   '/api/reminders/send-queue': typeof ApiRemindersSendQueueRoute
   '/api/test/fixtures': typeof ApiTestFixturesRoute
@@ -437,6 +445,7 @@ export interface FileRoutesById {
   '/settings/': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/auth/supabase-session': typeof ApiAuthSupabaseSessionRoute
+  '/api/invoice/audit': typeof ApiInvoiceAuditRoute
   '/api/invoice/scheduled': typeof ApiInvoiceScheduledRoute
   '/api/reminders/send-queue': typeof ApiRemindersSendQueueRoute
   '/api/test/fixtures': typeof ApiTestFixturesRoute
@@ -489,6 +498,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/api/auth/$'
     | '/api/auth/supabase-session'
+    | '/api/invoice/audit'
     | '/api/invoice/scheduled'
     | '/api/reminders/send-queue'
     | '/api/test/fixtures'
@@ -535,6 +545,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/api/auth/$'
     | '/api/auth/supabase-session'
+    | '/api/invoice/audit'
     | '/api/invoice/scheduled'
     | '/api/reminders/send-queue'
     | '/api/test/fixtures'
@@ -585,6 +596,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/api/auth/$'
     | '/api/auth/supabase-session'
+    | '/api/invoice/audit'
     | '/api/invoice/scheduled'
     | '/api/reminders/send-queue'
     | '/api/test/fixtures'
@@ -624,6 +636,7 @@ export interface RootRouteChildren {
   SolutionsSmallBusinessRoute: typeof SolutionsSmallBusinessRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiAuthSupabaseSessionRoute: typeof ApiAuthSupabaseSessionRoute
+  ApiInvoiceAuditRoute: typeof ApiInvoiceAuditRoute
   ApiInvoiceScheduledRoute: typeof ApiInvoiceScheduledRoute
   ApiRemindersSendQueueRoute: typeof ApiRemindersSendQueueRoute
   ApiTestFixturesRoute: typeof ApiTestFixturesRoute
@@ -846,6 +859,13 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/supabase-session'
       fullPath: '/api/auth/supabase-session'
       preLoaderRoute: typeof ApiAuthSupabaseSessionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/invoice/audit': {
+      id: '/api/invoice/audit'
+      path: '/api/invoice/audit'
+      fullPath: '/api/invoice/audit'
+      preLoaderRoute: typeof ApiInvoiceAuditRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/invoice/scheduled': {
@@ -1077,6 +1097,7 @@ const rootRouteChildren: RootRouteChildren = {
   SolutionsSmallBusinessRoute: SolutionsSmallBusinessRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiAuthSupabaseSessionRoute: ApiAuthSupabaseSessionRoute,
+  ApiInvoiceAuditRoute: ApiInvoiceAuditRoute,
   ApiInvoiceScheduledRoute: ApiInvoiceScheduledRoute,
   ApiRemindersSendQueueRoute: ApiRemindersSendQueueRoute,
   ApiTestFixturesRoute: ApiTestFixturesRoute,
