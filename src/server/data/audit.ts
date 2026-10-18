@@ -6,13 +6,31 @@ import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
  * G1 — the ONE append-only invoice audit service
  * (SPEC 5.G "Append-only audit log", 4.2 tamper-evidence).
  *
+ * SERVER-ONLY. This module holds the service-role INSERT, so it must never
+ * be imported by browser code — there is a runtime tripwire below, and
+ * `audit-browser-boundary.test.ts` walks every browser-imported module to
+ * prove no client-reachable code references `getSupabaseAdminClient`.
+ *
  * Every invoice lifecycle code path (create / edit / send / cancel /
- * export) calls `recordInvoiceAudit`, which writes who / what / when /
- * before-after into `public.invoice_audit_log`. The table has no update and
- * no application delete path (migration
- * `20261016000000_einvoice_g1_invoice_audit_log.sql`); this module exposes
- * exactly one write plus pure row/payload helpers — deliberately no update
- * or delete call exists here.
+ * export) reaches this service through exactly one of two callers:
+ *   1. browser-initiated mutations call the browser-safe transport
+ *      (`./audit-client`), which POSTs the entry to
+ *      POST /api/invoice/audit; that route derives actor and workspace
+ *      from the verified session and then calls `recordInvoiceAudit`
+ *      (src/routes/api/invoice/audit.ts);
+ *   2. server-side callers (the invoice send route, via
+ *      src/server/invoice-repository.ts) pass this function as the
+ *      injected `write` so the row is written in-process.
+ * No other module inserts into `invoice_audit_log`.
+ *
+ * Append-only is enforced in the database, not by convention: migrations
+ * `20261016000000_einvoice_g1_invoice_audit_log.sql` (BEFORE UPDATE raise)
+ * plus `20261017000000_einvoice_g1_invoice_audit_log_delete_guard.sql`
+ * (BEFORE DELETE raise for direct deletes, `pg_trigger_depth()` passthrough
+ * for the workspaces FK ON DELETE CASCADE). This module exposes exactly one
+ * write plus pure row/payload helpers — deliberately no update or delete
+ * call exists here — so no application code can rewrite or remove history,
+ * and neither can the service-role key through the API.
  *
  * Tenancy: the workspace id is always resolved server-side through the
  * caller's user-scoped RLS client (`resolveActiveWorkspaceId`) — never
@@ -22,10 +40,15 @@ import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
  * session holding the publishable-key PostgREST client cannot forge
  * events. Reads stay member-scoped under RLS.
  *
+ * Identity: `userId` must be the verified session user handed over by a
+ * server entry point (the audit route or a session-minted context). The
+ * browser never calls this function directly, so no client-supplied actor
+ * id can reach it.
+ *
  * Fail-closed: `recordInvoiceAudit` throws when the workspace cannot be
- * resolved or when the insert fails, and lifecycle call sites await it
- * without swallowing the error. Audit and mutation are NOT wrapped in one
- * SQL transaction — the A10 data layer is non-transactional throughout, and
+ * resolved or when the insert fails, and callers await it without
+ * swallowing the error. Audit and mutation are NOT wrapped in one SQL
+ * transaction — the A10 data layer is non-transactional throughout, and
  * rewriting every lifecycle op as an RPC is out of scope — so a mutation
  * can succeed while its audit insert fails (the caller then sees an
  * error).
@@ -126,16 +149,24 @@ export function buildInvoiceAuditRow(args: {
 /**
  * Record one append-only audit event for the caller's active workspace.
  *
- * `client` must be the caller's user-scoped RLS client; the workspace is
- * resolved from it (server-side) and the row is written with the
- * service-role client. Throws — fail-closed — when the workspace is
- * missing or the insert fails.
+ * SERVER-ONLY (see the module doc): `client` must be the caller's
+ * user-scoped RLS client minted from a verified session server-side, and
+ * `userId` must be that session's user id. The workspace is resolved from
+ * the client and the row is written with the service-role client. Throws —
+ * fail-closed — when the workspace is missing or the insert fails.
  */
 export async function recordInvoiceAudit(
 	client: Supabase,
 	userId: string,
 	entry: InvoiceAuditEntry,
 ): Promise<void> {
+	if (typeof window !== "undefined") {
+		// Tripwire: the service-role key cannot exist in a browser. Client
+		// code must go through ./audit-client (POST /api/invoice/audit).
+		throw new Error(
+			"recordInvoiceAudit is server-only; browser callers must use ./audit-client.",
+		);
+	}
 	const workspaceId = await resolveActiveWorkspaceId(client, userId);
 	if (!workspaceId) throw new Error("No active workspace.");
 	const { error } = await getSupabaseAdminClient()

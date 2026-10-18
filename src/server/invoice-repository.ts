@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { InvoiceRecord } from "#/features/invoices/types";
+import { recordInvoiceAudit } from "#/server/data/audit";
 import { getById, recordDeliveryEvent } from "#/server/data/invoices";
 import { mintSupabaseAccessToken } from "#/server/supabase-session";
 import type { Database } from "#/types/database.types";
@@ -54,9 +55,18 @@ export async function recordInvoiceDeliveryEvent(
 		publicUrl?: string;
 	},
 ) {
-	return recordDeliveryEvent(context.client, context.userId, {
-		...input,
-		channel: "email",
-		provider: "resend",
-	});
+	// Server-side path: inject the ONE audit service so the row is written
+	// in-process (the default browser transport is a relative fetch, which
+	// does not exist here). Actor and workspace come from the verified
+	// session context above.
+	return recordDeliveryEvent(
+		context.client,
+		context.userId,
+		{
+			...input,
+			channel: "email",
+			provider: "resend",
+		},
+		{ write: recordInvoiceAudit },
+	);
 }

@@ -1,4 +1,4 @@
-import { recordInvoiceAudit } from "./audit";
+import { recordInvoiceAudit } from "./audit-client";
 import { buildComplianceDashboardReport } from "./compliance-dashboard";
 import { list as listInvoices } from "./invoices";
 import type { Supabase } from "./workspaces";

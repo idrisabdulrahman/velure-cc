@@ -1,5 +1,5 @@
 import type { Database, Json } from "#/types/database.types";
-import { recordInvoiceAudit } from "./audit";
+import { type InvoiceAuditWriter, recordInvoiceAudit } from "./audit-client";
 import {
 	assertValidRcNumber,
 	assertValidTin,
@@ -2079,6 +2079,17 @@ export async function updateStatus(
 	const now = args.paidAt ?? Date.now();
 
 	if (args.status === "canceled") {
+		const derived = getDerivedInvoiceStatus(current);
+		if (derived === "canceled") {
+			// Transition guard: a redundant cancel must not append a second
+			// invoice.cancel row for a state that already happened.
+			throw new Error("Invoice is already canceled.");
+		}
+		if (derived === "paid") {
+			// Money already settled: canceling would rewrite paid history
+			// (issued-invoice immutability; corrections go through notes).
+			throw new Error("A paid invoice cannot be canceled.");
+		}
 		const canceledAt = current.canceledAt ?? Date.now();
 		const { error } = await client
 			.from("invoices")
@@ -2131,6 +2142,19 @@ export async function updateStatus(
 			.eq("id", args.id)
 			.eq("workspace_id", workspaceId);
 		if (error) throw error;
+		await recordInvoiceAudit(client, userId, {
+			action: "invoice.edit",
+			resourceId: args.id,
+			before: current,
+			after: {
+				status: "paid",
+				paidAt: now,
+				paymentAmount: Math.max(existingPayment, total),
+				paymentReference:
+					args.paymentReference ?? current.paymentReference ?? null,
+			},
+			message: "Invoice marked as paid.",
+		});
 		return { ok: true };
 	}
 
@@ -2157,6 +2181,13 @@ export async function updateStatus(
 			.eq("id", args.id)
 			.eq("workspace_id", workspaceId);
 		if (error) throw error;
+		await recordInvoiceAudit(client, userId, {
+			action: "invoice.edit",
+			resourceId: args.id,
+			before: current,
+			after: { status: patch.status, deliveredAt },
+			message: `Invoice marked as ${args.status}.`,
+		});
 		return { ok: true };
 	}
 
@@ -2173,6 +2204,13 @@ export async function updateStatus(
 			.eq("id", args.id)
 			.eq("workspace_id", workspaceId);
 		if (error) throw error;
+		await recordInvoiceAudit(client, userId, {
+			action: "invoice.edit",
+			resourceId: args.id,
+			before: current,
+			after: { status: "draft", deliveredAt: null },
+			message: "Invoice reverted to draft.",
+		});
 	}
 
 	return { ok: true };
@@ -2594,7 +2632,10 @@ export async function duplicate(
 	await recordInvoiceAudit(client, userId, {
 		action: "invoice.create",
 		resourceId: data.id,
-		before: source,
+		// Create event for the NEW invoice: there is no prior state of this
+		// resource, so `before` is null (the source invoice is referenced
+		// in the message instead of being misreported as prior state).
+		before: null,
 		after: {
 			invoiceNumber: generated.invoiceNumber,
 			duplicatedFrom: id,
@@ -2732,7 +2773,10 @@ export async function convertProformaToInvoice(
 	await recordInvoiceAudit(client, userId, {
 		action: "invoice.create",
 		resourceId: convertedId,
-		before: source,
+		// Create event for the converted invoice: no prior state of THIS
+		// resource exists, so `before` is null; the pro-forma source id
+		// travels in `after` / the message.
+		before: null,
 		after: {
 			invoiceNumber: generated.invoiceNumber,
 			documentType: "standard",
@@ -3099,6 +3143,10 @@ export async function recordDeliveryEvent(
 		error?: string;
 		publicUrl?: string;
 	},
+	// Server callers (src/server/invoice-repository.ts) inject the
+	// server-only audit service; browser callers rely on the default
+	// endpoint transport from ./audit-client.
+	options?: { write?: InvoiceAuditWriter },
 ): Promise<{ ok: true; deliveryEventId: string }> {
 	const workspaceId = await resolveActiveWorkspaceId(client, userId);
 	if (!workspaceId) throw new Error("No active workspace.");
@@ -3150,13 +3198,18 @@ export async function recordDeliveryEvent(
 			.eq("workspace_id", workspaceId);
 		if (updateError) throw updateError;
 
-		await recordInvoiceAudit(client, userId, {
-			action: "invoice.send",
-			resourceId: args.invoiceId,
-			before: invoice,
-			after: patch,
-			message: `Invoice emailed to ${args.recipient}.`,
-		});
+		await recordInvoiceAudit(
+			client,
+			userId,
+			{
+				action: "invoice.send",
+				resourceId: args.invoiceId,
+				before: invoice,
+				after: patch,
+				message: `Invoice emailed to ${args.recipient}.`,
+			},
+			options?.write,
+		);
 	}
 
 	return { ok: true, deliveryEventId };

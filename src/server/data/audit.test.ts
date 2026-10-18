@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { handle as handleAuditWrite } from "#/routes/api/invoice/audit";
+import { getInvoiceUserContext } from "#/server/invoice-repository";
 import { getSupabaseAdminClient } from "#/server/supabase";
 import {
 	buildInvoiceAuditRow,
@@ -10,14 +12,20 @@ import {
 import { createInvoiceExport } from "./compliance";
 import {
 	cancelSchedule,
+	convertProformaToInvoice,
 	createDraft,
+	duplicate,
 	markInvoiceSent,
 	updateStatus,
 } from "./invoices";
+import { recordPayment } from "./payments";
 import type { Supabase } from "./workspaces";
 
 vi.mock("#/server/supabase", () => ({
 	getSupabaseAdminClient: vi.fn(),
+}));
+vi.mock("#/server/invoice-repository", () => ({
+	getInvoiceUserContext: vi.fn(),
 }));
 
 const USER_ID = "user-1";
@@ -97,8 +105,40 @@ function installAdminFake() {
 	return fake;
 }
 
+/**
+ * Run an audit write through the REAL server path.
+ *
+ * The lifecycle function under test writes via `./audit-client`, which POSTs
+ * to POST /api/invoice/audit; the fetch stub below dispatches that request to
+ * the real route handler, which derives the actor from the verified session,
+ * validates the body and writes through the real `recordInvoiceAudit`
+ * service into the captured admin client. Only the session and the database
+ * are faked — exactly the boundary a browser-driven create/edit/cancel/
+ * export action crosses.
+ */
+function installAuditEndpoint(client: Supabase) {
+	const admin = installAdminFake();
+	vi.mocked(getInvoiceUserContext).mockResolvedValue({
+		userId: USER_ID,
+		client,
+	} as never);
+	vi.stubGlobal("fetch", (async (
+		input: RequestInfo | URL,
+		init?: RequestInit,
+	) =>
+		handleAuditWrite({
+			request: new Request(new URL(String(input), "http://velure.test"), init),
+		})) as typeof fetch);
+	return admin;
+}
+
 beforeEach(() => {
 	vi.mocked(getSupabaseAdminClient).mockReset();
+	vi.mocked(getInvoiceUserContext).mockReset();
+});
+
+afterEach(() => {
+	vi.unstubAllGlobals();
 });
 
 // ---------------------------------------------------------------------------
@@ -323,7 +363,6 @@ function workspaceResolutions(count: number): CannedResult[] {
 
 describe("invoice lifecycle wiring", () => {
 	it("createDraft records invoice.create with a sanitized after snapshot", async () => {
-		const admin = installAdminFake();
 		const { client, inserts } = createFakeUserClient({
 			active_workspaces: workspaceResolutions(2),
 			workspaces: [
@@ -339,6 +378,7 @@ describe("invoice lifecycle wiring", () => {
 			],
 			invoices: [{ data: [] }, { data: null }, { data: { id: "inv-new" } }],
 		});
+		const admin = installAuditEndpoint(client);
 
 		const invoice = await createDraft(client, USER_ID, {
 			token: "pub-draft-token",
@@ -351,6 +391,9 @@ describe("invoice lifecycle wiring", () => {
 		});
 
 		expect(invoice.id).toBe("inv-new");
+		// One UI action, one audit row, written through the server endpoint.
+		expect(admin.rows).toHaveLength(1);
+		expect(getInvoiceUserContext).toHaveBeenCalledTimes(1);
 		const auditRow = admin.rows[0] as Record<string, unknown>;
 		expect(auditRow).toMatchObject({
 			workspace_id: WORKSPACE_ID,
@@ -371,14 +414,15 @@ describe("invoice lifecycle wiring", () => {
 	});
 
 	it("markInvoiceSent records invoice.send", async () => {
-		const admin = installAdminFake();
 		const { client } = createFakeUserClient({
 			active_workspaces: workspaceResolutions(3),
 			invoices: [{ data: invoiceRow }, { data: null, error: null }],
 		});
+		const admin = installAuditEndpoint(client);
 
 		await markInvoiceSent(client, USER_ID, "inv-1");
 
+		expect(admin.rows).toHaveLength(1);
 		const auditRow = admin.rows[0] as Record<string, unknown>;
 		expect(auditRow).toMatchObject({
 			workspace_id: WORKSPACE_ID,
@@ -396,17 +440,20 @@ describe("invoice lifecycle wiring", () => {
 	});
 
 	it("updateStatus(canceled) records invoice.cancel and fails closed on update errors", async () => {
-		const admin = installAdminFake();
 		const { client } = createFakeUserClient({
 			active_workspaces: workspaceResolutions(3),
 			invoices: [{ data: invoiceRow }, { data: null, error: null }],
 		});
+		const admin = installAuditEndpoint(client);
 
 		await updateStatus(client, USER_ID, { id: "inv-1", status: "canceled" });
 
+		expect(admin.rows).toHaveLength(1);
 		const auditRow = admin.rows[0] as Record<string, unknown>;
 		expect(auditRow).toMatchObject({
 			action: "invoice.cancel",
+			workspace_id: WORKSPACE_ID,
+			actor_id: USER_ID,
 			resource_id: "inv-1",
 			message: "Invoice canceled.",
 		});
@@ -417,22 +464,24 @@ describe("invoice lifecycle wiring", () => {
 		});
 
 		// A failing invoice update must abort before any audit row is written.
-		const failing = installAdminFake();
 		const broken = createFakeUserClient({
-			active_workspaces: workspaceResolutions(2),
+			active_workspaces: workspaceResolutions(3),
 			invoices: [
 				{ data: invoiceRow },
 				{ data: null, error: { message: "update refused" } },
 			],
 		});
+		const failing = installAuditEndpoint(broken.client);
 		await expect(
-			updateStatus(broken.client, USER_ID, { id: "inv-1", status: "canceled" }),
+			updateStatus(broken.client, USER_ID, {
+				id: "inv-1",
+				status: "canceled",
+			}),
 		).rejects.toMatchObject({ message: "update refused" });
 		expect(failing.rows).toHaveLength(0);
 	});
 
 	it("cancelSchedule records invoice.edit for the schedule state change", async () => {
-		const admin = installAdminFake();
 		const scheduledRow = {
 			...invoiceRow,
 			scheduled_at: "2026-12-01T10:00:00.000Z",
@@ -442,9 +491,11 @@ describe("invoice lifecycle wiring", () => {
 			active_workspaces: workspaceResolutions(3),
 			invoices: [{ data: scheduledRow }, { data: null, error: null }],
 		});
+		const admin = installAuditEndpoint(client);
 
 		await cancelSchedule(client, USER_ID, "inv-1");
 
+		expect(admin.rows).toHaveLength(1);
 		const auditRow = admin.rows[0] as Record<string, unknown>;
 		expect(auditRow).toMatchObject({
 			action: "invoice.edit",
@@ -462,7 +513,6 @@ describe("invoice lifecycle wiring", () => {
 	});
 
 	it("createInvoiceExport records invoice.export on the export resource", async () => {
-		const admin = installAdminFake();
 		const { client, inserts } = createFakeUserClient({
 			active_workspaces: workspaceResolutions(2),
 			workspaces: [
@@ -485,6 +535,7 @@ describe("invoice lifecycle wiring", () => {
 				},
 			],
 		});
+		const admin = installAuditEndpoint(client);
 
 		const result = await createInvoiceExport(
 			client,
@@ -496,6 +547,7 @@ describe("invoice lifecycle wiring", () => {
 		expect(
 			inserts.filter((entry) => entry.table === "invoice_exports"),
 		).toHaveLength(1);
+		expect(admin.rows).toHaveLength(1);
 		const auditRow = admin.rows[0] as Record<string, unknown>;
 		expect(auditRow).toMatchObject({
 			workspace_id: WORKSPACE_ID,
@@ -528,5 +580,324 @@ describe("invoice lifecycle wiring", () => {
 			expect(invoicesSource).toContain(`action: "${action}"`);
 		}
 		expect(complianceSource).toContain('action: "invoice.export"');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// G1 fix round: previously unaudited material transitions, the create-event
+// `before` shape, and the cancel transition guard
+// ---------------------------------------------------------------------------
+
+describe("material state transitions", () => {
+	it("updateStatus(paid) appends invoice.edit with the settled money state", async () => {
+		const { client } = createFakeUserClient({
+			active_workspaces: workspaceResolutions(6),
+			invoices: [{ data: invoiceRow }, { data: null, error: null }],
+		});
+		const admin = installAuditEndpoint(client);
+
+		await updateStatus(client, USER_ID, {
+			id: "inv-1",
+			status: "paid",
+			paymentReference: "REF-99",
+		});
+
+		expect(admin.rows).toHaveLength(1);
+		expect(admin.rows[0]).toMatchObject({
+			workspace_id: WORKSPACE_ID,
+			actor_id: USER_ID,
+			action: "invoice.edit",
+			resource_id: "inv-1",
+			message: "Invoice marked as paid.",
+		});
+		expect(admin.rows[0].before_payload).toMatchObject({ id: "inv-1" });
+		const paidAfter = admin.rows[0].after_payload as Record<string, unknown>;
+		expect(paidAfter).toMatchObject({
+			status: "paid",
+			paidAt: expect.any(Number),
+			paymentReference: "REF-99",
+		});
+		// The invoice is settled to its full total (tax inclusive), never below.
+		expect(paidAfter.paymentAmount).toBeGreaterThanOrEqual(5000);
+	});
+
+	it("updateStatus(unpaid) appends invoice.edit for the issued → unpaid transition", async () => {
+		const { client } = createFakeUserClient({
+			active_workspaces: workspaceResolutions(6),
+			invoices: [{ data: invoiceRow }, { data: null, error: null }],
+		});
+		const admin = installAuditEndpoint(client);
+
+		await updateStatus(client, USER_ID, { id: "inv-1", status: "unpaid" });
+
+		expect(admin.rows).toHaveLength(1);
+		expect(admin.rows[0]).toMatchObject({
+			actor_id: USER_ID,
+			action: "invoice.edit",
+			resource_id: "inv-1",
+			message: "Invoice marked as unpaid.",
+		});
+		expect(admin.rows[0].after_payload).toMatchObject({
+			status: "unpaid",
+			deliveredAt: expect.any(Number),
+		});
+	});
+
+	it("updateStatus(draft) appends invoice.edit for the revert to draft", async () => {
+		const { client } = createFakeUserClient({
+			active_workspaces: workspaceResolutions(6),
+			invoices: [{ data: invoiceRow }, { data: null, error: null }],
+		});
+		const admin = installAuditEndpoint(client);
+
+		await updateStatus(client, USER_ID, { id: "inv-1", status: "draft" });
+
+		expect(admin.rows).toHaveLength(1);
+		expect(admin.rows[0]).toMatchObject({
+			actor_id: USER_ID,
+			action: "invoice.edit",
+			resource_id: "inv-1",
+			message: "Invoice reverted to draft.",
+		});
+		expect(admin.rows[0].before_payload).toMatchObject({ id: "inv-1" });
+		expect(admin.rows[0].after_payload).toMatchObject({
+			status: "draft",
+			deliveredAt: null,
+		});
+	});
+
+	it("recordPayment appends invoice.edit for the money it applied", async () => {
+		const paidRow = {
+			...invoiceRow,
+			payment_amount: 5000,
+			paid_at: "2026-10-17T10:00:00.000Z",
+			status: "paid",
+		};
+		const { client } = createFakeUserClient({
+			active_workspaces: workspaceResolutions(6),
+			invoices: [
+				{ data: invoiceRow },
+				{ data: null, error: null },
+				{ data: paidRow },
+			],
+		});
+		const admin = installAuditEndpoint(client);
+
+		const result = await recordPayment(client, USER_ID, {
+			invoiceId: "inv-1",
+			amount: 5000,
+		});
+
+		expect(result).toEqual({ ok: true, duplicate: false, invoiceId: "inv-1" });
+		expect(admin.rows).toHaveLength(1);
+		expect(admin.rows[0]).toMatchObject({
+			workspace_id: WORKSPACE_ID,
+			actor_id: USER_ID,
+			action: "invoice.edit",
+			resource_id: "inv-1",
+			message: "Recorded a payment.",
+		});
+		expect(admin.rows[0].before_payload).toMatchObject({
+			id: "inv-1",
+			paymentAmount: 0,
+		});
+		expect(admin.rows[0].after_payload).toMatchObject({
+			id: "inv-1",
+			paymentAmount: 5000,
+			status: "paid",
+		});
+	});
+
+	it("duplicate appends invoice.create with before: null (finding: no prior state)", async () => {
+		const { client } = createFakeUserClient({
+			active_workspaces: workspaceResolutions(6),
+			workspaces: [
+				{
+					data: {
+						name: "Velure",
+						invoice_number_mode: "prefix",
+						invoice_number_prefix: "INV",
+						next_invoice_sequence: 7,
+					},
+				},
+				{ data: null },
+			],
+			invoices: [
+				{ data: invoiceRow },
+				{ data: [] },
+				{ data: { id: "inv-dup" } },
+			],
+		});
+		const admin = installAuditEndpoint(client);
+
+		const created = await duplicate(client, USER_ID, "inv-1");
+
+		expect(created.id).toBe("inv-dup");
+		expect(admin.rows).toHaveLength(1);
+		expect(admin.rows[0]).toMatchObject({
+			action: "invoice.create",
+			resource_id: "inv-dup",
+		});
+		expect(admin.rows[0].before_payload).toBeNull();
+		expect(admin.rows[0].after_payload).toMatchObject({
+			duplicatedFrom: "inv-1",
+		});
+	});
+
+	it("convertProformaToInvoice appends invoice.create with before: null", async () => {
+		const proformaRow = {
+			...invoiceRow,
+			document_type: "proforma",
+			invoice_number: "PF-2026-0001",
+		};
+		const { client } = createFakeUserClient({
+			active_workspaces: workspaceResolutions(6),
+			workspaces: [
+				{
+					data: {
+						name: "Velure",
+						invoice_number_mode: "prefix",
+						invoice_number_prefix: "INV",
+						next_invoice_sequence: 7,
+					},
+				},
+				{ data: null },
+			],
+			invoices: [
+				{ data: proformaRow },
+				{ data: [] },
+				{ data: { id: "inv-converted" } },
+			],
+		});
+		const admin = installAuditEndpoint(client);
+
+		const created = await convertProformaToInvoice(client, USER_ID, "inv-1");
+
+		expect(created.id).toBe("inv-converted");
+		expect(admin.rows).toHaveLength(1);
+		expect(admin.rows[0]).toMatchObject({
+			action: "invoice.create",
+			resource_id: "inv-converted",
+		});
+		expect(admin.rows[0].before_payload).toBeNull();
+		expect(admin.rows[0].after_payload).toMatchObject({
+			convertedFromProformaId: "inv-1",
+			documentType: "standard",
+		});
+	});
+
+	it("refuses a redundant or money-settling cancel without appending a row", async () => {
+		const canceled = createFakeUserClient({
+			active_workspaces: workspaceResolutions(6),
+			invoices: [
+				{
+					data: {
+						...invoiceRow,
+						status: "canceled",
+						canceled_at: "2026-10-05T10:00:00.000Z",
+					},
+				},
+			],
+		});
+		const canceledAdmin = installAuditEndpoint(canceled.client);
+		await expect(
+			updateStatus(canceled.client, USER_ID, {
+				id: "inv-1",
+				status: "canceled",
+			}),
+		).rejects.toThrow(/already canceled/);
+		expect(canceledAdmin.rows).toHaveLength(0);
+
+		const paid = createFakeUserClient({
+			active_workspaces: workspaceResolutions(6),
+			invoices: [
+				{
+					data: {
+						...invoiceRow,
+						status: "paid",
+						payment_amount: 100000,
+						paid_at: "2026-10-05T10:00:00.000Z",
+					},
+				},
+			],
+		});
+		const paidAdmin = installAuditEndpoint(paid.client);
+		await expect(
+			updateStatus(paid.client, USER_ID, { id: "inv-1", status: "canceled" }),
+		).rejects.toThrow(/paid invoice cannot be canceled/);
+		expect(paidAdmin.rows).toHaveLength(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// G1 fix round: service-role DELETEs are rejected at the database, while the
+// workspaces FK ON DELETE CASCADE (account deletion) still works
+// ---------------------------------------------------------------------------
+
+describe("invoice_audit_log delete guard migration", () => {
+	const guard = readFileSync(
+		new URL(
+			"../../../supabase/migrations/20261017000000_einvoice_g1_invoice_audit_log_delete_guard.sql",
+			import.meta.url,
+		),
+		"utf8",
+	);
+	const original = readFileSync(
+		new URL(
+			"../../../supabase/migrations/20261016000000_einvoice_g1_invoice_audit_log.sql",
+			import.meta.url,
+		),
+		"utf8",
+	);
+
+	it("rejects a direct removal of an audit row for every role", () => {
+		expect(guard).toMatch(
+			/create trigger invoice_audit_log_block_delete\s+before delete on public\.invoice_audit_log\s+for each row\s+execute function public\.invoice_audit_log_append_only_delete\(\);/,
+		);
+		expect(guard).toContain(
+			"create or replace function public.invoice_audit_log_append_only_delete()",
+		);
+		// Inside a BEFORE ROW trigger `pg_trigger_depth()` is 1 when the
+		// statement came straight from a client (service-role included) and
+		// greater than 1 when a parent trigger caused it — so `<= 1` is the
+		// "not nested" check that rejects every direct removal.
+		expect(guard).toMatch(/if pg_trigger_depth\(\) <= 1 then/);
+		expect(guard).toMatch(
+			/raise exception[\s\S]*append-only; deletes are not permitted[\s\S]*using errcode = 'insufficient_privilege';/,
+		);
+	});
+
+	it("lets the workspaces FK ON DELETE CASCADE through (nested removal only)", () => {
+		// The guard returns `old` (row passes) only for the nested case; it
+		// never blocks the cascade that account deletion depends on.
+		expect(guard).toMatch(/-- nested delete[\s\S]*return old;/);
+		expect(guard).not.toMatch(/return null;/);
+	});
+
+	it("touches only the guard objects and ships a reversible down section", () => {
+		expect(guard).not.toMatch(/^\s*grant\s/im);
+		expect(guard).not.toMatch(/^\s*create policy/im);
+		expect(guard).not.toMatch(/^\s*alter table/im);
+		expect(guard).toContain("-- down (reversible)");
+		expect(guard).toContain(
+			"drop trigger if exists invoice_audit_log_block_delete on public.invoice_audit_log;",
+		);
+		expect(guard).toContain(
+			"drop function if exists public.invoice_audit_log_append_only_delete();",
+		);
+	});
+
+	it("corrects the misleading delete claim in the original migration header", () => {
+		// The header used to claim that only the FK cascade could remove a
+		// row; it now points at the guard that enforces that.
+		expect(original).not.toContain(
+			"method. The only delete that can touch rows",
+		);
+		expect(original).toContain(
+			"20261017000000_einvoice_g1_invoice_audit_log_delete_guard.sql",
+		);
+		// Comment-only correction: the original migration's SQL is untouched.
+		expect(original).toContain("create table public.invoice_audit_log (");
+		expect(original).toContain("create trigger invoice_audit_log_append_only");
 	});
 });

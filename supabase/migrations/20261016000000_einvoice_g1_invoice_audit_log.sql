@@ -17,8 +17,12 @@
 --     UPDATE trigger that raises for every role, including the service key
 --     (tamper-evidence floor).
 --   * No application DELETE path: no RLS policy, no grant, no service
---     method. The only delete that can touch rows is the workspaces FK
---     ON DELETE CASCADE (account deletion), matching public.audit_logs.
+--     method, and a BEFORE DELETE guard shipped in
+--     20261017000000_einvoice_g1_invoice_audit_log_delete_guard.sql rejects
+--     a direct removal of rows for every role (service-role key included).
+--     The only delete that can touch rows is the workspaces FK ON DELETE
+--     CASCADE (account deletion), which that guard passes through while the
+--     removal is nested, matching public.audit_logs.
 --
 -- Deliberately separate from public.audit_logs (A5): that table is the
 -- Convex-ported general event trail whose `action` is a Postgres enum —
@@ -77,8 +81,10 @@ begin
 end;
 $$;
 
--- UPDATE only: a DELETE trigger would also fire for the workspaces FK
--- ON DELETE CASCADE above and break account deletion.
+-- UPDATE only: a DELETE trigger raised for every statement would also fire
+-- for the workspaces FK ON DELETE CASCADE above and break account deletion;
+-- the follow-up guard in 20261017000000_einvoice_g1_invoice_audit_log_delete_guard.sql
+-- rejects only a direct removal and lets that cascade through.
 create trigger invoice_audit_log_append_only
   before update on public.invoice_audit_log
   for each row

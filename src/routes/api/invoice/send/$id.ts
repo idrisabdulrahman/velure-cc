@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
 import { Resend } from "resend";
-import { ensurePaystackTransferCharge } from "#/server/data/payments";
+import { ensurePaystackTransferCharge } from "#/server/data/paystack-server";
 import { getServerEnv } from "#/server/env";
 import { safeErrorDetails } from "#/server/http-security";
 import {
@@ -257,8 +257,14 @@ async function sendInvoiceEmail({
 		providerMessageId: result.data?.id ?? undefined,
 		publicUrl,
 	}).catch((error: unknown) => {
+		// The email is already delivered at this point. Failing the request
+		// here would make the client retry and re-send, so the route stays
+		// idempotent: log loudly (delivery event + invoice send audit row may
+		// be missing) and still answer 200. Resend also received a
+		// deterministic idempotency key above, so even a genuine client retry
+		// does not deliver twice.
 		console.error(
-			"Failed to record invoice email delivery event",
+			"Invoice email sent but the delivery/audit record failed; reconcile invoice_audit_log for this invoice",
 			safeErrorDetails(error),
 		);
 	});
@@ -273,7 +279,7 @@ async function sendInvoiceEmail({
 	return Response.json({ ok: true, id: result.data?.id ?? null });
 }
 
-async function handle({
+export async function handle({
 	params,
 	request,
 }: {

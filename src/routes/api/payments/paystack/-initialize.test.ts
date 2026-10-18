@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ensurePaystackTransferCharge } from "#/server/data/payments";
+import { ensurePaystackTransferCharge } from "#/server/data/paystack-server";
 import {
 	consumeFixedWindowRateLimit,
 	getClientIp,
@@ -7,7 +7,7 @@ import {
 import { getSupabaseAdminClient } from "#/server/supabase";
 import { handle, handlers } from "./initialize";
 
-vi.mock("#/server/data/payments", () => ({
+vi.mock("#/server/data/paystack-server", () => ({
 	ensurePaystackTransferCharge: vi.fn(),
 }));
 vi.mock("#/server/http-security", () => ({
