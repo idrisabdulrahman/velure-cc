@@ -32,6 +32,19 @@ function readRoute(name: string) {
 	return readFileSync(new URL(`../../routes/${name}`, import.meta.url), "utf8");
 }
 
+/* The rendered "Official sources" section itself, sliced out of the route
+ * source between its aria-label and closing tag. Slicing lets assertions bind
+ * to the actual markup of the source list instead of passing on independent
+ * file-wide substrings that could survive the anchors losing their attributes. */
+function officialSourcesSection(route: string): string {
+	const start = route.indexOf('aria-label="Official sources"');
+	const end = start === -1 ? -1 : route.indexOf("</section>", start);
+	if (start === -1 || end === -1) {
+		throw new Error("Official sources section missing from route source");
+	}
+	return route.slice(start, end);
+}
+
 describe("NRS honesty claims (e-invoicing SPEC A1-A3)", () => {
 	it("keeps the disclaimer wording stable", () => {
 		expect(NRS_INFORMATIONAL_DISCLAIMER).toBe(
@@ -79,7 +92,8 @@ const NRS_OFFICIAL_SOURCE_URLS = [
 
 const NON_AFFILIATION_PHRASE = "not connected to or endorsed by the NRS";
 
-/* Banned in the official-sources copy. Scoped to claim words that would
+/* Banned in the official-sources copy — both the shared constants and the
+ * route slice that renders the section. Scoped to claim words that would
  * turn a reference list into a compliance/clearance/certification claim;
  * "endorsed" is only ever allowed inside the non-affiliation phrase, which
  * is pinned separately. */
@@ -120,12 +134,22 @@ describe("NRS official sources grounding", () => {
 	it("lists every source on the Compliance surface with new-tab-safe links", () => {
 		// The URLs live in the shared constant, so pin the constant plus the
 		// route's render wiring: the surface must import and map over it, and
-		// the anchors must open a new tab safely.
+		// the safe attributes must sit on the source anchors themselves —
+		// inside the "Official sources" section, in the same tag as the href —
+		// so they cannot migrate to an unrelated anchor elsewhere in the file.
 		const route = readRoute("settings.compliance.tsx");
 		expect(route).toContain("NRS_OFFICIAL_SOURCES");
 		expect(route).toContain("NRS_OFFICIAL_SOURCES_INTRO");
-		expect(route).toContain('target="_blank"');
-		expect(route).toContain('rel="noopener noreferrer"');
+		const section = officialSourcesSection(route);
+		expect(section).toContain("NRS_OFFICIAL_SOURCES.map");
+		expect(section).toContain("NRS_OFFICIAL_SOURCES_INTRO");
+		const anchorTags = section.match(/<a\b[\s\S]*?>/g) ?? [];
+		expect(anchorTags.length).toBeGreaterThan(0);
+		for (const tag of anchorTags) {
+			expect(tag).toMatch(/href=\{[^}]*\}/);
+			expect(tag).toContain('target="_blank"');
+			expect(tag).toContain('rel="noopener noreferrer"');
+		}
 		// The banner stays above it, untouched.
 		expect(route).toContain("NRS_INFORMATIONAL_DISCLAIMER");
 	});
@@ -135,13 +159,21 @@ describe("NRS official sources grounding", () => {
 	});
 
 	it("keeps claim words out of the official-sources copy", () => {
+		// Scan both the shared constants and the route slice that renders the
+		// section, so route-level literals (the heading, future sibling copy)
+		// obey the same ban as the constant-sourced copy.
+		const route = readRoute("settings.compliance.tsx");
+		const section = officialSourcesSection(route);
 		const copy = officialSourcesCopy();
 		for (const pattern of BANNED_SOURCE_CLAIM_PATTERNS) {
 			expect(copy, pattern.source).not.toMatch(pattern);
+			expect(section, pattern.source).not.toMatch(pattern);
 		}
 		// "endorsed" survives only inside the negated phrase.
-		expect(
-			copy.replace(new RegExp(NON_AFFILIATION_PHRASE, "gi"), ""),
-		).not.toMatch(/\bendorsed\b/i);
+		for (const scanned of [copy, section]) {
+			expect(
+				scanned.replace(new RegExp(NON_AFFILIATION_PHRASE, "gi"), ""),
+			).not.toMatch(/\bendorsed\b/i);
+		}
 	});
 });
