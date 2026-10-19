@@ -99,6 +99,9 @@ export type Database = {
       clients: {
         Row: {
           billing_address: string | null
+          buyer_profile_issues: Json
+          buyer_profile_status: string
+          buyer_type: string
           company: string | null
           contact: Json
           created_at: string | null
@@ -119,6 +122,9 @@ export type Database = {
         }
         Insert: {
           billing_address?: string | null
+          buyer_profile_issues?: Json
+          buyer_profile_status?: string
+          buyer_type?: string
           company?: string | null
           contact: Json
           created_at?: string | null
@@ -139,6 +145,9 @@ export type Database = {
         }
         Update: {
           billing_address?: string | null
+          buyer_profile_issues?: Json
+          buyer_profile_status?: string
+          buyer_type?: string
           company?: string | null
           contact?: Json
           created_at?: string | null

@@ -1,5 +1,9 @@
+import {
+	type BuyerType,
+	validateBuyerProfile,
+} from "#/features/clients/buyer-profile";
 import { buildClientIntelligence } from "./client-intelligence";
-import { assertValidTin, normalizeNigeriaPhone } from "./nigeria";
+import { normalizeNigeriaPhone } from "./nigeria";
 import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
 
 export type { Supabase } from "./workspaces";
@@ -36,6 +40,9 @@ export type ClientRecord = {
 	website: string | null;
 	billingAddress: string | null;
 	taxId: string | null;
+	buyerType: BuyerType;
+	buyerProfileStatus: string;
+	buyerProfileIssues: string[];
 	currency: string;
 	paymentTerms: string;
 	internalNotes: string | null;
@@ -54,6 +61,8 @@ export type ClientInput = {
 	website?: string;
 	billingAddress?: string;
 	taxId?: string;
+	/** B2B/B2C buyer type; defaults to B2B when omitted. */
+	buyerType?: BuyerType;
 	currency: string;
 	paymentTerms: string;
 	internalNotes?: string;
@@ -70,6 +79,9 @@ const normalize = (value?: string) => {
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_CLIENT_IMPORT_ROWS = 2_000;
 const CLIENT_IMPORT_INSERT_CHUNK_SIZE = 50;
+
+const CLIENT_COLUMNS =
+	"id, workspace_id, owner_id, name, company, email, phone, website, billing_address, tax_id, buyer_type, buyer_profile_status, buyer_profile_issues, currency, payment_terms, internal_notes, contact, favorite, status, created_at, updated_at";
 
 const assertValidClientPayload = (input: {
 	name: string;
@@ -116,6 +128,75 @@ const assertValidClientPayload = (input: {
 	}
 };
 
+export const CLIENT_BUYER_REJECTION_PREFIX = "Buyer profile is invalid:";
+
+type ClientBuyerRowSnapshot = {
+	buyer_type?: string | null;
+	tax_id?: string | null;
+	billing_address?: string | null;
+};
+
+export type ClientBuyerColumns = {
+	buyer_type: BuyerType;
+	buyer_profile_status: "complete" | "needs_review";
+	buyer_profile_issues: string[];
+	/** Normalized stored values (null = cleared) so flags and data stay in lockstep. */
+	billing_address: string | null;
+	tax_id: string | null;
+};
+
+/**
+ * B2 server boundary for the buyer profile on a client row. A provided
+ * (non-undefined) value replaces the stored one; omitted values fall back to
+ * what is already stored and "" clears — same contract as B1's
+ * `buildSupplierProfileUpdate`. Throws on format-invalid values (bad email,
+ * malformed/placeholder TIN, invalid buyer type, over-long address); missing
+ * required parts (address, B2B TIN) are FLAGGED through the non-destructive
+ * flag columns instead of rejected so bulk pre-existing clients and CSV
+ * imports keep working.
+ *
+ * Pure so the write path can be unit-tested without a Supabase client; the
+ * returned columns never delete or rewrite name/email history.
+ */
+export function buildClientBuyerColumns(
+	current: ClientBuyerRowSnapshot,
+	input: {
+		name: string;
+		email: string;
+		billingAddress?: string;
+		taxId?: string;
+		buyerType?: BuyerType;
+	},
+): ClientBuyerColumns {
+	const provided = (
+		value: string | undefined,
+		fallback: string | null | undefined,
+	) => (value === undefined ? (fallback ?? "") : value);
+
+	const result = validateBuyerProfile({
+		name: input.name,
+		email: input.email,
+		billingAddress: provided(input.billingAddress, current.billing_address),
+		taxId: provided(input.taxId, current.tax_id),
+		buyerType: provided(input.buyerType, current.buyer_type),
+	});
+	if (!result.valid) {
+		throw new Error(
+			`${CLIENT_BUYER_REJECTION_PREFIX} ${result.blockingIssues
+				.map((issue) => issue.message)
+				.join(" ")}`,
+		);
+	}
+
+	return {
+		buyer_type: result.normalized.buyerType,
+		buyer_profile_status: result.status,
+		buyer_profile_issues: result.issues.map((issue) => issue.code),
+		billing_address: result.normalized.billingAddress || null,
+		tax_id: result.normalized.taxId || null,
+	};
+}
+
 type ClientRow = {
 	id: string;
 	workspace_id: string | null;
@@ -127,6 +208,9 @@ type ClientRow = {
 	website: string | null;
 	billing_address: string | null;
 	tax_id: string | null;
+	buyer_type: string | null;
+	buyer_profile_status: string | null;
+	buyer_profile_issues: unknown;
 	currency: string;
 	payment_terms: string;
 	internal_notes: string | null;
@@ -168,6 +252,11 @@ function toClientRecord(row: ClientRow): ClientRecord {
 		website: row.website,
 		billingAddress: row.billing_address,
 		taxId: row.tax_id,
+		buyerType: row.buyer_type === "b2c" ? "b2c" : "b2b",
+		buyerProfileStatus: row.buyer_profile_status ?? "needs_review",
+		buyerProfileIssues: Array.isArray(row.buyer_profile_issues)
+			? (row.buyer_profile_issues as string[])
+			: [],
 		currency: row.currency,
 		paymentTerms: row.payment_terms,
 		internalNotes: row.internal_notes,
@@ -211,9 +300,7 @@ export async function listClients(
 	const status = args.status && args.status !== "all" ? args.status : null;
 	let query = client
 		.from("clients")
-		.select(
-			"id, workspace_id, owner_id, name, company, email, phone, website, billing_address, tax_id, currency, payment_terms, internal_notes, contact, favorite, status, created_at, updated_at",
-		)
+		.select(CLIENT_COLUMNS)
 		.eq("workspace_id", workspaceId)
 		.order("updated_at", { ascending: false });
 	if (status) query = query.eq("status", status);
@@ -252,9 +339,7 @@ export async function getClientById(
 
 	const { data, error } = await client
 		.from("clients")
-		.select(
-			"id, workspace_id, owner_id, name, company, email, phone, website, billing_address, tax_id, currency, payment_terms, internal_notes, contact, favorite, status, created_at, updated_at",
-		)
+		.select(CLIENT_COLUMNS)
 		.eq("id", id)
 		.eq("workspace_id", workspaceId)
 		.maybeSingle();
@@ -334,7 +419,16 @@ export async function createClient(
 		website: args.website,
 		contactEmail: args.contact.email,
 	});
-	assertValidTin(args.taxId);
+	const buyer = buildClientBuyerColumns(
+		{},
+		{
+			name: args.name,
+			email: args.email,
+			billingAddress: args.billingAddress,
+			taxId: args.taxId,
+			buyerType: args.buyerType,
+		},
+	);
 	await assertEmailUnique(client, workspaceId, args.email);
 
 	const { data, error } = await client
@@ -347,8 +441,11 @@ export async function createClient(
 			email: args.email.trim().toLowerCase(),
 			phone: normalizeNigeriaPhone(args.phone),
 			website: normalize(args.website),
-			billing_address: normalize(args.billingAddress),
-			tax_id: normalize(args.taxId),
+			billing_address: buyer.billing_address,
+			tax_id: buyer.tax_id,
+			buyer_type: buyer.buyer_type,
+			buyer_profile_status: buyer.buyer_profile_status,
+			buyer_profile_issues: buyer.buyer_profile_issues,
 			currency: args.currency.trim(),
 			payment_terms: args.paymentTerms.trim(),
 			internal_notes: normalize(args.internalNotes),
@@ -385,7 +482,27 @@ export async function updateClient(
 		website: args.website,
 		contactEmail: args.contact.email,
 	});
-	assertValidTin(args.taxId);
+	const { data: currentBuyerRow, error: currentBuyerError } = await client
+		.from("clients")
+		.select("buyer_type, tax_id, billing_address")
+		.eq("id", id)
+		.eq("workspace_id", workspaceId)
+		.maybeSingle();
+	if (currentBuyerError) throw currentBuyerError;
+	const buyer = buildClientBuyerColumns(
+		{
+			buyer_type: currentBuyerRow?.buyer_type,
+			tax_id: currentBuyerRow?.tax_id,
+			billing_address: currentBuyerRow?.billing_address,
+		},
+		{
+			name: args.name,
+			email: args.email,
+			billingAddress: args.billingAddress,
+			taxId: args.taxId,
+			buyerType: args.buyerType,
+		},
+	);
 	await assertEmailUnique(client, workspaceId, args.email, id);
 
 	const { error } = await client
@@ -396,8 +513,11 @@ export async function updateClient(
 			email: args.email.trim().toLowerCase(),
 			phone: normalizeNigeriaPhone(args.phone),
 			website: normalize(args.website),
-			billing_address: normalize(args.billingAddress),
-			tax_id: normalize(args.taxId),
+			billing_address: buyer.billing_address,
+			tax_id: buyer.tax_id,
+			buyer_type: buyer.buyer_type,
+			buyer_profile_status: buyer.buyer_profile_status,
+			buyer_profile_issues: buyer.buyer_profile_issues,
 			currency: args.currency.trim(),
 			payment_terms: args.paymentTerms.trim(),
 			internal_notes: normalize(args.internalNotes),
@@ -529,7 +649,7 @@ export async function importClientsCsv(
 		(existing ?? []).map((c) => c.email.trim().toLowerCase()),
 	);
 
-	const docs: ClientInput[] = [];
+	const docs: Array<ClientInput & { buyer: ClientBuyerColumns }> = [];
 	for (const [index, row] of rows.entries()) {
 		const email = row.email.trim().toLowerCase();
 		const clientRow = {
@@ -539,9 +659,20 @@ export async function importClientsCsv(
 			currency: row.currency?.trim().toUpperCase() || "NGN",
 		};
 
+		let buyer: ClientBuyerColumns;
 		try {
 			assertValidClientPayload(clientRow);
-			assertValidTin(row.taxId);
+			// B2: format-invalid buyer data (bad TIN, bad email) skips the row;
+			// incomplete data (missing address/B2B TIN) imports and is flagged.
+			buyer = buildClientBuyerColumns(
+				{},
+				{
+					name: clientRow.name,
+					email,
+					billingAddress: row.billingAddress,
+					taxId: row.taxId,
+				},
+			);
 		} catch (error) {
 			skipped += 1;
 			addImportError(
@@ -564,14 +695,15 @@ export async function importClientsCsv(
 			email,
 			phone: normalizeNigeriaPhone(row.phone),
 			website: undefined,
-			billingAddress: normalize(row.billingAddress),
-			taxId: normalize(row.taxId),
+			billingAddress: buyer.billing_address ?? undefined,
+			taxId: buyer.tax_id ?? undefined,
 			currency: clientRow.currency,
 			paymentTerms: clientRow.paymentTerms,
 			internalNotes: undefined,
 			contact: {},
 			favorite: false,
 			status: "active",
+			buyer,
 		});
 	}
 
@@ -591,8 +723,11 @@ export async function importClientsCsv(
 					email: doc.email,
 					phone: doc.phone,
 					website: doc.website,
-					billing_address: doc.billingAddress,
-					tax_id: doc.taxId,
+					billing_address: doc.buyer.billing_address,
+					tax_id: doc.buyer.tax_id,
+					buyer_type: doc.buyer.buyer_type,
+					buyer_profile_status: doc.buyer.buyer_profile_status,
+					buyer_profile_issues: doc.buyer.buyer_profile_issues,
 					currency: doc.currency,
 					payment_terms: doc.paymentTerms,
 					internal_notes: doc.internalNotes,

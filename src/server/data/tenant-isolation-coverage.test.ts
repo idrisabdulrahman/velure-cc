@@ -75,6 +75,8 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	removeClient: "app-scoped",
 	toggleClientFavorite: "app-scoped",
 	importClientsCsv: "app-scoped",
+	CLIENT_BUYER_REJECTION_PREFIX: "pure",
+	buildClientBuyerColumns: "pure",
 	// compliance-dashboard.ts
 	buildComplianceDashboardReport: "pure",
 	// compliance-export.ts

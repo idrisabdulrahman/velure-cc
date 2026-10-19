@@ -1,3 +1,7 @@
+import {
+	CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE,
+	transitionLeavesDraft,
+} from "#/features/invoices/customer-gate";
 import type { Database, Json } from "#/types/database.types";
 import { type InvoiceAuditWriter, recordInvoiceAudit } from "./audit-client";
 import {
@@ -1457,6 +1461,29 @@ async function assertWorkspaceCustomer(
 	if (!data) throw new Error("Customer not found.");
 }
 
+/**
+ * B2 — customer required to leave Draft (SPEC §5.B row B2). A draft may
+ * remain customer-less, but any transition out of Draft into an issued/
+ * sent/paid/scheduled state requires a linked customer record that resolves
+ * inside the caller's workspace (a forged cross-workspace customer id fails
+ * `assertWorkspaceCustomer`). Canceling a draft is a soft discard and stays
+ * customer-less. Pure decision logic lives in
+ * `#/features/invoices/customer-gate`.
+ */
+async function assertCustomerForIssueTransition(
+	client: Supabase,
+	workspaceId: string,
+	invoice: { customerId?: string },
+	from: InvoiceStatus,
+	to: InvoiceStatus,
+) {
+	if (!transitionLeavesDraft(from, to)) return;
+	if (!invoice.customerId) {
+		throw new Error(CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE);
+	}
+	await assertWorkspaceCustomer(client, workspaceId, invoice.customerId);
+}
+
 type DraftDoc = {
 	token: string;
 	documentType: InvoiceDocumentType;
@@ -1665,6 +1692,15 @@ export async function createDraft(
 		updatedAt: now,
 	};
 	const status = getDerivedInvoiceStatus(doc);
+	// B2: finalizing a draft always leaves Draft — a customer record is
+	// required (all deliveryTypes: create, create_and_send, scheduled).
+	await assertCustomerForIssueTransition(
+		client,
+		workspaceId,
+		{ customerId: args.customerId },
+		"draft",
+		status,
+	);
 	const columns = {
 		workspace_id: workspaceId,
 		user_id: existingDraft ? existingDraft.id : userId,
@@ -2075,6 +2111,16 @@ export async function updateStatus(
 	if (!workspaceId) throw new Error("No active workspace.");
 	const current = await getById(client, userId, args.id);
 	if (!current) throw new Error("Invoice not found.");
+
+	// B2: leaving Draft (paid / unpaid / overdue) requires a customer record;
+	// draft→draft and draft→canceled are unaffected.
+	await assertCustomerForIssueTransition(
+		client,
+		workspaceId,
+		current,
+		getDerivedInvoiceStatus(current),
+		args.status,
+	);
 
 	const now = args.paidAt ?? Date.now();
 
@@ -2722,6 +2768,18 @@ export async function convertProformaToInvoice(
 		updatedAt: now,
 	};
 	const status = getDerivedInvoiceStatus(doc);
+	// B2: a conversion that lands the new standard invoice outside Draft
+	// requires a customer record. With the current derivation this only
+	// fires defensively — a deposit-carrying source already derives issued,
+	// and a customer-less Draft source lands as Draft — but the guard keeps
+	// the rule true if the landing status ever changes.
+	await assertCustomerForIssueTransition(
+		client,
+		workspaceId,
+		source,
+		getDerivedInvoiceStatus(source),
+		status,
+	);
 
 	const { data, error } = await client
 		.from("invoices")
@@ -3093,6 +3151,14 @@ export async function markInvoiceSent(
 	if (currentStatus === "paid" || currentStatus === "canceled") {
 		throw new Error("Cannot send a paid or canceled invoice.");
 	}
+	// B2: sending a draft (mark as sent) leaves Draft — customer required.
+	await assertCustomerForIssueTransition(
+		client,
+		workspaceId,
+		invoice,
+		currentStatus,
+		"unpaid",
+	);
 
 	const now = Date.now();
 	const currentLifecycle = invoice.lifecycle ?? {};
