@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 import { Keyboard, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { VelureSymbol } from "#/components/brand/velure-symbol";
 import { ThemeToggle } from "#/components/theme/theme-toggle";
 import { AppLoader } from "#/components/ui/app-loader";
 import { Button } from "#/components/ui/button";
@@ -491,17 +492,7 @@ function AuthPage() {
 								to="/"
 								className="inline-flex items-center gap-2.5 text-sm font-medium text-ink"
 							>
-								<span
-									className="flex h-7 w-7 items-center justify-center text-[13px] font-extrabold text-brand-ink"
-									style={{
-										borderRadius: "8px",
-										background: "var(--hm-accent)",
-										fontFamily: "var(--hm-font-display)",
-									}}
-									aria-hidden
-								>
-									V
-								</span>
+								<VelureSymbol className="h-7 w-7" />
 								<span style={{ fontFamily: "var(--hm-font-display)" }}>
 									Velure
 								</span>

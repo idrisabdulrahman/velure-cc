@@ -18,6 +18,7 @@ import {
 	Users,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { VelureSymbol } from "#/components/brand/velure-symbol";
 import { ProfileDropdown } from "#/components/dashboard/profile-dropdown";
 import { CommandPalette } from "#/components/global-search/command-palette";
 import { RouteTransition } from "#/components/navigation/RouteTransition";
@@ -487,9 +488,7 @@ export function DashboardLayout() {
 						onClick={() => setNavOpen(false)}
 						className="flex items-center gap-3"
 					>
-						<span className="flex h-8 w-8 items-center justify-center rounded-[var(--hm-r-input)] border border-brand/45 bg-brand-soft text-xs font-bold text-brand">
-							V
-						</span>
+						<VelureSymbol className="h-7 w-7" />
 						<div>
 							<p className="text-[11px] font-bold uppercase tracking-[0.24em] text-ink">
 								Velure
@@ -700,12 +699,7 @@ export function DashboardLayout() {
 								<Menu className="h-4 w-4" />
 							</button>
 							<p className="flex min-w-0 items-center gap-2 text-[13px] text-ink-3">
-								<span
-									aria-hidden="true"
-									className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[var(--hm-r-btn)] border border-brand/45 bg-brand-soft text-[10px] font-bold text-brand"
-								>
-									V
-								</span>
+								<VelureSymbol className="h-5 w-5" />
 								<span className="truncate">{workspaceLabel}</span>
 								<span className="mx-2">/</span>
 								<span className="font-medium text-ink">{activePageLabel}</span>

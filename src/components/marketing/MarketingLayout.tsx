@@ -87,11 +87,17 @@ export function Wordmark() {
 			{/*
 				Horizontal lockup (Level V symbol + Velure wordmark), cropped to
 				its ink so the asset sizes directly. Height is in em so the logo
-				tracks the app's persisted text-size setting. Masters and
-				guidelines: design/brand/kit/ and design/brand/guidelines.md.
+				tracks the app's persisted text-size setting.
+
+				The `.hm` marketing scope is dark in both theme directions
+				(design.md, "Marketing scope"), so this is the light master —
+				paper #FCF8F5 + warm red, the kit's `-reversed` artwork exported
+				as public/velure-lockup-horizontal-light.svg. The ink lockup on
+				`#0a0706` would be invisible here. Masters and guidelines:
+				design/brand/kit/ and design/brand/guidelines.md.
 			*/}
 			<img
-				src="/velure-lockup-horizontal.svg"
+				src="/velure-lockup-horizontal-light.svg"
 				alt="Velure"
 				width={464}
 				height={110}

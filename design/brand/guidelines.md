@@ -93,7 +93,29 @@ functional accent; status colours are semantic and never brand).
   `public/icon-192.png`, `public/icon-512.png`, `public/maskable-512.png` —
   generated from `velure-symbol-tile*.svg`.
 - `src/components/marketing/MarketingLayout.tsx` → `Wordmark()` renders
-  `public/velure-lockup-horizontal.svg`.
+  `public/velure-lockup-horizontal-light.svg`, because the `.hm` marketing
+  scope is dark in both theme directions.
+- **Light set** (`-light` = the `-reversed` treatment: paper `#FCF8F5` + warm
+  red, no tile) — for dark surfaces only:
+  `public/velure-lockup-horizontal-light.svg`,
+  `public/favicon-light.svg`, `public/favicon-light.ico`,
+  `public/apple-touch-icon-light.png`, `public/icon-192-light.png`,
+  `public/icon-512-light.png`, `public/maskable-512-light.png`.
+  The icon PNGs keep the ink set's exact artwork geometry (V at 58.6 % of the
+  canvas; maskable 43.8 %), only the ink tile is removed. On a light surface
+  the paper artwork disappears — the ink tile set stays the default for
+  browser tabs, `manifest.json` and anything that can render on either
+  background.
+- **In-app mark**: `src/components/brand/velure-symbol.tsx` renders the
+  symbol inline — arms `var(--hm-ink)`, level locked `#EA373E` — so the one
+  component is ink-on-paper in light mode and paper-on-ink in dark mode, with
+  no `<img>` swap and no flash. It is placed **bare** (no tile, chip or
+  coloured background) on the sign-in page, the workspace sidebar and the
+  mobile breadcrumb; the marketing shell keeps
+  `public/velure-lockup-horizontal-light.svg` because `.hm` is dark in both
+  directions. Contract: `src/components/brand/velure-symbol.test.tsx` pins the
+  path data to the kit masters, the fills to the tokens, and the bare
+  placement on every consumer.
 
 Open item: `public/manifest.json` is correct but **nothing links it**
 (no `<link rel="manifest">`). Activating it makes the site installable as a
