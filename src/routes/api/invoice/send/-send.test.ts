@@ -16,6 +16,11 @@ vi.mock("#/server/invoice-repository", () => ({
 		customerName: "Acme Ltd",
 		documentType: "standard",
 		updatedAt: 1_700_000_000_000,
+		// Ordinary issued invoice: line items keep the send-route B2 gate
+		// derivation cheap, deliveredAt keeps it out of Draft (the gate only
+		// rejects customer-less drafts — see -send-gate.test.ts).
+		lineItems: [{ id: "li-1", name: "Service", quantity: 1, price: 100 }],
+		deliveredAt: 1_700_000_000_000,
 	})),
 	// The delivery event + invoice send audit row fail after the email
 	// already committed (G1 non-atomicity, finding 4).

@@ -256,9 +256,16 @@ describe("client write paths store buyer flags", () => {
 		expect(row("client-b")).toEqual(snapshot);
 	});
 
-	it("updateClient re-flags a legacy placeholder TIN when the buyer type is confirmed B2B", async () => {
+	it("updateClient hard-fails on a legacy placeholder TIN the edit leaves in place", async () => {
 		// The legacy row carries a placeholder TIN; confirming/editing through
 		// the validated path refuses it instead of silently keeping it.
+		// AUDIT ROUND-1 FINDING 5: this hard-fail was ACCEPTED AS DESIGNED and
+		// is documented only — no behavior change. A placeholder is a FORMAT
+		// issue (reject), not a completeness gap (flag); the save path is the
+		// moment the buyer is being edited anyway, so the caller is told to
+		// supply a real TIN. See the DELIBERATE ASYMMETRY note on
+		// `buildClientBuyerColumns` in src/server/data/clients.ts.
+		const snapshot = { ...row("client-b") };
 		await expect(
 			updateClient(client, USER_B, "client-b", {
 				...clientInput,
@@ -266,6 +273,7 @@ describe("client write paths store buyer flags", () => {
 				email: "client-b@example.test",
 			}),
 		).rejects.toThrow(/placeholder/i);
+		expect(row("client-b")).toEqual(snapshot);
 	});
 
 	it("importClientsCsv skips format-invalid rows and imports flagged ones", async () => {

@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
 import { Resend } from "resend";
+import { CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE } from "#/features/invoices/customer-gate";
+import { assertSendCustomerGate } from "#/server/data/invoices";
 import { ensurePaystackTransferCharge } from "#/server/data/paystack-server";
 import { getServerEnv } from "#/server/env";
 import { safeErrorDetails } from "#/server/http-security";
@@ -155,6 +157,24 @@ async function sendInvoiceEmail({
 			{ ok: false, error: "Invoice not found." },
 			{ status: 404 },
 		);
+	}
+
+	// B2 — customer required to leave Draft: a `sent` delivery event derives a
+	// Draft invoice out of Draft (delivered_at → unpaid/overdue), so a
+	// customer-less draft is rejected HERE, before the PDF render, the provider
+	// call and any delivery-event write. Only the gate's own rejections are
+	// mapped; anything else still bubbles to the route's 500 handler.
+	try {
+		await assertSendCustomerGate(context.client, context.userId, invoice);
+	} catch (error) {
+		const gateMessage = errorMessage(error, "");
+		if (
+			gateMessage === CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE ||
+			gateMessage === "Customer not found."
+		) {
+			return Response.json({ ok: false, error: gateMessage }, { status: 400 });
+		}
+		throw error;
 	}
 
 	const publicUrl = `${new URL(request.url).origin}/i/${invoice.token}`;

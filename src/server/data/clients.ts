@@ -155,6 +155,15 @@ export type ClientBuyerColumns = {
  * flag columns instead of rejected so bulk pre-existing clients and CSV
  * imports keep working.
  *
+ * DELIBERATE ASYMMETRY (accepted as designed, WP6 audit round-1 finding 5):
+ * a LEGACY stored placeholder TIN that an edit leaves in place HARD-FAILS the
+ * save rather than being re-flagged — the save path is the moment the user is
+ * editing that buyer anyway, and silently keeping a placeholder would defeat
+ * B1's reject-on-placeholder rule. Only genuinely MISSING parts are flagged.
+ * Pinned by `refuses to persist a stored placeholder that the edit leaves in
+ * place` and `updateClient hard-fails on a legacy placeholder TIN` in
+ * src/server/data/clients-buyer-profile.test.ts.
+ *
  * Pure so the write path can be unit-tested without a Supabase client; the
  * returned columns never delete or rewrite name/email history.
  */

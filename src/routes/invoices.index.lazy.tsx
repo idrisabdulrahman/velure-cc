@@ -1277,11 +1277,18 @@ function InvoicesIndex() {
 				const { client, userId } = requireSupabase();
 				const result = await importCsv(client, userId, rows);
 				const issueCount = result.errors?.length ?? 0;
+				// B2 import flag: issued-family rows with no linked client are a
+				// deliberate historical exemption, so they are reported here
+				// instead of landing silently as customer-less invoices.
+				const buyerNote =
+					result.needsBuyerMatch > 0
+						? `, ${result.needsBuyerMatch} without a linked buyer`
+						: "";
 				toast({
 					title: "Invoice import finished",
 					description: `${result.created} created, ${result.skipped} skipped${
 						issueCount > 0 ? `, ${issueCount} row issues reported` : ""
-					}.`,
+					}${buyerNote}.`,
 					variant: "success",
 				});
 				return;

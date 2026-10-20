@@ -25,8 +25,10 @@ import {
 	convertProformaToInvoice,
 	createDraft,
 	markInvoiceSent,
+	recordDeliveryEvent,
 	updateStatus,
 } from "./invoices";
+import { recordPayment } from "./payments";
 import { createFakeSupabase, type FakeTables } from "./testing/fake-db";
 
 const USER_A = "user-a";
@@ -168,7 +170,9 @@ function seedTables(): FakeTables {
 				favorite: false,
 				status: "active",
 				buyer_type: "b2c",
-				buyer_profile_status: "flagged",
+				// Legal values under the migration CHECK are
+				// 'complete' | 'needs_review' — 'flagged' is not one of them.
+				buyer_profile_status: "needs_review",
 				buyer_profile_issues: ["address_required"],
 				created_at: "2026-01-01T00:00:00.000Z",
 				updated_at: "2026-01-01T00:00:00.000Z",
@@ -191,6 +195,7 @@ function seedTables(): FakeTables {
 			}),
 		],
 		payment_transactions: [],
+		invoice_delivery_events: [],
 	};
 }
 
@@ -371,21 +376,82 @@ describe("convertProformaToInvoice draft gate", () => {
 			tables.payment_transactions as Array<Record<string, unknown>>,
 		).toHaveLength(1);
 	});
+});
 
-	it("does not retro-block an already-issued legacy pro-forma without a customer", async () => {
-		tables.invoices = [
-			...(tables.invoices as Array<Record<string, unknown>>),
-			invoiceRow("inv-a-proforma", WS_A, {
-				document_type: "proforma",
-				payment_amount: 500,
+// Audit round-1, finding 2: B2's headline invariant is "customer required to
+// leave Draft", so SETTLING a derived-Draft invoice needs a customer too.
+// (This block replaces the removed pin that asserted a paid invoice with a
+// null customer reached through pro-forma conversion — now pinned as
+// rejections instead, while non-derived-Draft invoices stay settleable.)
+describe("recordPayment draft gate", () => {
+	it("rejects FULL settlement of a customer-less draft with the gate message", async () => {
+		await expect(
+			recordPayment(client, USER_A, { invoiceId: "inv-a-draft", amount: 100 }),
+		).rejects.toThrow(CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE);
+		expect(row("inv-a-draft")?.status).toBe("draft");
+		expect(row("inv-a-draft")?.payment_amount).toBe(0);
+		expect(tables.payment_transactions).toHaveLength(0);
+	});
+
+	it("rejects PARTIAL settlement of a customer-less draft with the gate message", async () => {
+		await expect(
+			recordPayment(client, USER_A, { invoiceId: "inv-a-draft", amount: 10 }),
+		).rejects.toThrow(CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE);
+		expect(row("inv-a-draft")?.status).toBe("draft");
+		expect(row("inv-a-draft")?.payment_amount).toBe(0);
+		expect(tables.payment_transactions).toHaveLength(0);
+	});
+
+	it("still settles a customer-less legacy issued invoice (no retro-block)", async () => {
+		const result = await recordPayment(client, USER_A, {
+			invoiceId: "inv-a-issued",
+			amount: 100,
+		});
+		expect(result.ok).toBe(true);
+		expect(row("inv-a-issued")?.status).toBe("paid");
+		// A non-derived-Draft invoice is never re-touched by the gate.
+		expect(row("inv-a-issued")?.customer_id).toBeNull();
+	});
+
+	it("still settles a draft that has a linked workspace customer", async () => {
+		const result = await recordPayment(client, USER_A, {
+			invoiceId: "inv-a-draft-linked",
+			amount: 100,
+		});
+		expect(result.ok).toBe(true);
+		expect(row("inv-a-draft-linked")?.status).toBe("paid");
+		expect(tables.payment_transactions).toHaveLength(1);
+	});
+});
+
+describe("recordDeliveryEvent draft gate", () => {
+	it("rejects a sent delivery event for a customer-less draft before any write", async () => {
+		await expect(
+			recordDeliveryEvent(client, USER_A, {
+				invoiceId: "inv-a-draft",
+				channel: "email",
+				recipient: "buyer@example.test",
+				provider: "resend",
+				status: "sent",
 			}),
-		];
-		const { id } = await convertProformaToInvoice(
-			client,
-			USER_A,
-			"inv-a-proforma",
-		);
-		expect(row(id)?.customer_id).toBeNull();
+		).rejects.toThrow(CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE);
+		expect(tables.invoice_delivery_events).toHaveLength(0);
+		expect(row("inv-a-draft")?.delivered_at).toBeNull();
+		expect(row("inv-a-draft")?.status).toBe("draft");
+	});
+
+	it("records the sent delivery event for a draft with a linked customer", async () => {
+		const result = await recordDeliveryEvent(client, USER_A, {
+			invoiceId: "inv-a-draft-linked",
+			channel: "email",
+			recipient: "buyer@example.test",
+			provider: "resend",
+			status: "sent",
+		});
+		expect(result.ok).toBe(true);
+		expect(tables.invoice_delivery_events).toHaveLength(1);
+		expect(row("inv-a-draft-linked")?.delivered_at).toBeTruthy();
+		expect(row("inv-a-draft-linked")?.status).toBe("unpaid");
 	});
 });
 
