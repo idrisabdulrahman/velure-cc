@@ -186,7 +186,7 @@ describe("POST /api/invoice/audit", () => {
 		expect(malformed.status).toBe(400);
 
 		const unknownAction = await handle({
-			request: post(JSON.stringify({ action: "invoice.delete" })),
+			request: post(JSON.stringify({ action: "invoice.void" })),
 		});
 		expect(unknownAction.status).toBe(400);
 
@@ -198,6 +198,38 @@ describe("POST /api/invoice/audit", () => {
 		expect(oversizedMessage.status).toBe(400);
 
 		expect(admin.rows).toHaveLength(0);
+	});
+
+	it("accepts the WP8 invoice.delete action through the one audit endpoint", async () => {
+		// `invoice.delete` joined the taxonomy in 20261020000002; the zod enum
+		// derives from INVOICE_AUDIT_ACTIONS, so the route must take it now.
+		const admin = installAdminCapture();
+		const client = createSessionClient([
+			{ data: { workspace_id: WORKSPACE_ID } },
+		]);
+		vi.mocked(getInvoiceUserContext).mockResolvedValue({
+			userId: USER_ID,
+			client,
+		} as never);
+
+		const response = await handle({
+			request: post(
+				JSON.stringify({
+					action: "invoice.delete",
+					resourceId: "inv-1",
+					message:
+						"Blocked: issued invoices cannot be deleted; cancel instead.",
+				}),
+			),
+		});
+
+		expect(response.status).toBe(200);
+		expect(admin.rows).toHaveLength(1);
+		expect(admin.rows[0]).toMatchObject({
+			action: "invoice.delete",
+			workspace_id: WORKSPACE_ID,
+			resource_id: "inv-1",
+		});
 	});
 
 	it("refuses bodies over the request limit", async () => {

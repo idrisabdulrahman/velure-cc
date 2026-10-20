@@ -634,6 +634,38 @@ export type Database = {
           },
         ]
       }
+      invoice_number_sequences: {
+        Row: {
+          last_value: number
+          prefix: string
+          updated_at: string
+          workspace_id: string
+          year: number
+        }
+        Insert: {
+          last_value: number
+          prefix: string
+          updated_at?: string
+          workspace_id: string
+          year: number
+        }
+        Update: {
+          last_value?: number
+          prefix?: string
+          updated_at?: string
+          workspace_id?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_number_sequences_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
           bottom_block: Json | null
@@ -1791,6 +1823,16 @@ export type Database = {
       }
     }
     Functions: {
+      allocate_invoice_number: {
+        Args: {
+          p_minimum_sequence?: number
+          p_prefix: string
+          p_reserve_only?: boolean
+          p_workspace_id: string
+          p_year: number
+        }
+        Returns: number
+      }
       confirm_paystack_payment: {
         Args: {
           input_amount: number
@@ -1813,6 +1855,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_issued_invoice: { Args: { p_workspace_id: string }; Returns: boolean }
       public_invoice_by_token: { Args: { input_token: string }; Returns: Json }
     }
     Enums: {

@@ -101,6 +101,22 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	recordSyncJobResult: "app-scoped",
 	retrySyncJob: "rls-only",
 	updateInvoiceSyncState: "app-scoped",
+	// invoice-numbering.ts (WP8/C1 — the ONE number authority)
+	isInvoiceIssued: "pure",
+	sequenceFromInvoiceNumber: "pure",
+	invoiceNumberForSequence: "pure",
+	resolveInvoiceNumberPrefix: "pure",
+	candidateInvoiceNumber: "pure",
+	// reads workspaces/invoices by a workspace id every caller first resolved
+	// through resolveActiveWorkspaceId; the collision check is eq-filtered
+	planInvoiceNumber: "app-scoped",
+	assertInvoiceNumberAvailable: "app-scoped",
+	// scope is enforced inside allocate_invoice_number / has_issued_invoice
+	// from the caller's own JWT (app.is_workspace_member), never a passed flag
+	reserveInvoiceNumber: "app-scoped",
+	commitInvoiceNumber: "app-scoped",
+	workspaceNumberingLocked: "app-scoped",
+	assertSequenceCounterChangeAllowed: "app-scoped",
 	// invoices.ts
 	INVOICE_LIST_PAGE_SIZE: "pure",
 	getDerivedInvoiceStatus: "pure",

@@ -79,7 +79,25 @@ function createFakeUserClient(
 		) => Promise.resolve(next()).then(onFulfilled, onRejected);
 		return b;
 	};
-	const client = { from: (table: string) => builder(table) };
+	// WP8: the two numbering RPCs the data layer now calls. `allocate` in
+	// reserve mode consumes nothing (the caller ignores `data`); in allocate
+	// mode it answers with the plan's floor — the canned client has no shared
+	// sequence store, and these tests assert audit wiring, not distinctness
+	// (distinctness is proven against the stateful fakes in
+	// invoice-numbering.test.ts / testing/fake-db.ts).
+	const rpc = async (name: string, args: Record<string, unknown>) => {
+		if (name === "allocate_invoice_number") {
+			return {
+				data: args.p_reserve_only ? null : Number(args.p_minimum_sequence ?? 1),
+				error: null,
+			};
+		}
+		if (name === "has_issued_invoice") {
+			return { data: false, error: null };
+		}
+		throw new Error(`fake user client: rpc "${name}" is not supported`);
+	};
+	const client = { from: (table: string) => builder(table), rpc };
 	return { client: client as unknown as Supabase, inserts };
 }
 
@@ -211,9 +229,13 @@ describe("audit row construction", () => {
 	});
 
 	it("keeps every action inside the DB check constraint list", () => {
+		// WP8 (20261020000002) restates the COMPLETE current action set of the
+		// invoice_audit_log CHECK; the base G1 migration (20261016000000)
+		// only carries the original five, so the taxonomy must be validated
+		// against the migration that supersedes it.
 		const migration = readFileSync(
 			new URL(
-				"../../../supabase/migrations/20261016000000_einvoice_g1_invoice_audit_log.sql",
+				"../../../supabase/migrations/20261020000002_einvoice_c3_audit_action_delete.sql",
 				import.meta.url,
 			),
 			"utf8",
@@ -221,6 +243,10 @@ describe("audit row construction", () => {
 		for (const action of INVOICE_AUDIT_ACTIONS) {
 			expect(migration).toContain(`'${action}'`);
 		}
+		// The down section is reversible: it re-adds the historical five-action
+		// set NOT VALID, so stored invoice.delete rows survive a rollback.
+		expect(migration).toContain("-- down (reversible)");
+		expect(migration).toContain("not valid");
 	});
 });
 
@@ -387,7 +413,10 @@ describe("invoice lifecycle wiring", () => {
 				},
 				{ data: null },
 			],
-			invoices: [{ data: [] }, { data: null }, { data: { id: "inv-new" } }],
+			// Consumption order under WP8's plan/commit numbering: the read-only
+			// collision check first, then the insert (the allocator RPC does not
+			// consume a canned result).
+			invoices: [{ data: [] }, { data: { id: "inv-new" } }],
 		});
 		const admin = installAuditEndpoint(client);
 
@@ -493,8 +522,12 @@ describe("invoice lifecycle wiring", () => {
 	});
 
 	it("cancelSchedule records invoice.edit for the schedule state change", async () => {
+		// A scheduled invoice has NOT been delivered yet (issuance happens when
+		// the schedule fires); a delivered row would be issued and C2-frozen.
 		const scheduledRow = {
 			...invoiceRow,
+			delivered_at: null,
+			status: "draft",
 			scheduled_at: "2026-12-01T10:00:00.000Z",
 			schedule_version: "schedule-1",
 		};
@@ -587,10 +620,15 @@ describe("invoice lifecycle wiring", () => {
 			"invoice.edit",
 			"invoice.send",
 			"invoice.cancel",
+			"invoice.delete",
 		]) {
 			expect(invoicesSource).toContain(`action: "${action}"`);
 		}
 		expect(complianceSource).toContain('action: "invoice.export"');
+		// C1: the settings service files its blocked counter edits through the
+		// ONE audit service too (on the `workspace` resource).
+		expect(complianceSource).toContain('action: "invoice.edit"');
+		expect(complianceSource).toContain('resourceType: "workspace"');
 	});
 });
 
@@ -655,9 +693,13 @@ describe("material state transitions", () => {
 	});
 
 	it("updateStatus(draft) appends invoice.edit for the revert to draft", async () => {
+		// Reverting is only legal while the invoice has never been issued
+		// (C2: an issued row cannot go back to draft — see the blocked case
+		// right below).
+		const unissuedRow = { ...invoiceRow, delivered_at: null, lifecycle: {} };
 		const { client } = createFakeUserClient({
 			active_workspaces: workspaceResolutions(6),
-			invoices: [{ data: invoiceRow }, { data: null, error: null }],
+			invoices: [{ data: unissuedRow }, { data: null, error: null }],
 		});
 		const admin = installAuditEndpoint(client);
 
@@ -674,6 +716,28 @@ describe("material state transitions", () => {
 		expect(admin.rows[0].after_payload).toMatchObject({
 			status: "draft",
 			deliveredAt: null,
+		});
+	});
+
+	it("refuses to revert an ISSUED invoice to draft and logs the blocked attempt", async () => {
+		// C2: `invoiceRow` was delivered, so it is issued — the revert is
+		// refused and the blocked edit attempt still lands in the append-only
+		// log through the one audit endpoint.
+		const { client } = createFakeUserClient({
+			active_workspaces: workspaceResolutions(6),
+			invoices: [{ data: invoiceRow }, { data: null, error: null }],
+		});
+		const admin = installAuditEndpoint(client);
+
+		await expect(
+			updateStatus(client, USER_ID, { id: "inv-1", status: "draft" }),
+		).rejects.toThrow(/cannot be reverted to draft/);
+
+		expect(admin.rows).toHaveLength(1);
+		expect(admin.rows[0]).toMatchObject({
+			action: "invoice.edit",
+			resource_id: "inv-1",
+			message: "Blocked: issued invoices cannot be reverted to draft.",
 		});
 	});
 
@@ -735,7 +799,8 @@ describe("material state transitions", () => {
 			],
 			invoices: [
 				{ data: invoiceRow },
-				{ data: [] },
+				// WP8 plan/commit: the allocator RPC answers without consuming a
+				// canned read, so the insert is the second invoices read.
 				{ data: { id: "inv-dup" } },
 			],
 		});
@@ -776,7 +841,7 @@ describe("material state transitions", () => {
 			],
 			invoices: [
 				{ data: proformaRow },
-				{ data: [] },
+				// WP8 plan/commit: no canned read between getById and the insert.
 				{ data: { id: "inv-converted" } },
 			],
 		});

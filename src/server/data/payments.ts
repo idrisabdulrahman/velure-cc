@@ -1,5 +1,6 @@
 import type { Database, Json } from "#/types/database.types";
 import { recordInvoiceAudit } from "./audit-client";
+import { isInvoiceIssued } from "./invoice-numbering";
 import { getById as getInvoiceById } from "./invoices";
 import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
 
@@ -530,14 +531,21 @@ export async function recordPayment(
 
 	// Append-only audit row for the money path (spec G1): the server records
 	// the payment it just applied, with the invoice state before and after.
+	// C3: money crossing a not-yet-issued invoice past the draft boundary is
+	// its first issuance — logged as `invoice.send`; later payments on an
+	// already-issued invoice stay `invoice.edit`.
 	const updated =
 		(await getInvoiceById(client, userId, args.invoiceId)) ?? invoice;
+	const crossingIntoIssued =
+		!isInvoiceIssued(invoice) && isInvoiceIssued(updated);
 	await recordInvoiceAudit(client, userId, {
-		action: "invoice.edit",
+		action: crossingIntoIssued ? "invoice.send" : "invoice.edit",
 		resourceId: args.invoiceId,
 		before: invoice,
 		after: updated,
-		message: "Recorded a payment.",
+		message: crossingIntoIssued
+			? "Invoice issued when a payment was recorded."
+			: "Recorded a payment.",
 	});
 
 	return { ok: true, duplicate: false, invoiceId: args.invoiceId };

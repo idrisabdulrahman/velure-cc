@@ -6,6 +6,10 @@ import { recordInvoiceAudit } from "./audit-client";
 import { buildComplianceDashboardReport } from "./compliance-dashboard";
 import type { ComplianceExportKind } from "./compliance-export";
 import { buildInvoiceExportContent } from "./compliance-export";
+import {
+	assertSequenceCounterChangeAllowed,
+	workspaceNumberingLocked,
+} from "./invoice-numbering";
 import { list as listInvoices } from "./invoices";
 import type { Supabase } from "./workspaces";
 import {
@@ -14,7 +18,19 @@ import {
 } from "./workspaces";
 
 export async function getWorkspaceSettings(client: Supabase, userId: string) {
-	return getInvoiceWorkspaceSettings(client, userId);
+	const settings = await getInvoiceWorkspaceSettings(client, userId);
+	if (!settings) return null;
+	// C1: the settings page disables the "next invoice number" input once the
+	// workspace has its first issued invoice. Display only — the change rules
+	// are enforced by `assertSequenceCounterChangeAllowed` on save and by the
+	// `workspaces_invoice_sequence_guard` trigger in the database.
+	return {
+		...settings,
+		numberingLocked: await workspaceNumberingLocked(
+			client,
+			settings.workspaceId,
+		),
+	};
 }
 
 type SupplierProfileRowSnapshot = {
@@ -133,12 +149,45 @@ export async function upsertWorkspaceSettings(
 	const { data: currentProfile, error: currentProfileError } = await client
 		.from("workspaces")
 		.select(
-			"tax_id, rc_number, address, address_street, address_lga, address_state, country_code",
+			"tax_id, rc_number, address, address_street, address_lga, address_state, country_code, next_invoice_sequence",
 		)
 		.eq("id", workspaceId)
 		.maybeSingle();
 	if (currentProfileError) throw currentProfileError;
 	if (!currentProfile) throw new Error("Workspace not found.");
+	// C1: the human-facing "next invoice number" counter is guarded BEFORE the
+	// whitelist write — not editable after the first issued invoice (raising
+	// included), raising honored before that, lowering never below a number an
+	// invoice already carries. The DB trigger
+	// `workspaces_invoice_sequence_guard` re-checks the issued-invoice rule for
+	// every role, so this is the friendly layer, never the only gate.
+	const nextInvoiceSequence = number(input.nextInvoiceSequence);
+	if (nextInvoiceSequence !== undefined) {
+		try {
+			await assertSequenceCounterChangeAllowed(client, {
+				workspaceId,
+				current: currentProfile.next_invoice_sequence,
+				proposed: nextInvoiceSequence,
+			});
+		} catch (error) {
+			// C1: a blocked change of the numbering setting is an edit attempt
+			// and is logged through the ONE audit service. The taxonomy has no
+			// workspace action, so it files under `invoice.edit` on the
+			// `workspace` resource (the route skips the invoice-lookup check for
+			// non-invoice resources) and rethrows the original refusal.
+			await recordInvoiceAudit(client, userId, {
+				action: "invoice.edit",
+				resourceType: "workspace",
+				resourceId: workspaceId,
+				before: { nextInvoiceSequence: currentProfile.next_invoice_sequence },
+				after: { nextInvoiceSequence },
+				message: `Blocked: ${
+					error instanceof Error ? error.message : "numbering change refused"
+				}`,
+			});
+			throw error;
+		}
+	}
 	const profile = buildSupplierProfileUpdate(currentProfile, {
 		taxId: text(input.taxId),
 		rcNumber: text(input.rcNumber),
