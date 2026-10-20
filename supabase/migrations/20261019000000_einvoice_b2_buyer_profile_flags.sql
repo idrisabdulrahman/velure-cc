@@ -29,34 +29,52 @@ alter table public.clients
 -- server boundary, so the only issues a pre-existing row can carry are the
 -- missing address and the TIN rules (applied because every pre-existing row
 -- is b2b via the column default). No existing column is written.
+--
+-- Selective and idempotent (audit round-2, LOW): a row is written only when
+-- it is not already in the target state. The CTE pre-filters to rows the
+-- column default leaves in 'needs_review' (every pre-existing row, so the
+-- first run still classifies all of them) and the WHERE clause skips rows
+-- whose stored flags already equal the computed ones — a second run matches
+-- zero rows, locks nothing and rewrites no dead tuples. Rows the app has
+-- since marked 'complete' belong to the save path and are never re-opened
+-- here.
+with classified as (
+  select c2.id,
+         coalesce(
+           (
+             select jsonb_agg(v.issue)
+             from (
+               values
+                 (case
+                   when btrim(coalesce(c2.billing_address, '')) = ''
+                     then 'address_required'
+                   else null
+                 end),
+                 (case
+                   when btrim(coalesce(c2.tax_id, '')) = ''
+                     then 'tin_required'
+                   when not btrim(coalesce(c2.tax_id, '')) ~ '^[0-9]{10}$'
+                     then 'tin_format'
+                   when btrim(coalesce(c2.tax_id, '')) in
+                        ('1234567890', '0123456789', '9876543210')
+                        or btrim(coalesce(c2.tax_id, '')) ~ '^(.)\1{9}$'
+                     then 'tin_placeholder'
+                   else null
+                 end)
+             ) as v(issue)
+             where v.issue is not null
+           ),
+           '[]'::jsonb
+         ) as issues
+  from public.clients c2
+  where c2.buyer_profile_status = 'needs_review'
+)
 update public.clients c
 set buyer_profile_status = 'needs_review',
-    buyer_profile_issues = coalesce(
-      (
-        select jsonb_agg(v.issue)
-        from (
-          values
-            (case
-              when btrim(coalesce(c.billing_address, '')) = ''
-                then 'address_required'
-              else null
-            end),
-            (case
-              when btrim(coalesce(c.tax_id, '')) = ''
-                then 'tin_required'
-              when not btrim(coalesce(c.tax_id, '')) ~ '^[0-9]{10}$'
-                then 'tin_format'
-              when btrim(coalesce(c.tax_id, '')) in
-                     ('1234567890', '0123456789', '9876543210')
-                   or btrim(coalesce(c.tax_id, '')) ~ '^(.)\1{9}$'
-                then 'tin_placeholder'
-              else null
-            end)
-        ) as v(issue)
-        where v.issue is not null
-      ),
-      '[]'::jsonb
-    );
+    buyer_profile_issues = classified.issues
+from classified
+where classified.id = c.id
+  and c.buyer_profile_issues is distinct from classified.issues;
 
 -- Reversal (run manually if this migration must be undone; restores the
 -- schema only — the backfill wrote nothing outside the new flag columns, so

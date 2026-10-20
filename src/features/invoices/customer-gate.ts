@@ -21,6 +21,17 @@ export const CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE =
 	"A customer is required before an invoice can leave Draft. Select or create a client first.";
 
 /**
+ * B2 companion rule (audit round-2): the gate makes the buyer link load
+ * bearing, so an ISSUED invoice may swap its customer but never lose it.
+ * `save()` patches `customer_id` straight from its input and the
+ * details-sheet payload omits `customerId` entirely, which used to write
+ * NULL behind the gate; the server now threads the stored id and refuses an
+ * explicit clear (null / blank) on any non-Draft invoice.
+ */
+export const CUSTOMER_LINK_CLEARED_ON_ISSUED_MESSAGE =
+	"A customer link cannot be removed from an issued invoice. Select a different client instead.";
+
+/**
  * True when a transition moves an invoice out of Draft into any state other
  * than canceled. Canceling a draft is a soft discard, not an issuance, so it
  * stays customer-less; every other exit from Draft (ready/unpaid/overdue/

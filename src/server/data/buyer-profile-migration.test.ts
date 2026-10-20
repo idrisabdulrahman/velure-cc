@@ -35,6 +35,15 @@ function firstUpdateStatement(body: string): string {
 	return body.slice(start, semicolon === -1 ? body.length : semicolon);
 }
 
+/**
+ * The migration documents its own behavior in prose; statement-shape checks
+ * must only ever see executable SQL, so comment lines are dropped first.
+ */
+const sqlBody = upSql
+	.split("\n")
+	.filter((line) => !line.trimStart().startsWith("--"))
+	.join("\n");
+
 describe("buyer profile flag migration", () => {
 	it("exists", () => {
 		expect(migrationFile).toMatch(
@@ -64,8 +73,8 @@ describe("buyer profile flag migration", () => {
 	});
 
 	it("performs exactly one UPDATE whose set clause only writes flag columns", () => {
-		expect(upSql.match(/\bupdate\b/gi)).toHaveLength(1);
-		const statement = firstUpdateStatement(upSql);
+		expect(sqlBody.match(/\bupdate\b/gi)).toHaveLength(1);
+		const statement = firstUpdateStatement(sqlBody);
 		const setStart = statement.search(/\bset\b/i);
 		const setClause = statement.slice(setStart).replace(/^\s*set\s+/i, "");
 		const targets = [...setClause.matchAll(/(?:^|,)\s*([a-z_]+)\s*=/gi)].map(
@@ -75,13 +84,23 @@ describe("buyer profile flag migration", () => {
 			"buyer_profile_issues",
 			"buyer_profile_status",
 		]);
-		// No top-level WHERE: every pre-existing row is classified.
-		expect(
-			statement
-				.trimEnd()
-				.replace(/[\s)]+$/, "")
-				.endsWith("'[]'::jsonb"),
-		).toBe(true);
+	});
+
+	it("backfills selectively so a second run writes nothing (audit round-2)", () => {
+		// CTE pre-filter and UPDATE predicate are one statement (a single
+		// semicolon), so the selectivity can never be split off from the write
+		// it guards.
+		const start = sqlBody.search(/\bwith classified as\b/i);
+		expect(start).toBeGreaterThanOrEqual(0);
+		const backfill = sqlBody.slice(start);
+		expect(backfill.match(/;/g)).toHaveLength(1);
+		// Every pre-existing row starts in the column-default state, so the
+		// first run still classifies all of them…
+		expect(backfill).toMatch(/where c2\.buyer_profile_status = 'needs_review'/);
+		// …but rows whose stored flags already equal the computed ones are
+		// skipped: no no-op row writes, no row locks held for nothing, and the
+		// backfill is safely re-runnable.
+		expect(backfill).toMatch(/is distinct from classified\.issues/);
 	});
 
 	it("documents a reversal that drops exactly the added columns", () => {

@@ -1,26 +1,31 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * WP6 audit round-1, finding 3 — CSV import client linkage.
+ * WP6 audit round-1 finding 3 (hardened in round 2, HIGH) — CSV import and
+ * the B2 customer gate.
  *
- * `importCsv` writes historical rows; before this round every imported row
- * carried only the free-text `customer_name`. Now the importer best-effort
- * links `customer_id` to an existing client whose email matches the row's
- * customer cell — SAME workspace only, normalized with the clients module's
- * `trim().toLowerCase()`. Rows without a match deliberately keep
- * `customer_id = null` (documented historical-import exemption at the status
- * derivation in src/server/data/invoices.ts) and are counted in the returned
- * `needsBuyerMatch` flag when they land in the issued family, so the import UI
- * reports them instead of dropping them silently; imported rows never run the
- * leave-Draft customer gate. Probes use the no-RLS fake-db double; the
- * browser-safe audit transport is stubbed like in the other data suites.
+ * `importCsv` writes historical rows; it best-effort links `customer_id` to
+ * an existing client whose email matches the row's customer cell — SAME
+ * workspace only, normalized with the clients module's
+ * `trim().toLowerCase()`. Round 1 exempted issued-family rows from the
+ * customer gate; round 2 REMOVED that exemption: a row whose CSV status is
+ * unpaid / overdue / paid but whose customer cell resolves to no workspace
+ * client now lands as a DRAFT (no `delivered_at` / `paid_at` /
+ * `payment_amount`, the original CSV status kept in `internal_notes`) so
+ * `assertCustomerForIssueTransition` stays the single choke point for
+ * leaving Draft. Demoted rows are still counted in the returned
+ * `needsBuyerMatch` flag, so the import UI reports them instead of dropping
+ * them silently; unmatched draft rows stay ordinary customer-less drafts.
+ * Probes use the no-RLS fake-db double; the browser-safe audit transport is
+ * stubbed like in the other data suites.
  */
 
 vi.mock("#/server/data/audit-client", () => ({
 	recordInvoiceAudit: vi.fn(async () => {}),
 }));
 
-import { type InvoiceImportRow, importCsv } from "./invoices";
+import { CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE } from "#/features/invoices/customer-gate";
+import { type InvoiceImportRow, importCsv, updateStatus } from "./invoices";
 import { createFakeSupabase, type FakeTables } from "./testing/fake-db";
 
 const USER_A = "user-a";
@@ -143,15 +148,18 @@ describe("CSV import → workspace client linkage by email", () => {
 		const rows = importedRows(WS_B);
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.customer_id).toBeNull();
-		// Cross-workspace linkage is refused, and the unlinked issued row is
-		// reported back (never linked, never silent).
+		// Cross-workspace linkage is refused, and the issued-family row is
+		// demoted to Draft — never linked, never issued, never silent.
+		expect(rows[0]?.status).toBe("draft");
+		expect(rows[0]?.delivered_at).toBeNull();
 		expect(result.needsBuyerMatch).toBe(1);
 	});
 
-	it("keeps customer_id null without a match and does not gate the import", async () => {
+	it("demotes an unmatched issued-family row to Draft instead of importing it issued", async () => {
 		const result = await importCsv(client, USER_A, [
-			// No email in the cell → no candidate; issued-family rows are
-			// historical imports and are never rejected by the B2 gate.
+			// No email in the cell → no candidate. The row ASKED for `unpaid`
+			// but import may not exempt itself from the leave-Draft gate: it
+			// lands as a buyer-less draft with no issue/payment stamp.
 			rowInput("No Match Ltd", "unpaid"),
 		]);
 
@@ -159,10 +167,52 @@ describe("CSV import → workspace client linkage by email", () => {
 		const rows = importedRows(WS_A);
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.customer_id).toBeNull();
-		expect(rows[0]?.status).toBe("unpaid");
-		// Documented exemption + flag: the row is created, and the caller is
-		// told it needs a buyer link.
+		expect(rows[0]?.status).toBe("draft");
+		expect(rows[0]?.delivered_at).toBeNull();
+		expect(rows[0]?.paid_at).toBeNull();
+		expect(rows[0]?.payment_amount).toBe(0);
+		// The original CSV status survives in the internal note so the buyer
+		// can be linked later without losing the imported intent.
+		expect(String(rows[0]?.internal_notes)).toContain('"unpaid"');
+		// Not silent: the row still trips the import report.
 		expect(result.needsBuyerMatch).toBe(1);
+	});
+
+	it("demotes an unmatched paid row without stamping paid_at or payment_amount", async () => {
+		const result = await importCsv(client, USER_A, [
+			rowInput("No Match Ltd", "paid"),
+		]);
+
+		expect(result).toMatchObject({ created: 1, skipped: 0, errors: [] });
+		const rows = importedRows(WS_A);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]?.customer_id).toBeNull();
+		expect(rows[0]?.status).toBe("draft");
+		expect(rows[0]?.paid_at).toBeNull();
+		expect(rows[0]?.delivered_at).toBeNull();
+		expect(rows[0]?.payment_amount).toBe(0);
+		expect(String(rows[0]?.internal_notes)).toContain('"paid"');
+		expect(result.needsBuyerMatch).toBe(1);
+	});
+
+	it("keeps the gate as the single choke point after a demoted import", async () => {
+		const result = await importCsv(client, USER_A, [
+			rowInput("No Match Ltd", "overdue"),
+		]);
+		expect(result.created).toBe(1);
+		const [imported] = importedRows(WS_A);
+		expect(imported?.status).toBe("draft");
+
+		// The imported draft must still pass `assertCustomerForIssueTransition`
+		// to leave Draft — the import path cannot front-run it.
+		await expect(
+			updateStatus(client, USER_A, {
+				id: String(imported?.id),
+				status: "unpaid",
+			}),
+		).rejects.toThrow(CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE);
+		expect(importedRows(WS_A)[0]?.status).toBe("draft");
+		expect(importedRows(WS_A)[0]?.delivered_at).toBeNull();
 	});
 
 	it("does not flag an unmatched row that stays a draft", async () => {
