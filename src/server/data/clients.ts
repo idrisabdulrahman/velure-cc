@@ -155,6 +155,11 @@ export type ClientBuyerColumns = {
  * flag columns instead of rejected so bulk pre-existing clients and CSV
  * imports keep working.
  *
+ * Exception (WP6 finding 4): an over-long address the write merely ECHOES
+ * back from the stored row is legacy data — it is flagged, not rejected, so
+ * such a row stays editable / archivable; a differently typed over-long
+ * address still throws.
+ *
  * DELIBERATE ASYMMETRY (accepted as designed, WP6 audit round-1 finding 5):
  * a LEGACY stored placeholder TIN that an edit leaves in place HARD-FAILS the
  * save rather than being re-flagged — the save path is the moment the user is
@@ -189,7 +194,27 @@ export function buildClientBuyerColumns(
 		taxId: provided(input.taxId, current.tax_id),
 		buyerType: provided(input.buyerType, current.buyer_type),
 	});
-	if (!result.valid) {
+
+	// AUDIT WP6 (finding 4): a LEGACY stored address longer than the 300-char
+	// cap made the row un-editable and un-restorable — the clients edit dialog
+	// has no address field, so it resubmits the STORED value and the
+	// over-long FORMAT check hard-failed every save forever. An address the
+	// edit merely ECHOES back (equal to what is stored, after trim) is
+	// therefore treated as legacy data: `address_too_long` stays a NON-BLOCKING
+	// flag (`buyer_profile_status = "needs_review"` + the issue code) and the
+	// write proceeds, so the row can be edited, archived and restored. A
+	// newly TYPED over-long address (any value that differs from the stored
+	// one) still HARD-FAILS, and so does any other blocking issue riding
+	// along (placeholder TIN, bad email, invalid buyer type) — the documented
+	// asymmetry above is untouched. No UI surface reads this flag yet; the
+	// address field in the edit dialog is a logged follow-up.
+	const echoesStoredAddress =
+		result.normalized.billingAddress === (current.billing_address ?? "").trim();
+	const legacyStoredOverlongAddress =
+		echoesStoredAddress &&
+		result.blockingIssues.length > 0 &&
+		result.blockingIssues.every((issue) => issue.code === "address_too_long");
+	if (!result.valid && !legacyStoredOverlongAddress) {
 		throw new Error(
 			`${CLIENT_BUYER_REJECTION_PREFIX} ${result.blockingIssues
 				.map((issue) => issue.message)

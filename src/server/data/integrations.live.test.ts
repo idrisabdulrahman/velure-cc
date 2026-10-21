@@ -6,6 +6,7 @@ dns.setDefaultResultOrder("ipv4first");
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { createClient as createClientRecord } from "./clients";
 import {
 	disconnect,
 	getConnectionSecret,
@@ -339,6 +340,30 @@ const today = () => new Date().toISOString().slice(0, 10);
 const inDays = (days: number) =>
 	new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
+/**
+ * B2 fixture: updateStatus → unpaid needs a REAL workspace customer, so the
+ * invoice fixture creates one first and passes its id — same pattern as
+ * `makePayableInvoice` in payments.live.test.ts (unique, suffix-scoped email
+ * so repeated live runs never collide).
+ */
+async function createWorkspaceCustomer(
+	client: Supabase,
+	user: { issuerUserId: string } | null,
+	name: string,
+) {
+	if (!user) throw new Error("signed-in user missing for customer fixture.");
+	const email = `${name.toLowerCase().replace(/\s+/g, "-")}-${suffix}@example.com`;
+	return createClientRecord(client, user.issuerUserId, {
+		name,
+		email,
+		currency: "NGN",
+		paymentTerms: "net-14",
+		contact: { fullName: name, email },
+		favorite: false,
+		status: "active",
+	});
+}
+
 describe.skipIf(!LIVE)("A10 integrations domain (live velure-cc)", () => {
 	beforeAll(async () => {
 		mgmtToken = process.env.SUPABASE_MANAGEMENT_TOKEN ?? "";
@@ -547,9 +572,13 @@ describe.skipIf(!LIVE)("A10 integrations domain (live velure-cc)", () => {
 
 	it("updates invoice sync state on A's invoice (RLS-pure)", async () => {
 		const clientA = userScopedClient(userA!.jwt);
+		// B2 gate: updateStatus → unpaid needs a workspace customer, so the
+		// fixture creates one first (payments.live.test.ts pattern).
+		const customerId = await createWorkspaceCustomer(clientA, userA, "Sync Co");
 		const draft = await autosaveDraft(clientA, userA!.issuerUserId, {
 			token: `pub-${crypto.randomUUID()}`,
 			invoiceNumber: "",
+			customerId,
 			customerName: "Sync Co",
 			currency: "NGN",
 			issueDate: today(),
@@ -564,6 +593,7 @@ describe.skipIf(!LIVE)("A10 integrations domain (live velure-cc)", () => {
 			token: full.token,
 			documentType: "standard",
 			invoiceNumber: full.invoiceNumber,
+			customerId,
 			customerName: "Sync Co",
 			currency: "NGN",
 			type: "one-time",

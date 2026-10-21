@@ -229,4 +229,43 @@ describe("CSV import → workspace client linkage by email", () => {
 		expect(rows[0]?.status).toBe("draft");
 		expect(result.needsBuyerMatch).toBe(0);
 	});
+
+	it("still matches a client that sits beyond one PostgREST page of workspace clients", async () => {
+		// PostgREST caps an UNBOUNDED SELECT at 1000 rows by default, and the
+		// fake now emulates that cap (`DEFAULT_MAX_ROWS` in
+		// testing/fake-db.ts). A single all-clients read would therefore
+		// truncate the email → id map for a workspace bigger than one page and
+		// silently demote a matchable row to a buyer-less draft. Fill workspace
+		// A past one page and give the matching client the LAST id (`zzz-…`) so
+		// the link can only be made from the SECOND page of the paged lookup.
+		const PAGE_SIZE = 1000;
+		for (let index = 0; index < PAGE_SIZE + 150; index += 1) {
+			tables.clients?.push(
+				clientRow(
+					`client-filler-${index}`,
+					WS_A,
+					USER_A,
+					`filler-${index}@example.test`,
+				),
+			);
+		}
+		tables.clients?.push(
+			clientRow("zzz-deep-client", WS_A, USER_A, "deep-buyer@example.test"),
+		);
+
+		const result = await importCsv(client, USER_A, [
+			rowInput("deep-buyer@example.test", "unpaid"),
+		]);
+
+		expect(result).toMatchObject({
+			created: 1,
+			skipped: 0,
+			errors: [],
+			needsBuyerMatch: 0,
+		});
+		const rows = importedRows(WS_A);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]?.customer_id).toBe("zzz-deep-client");
+		expect(rows[0]?.status).toBe("unpaid");
+	});
 });
