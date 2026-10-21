@@ -988,12 +988,19 @@ export function CreateInvoicePanel({
 		(item) => item.name.trim().length > 0 && item.price > 0,
 	);
 	const canSubmit =
-		customerName.trim().length > 1 && hasPricedLineItem && !submitting;
-	const submitBlockerText = !customerName.trim()
-		? "Select or enter a client before creating."
-		: !hasPricedLineItem
-			? "Add at least one priced line item."
-			: "";
+		customerName.trim().length > 1 &&
+		Boolean(customerId) &&
+		hasPricedLineItem &&
+		!submitting;
+	// B2: finalizing requires a saved client record (the server rejects a
+	// customer-less invoice leaving Draft), so the blocker names the picker.
+	const submitBlockerText = !customerId
+		? "Select or create a saved client before creating."
+		: !customerName.trim()
+			? "Select or enter a client before creating."
+			: !hasPricedLineItem
+				? "Add at least one priced line item."
+				: "";
 	const autosaveStatusText =
 		autosaveStatus === "saving"
 			? "Saving draft..."

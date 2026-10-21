@@ -1,6 +1,10 @@
 import type { Database, Json } from "#/types/database.types";
 import { recordInvoiceAudit } from "./audit-client";
-import { getById as getInvoiceById } from "./invoices";
+import {
+	assertCustomerForIssueTransition,
+	getDerivedInvoiceStatus,
+	getById as getInvoiceById,
+} from "./invoices";
 import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
 
 /**
@@ -471,6 +475,20 @@ export async function recordPayment(
 	const now = args.recordedAt ?? Date.now();
 	const workspaceId = await resolveActiveWorkspaceId(client, userId);
 	if (!workspaceId) throw new Error("No active workspace.");
+
+	// B2 — customer required to leave Draft: a settlement moves a derived-Draft
+	// invoice straight to paid / partially-paid, so it runs the same gate as
+	// every other leave-Draft path BEFORE the transaction row and the invoice
+	// patch are written. Invoices that do not derive Draft (issued / legacy
+	// rows, including ones without a customer) are unaffected —
+	// transitionLeavesDraft returns before any customer lookup.
+	await assertCustomerForIssueTransition(
+		client,
+		workspaceId,
+		invoice,
+		getDerivedInvoiceStatus(invoice),
+		payment.isPaid ? "paid" : "partially-paid",
+	);
 
 	const { error: insertError } = await client
 		.from("payment_transactions")

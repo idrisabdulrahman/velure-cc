@@ -75,6 +75,8 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	removeClient: "app-scoped",
 	toggleClientFavorite: "app-scoped",
 	importClientsCsv: "app-scoped",
+	CLIENT_BUYER_REJECTION_PREFIX: "pure",
+	buildClientBuyerColumns: "pure",
 	// compliance-dashboard.ts
 	buildComplianceDashboardReport: "pure",
 	// compliance-export.ts
@@ -129,6 +131,10 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	saveDraftSettings: "app-scoped",
 	saveTemplateDefaults: "app-scoped",
 	updateStatus: "app-scoped",
+	// B2 leave-Draft gates: workspace id resolved from the verified session,
+	// customer lookup scoped to that workspace (resolveActiveWorkspaceId)
+	assertCustomerForIssueTransition: "app-scoped",
+	assertSendCustomerGate: "app-scoped",
 	cancelSchedule: "app-scoped",
 	reschedule: "app-scoped",
 	remove: "app-scoped",

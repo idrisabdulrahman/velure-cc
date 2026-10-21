@@ -13,6 +13,7 @@ import {
 import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
+import type { BuyerType } from "#/features/clients/buyer-profile";
 import { useUnifiedAuth } from "#/lib/auth-hook";
 import { useSupabaseSession } from "#/lib/supabase-session";
 import { createClient } from "#/server/data/clients";
@@ -29,6 +30,7 @@ type FormState = {
 	website: string;
 	billingAddress: string;
 	taxId: string;
+	buyerType: BuyerType;
 	currency: string;
 	paymentTerms: string;
 	internalNotes: string;
@@ -47,6 +49,7 @@ const initialState: FormState = {
 	website: "",
 	billingAddress: "",
 	taxId: "",
+	buyerType: "b2b",
 	currency: "NGN",
 	paymentTerms: "Net 14",
 	internalNotes: "",
@@ -108,6 +111,7 @@ function NewClient() {
 				website: state.website || undefined,
 				billingAddress: state.billingAddress || undefined,
 				taxId: state.taxId || undefined,
+				buyerType: state.buyerType,
 				currency: state.currency,
 				paymentTerms: state.paymentTerms,
 				internalNotes: state.internalNotes || undefined,
@@ -240,6 +244,25 @@ function NewClient() {
 										className={inputClass}
 										placeholder="10-digit TIN"
 									/>
+								</Field>
+								<Field label="Buyer Type">
+									<Select
+										value={state.buyerType}
+										onValueChange={(value) =>
+											setState((prev) => ({
+												...prev,
+												buyerType: value as BuyerType,
+											}))
+										}
+									>
+										<SelectTrigger className={`${inputClass} w-full`}>
+											<SelectValue placeholder="Buyer Type" />
+										</SelectTrigger>
+										<SelectContent className="border-rule bg-paper-2 text-ink">
+											<SelectItem value="b2b">B2B (business)</SelectItem>
+											<SelectItem value="b2c">B2C (consumer)</SelectItem>
+										</SelectContent>
+									</Select>
 								</Field>
 								<Field label="Currency">
 									<Select

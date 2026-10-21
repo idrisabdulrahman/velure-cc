@@ -388,12 +388,18 @@ describe("invoice lifecycle wiring", () => {
 				{ data: null },
 			],
 			invoices: [{ data: [] }, { data: null }, { data: { id: "inv-new" } }],
+			// B2: finalizing out of Draft requires a customer record that
+			// resolves in the caller's workspace. createDraft validates the
+			// link before preparing the number, and the draft-exit gate
+			// re-checks it, so both lookups answer here.
+			clients: [{ data: { id: "client-1" } }, { data: { id: "client-1" } }],
 		});
 		const admin = installAuditEndpoint(client);
 
 		const invoice = await createDraft(client, USER_ID, {
 			token: "pub-draft-token",
 			invoiceNumber: "INV-2026-0007",
+			customerId: "client-1",
 			customerName: "Acme Ltd",
 			currency: "NGN",
 			issueDate: "2026-10-16",

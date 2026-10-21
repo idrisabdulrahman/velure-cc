@@ -6,6 +6,7 @@ dns.setDefaultResultOrder("ipv4first");
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { createClient as createClientRecord } from "./clients";
 import {
 	autosaveDraft,
 	getById as getInvoiceById,
@@ -447,8 +448,25 @@ describe.skipIf(!LIVE)("A10 payments domain (live velure-cc)", () => {
 		userId: string,
 		customerName: string,
 	) {
+		// B2: the draft must carry a workspace customer before it can leave
+		// Draft (updateStatus → unpaid), and the later settlement exercises
+		// the same rule. Fixture-only change: a real workspace client with a
+		// unique email (suffix-scoped), mirroring invoices.live.test.ts.
+		const customerEmail = `${customerName
+			.toLowerCase()
+			.replace(/\s+/g, "-")}-${suffix}@example.com`;
+		const customerId = await createClientRecord(client, userId, {
+			name: customerName,
+			email: customerEmail,
+			currency: "NGN",
+			paymentTerms: "net-14",
+			contact: { fullName: customerName, email: customerEmail },
+			favorite: false,
+			status: "active",
+		});
 		const draft = await autosaveDraft(client, userId, {
 			...draftInput(customerName),
+			customerId,
 		});
 		const full = await getInvoiceById(client, userId, draft.id);
 		if (!full) throw new Error("draft not found after autosave");
@@ -457,6 +475,7 @@ describe.skipIf(!LIVE)("A10 payments domain (live velure-cc)", () => {
 			token: full.token,
 			documentType: "standard",
 			invoiceNumber: full.invoiceNumber,
+			customerId,
 			customerName,
 			currency: "NGN",
 			type: "one-time",

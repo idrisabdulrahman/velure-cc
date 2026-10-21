@@ -1,3 +1,8 @@
+import {
+	CUSTOMER_LINK_CLEARED_ON_ISSUED_MESSAGE,
+	CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE,
+	transitionLeavesDraft,
+} from "#/features/invoices/customer-gate";
 import type { Database, Json } from "#/types/database.types";
 import { type InvoiceAuditWriter, recordInvoiceAudit } from "./audit-client";
 import {
@@ -1457,6 +1462,63 @@ async function assertWorkspaceCustomer(
 	if (!data) throw new Error("Customer not found.");
 }
 
+/**
+ * B2 — customer required to leave Draft (SPEC §5.B row B2). A draft may
+ * remain customer-less, but any transition out of Draft into an issued/
+ * sent/paid/scheduled state requires a linked customer record that resolves
+ * inside the caller's workspace (a forged cross-workspace customer id fails
+ * `assertWorkspaceCustomer`). Canceling a draft is a soft discard and stays
+ * customer-less. Pure decision logic lives in
+ * `#/features/invoices/customer-gate`.
+ *
+ * Shared by every leave-Draft write path: createDraft finalize, updateStatus,
+ * markInvoiceSent, convertProformaToInvoice, recordDeliveryEvent (sent),
+ * recordPayment (settlement) and the email send route.
+ */
+export async function assertCustomerForIssueTransition(
+	client: Supabase,
+	workspaceId: string,
+	invoice: { customerId?: string },
+	from: InvoiceStatus,
+	to: InvoiceStatus,
+) {
+	if (!transitionLeavesDraft(from, to)) return;
+	if (!invoice.customerId) {
+		throw new Error(CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE);
+	}
+	await assertWorkspaceCustomer(client, workspaceId, invoice.customerId);
+}
+
+/**
+ * B2 gate for the email send route (`POST /api/invoice/send/:id`).
+ *
+ * Emailing an invoice records a `sent` delivery event, which derives a Draft
+ * invoice out of Draft (delivered_at → unpaid/overdue). The route therefore
+ * rejects a customer-less draft BEFORE it renders the PDF, calls the email
+ * provider or writes any delivery event, so this helper only reads. Legacy
+ * issued invoices that never had a customer stay sendable (a non-derived-Draft
+ * invoice is not an exit from Draft). Throws
+ * `CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE`, or `Customer not found.` when a
+ * draft's customer id does not resolve inside the verified workspace.
+ */
+export async function assertSendCustomerGate(
+	client: Supabase,
+	userId: string,
+	invoice: { customerId?: string },
+): Promise<void> {
+	const currentStatus = getDerivedInvoiceStatus(invoice);
+	if (currentStatus !== "draft") return;
+	const workspaceId = await resolveActiveWorkspaceId(client, userId);
+	if (!workspaceId) throw new Error("No active workspace.");
+	await assertCustomerForIssueTransition(
+		client,
+		workspaceId,
+		invoice,
+		currentStatus,
+		"unpaid",
+	);
+}
+
 type DraftDoc = {
 	token: string;
 	documentType: InvoiceDocumentType;
@@ -1665,6 +1727,15 @@ export async function createDraft(
 		updatedAt: now,
 	};
 	const status = getDerivedInvoiceStatus(doc);
+	// B2: finalizing a draft always leaves Draft — a customer record is
+	// required (all deliveryTypes: create, create_and_send, scheduled).
+	await assertCustomerForIssueTransition(
+		client,
+		workspaceId,
+		{ customerId: args.customerId },
+		"draft",
+		status,
+	);
 	const columns = {
 		workspace_id: workspaceId,
 		user_id: existingDraft ? existingDraft.id : userId,
@@ -1878,6 +1949,27 @@ export async function save(
 	if (!workspaceId) throw new Error("No active workspace.");
 	const current = await getById(client, userId, args.id);
 	if (!current) throw new Error("Invoice not found.");
+
+	// B2 (audit round-2, LOW): once an invoice is issued its buyer link is
+	// load bearing — the details-sheet save payload omits `customerId`
+	// entirely, so patching straight from `args.customerId` used to write
+	// NULL behind the gate. On a non-Draft invoice an OMITTED id threads the
+	// stored one, and an explicit clear (null / blank) is refused outright.
+	// Drafts keep today's semantics: a buyer-less draft stays legal.
+	const currentStatus = getDerivedInvoiceStatus(current);
+	const requestedCustomerId = args.customerId?.trim();
+	if (
+		currentStatus !== "draft" &&
+		current.customerId &&
+		args.customerId !== undefined &&
+		!requestedCustomerId
+	) {
+		throw new Error(CUSTOMER_LINK_CLEARED_ON_ISSUED_MESSAGE);
+	}
+	const customerId =
+		currentStatus === "draft" || requestedCustomerId !== undefined
+			? args.customerId
+			: current.customerId;
 	await assertWorkspaceCustomer(client, workspaceId, args.customerId);
 
 	const compliance = args.compliance ?? defaultCompliance(args);
@@ -1910,7 +2002,7 @@ export async function save(
 		shipmentDetails,
 		depositRequest,
 		invoiceNumber: args.invoiceNumber,
-		customerId: args.customerId,
+		customerId,
 		customerName: args.customerName,
 		logoUrl: args.logoUrl,
 		customerPoNumber: normalizeCustomerPoNumber(args.customerPoNumber),
@@ -2075,6 +2167,16 @@ export async function updateStatus(
 	if (!workspaceId) throw new Error("No active workspace.");
 	const current = await getById(client, userId, args.id);
 	if (!current) throw new Error("Invoice not found.");
+
+	// B2: leaving Draft (paid / unpaid / overdue) requires a customer record;
+	// draft→draft and draft→canceled are unaffected.
+	await assertCustomerForIssueTransition(
+		client,
+		workspaceId,
+		current,
+		getDerivedInvoiceStatus(current),
+		args.status,
+	);
 
 	const now = args.paidAt ?? Date.now();
 
@@ -2722,6 +2824,18 @@ export async function convertProformaToInvoice(
 		updatedAt: now,
 	};
 	const status = getDerivedInvoiceStatus(doc);
+	// B2: a conversion that lands the new standard invoice outside Draft
+	// requires a customer record. With the current derivation this only
+	// fires defensively — a deposit-carrying source already derives issued,
+	// and a customer-less Draft source lands as Draft — but the guard keeps
+	// the rule true if the landing status ever changes.
+	await assertCustomerForIssueTransition(
+		client,
+		workspaceId,
+		source,
+		getDerivedInvoiceStatus(source),
+		status,
+	);
 
 	const { data, error } = await client
 		.from("invoices")
@@ -2802,6 +2916,20 @@ export type InvoiceImportRow = {
 	paymentDetails?: string;
 };
 
+/**
+ * CSV cells are free text, and row exports from payment/email tools often put
+ * the buyer's email in the customer column ("billing@acme.com"). Returns the
+ * first email-shaped token, normalized with the same `trim()` +
+ * `toLowerCase()` the clients module applies to stored emails
+ * (src/server/data/clients.ts), or null when the cell carries no email.
+ */
+function importRowCustomerEmail(customerName: string): string | null {
+	const match = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.exec(
+		customerName,
+	);
+	return match ? match[0].trim().toLowerCase() : null;
+}
+
 export async function importCsv(
 	client: Supabase,
 	userId: string,
@@ -2810,6 +2938,15 @@ export async function importCsv(
 	created: number;
 	skipped: number;
 	errors: Array<{ row: number; message: string }>;
+	/**
+	 * B2 import flag (audit round-1 finding 3, hardened in round 2): rows
+	 * whose CSV status was issued-family (unpaid / overdue / paid) but whose
+	 * customer cell resolved to no workspace client. Import no longer exempts
+	 * itself from the leave-Draft gate: those rows land as DRAFTS awaiting a
+	 * buyer link (see the comment at the status derivation) and are counted
+	 * here so the caller reports them instead of dropping them silently.
+	 */
+	needsBuyerMatch: number;
 }> {
 	const workspaceId = await resolveActiveWorkspaceId(client, userId);
 	if (!workspaceId) throw new Error("No active workspace.");
@@ -2822,6 +2959,7 @@ export async function importCsv(
 	const now = Date.now();
 	const created: string[] = [];
 	let skipped = 0;
+	let needsBuyerMatch = 0;
 	const errors: Array<{ row: number; message: string }> = [];
 	const addImportError = (row: number, message: string) => {
 		if (errors.length < 100) {
@@ -2931,6 +3069,34 @@ export async function importCsv(
 		});
 	}
 
+	// Best-effort B2 linkage for CSV import: when the customer cell carries an
+	// email address, link the row to the existing client with that email in
+	// THIS workspace. The lookup is workspace-scoped exactly like every other
+	// client query and normalizes both sides with the clients module's
+	// `trim().toLowerCase()` (src/server/data/clients.ts importClientsCsv).
+	// Rows whose cell carries no email (or no match) are handled at the status
+	// derivation below: issued-family rows land as drafts awaiting a buyer
+	// link instead of being exempted from the leave-Draft gate.
+	const emailToClientId = new Map<string, string>();
+	const hasImportEmails = [...groups.values()].some(
+		(group) => importRowCustomerEmail(group.customerName) !== null,
+	);
+	if (hasImportEmails) {
+		const { data: workspaceClients, error: clientsError } = await client
+			.from("clients")
+			.select("id, email")
+			.eq("workspace_id", workspaceId);
+		if (clientsError) throw clientsError;
+		for (const row of workspaceClients ?? []) {
+			const normalized = String(row.email ?? "")
+				.trim()
+				.toLowerCase();
+			if (normalized && !emailToClientId.has(normalized)) {
+				emailToClientId.set(normalized, String(row.id));
+			}
+		}
+	}
+
 	for (const group of groups.values()) {
 		let invoiceNumber = group.invoiceNumber;
 		if (
@@ -2971,12 +3137,38 @@ export async function importCsv(
 			continue;
 		}
 
+		const matchEmail = importRowCustomerEmail(group.customerName);
+		const matchedCustomerId = matchEmail
+			? (emailToClientId.get(matchEmail) ?? null)
+			: null;
+		// Issued family = anything that leaves Draft on import (the same
+		// condition that stamps `delivered_at` below); draft/canceled rows are
+		// never flagged because a buyer-less draft is a legal document state.
+		const issuedFamily =
+			group.status !== "draft" && group.status !== "canceled";
+		// B2 (audit round-2, HIGH): import must NOT exempt itself from
+		// `assertCustomerForIssueTransition`, the single choke point for
+		// leaving Draft. An issued-family row whose customer cell resolves to
+		// no workspace client therefore lands as a DRAFT — never `unpaid`,
+		// `overdue` or `paid`, and with no `delivered_at` / `paid_at` /
+		// `payment_amount` stamp — with the original CSV status preserved in
+		// `internal_notes` so the buyer can be linked later and the row then
+		// issues through the ordinary gated transition. Rows WITH a workspace
+		// customer keep today's behavior. Nothing is dropped silently: every
+		// demoted row is still counted in `needsBuyerMatch` (reported by the
+		// import toast) and the reason travels in `internal_notes`. Recorded in
+		// prompts/wp6-audit-round2-fixes.md.
+		const landAsDraft = issuedFamily && !matchedCustomerId;
+		if (landAsDraft) needsBuyerMatch += 1;
+		const csvStatus = group.status;
+
 		const invoiceDoc = {
 			workspace_id: workspaceId,
 			user_id: userId,
 			token: `pub-${crypto.randomUUID()}`,
 			document_type: "standard",
 			invoice_number: invoiceNumber,
+			customer_id: matchedCustomerId,
 			customer_name: group.customerName,
 			currency: group.currency,
 			invoice_type: "one-time",
@@ -2987,7 +3179,7 @@ export async function importCsv(
 			issue_date: group.issueDate,
 			due_date: group.dueDate,
 			payment_amount:
-				group.status === "paid"
+				!landAsDraft && group.status === "paid"
 					? invoiceAmount({
 							lineItems: group.lineItems,
 							compliance: normalizedCompliance as {
@@ -2997,14 +3189,17 @@ export async function importCsv(
 							},
 						})
 					: 0,
-			delivered_at:
-				group.status !== "draft" && group.status !== "canceled"
-					? iso(now)
-					: null,
+			delivered_at: issuedFamily && !landAsDraft ? iso(now) : null,
 			canceled_at: group.status === "canceled" ? iso(now) : null,
 			payment_details: group.paymentDetails ?? null,
-			paid_at: group.status === "paid" ? iso(now) : null,
+			paid_at: !landAsDraft && group.status === "paid" ? iso(now) : null,
 			notes: group.notes ?? null,
+			// Buyer-less issued-family rows keep their original CSV status here
+			// so the demoted draft can be linked and issued later without
+			// losing the imported intent (internal: never on the public copy).
+			internal_notes: landAsDraft
+				? `Imported from CSV as a draft: row status "${csvStatus}" needs a linked client before this invoice can leave Draft.`
+				: null,
 			line_items: group.lineItems,
 			compliance: normalizedCompliance,
 			fiscalization: { status: "not_configured" },
@@ -3013,12 +3208,30 @@ export async function importCsv(
 			lifecycle: {},
 			created_at: iso(now),
 			updated_at: iso(now),
+			// B2 import semantics (WP6, audit round-2): CSV rows are PAST
+			// records being backfilled, so import still derives and writes the
+			// row's status here instead of replaying each historical
+			// transition — but it no longer exempts itself from the
+			// leave-Draft customer gate. A row marked draft, canceled, or
+			// issued-family WITH a matched workspace client lands with its CSV
+			// status; an issued-family row (unpaid / overdue / paid) WITHOUT a
+			// match is demoted to `draft` (`landAsDraft` above) with its
+			// intent recorded in `internal_notes` and counted in
+			// `needsBuyerMatch`, so no customer-less invoice can reach an
+			// issued or settled state through this path. Any later transition
+			// of the imported row is gated as usual. Recorded in
+			// prompts/wp6-audit-round2-fixes.md.
 			status: getDerivedInvoiceStatus({
 				...group,
+				// Demote before deriving: overriding `status` also stops
+				// `deliveredAtForInvoice` from treating the CSV status itself
+				// as evidence the invoice was issued.
+				...(landAsDraft ? { status: "draft" as const } : {}),
 				lineItems: group.lineItems,
 				compliance: normalizedCompliance,
-				paymentAmount:
-					group.status === "paid"
+				paymentAmount: landAsDraft
+					? 0
+					: group.status === "paid"
 						? invoiceAmount({
 								lineItems: group.lineItems,
 								compliance: normalizedCompliance as {
@@ -3028,12 +3241,9 @@ export async function importCsv(
 								},
 							})
 						: 0,
-				deliveredAt:
-					group.status !== "draft" && group.status !== "canceled"
-						? now
-						: undefined,
+				deliveredAt: issuedFamily && !landAsDraft ? now : undefined,
 				canceledAt: group.status === "canceled" ? now : undefined,
-				paidAt: group.status === "paid" ? now : undefined,
+				paidAt: !landAsDraft && group.status === "paid" ? now : undefined,
 			}),
 		};
 
@@ -3071,12 +3281,13 @@ export async function importCsv(
 				created: created.length,
 				skipped,
 				failed: errors.length,
+				needsBuyerMatch,
 			},
 			message: `Imported ${created.length} invoice(s) from CSV.`,
 		});
 	}
 
-	return { created: created.length, skipped, errors };
+	return { created: created.length, skipped, errors, needsBuyerMatch };
 }
 
 export async function markInvoiceSent(
@@ -3093,6 +3304,14 @@ export async function markInvoiceSent(
 	if (currentStatus === "paid" || currentStatus === "canceled") {
 		throw new Error("Cannot send a paid or canceled invoice.");
 	}
+	// B2: sending a draft (mark as sent) leaves Draft — customer required.
+	await assertCustomerForIssueTransition(
+		client,
+		workspaceId,
+		invoice,
+		currentStatus,
+		"unpaid",
+	);
 
 	const now = Date.now();
 	const currentLifecycle = invoice.lifecycle ?? {};
@@ -3152,6 +3371,22 @@ export async function recordDeliveryEvent(
 	if (!workspaceId) throw new Error("No active workspace.");
 	const invoice = await getById(client, userId, args.invoiceId);
 	if (!invoice) throw new Error("Invoice not found.");
+
+	// B2: a `sent` delivery event sets delivered_at, deriving a Draft invoice
+	// out of Draft (unpaid/overdue) — the same customer requirement as every
+	// other leave-Draft path, enforced BEFORE the event row and the invoice
+	// update are written. `failed` events do not leave Draft, so they stay
+	// recordable for customer-less drafts. Non-derived-Draft invoices are
+	// unaffected (transitionLeavesDraft returns early, no extra query).
+	if (args.status === "sent") {
+		await assertCustomerForIssueTransition(
+			client,
+			workspaceId,
+			invoice,
+			getDerivedInvoiceStatus(invoice),
+			"unpaid",
+		);
+	}
 
 	const now = Date.now();
 	const { data, error } = await client
