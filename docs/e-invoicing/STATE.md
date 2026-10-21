@@ -16,7 +16,7 @@ Status: pending | ready | implementing | auditing | fixing | merged | blocked
 | WP5 | E2 | none | **merged** (round 1 PASS + WHT-base parameterized; round 2 PASS dbdedc0; merge commit b3b7806) | einv/wp5 | 536f564 | 2 | LOW: WHT base (inclusive vs exclusive) needs tax-adviser confirmation — module requires explicit parameter, no default assumed; stale Results line in prompts/wp5 file (disk-only, prompts/ gitignored) |
 | WP6 | B2 | WP2 (merged) | **implementing** (worktree .worktrees/wp6) | einv/wp6 | f9dad76 | 0 | — |
 | WP7 | B3 | WP5 (merged) | ready — held for batch B (serialized: shares invoice "leave Draft" validation seam with WP6) | — | — | 0 | — |
-| WP8 | C1,C2,C3 | WP4 (merged) | **implementing** (worktree .worktrees/wp8) | einv/wp8 | f9dad76 | 0 | — |
+| WP8 | C1,C2,C3 | WP4 (merged) | **implementing** (worktree .worktrees/wp8; 87b6869 + audit-fix round: bulk-archive audit resourceId, Paystack 2nd-payment migration 20261021000000, C1 backfill seed off-by-one, paid→unpaid guard, custom-number year bounds — see prompts/wp8-numbering-immutability.md fix-round section; suites 442/86, typecheck 0, check 356 warnings) | einv/wp8 | f9dad76 | 0 | — |
 | WP9 | B6 | WP8 | pending | — | — | 0 | — |
 | WP10 | D1 | WP6,WP7,WP8 | pending | — | — | 0 | — |
 | WP11 | D3 | WP8,WP10 | pending | — | — | 0 | — |

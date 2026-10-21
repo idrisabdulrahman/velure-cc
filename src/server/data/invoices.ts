@@ -2103,6 +2103,22 @@ export async function updateStatus(
 	}
 
 	if (args.status === "unpaid" || args.status === "overdue") {
+		if (current.status === "paid") {
+			// C2/C3: the database trigger (20261020000001) refuses to move a
+			// paid invoice to any status but paid/canceled; mirror it here so
+			// the caller gets a friendly refusal and the blocked attempt is
+			// logged instead of a raw insufficient_privilege from Postgres.
+			await recordInvoiceAudit(client, userId, {
+				action: "invoice.edit",
+				resourceId: args.id,
+				before: current,
+				after: { status: args.status },
+				message: "Blocked: paid invoices cannot be marked unpaid.",
+			});
+			throw new Error(
+				"Paid invoices cannot be marked unpaid; corrections go through credit or debit notes.",
+			);
+		}
 		const deliveredAt = deliveredAtForInvoice(current) ?? Date.now();
 		const patch = patchWithDerivedStatus(current, {
 			deliveredAt,
@@ -2481,11 +2497,20 @@ export async function bulkDeleteOrArchive(
 			.eq("workspace_id", workspaceId);
 		if (error) throw error;
 		// Archiving is the soft-cancel path for issued invoices (C3): the row
-		// and its number stay, so it is logged as a cancellation.
+		// and its number stay, so it is logged as a cancellation. `resourceId`
+		// stays null — archiving sets `deleted_at`, and the audit route
+		// resolves an `invoice` entry's id through a lookup that filters
+		// `deleted_at IS NULL`, so a soft-deleted id would answer 404, throw,
+		// and abort the bulk loop with the remaining items unprocessed (same
+		// reason as the hard-delete branch above).
 		await recordInvoiceAudit(client, userId, {
 			action: "invoice.cancel",
-			resourceId: item.id,
-			before: { invoiceNumber: item.invoiceNumber, status: item.status },
+			resourceId: null,
+			before: {
+				id: item.id,
+				invoiceNumber: item.invoiceNumber,
+				status: item.status,
+			},
 			after: { status: "canceled" },
 			message: "Archived invoice (bulk cleanup).",
 		});

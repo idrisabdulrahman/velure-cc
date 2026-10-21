@@ -284,10 +284,18 @@ create unique index invoices_workspace_number_unique
   on public.invoices (workspace_id, invoice_number);
 
 -- 6. Backfill: seed one floor per (workspace, prefix, year) found in existing
---    invoice numbers at max(sequence) + 1, and lift each workspace's own
---    prefix/current-year floor to its editable `next_invoice_sequence` (the
---    pre-C1 behaviour), so the very first allocation after this migration
---    never reissues a number that already exists. No row is modified.
+--    invoice numbers at max(sequence), and each workspace's own
+--    prefix/current-year bucket at `next_invoice_sequence - 1`, so the very
+--    first allocation after this migration never reissues a number that
+--    already exists AND lands exactly on the human-facing next number. No row
+--    is modified.
+--
+--    Seed semantics: `last_value` is the LAST ALLOCATED number — the
+--    allocator hands out `greatest(seq.last_value + 1, minimum)` when a row
+--    already exists. Seeding max(sequence) + 1 (or next_invoice_sequence
+--    itself) would therefore skip one number per bucket forever at cutover:
+--    invoices through …-000005 with a counter at 6 would hand out …-000007,
+--    and an untouched workspace would start at …-000002.
 with floors as (
   select
     i.workspace_id,
@@ -303,7 +311,7 @@ with floors as (
       regexp_match(
         i.invoice_number,
         '^([A-Z0-9]{2,12})-([0-9]{4})-([0-9]{4,6})$'
-      ))[3])::integer)::integer + 1 as last_value
+      ))[3])::integer)::integer as last_value
   from public.invoices i
   where i.invoice_number ~ '^[A-Z0-9]{2,12}-[0-9]{4}-[0-9]{4,6}$'
   group by 1, 2, 3
@@ -320,6 +328,12 @@ do update set
   ),
   updated_at = now();
 
+-- Each workspace's own prefix/current-year bucket: seed `next - 1` so the
+-- first allocation lands exactly on the human-facing next number (the
+-- allocator's update path adds 1 back). A workspace still on the default
+-- counter seeds nothing — `next - 1` would be 0, which `last_value`'s CHECK
+-- forbids, and the allocator's no-row insert path already hands that
+-- workspace its 1 on the first allocation.
 insert into public.invoice_number_sequences
   (workspace_id, prefix, year, last_value)
 select
@@ -348,8 +362,9 @@ select
     'INV'
   ),
   (extract(year from now()))::integer,
-  greatest(coalesce(w.next_invoice_sequence, 1), 1)
+  greatest(coalesce(w.next_invoice_sequence, 1) - 1, 0)
 from public.workspaces w
+where coalesce(w.next_invoice_sequence, 1) > 1
 on conflict (workspace_id, prefix, year)
 do update set
   last_value = greatest(

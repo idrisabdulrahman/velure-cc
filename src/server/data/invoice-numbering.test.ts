@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+	assertInvoiceNumberAvailable,
 	assertSequenceCounterChangeAllowed,
 	candidateInvoiceNumber,
 	commitInvoiceNumber,
@@ -315,6 +316,55 @@ describe("allocator: plan/commit under concurrency", () => {
 		);
 		expect(next).toBe(`INV-${year}-000010`);
 	});
+
+	it("continues from a backfilled counter row (last_value = last allocated), no skipped number", async () => {
+		// C1 backfill regression: the corrected migration seeds each bucket at
+		// max(sequence) — the last ALLOCATED number — because the allocator's
+		// existing-row path hands out `greatest(last_value + 1, minimum)`.
+		// A "+ 1" seed made every workspace permanently skip one number at
+		// cutover (invoices through …-000005 + counter 6 → first new invoice
+		// …-000007).
+		const { client } = createFakeSupabase(
+			seed({
+				workspaces: [workspaceRow(6)],
+				invoice_number_sequences: [
+					{ workspace_id: WS, prefix: "INV", year, last_value: 5 },
+				],
+			}),
+		);
+		const plan = await planInvoiceNumber(client, { workspaceId: WS });
+		expect(plan.minimumSequence).toBe(6);
+		const first = await commitInvoiceNumber(
+			client,
+			plan,
+			candidateInvoiceNumber(plan),
+		);
+		expect(first).toBe(`INV-${year}-000006`);
+		// Contiguous: the very next allocation is 000007, never 000008.
+		const second = await commitInvoiceNumber(
+			client,
+			plan,
+			candidateInvoiceNumber(plan),
+		);
+		expect(second).toBe(`INV-${year}-000007`);
+	});
+
+	it("hands an untouched default workspace 000001, not 000002", async () => {
+		// The backfill seeds NOTHING for a workspace still on the default
+		// counter (next_invoice_sequence = 1); the allocator's no-row insert
+		// path must then hand out 1 exactly.
+		const { client } = createFakeSupabase(
+			seed({ workspaces: [workspaceRow(1)] }),
+		);
+		const plan = await planInvoiceNumber(client, { workspaceId: WS });
+		expect(plan.minimumSequence).toBe(1);
+		const first = await commitInvoiceNumber(
+			client,
+			plan,
+			candidateInvoiceNumber(plan),
+		);
+		expect(first).toBe(`INV-${year}-000001`);
+	});
 });
 
 describe("C1: the next-invoice-number counter guard", () => {
@@ -417,6 +467,64 @@ describe("C1: the next-invoice-number counter guard", () => {
 	});
 });
 
+describe("C1: custom invoice number year bounds", () => {
+	const YEAR_ERROR = "Invoice number year must be between 2000 and 2100.";
+
+	it("refuses an out-of-range year with the repo validation error, before any allocator write", async () => {
+		const { client, tables } = createFakeSupabase(seed());
+		// `save` path: the availability assert refuses before the reserve RPC
+		// that follows it.
+		await expect(
+			assertInvoiceNumberAvailable(client, {
+				workspaceId: WS,
+				invoiceNumber: "INV-1999-0001",
+			}),
+		).rejects.toThrow(YEAR_ERROR);
+		// `createDraft` path: the reserve itself refuses before the RPC —
+		// this is the seam the raw Postgres `invoice_number_sequences_year_check`
+		// message used to escape through.
+		await expect(
+			reserveInvoiceNumber(client, {
+				workspaceId: WS,
+				invoiceNumber: "INV-2101-0001",
+			}),
+		).rejects.toThrow(YEAR_ERROR);
+		// Nothing was consumed and nothing was written.
+		expect(tables.invoice_number_sequences ?? []).toHaveLength(0);
+		expect(tables.invoices).toHaveLength(0);
+	});
+
+	it("accepts the boundary years and leaves format errors to the format checks", async () => {
+		const { client } = createFakeSupabase(seed());
+		await expect(
+			assertInvoiceNumberAvailable(client, {
+				workspaceId: WS,
+				invoiceNumber: "INV-2000-0001",
+			}),
+		).resolves.toBeUndefined();
+		await expect(
+			assertInvoiceNumberAvailable(client, {
+				workspaceId: WS,
+				invoiceNumber: "INV-2100-0001",
+			}),
+		).resolves.toBeUndefined();
+		// A number that is not PREFIX-YYYY-NNNN at all is not this guard's
+		// business (the format checks own it), and the reserve stays a no-op.
+		await expect(
+			assertInvoiceNumberAvailable(client, {
+				workspaceId: WS,
+				invoiceNumber: "not-a-number",
+			}),
+		).resolves.toBeUndefined();
+		await expect(
+			reserveInvoiceNumber(client, {
+				workspaceId: WS,
+				invoiceNumber: "not-a-number",
+			}),
+		).resolves.toBeUndefined();
+	});
+});
+
 describe("WP8 migrations pin the database authority", () => {
 	it("C1: the allocator is ONE atomic, monotone statement behind a membership check", () => {
 		expect(MIGRATION_C1).toContain(
@@ -450,8 +558,23 @@ describe("WP8 migrations pin the database authority", () => {
 		expect(indexAt).toBeGreaterThan(dedupeAt);
 		// Two issued copies abort the migration instead of renumbering history.
 		expect(MIGRATION_C1).toContain("Duplicate issued invoice numbers");
-		// The backfill seeds floors at max(sequence) + 1 per (workspace, prefix, year).
-		expect(MIGRATION_C1).toContain("+ 1 as last_value");
+		// The backfill seeds each bucket at max(sequence): `last_value` is the
+		// LAST ALLOCATED number (the allocator adds 1 back on the conflict
+		// path), so a "+ 1" seed would permanently skip one number per
+		// workspace at cutover (invoices through 000005 + next 6 → first new
+		// invoice 000007; empty workspace → starts at 000002).
+		expect(MIGRATION_C1).toContain(")::integer)::integer as last_value");
+		expect(MIGRATION_C1).not.toContain("+ 1 as last_value");
+		// The workspace's own bucket seeds next - 1 so the first allocation
+		// lands exactly on the human-facing next number; a workspace still on
+		// the default counter (1) seeds nothing — the allocator's no-row
+		// insert path already hands it 1.
+		expect(MIGRATION_C1).toContain(
+			"greatest(coalesce(w.next_invoice_sequence, 1) - 1, 0)",
+		);
+		expect(MIGRATION_C1).toContain(
+			"where coalesce(w.next_invoice_sequence, 1) > 1",
+		);
 	});
 
 	it("C1: invoice_is_issued excludes finalized_at and bare unpaid status", () => {

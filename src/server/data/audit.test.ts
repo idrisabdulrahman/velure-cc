@@ -14,6 +14,7 @@ import {
 } from "./audit";
 import { createInvoiceExport } from "./compliance";
 import {
+	bulkDeleteOrArchive,
 	cancelSchedule,
 	convertProformaToInvoice,
 	createDraft,
@@ -741,6 +742,43 @@ describe("material state transitions", () => {
 		});
 	});
 
+	it("refuses paid → unpaid and logs the blocked attempt", async () => {
+		// C2: the DB trigger (20261020000001) only allows a paid invoice to
+		// stay paid or become canceled; the app guard mirrors it so the
+		// caller gets a friendly refusal — and the blocked attempt still
+		// lands in the append-only log — instead of a raw
+		// insufficient_privilege from Postgres.
+		const paidRow = {
+			...invoiceRow,
+			status: "paid",
+			payment_amount: 5000,
+			paid_at: "2026-10-05T10:00:00.000Z",
+			payment_reference: "REF-77",
+		};
+		const { client } = createFakeUserClient({
+			active_workspaces: workspaceResolutions(6),
+			invoices: [{ data: paidRow }],
+		});
+		const admin = installAuditEndpoint(client);
+
+		await expect(
+			updateStatus(client, USER_ID, { id: "inv-1", status: "unpaid" }),
+		).rejects.toThrow(/cannot be marked unpaid/);
+
+		expect(admin.rows).toHaveLength(1);
+		expect(admin.rows[0]).toMatchObject({
+			action: "invoice.edit",
+			resource_id: "inv-1",
+			message: "Blocked: paid invoices cannot be marked unpaid.",
+		});
+		expect(admin.rows[0].after_payload).toEqual({ status: "unpaid" });
+		// No update reached the row: the paid state is untouched.
+		expect(admin.rows[0].before_payload).toMatchObject({
+			id: "inv-1",
+			status: "paid",
+		});
+	});
+
 	it("recordPayment appends invoice.edit for the money it applied", async () => {
 		const paidRow = {
 			...invoiceRow,
@@ -902,6 +940,68 @@ describe("material state transitions", () => {
 			updateStatus(paid.client, USER_ID, { id: "inv-1", status: "canceled" }),
 		).rejects.toThrow(/paid invoice cannot be canceled/);
 		expect(paidAdmin.rows).toHaveLength(0);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// WP8 fix round: bulk archival of issued invoices completes end to end and
+// writes one audit row per item — the rows must not reference the now
+// soft-deleted ids (the audit route resolves `invoice` resourceIds through
+// getById, which filters deleted_at IS NULL, so a soft-deleted id answers
+// 404 and the bulk loop would abort with partial commits)
+// ---------------------------------------------------------------------------
+
+describe("bulk archival of issued invoices (C3)", () => {
+	it("archives every item and writes one resourceId-less audit row per item", async () => {
+		// Model `getById`'s `deleted_at IS NULL` filter: once an invoice is
+		// archived by this very call it is unresolvable by id — the exact
+		// condition that made the old `resourceId: item.id` audit rows 404.
+		const archived = new Set(["inv-1", "inv-2"]);
+		vi.mocked(getAuthenticatedInvoiceById).mockImplementation(
+			async (id: string) => (archived.has(id) ? null : ({ id } as never)),
+		);
+
+		const secondRow = {
+			...invoiceRow,
+			id: "inv-2",
+			invoice_number: "INV-2026-0008",
+		};
+		const { client } = createFakeUserClient({
+			// 1 resolve for the bulk call + 1 resolve per audit write.
+			active_workspaces: workspaceResolutions(6),
+			// One preview read per id; the per-item updates consume the
+			// canned default ({data: null, error: null}).
+			invoices: [{ data: invoiceRow }, { data: secondRow }],
+		});
+		const admin = installAuditEndpoint(client);
+
+		const result = await bulkDeleteOrArchive(client, USER_ID, [
+			"inv-1",
+			"inv-2",
+		]);
+
+		// The loop COMPLETED for both items — under the old resourceId it
+		// threw on the first row (404) and left the rest unprocessed.
+		expect(result).toEqual({ hardDeleted: 0, archived: 2, blocked: 0 });
+		expect(admin.rows).toHaveLength(2);
+		for (const [index, id] of ["inv-1", "inv-2"].entries()) {
+			expect(admin.rows[index]).toMatchObject({
+				action: "invoice.cancel",
+				// Null: the archived id can no longer be resolved by the
+				// audit route, so identity travels in the payload instead.
+				resource_id: null,
+				message: "Archived invoice (bulk cleanup).",
+			});
+			expect(admin.rows[index].before_payload).toMatchObject({
+				id,
+				invoiceNumber: expect.stringMatching(/^INV-2026-/),
+			});
+			expect(admin.rows[index].after_payload).toEqual({
+				status: "canceled",
+			});
+		}
+		// No lookup was even attempted for the archived ids.
+		expect(getAuthenticatedInvoiceById).not.toHaveBeenCalled();
 	});
 });
 

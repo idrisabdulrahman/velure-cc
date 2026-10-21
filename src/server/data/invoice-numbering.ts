@@ -80,6 +80,31 @@ export function isInvoiceIssued(invoice: {
 /** PREFIX-YYYY-NNNN (4–6 digits), the only number format this app issues. */
 const INVOICE_NUMBER_PATTERN = /^([A-Z0-9]{2,12})-(\d{4})-(\d{4,6})$/;
 
+/**
+ * Year bounds mirrored from `invoice_number_sequences`
+ * (20261020000000: `check (year between 2000 and 2100)`).
+ */
+const MIN_INVOICE_YEAR = 2000;
+const MAX_INVOICE_YEAR = 2100;
+
+/**
+ * C1: a user-chosen PREFIX-YYYY-NNNN number with an out-of-range year is
+ * refused HERE, in the repo's validation-error shape, BEFORE any allocator
+ * RPC runs — otherwise `invoice_number_sequences_year_check` surfaces as a
+ * raw Postgres constraint error on the create/save path. A number that does
+ * not match the format at all is left to the format checks that own it.
+ */
+function assertInvoiceYearInRange(invoiceNumber: string): void {
+	const match = invoiceNumber.match(INVOICE_NUMBER_PATTERN);
+	if (!match) return;
+	const year = Number(match[2]);
+	if (year < MIN_INVOICE_YEAR || year > MAX_INVOICE_YEAR) {
+		throw new Error(
+			`Invoice number year must be between ${MIN_INVOICE_YEAR} and ${MAX_INVOICE_YEAR}.`,
+		);
+	}
+}
+
 /** Parse an invoice number into its parts, or null when it does not match. */
 export function sequenceFromInvoiceNumber(
 	invoiceNumber: string,
@@ -272,6 +297,10 @@ export async function reserveInvoiceNumber(
 	client: Supabase,
 	args: { workspaceId: string; invoiceNumber: string },
 ): Promise<void> {
+	// C1: an out-of-range year is refused before the RPC — the create flow
+	// (`commitInvoiceNumber`) never runs `assertInvoiceNumberAvailable`, so
+	// the guard lives here, next to the call it protects.
+	assertInvoiceYearInRange(args.invoiceNumber);
 	const match = args.invoiceNumber.match(INVOICE_NUMBER_PATTERN);
 	if (!match) return;
 	const { error } = await client.rpc("allocate_invoice_number", {
@@ -327,6 +356,10 @@ export async function assertInvoiceNumberAvailable(
 		exceptId?: string;
 	},
 ) {
+	// C1: fail with the repo's validation error BEFORE the allocator RPC
+	// (`reserveInvoiceNumber`, called right after by `save`) can surface the
+	// raw Postgres CHECK message for an out-of-range year.
+	assertInvoiceYearInRange(args.invoiceNumber);
 	const { data, error } = await client
 		.from("invoices")
 		.select("id")
