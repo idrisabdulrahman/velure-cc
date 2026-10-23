@@ -217,6 +217,14 @@ describe("validateWorkspaceInvoice", () => {
 				...compliance,
 				taxLines: [{ ...compliance.taxLines[0], amount: Number.NaN }],
 			},
+			{
+				...compliance,
+				taxLines: [{ ...compliance.taxLines[0], rate: -1 }],
+			},
+			{
+				...compliance,
+				taxLines: [{ ...compliance.taxLines[0], treatment: "bogus" }],
+			},
 			{ ...compliance, seller: { legalName: 42 } },
 		];
 		for (const snapshot of malformedSnapshots) {

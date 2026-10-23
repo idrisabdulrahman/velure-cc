@@ -18,6 +18,14 @@ const notFound: CanonicalInvoiceValidation = {
 		},
 	],
 };
+const TAX_TREATMENTS = new Set([
+	"none",
+	"exclusive_rate",
+	"inclusive_rate",
+	"reverse_charge",
+	"exempt",
+	"zero_rated",
+]);
 
 function hasStoredComplianceSnapshot(value: unknown): boolean {
 	if (!value || typeof value !== "object") return false;
@@ -48,8 +56,10 @@ function hasStoredComplianceSnapshot(value: unknown): boolean {
 		return (
 			typeof line.label === "string" &&
 			finite(line.rate) &&
+			Number(line.rate) >= 0 &&
 			finite(line.amount) &&
 			typeof line.treatment === "string" &&
+			TAX_TREATMENTS.has(line.treatment) &&
 			typeof line.jurisdictionCode === "string"
 		);
 	};

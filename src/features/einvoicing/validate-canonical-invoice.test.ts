@@ -224,6 +224,37 @@ describe("validateCanonicalInvoice", () => {
 		);
 	});
 
+	it("rejects unsupported tax-line treatment and negative tax rate", () => {
+		const base = invoice();
+		const tax = base.taxes?.[0];
+		if (!tax) throw new Error("Test invoice needs a tax line.");
+		const unsupported = {
+			...tax,
+			treatment: { scheme: "source.taxTreatment", value: "bogus" },
+		} as unknown as NonNullable<CanonicalInvoice["taxes"]>[number];
+		const badTreatment = validateCanonicalInvoice(
+			invoice({ taxes: [unsupported] }),
+			{ buyerType: "b2b" },
+		);
+		expect(badTreatment.issues).toContainEqual(
+			expect.objectContaining({
+				code: "tax_treatment_invalid",
+				path: "taxes[0].treatment",
+			}),
+		);
+
+		const badRate = validateCanonicalInvoice(
+			invoice({ taxes: [{ ...tax, rate: -0.01 }] }),
+			{ buyerType: "b2b" },
+		);
+		expect(badRate.issues).toContainEqual(
+			expect.objectContaining({
+				code: "tax_rate_invalid",
+				path: "taxes[0].rate",
+			}),
+		);
+	});
+
 	it("supports all persisted no-tax treatments without recalculating rates", () => {
 		for (const treatment of [
 			"none",

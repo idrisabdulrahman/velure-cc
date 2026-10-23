@@ -337,6 +337,23 @@ export function validateCanonicalInvoice(
 		);
 	(invoice.taxes ?? []).forEach((tax, index) => {
 		const amount = decimal(tax.amount);
+		if (!Number.isFinite(tax.rate) || tax.rate < 0)
+			issue(
+				issues,
+				"tax_rate_invalid",
+				`taxes[${index}].rate`,
+				"Tax line rate must be a finite nonnegative number.",
+			);
+		if (
+			tax.treatment.scheme !== "source.taxTreatment" ||
+			!TREATMENTS.has(tax.treatment.value)
+		)
+			issue(
+				issues,
+				"tax_treatment_invalid",
+				`taxes[${index}].treatment`,
+				"Tax line treatment must use a supported tax treatment.",
+			);
 		if (amount && amount.coefficient < 0n)
 			issue(
 				issues,
