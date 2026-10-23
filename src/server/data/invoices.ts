@@ -1,6 +1,7 @@
 import {
 	CUSTOMER_LINK_CLEARED_ON_ISSUED_MESSAGE,
 	CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE,
+	INVOICE_LINE_CLASSIFICATION_REQUIRED_MESSAGE,
 	transitionLeavesDraft,
 } from "#/features/invoices/customer-gate";
 import type { Database, Json } from "#/types/database.types";
@@ -1366,9 +1367,7 @@ export async function assertCustomerForIssueTransition(
 				!item.classificationCode?.trim(),
 		)
 	) {
-		throw new Error(
-			"Each invoice line needs a unit, VAT category, and goods/service code before leaving Draft.",
-		);
+		throw new Error(INVOICE_LINE_CLASSIFICATION_REQUIRED_MESSAGE);
 	}
 	await assertWorkspaceCustomer(client, workspaceId, invoice.customerId);
 }
@@ -2929,8 +2928,8 @@ export async function convertProformaToInvoice(
 	await assertCustomerForIssueTransition(
 		client,
 		workspaceId,
-		source,
-		getDerivedInvoiceStatus(source),
+		doc,
+		"draft",
 		status,
 	);
 
@@ -3005,6 +3004,9 @@ export type InvoiceImportRow = {
 	description: string;
 	quantity?: number;
 	price?: number;
+	unit?: string;
+	vatCategory?: LineItem["vatCategory"];
+	classificationCode?: string;
 	notes?: string;
 	paymentDetails?: string;
 };
@@ -3040,6 +3042,8 @@ export async function importCsv(
 	 * here so the caller reports them instead of dropping them silently.
 	 */
 	needsBuyerMatch: number;
+	/** Issued-family CSV rows with one or more incomplete line classifications. */
+	needsLineClassification: number;
 }> {
 	const workspaceId = await resolveActiveWorkspaceId(client, userId);
 	if (!workspaceId) throw new Error("No active workspace.");
@@ -3053,6 +3057,7 @@ export async function importCsv(
 	const created: string[] = [];
 	let skipped = 0;
 	let needsBuyerMatch = 0;
+	let needsLineClassification = 0;
 	const errors: Array<{ row: number; message: string }> = [];
 	const addImportError = (row: number, message: string) => {
 		if (errors.length < 100) {
@@ -3118,6 +3123,9 @@ export async function importCsv(
 				name: description,
 				quantity,
 				price,
+				unit: row.unit?.trim() || undefined,
+				vatCategory: row.vatCategory,
+				classificationCode: row.classificationCode?.trim() || undefined,
 			});
 			group.rowNumbers.push(index + 2);
 			continue;
@@ -3139,6 +3147,9 @@ export async function importCsv(
 					name: description,
 					quantity,
 					price,
+					unit: row.unit?.trim() || undefined,
+					vatCategory: row.vatCategory,
+					classificationCode: row.classificationCode?.trim() || undefined,
 				},
 			],
 		});
@@ -3247,6 +3258,17 @@ export async function importCsv(
 		// never flagged because a buyer-less draft is a legal document state.
 		const issuedFamily =
 			group.status !== "draft" && group.status !== "canceled";
+		const hasCompleteClassification = group.lineItems.every(
+			(item) =>
+				Boolean(item.unit?.trim()) &&
+				VAT_CATEGORIES.has(item.vatCategory ?? "") &&
+				Boolean(item.classificationCode?.trim()),
+		);
+		// B2/B3: import must NOT exempt itself from the same buyer and line
+		// classification rules applied at every Draft exit.
+		const missingLineClassification =
+			issuedFamily && !hasCompleteClassification;
+		if (missingLineClassification) needsLineClassification += 1;
 		// B2 (audit round-2, HIGH): import must NOT exempt itself from
 		// `assertCustomerForIssueTransition`, the single choke point for
 		// leaving Draft. An issued-family row whose customer cell resolves to
@@ -3255,12 +3277,14 @@ export async function importCsv(
 		// `payment_amount` stamp — with the original CSV status preserved in
 		// `internal_notes` so the buyer can be linked later and the row then
 		// issues through the ordinary gated transition. Rows WITH a workspace
-		// customer keep today's behavior. Nothing is dropped silently: every
-		// demoted row is still counted in `needsBuyerMatch` (reported by the
-		// import toast) and the reason travels in `internal_notes`. Recorded in
+		// customer and complete line classification keep their CSV status.
+		// Nothing is dropped silently: buyer and classification demotions are
+		// separately counted in the import toast, with reasons in
+		// `internal_notes`. Recorded in
 		// prompts/wp6-audit-round2-fixes.md.
-		const landAsDraft = issuedFamily && !matchedCustomerId;
-		if (landAsDraft) needsBuyerMatch += 1;
+		const landAsDraft =
+			issuedFamily && (!matchedCustomerId || missingLineClassification);
+		if (issuedFamily && !matchedCustomerId) needsBuyerMatch += 1;
 		const csvStatus = group.status;
 
 		const invoiceDoc = {
@@ -3299,7 +3323,13 @@ export async function importCsv(
 			// so the demoted draft can be linked and issued later without
 			// losing the imported intent (internal: never on the public copy).
 			internal_notes: landAsDraft
-				? `Imported from CSV as a draft: row status "${csvStatus}" needs a linked client before this invoice can leave Draft.`
+				? `Imported from CSV as a draft: row status "${csvStatus}" was preserved. ${[
+						!matchedCustomerId && "A linked client is required",
+						missingLineClassification &&
+							"unit, VAT category, and goods/service code are required for every line",
+					]
+						.filter(Boolean)
+						.join("; ")} before this invoice can leave Draft.`
 				: null,
 			line_items: group.lineItems,
 			compliance: normalizedCompliance,
@@ -3380,12 +3410,19 @@ export async function importCsv(
 				skipped,
 				failed: errors.length,
 				needsBuyerMatch,
+				needsLineClassification,
 			},
 			message: `Imported ${created.length} invoice(s) from CSV.`,
 		});
 	}
 
-	return { created: created.length, skipped, errors, needsBuyerMatch };
+	return {
+		created: created.length,
+		skipped,
+		errors,
+		needsBuyerMatch,
+		needsLineClassification,
+	};
 }
 
 export async function markInvoiceSent(

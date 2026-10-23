@@ -26,6 +26,21 @@ describe("invoice spreadsheet import", () => {
 		]);
 	});
 
+	it("parses line classification fields from CSV headers", () => {
+		const rows = parseInvoiceCsv(
+			[
+				"Customer,Description,Qty,Price,UOM,VAT Category,Goods/Service Code,Status",
+				"acme@example.test,Design sprint,2,50000,hour,Zero rated,SVC-001,unpaid",
+			].join("\n"),
+		);
+
+		expect(rows[0]).toMatchObject({
+			unit: "hour",
+			vatCategory: "zero_rated",
+			classificationCode: "SVC-001",
+		});
+	});
+
 	it("extracts a draft from a formatted invoice sheet", () => {
 		const draft = parseInvoiceDraftGrid([
 			["", "", "", "", "", "INVOICE"],

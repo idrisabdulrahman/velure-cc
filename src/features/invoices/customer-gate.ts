@@ -20,6 +20,9 @@ import type { InvoiceStatus } from "./types";
 export const CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE =
 	"A customer is required before an invoice can leave Draft. Select or create a client first.";
 
+export const INVOICE_LINE_CLASSIFICATION_REQUIRED_MESSAGE =
+	"Each invoice line needs a unit, VAT category, and goods/service code before leaving Draft.";
+
 /**
  * B2 companion rule (audit round-2): the gate makes the buyer link load
  * bearing, so an ISSUED invoice may swap its customer but never lose it.

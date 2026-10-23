@@ -528,6 +528,39 @@ describe("convertProformaToInvoice draft gate", () => {
 			tables.payment_transactions as Array<Record<string, unknown>>,
 		).toHaveLength(1);
 	});
+
+	it("rejects an issued legacy pro-forma with incomplete lines when conversion issues it", async () => {
+		tables.invoices = [
+			...(tables.invoices as Array<Record<string, unknown>>),
+			invoiceRow("inv-a-proforma", WS_A, {
+				document_type: "proforma",
+				customer_id: CLIENT_A,
+				status: "unpaid",
+				delivered_at: "2026-01-02T00:00:00.000Z",
+				payment_amount: 500,
+				line_items: [
+					{
+						id: "li-legacy",
+						name: "Legacy service",
+						quantity: 1,
+						price: 500,
+					},
+				],
+			}),
+		];
+		const invoiceIdsBefore = (tables.invoices as Array<Record<string, unknown>>)
+			.map((entry) => entry.id)
+			.sort();
+
+		await expect(
+			convertProformaToInvoice(client, USER_A, "inv-a-proforma"),
+		).rejects.toThrow("Each invoice line needs a unit");
+		expect(
+			(tables.invoices as Array<Record<string, unknown>>)
+				.map((entry) => entry.id)
+				.sort(),
+		).toEqual(invoiceIdsBefore);
+	});
 });
 
 // Audit round-1, finding 2: B2's headline invariant is "customer required to
