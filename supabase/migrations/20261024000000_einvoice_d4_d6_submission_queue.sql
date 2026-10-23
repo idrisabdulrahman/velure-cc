@@ -50,13 +50,14 @@ create table public.invoice_submission_attempts (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   submission_id uuid not null,
   attempt_number integer not null check (attempt_number > 0),
-  outcome text not null check (outcome in ('accepted','rejected','timeout','duplicate','interrupted','error')),
+  event_type text not null check (event_type in ('started','result')),
+  outcome text not null check (outcome in ('started','accepted','rejected','timeout','duplicate','interrupted','error')),
   request_snapshot jsonb not null,
   response_snapshot jsonb,
   error_code text,
   started_at timestamptz not null,
-  finished_at timestamptz not null default now(),
-  unique (workspace_id, submission_id, attempt_number),
+  finished_at timestamptz,
+  unique (workspace_id, submission_id, attempt_number, event_type),
   foreign key (submission_id, workspace_id)
     references public.invoice_submission_queue(id, workspace_id) on delete cascade
 );

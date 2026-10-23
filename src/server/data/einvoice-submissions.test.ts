@@ -127,7 +127,7 @@ function submissionFixture(): FakeTables {
 				template_settings: null,
 				top_block: null,
 				bottom_block: null,
-				compliance,
+				compliance: structuredClone(compliance),
 				fiscalization: null,
 				reminder: null,
 				sync: null,
@@ -192,7 +192,12 @@ describe("WP14 submission queue controls", () => {
 		).rejects.toThrow("simulated process crash");
 		expect(tables.invoice_submission_queue).toHaveLength(1);
 		expect(tables.invoice_submission_queue[0].status).toBe("processing");
-		expect(tables.invoice_submission_attempts).toHaveLength(0);
+		expect(tables.invoice_submission_attempts).toHaveLength(1);
+		expect(tables.invoice_submission_attempts[0]).toMatchObject({
+			attempt_number: 1,
+			event_type: "started",
+			outcome: "started",
+		});
 		const key = tables.invoice_submission_queue[0].idempotency_key;
 		instant = new Date("2026-01-01T00:02:00Z"); // expired persisted worker lease
 		const replay = await queueInvoiceSubmission(
@@ -206,10 +211,27 @@ describe("WP14 submission queue controls", () => {
 		expect(JSON.stringify(replay)).not.toContain("secret-token");
 		expect(JSON.stringify(replay)).not.toContain("Seller Ltd");
 		expect(tables.invoice_submission_queue[0].idempotency_key).toBe(key);
-		expect(tables.invoice_submission_attempts).toHaveLength(1);
+		expect(tables.invoice_submission_attempts).toHaveLength(4);
+		expect(tables.invoice_submission_attempts).toMatchObject([
+			{ attempt_number: 1, event_type: "started", outcome: "started" },
+			{
+				attempt_number: 1,
+				event_type: "result",
+				outcome: "interrupted",
+				error_code: "WORKER_LEASE_EXPIRED",
+			},
+			{ attempt_number: 2, event_type: "started", outcome: "started" },
+			{ attempt_number: 2, event_type: "result", outcome: "accepted" },
+		]);
+		expect(
+			tables.invoice_submission_attempts[1].request_snapshot as Record<
+				string,
+				unknown
+			>,
+		).toEqual(tables.invoice_submission_attempts[0].request_snapshot);
 		expect(
 			(
-				tables.invoice_submission_attempts[0].response_snapshot as Record<
+				tables.invoice_submission_attempts[3].response_snapshot as Record<
 					string,
 					unknown
 				>
@@ -224,7 +246,45 @@ describe("WP14 submission queue controls", () => {
 			testOptions(client, now, { adapter }),
 		);
 		expect(duplicateCall.status).toBe("completed");
-		expect(tables.invoice_submission_attempts).toHaveLength(1);
+		expect(tables.invoice_submission_attempts).toHaveLength(4);
+	});
+
+	it("derives canonical payload and WP12 result from one captured invoice row", async () => {
+		const state = submissionFixture();
+		let invoiceReads = 0;
+		const { client, tables } = createFakeSupabase(state, {
+			onFrom(table) {
+				if (table === "invoices") invoiceReads += 1;
+				if (table === "clients") {
+					const row = tables.invoices[0];
+					(row.line_items as Array<Record<string, unknown>>)[0].price = 200;
+					const stored = row.compliance as Record<string, unknown>;
+					stored.subtotal = 200;
+					stored.totalTax = 15;
+					stored.grandTotal = 215;
+					stored.netPayable = 215;
+					(stored.taxLines as Array<Record<string, unknown>>)[0].amount = 15;
+				}
+			},
+		});
+		const result = await queueInvoiceSubmission(
+			client,
+			"user-a",
+			"invoice-a",
+			testOptions(client, () => new Date("2026-01-01T00:00:00Z")),
+		);
+		expect(result.status).toBe("completed");
+		expect(invoiceReads).toBe(1);
+		const snapshot = tables.invoice_submission_queue[0].submission_snapshot as {
+			invoice: { lines: Array<{ unitPrice: string }> };
+			validation: { valid: boolean };
+		};
+		expect(snapshot.invoice.lines[0].unitPrice).toBe("100");
+		expect(snapshot.validation.valid).toBe(true);
+		expect(
+			(tables.invoices[0].line_items as Array<Record<string, unknown>>)[0]
+				.price,
+		).toBe(200);
 	});
 
 	it("scopes invoice reads and refuses invalid snapshots before queue writes", async () => {
@@ -284,7 +344,7 @@ describe("WP14 submission queue controls", () => {
 			"processing",
 		]);
 		expect(tables.invoice_submission_queue).toHaveLength(1);
-		expect(tables.invoice_submission_attempts).toHaveLength(1);
+		expect(tables.invoice_submission_attempts).toHaveLength(2);
 		expect(submitCalls).toBe(1);
 	});
 
@@ -320,7 +380,7 @@ describe("WP14 submission queue controls", () => {
 		);
 		expect(result.status).toBe("dead_letter");
 		expect(result.message).toContain("manual review");
-		expect(tables.invoice_submission_attempts).toHaveLength(5);
+		expect(tables.invoice_submission_attempts).toHaveLength(10);
 		expect(tables.invoice_submission_queue[0].status).toBe("dead_letter");
 		expect(tables.invoices[0].status).toBe("unpaid");
 	});
@@ -336,7 +396,7 @@ describe("WP14 submission queue controls", () => {
 			}),
 		);
 		expect(result.status).toBe("rejected");
-		expect(tables.invoice_submission_attempts[0].outcome).toBe("rejected");
+		expect(tables.invoice_submission_attempts[1].outcome).toBe("rejected");
 		expect(tables.invoice_submission_queue[0].last_error_code).toBe(
 			"MOCK_REJECTION",
 		);
@@ -384,7 +444,7 @@ describe("WP14 submission queue controls", () => {
 			tables.invoice_submission_queue[0].idempotency_key,
 		);
 		expect(replayedInvoiceId).toBe("invoice-a");
-		expect(tables.invoice_submission_attempts).toHaveLength(2);
+		expect(tables.invoice_submission_attempts).toHaveLength(4);
 		expect(tables.invoices[0].status).toBe("unpaid");
 		expect(tables.invoices[0].lifecycle).toBe(null);
 	});
@@ -418,7 +478,7 @@ describe("WP14 submission queue controls", () => {
 		expect(migration).toContain("request_snapshot jsonb not null");
 		expect(migration).toContain("response_snapshot jsonb");
 		expect(migration).toContain(
-			"unique (workspace_id, submission_id, attempt_number)",
+			"unique (workspace_id, submission_id, attempt_number, event_type)",
 		);
 		expect(migration).toContain(
 			"before update on public.invoice_submission_attempts",

@@ -196,7 +196,7 @@ function submissionUniqueViolation(
 					["workspace_id", "idempotency_key"],
 				]
 			: table === "invoice_submission_attempts"
-				? [["workspace_id", "submission_id", "attempt_number"]]
+				? [["workspace_id", "submission_id", "attempt_number", "event_type"]]
 				: [];
 	for (const fields of uniqueFields) {
 		const key = (row: Row) => fields.map((field) => row[field]).join(":");
@@ -466,9 +466,13 @@ export type FakeSupabase = { client: Supabase; tables: FakeTables };
  * shared by reference: tests can mutate/inspect it directly before and
  * after calling data-layer functions.
  */
-export function createFakeSupabase(tables: FakeTables): FakeSupabase {
+export function createFakeSupabase(
+	tables: FakeTables,
+	options: Readonly<{ onFrom?: (table: string) => void }> = {},
+): FakeSupabase {
 	const client = {
 		from(table: string) {
+			options.onFrom?.(table);
 			return new FakeBuilder(tables, table);
 		},
 		// Models the two RPCs WP8 adds (see the migrations each one ships

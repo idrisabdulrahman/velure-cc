@@ -84,6 +84,7 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	// einvoice-validation.ts — caller session selects active workspace, then
 	// invoice and customer reads both carry that workspace filter.
 	validateWorkspaceInvoice: "app-scoped",
+	loadWorkspaceInvoiceSubmissionSnapshot: "app-scoped",
 	// einvoice-submissions.ts — active-workspace membership is verified with the user client, every admin mutation is workspace-filtered.
 	submissionBackoffMs: "pure",
 	queueInvoiceSubmission: "server-admin",

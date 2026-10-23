@@ -477,9 +477,9 @@ export type Database = {
         Relationships: []
       }
       invoice_submission_attempts: {
-        Row: { id: string; workspace_id: string; submission_id: string; attempt_number: number; outcome: string; request_snapshot: Json; response_snapshot: Json | null; error_code: string | null; started_at: string; finished_at: string }
-        Insert: { id?: string; workspace_id: string; submission_id: string; attempt_number: number; outcome: string; request_snapshot: Json; response_snapshot?: Json | null; error_code?: string | null; started_at: string; finished_at?: string }
-        Update: { id?: string; workspace_id?: string; submission_id?: string; attempt_number?: number; outcome?: string; request_snapshot?: Json; response_snapshot?: Json | null; error_code?: string | null; started_at?: string; finished_at?: string }
+        Row: { id: string; workspace_id: string; submission_id: string; attempt_number: number; event_type: string; outcome: string; request_snapshot: Json; response_snapshot: Json | null; error_code: string | null; started_at: string; finished_at: string | null }
+        Insert: { id?: string; workspace_id: string; submission_id: string; attempt_number: number; event_type: string; outcome: string; request_snapshot: Json; response_snapshot?: Json | null; error_code?: string | null; started_at: string; finished_at?: string | null }
+        Update: { id?: string; workspace_id?: string; submission_id?: string; attempt_number?: number; event_type?: string; outcome?: string; request_snapshot?: Json; response_snapshot?: Json | null; error_code?: string | null; started_at?: string; finished_at?: string | null }
         Relationships: []
       }
       invoice_audit_log: {

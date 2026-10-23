@@ -1,13 +1,11 @@
 import type { CanonicalInvoice } from "#/features/einvoicing/canonical-invoice";
-import { toCanonicalInvoice } from "#/features/einvoicing/canonical-invoice";
 import {
 	createMockProviderAdapter,
 	type ProviderAdapter,
 } from "#/features/einvoicing/provider-adapter";
 import type { CanonicalInvoiceValidation } from "#/features/einvoicing/validate-canonical-invoice";
 import { recordInvoiceAudit } from "#/server/data/audit";
-import { validateWorkspaceInvoice } from "#/server/data/einvoice-validation";
-import { getById } from "#/server/data/invoices";
+import { loadWorkspaceInvoiceSubmissionSnapshot } from "#/server/data/einvoice-validation";
 import { getSupabaseAdminClient } from "#/server/supabase";
 import type { Json } from "#/types/database.types";
 import type { Supabase } from "./workspaces";
@@ -147,6 +145,55 @@ async function processQueuedSubmission({
 	if (row.status === "queued" && new Date(row.next_attempt_at) > instant) {
 		return safeResponse("queued", row.attempt_count, row.next_attempt_at);
 	}
+	if (row.status === "processing" && row.lease_expires_at) {
+		const unfinished = await admin
+			.from("invoice_submission_attempts")
+			.select("*")
+			.eq("workspace_id", workspaceId)
+			.eq("submission_id", row.id)
+			.eq("attempt_number", row.attempt_count)
+			.eq("event_type", "started")
+			.maybeSingle();
+		if (unfinished.error) throw unfinished.error;
+		if (unfinished.data) {
+			const result = await admin
+				.from("invoice_submission_attempts")
+				.select("id")
+				.eq("workspace_id", workspaceId)
+				.eq("submission_id", row.id)
+				.eq("attempt_number", row.attempt_count)
+				.eq("event_type", "result")
+				.maybeSingle();
+			if (result.error) throw result.error;
+			if (!result.data) {
+				const interruptedAt = instant.toISOString();
+				const interrupted = await admin
+					.from("invoice_submission_attempts")
+					.insert({
+						workspace_id: workspaceId,
+						submission_id: row.id,
+						attempt_number: row.attempt_count,
+						event_type: "result",
+						outcome: "interrupted",
+						request_snapshot: unfinished.data.request_snapshot,
+						response_snapshot: null,
+						error_code: "WORKER_LEASE_EXPIRED",
+						started_at: unfinished.data.started_at,
+						finished_at: interruptedAt,
+					});
+				if (interrupted.error) throw interrupted.error;
+				await auditEntry({
+					action: "invoice.send",
+					resourceType: "einvoice_submission",
+					resourceId: row.id,
+					message:
+						"Expired sandbox attempt recorded as interrupted before retry.",
+					before: { status: "processing", attemptCount: row.attempt_count },
+					after: { status: "interrupted", attemptCount: row.attempt_count },
+				});
+			}
+		}
+	}
 	if (row.attempt_count >= row.max_attempts) {
 		const dead = await admin
 			.from("invoice_submission_queue")
@@ -193,6 +240,21 @@ async function processQueuedSubmission({
 	if (!claim.data)
 		return safeResponse("processing", row.attempt_count, row.next_attempt_at);
 	row = claim.data as unknown as QueueRow;
+	const startedAt = instant.toISOString();
+	const snapshot = row.submission_snapshot as unknown as SubmissionSnapshot;
+	const attemptStart = await admin.from("invoice_submission_attempts").insert({
+		workspace_id: workspaceId,
+		submission_id: row.id,
+		attempt_number: attemptNumber,
+		event_type: "started",
+		outcome: "started",
+		request_snapshot: row.submission_snapshot,
+		response_snapshot: null,
+		error_code: null,
+		started_at: startedAt,
+		finished_at: null,
+	});
+	if (attemptStart.error) throw attemptStart.error;
 	await auditEntry({
 		action: "invoice.send",
 		resourceType: "einvoice_submission",
@@ -201,8 +263,6 @@ async function processQueuedSubmission({
 		before: { status: "queued", attemptCount: attemptNumber - 1 },
 		after: { status: "processing", attemptCount: attemptNumber },
 	});
-	const snapshot = row.submission_snapshot as unknown as SubmissionSnapshot;
-	const startedAt = instant.toISOString();
 	let responseSnapshot: Json | null = null;
 	let outcome:
 		| "accepted"
@@ -241,6 +301,7 @@ async function processQueuedSubmission({
 		workspace_id: workspaceId,
 		submission_id: row.id,
 		attempt_number: attemptNumber,
+		event_type: "result",
 		outcome,
 		request_snapshot: row.submission_snapshot,
 		response_snapshot: responseSnapshot,
@@ -311,19 +372,26 @@ export async function queueInvoiceSubmission(
 	const context = await getWorkspaceContext(client, userId);
 	if (!context || !["owner", "member"].includes(context.role))
 		return safeResponse("not_found", 0);
-	const invoice = await getById(client, userId, invoiceId);
-	if (!invoice) return safeResponse("not_found", 0);
-	const validation = await validateWorkspaceInvoice(client, userId, invoiceId);
-	if (!validation.valid)
-		return { ...safeResponse("invalid", 0), issues: validation.issues };
+	const loaded = await loadWorkspaceInvoiceSubmissionSnapshot(
+		client,
+		userId,
+		invoiceId,
+	);
+	if (!loaded.canonical || loaded.workspaceId !== context.workspaceId) {
+		return loaded.validation.issues[0]?.code === "invoice_not_found"
+			? safeResponse("not_found", 0)
+			: { ...safeResponse("invalid", 0), issues: loaded.validation.issues };
+	}
+	if (!loaded.validation.valid)
+		return { ...safeResponse("invalid", 0), issues: loaded.validation.issues };
 	const admin =
 		options.adminClient ?? (getSupabaseAdminClient() as unknown as Supabase);
 	const audit = options.audit ?? recordInvoiceAudit;
 	const submissionSnapshot: SubmissionSnapshot = {
 		provider: "mock",
 		environment: "sandbox",
-		invoice: toCanonicalInvoice(invoice as never),
-		validation,
+		invoice: loaded.canonical,
+		validation: loaded.validation,
 	};
 	const existingResult = await admin
 		.from("invoice_submission_queue")
