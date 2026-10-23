@@ -18,7 +18,7 @@ Status: pending | ready | implementing | auditing | fixing | merged | blocked
 | WP7 | B3 | WP5,WP6,WP8 (merged) | **merged** (audited PASS; merge commit 3878acc; WP7 branch 6e98e3f; integration 542 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp7 | 5901e58 | 1 | No open findings; live RLS validation unavailable without linked Supabase |
 | WP8 | C1,C2,C3 | WP4 (merged) | **merged** (round 1 FAIL @87b6869; audit-fix @c53139f; integration review found and closed manual second-payment reference overwrite; final integration checks: 530 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp8 | 96d5c49 | 2 | R1 findings and cross-package manual-payment reference issue closed with regressions. No live migration/application test |
 | WP9 | B6 | WP8 (merged) | **merged** (audit PASS; merge commit 4b90014; package commit a6e9384; integration 551 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp9 | 8ade385 | 1 | No open findings; live Supabase migration/RLS validation unavailable |
-| WP10 | D1 | WP6,WP7,WP8 (merged) | **implementing** (prompt `prompts/einv-wp10.md`; isolated worktree starting from cc763e2) | einv/wp10 | cc763e2 | 0 | — |
+| WP10 | D1 | WP6,WP7,WP8,WP9 (merged) | **merged** (audit PASS after one fix round; merge commit 07a6755; branch commit b264778; integration 558 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp10 | a5aed99 | 2 | No open findings; live DB checks not applicable (pure mapper) |
 | WP11 | D3 | WP8,WP10 | pending | — | — | 0 | — |
 | WP12 | D8 | WP10,WP5 | pending | — | — | 0 | — |
 | WP13 | D2,D10 | WP10,WP11 | pending | — | — | 0 | — |
