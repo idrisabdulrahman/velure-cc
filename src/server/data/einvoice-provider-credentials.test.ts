@@ -135,9 +135,25 @@ describe("e-invoice provider credentials", () => {
 			apiKey: fakeBundle.apiKey,
 			certificate: fakeBundle.certificate,
 			privateKey: fakeBundle.privateKey,
+			api_key: "fake-snake-api-key",
+			private_key: "fake-snake-private-key",
+			certificate_pem: "fake-snake-certificate",
+			client_private_key: "fake-snake-client-private-key",
+			access_token: "fake-snake-access-token",
+			refresh_token: "fake-snake-refresh-token",
+			client_secret: "fake-snake-client-secret",
 		});
 		const serialized = JSON.stringify(audit);
-		for (const secret of Object.values(fakeBundle)) {
+		for (const secret of [
+			...Object.values(fakeBundle),
+			"fake-snake-api-key",
+			"fake-snake-private-key",
+			"fake-snake-certificate",
+			"fake-snake-client-private-key",
+			"fake-snake-access-token",
+			"fake-snake-refresh-token",
+			"fake-snake-client-secret",
+		]) {
 			expect(serialized).not.toContain(secret);
 		}
 		const migration = readFileSync(

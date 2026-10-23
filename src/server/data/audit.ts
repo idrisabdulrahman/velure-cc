@@ -101,6 +101,9 @@ type InvoiceAuditLogInsert =
 const AUDIT_REDACTED_KEYS = new Set([
 	"token",
 	"tokenrevokedat",
+	"accesstoken",
+	"refreshtoken",
+	"clientsecret",
 	"password",
 	"apikey",
 	"privatekey",
@@ -125,7 +128,8 @@ export function sanitizeAuditPayload(value: unknown, depth = 0): Json | null {
 	if (typeof value === "object") {
 		const sanitized: Record<string, Json> = {};
 		for (const [key, item] of Object.entries(value)) {
-			if (AUDIT_REDACTED_KEYS.has(key.toLowerCase())) continue;
+			const normalizedKey = key.toLowerCase().replace(/[_-]/g, "");
+			if (AUDIT_REDACTED_KEYS.has(normalizedKey)) continue;
 			sanitized[key] = sanitizeAuditPayload(item, depth + 1);
 		}
 		return sanitized;
