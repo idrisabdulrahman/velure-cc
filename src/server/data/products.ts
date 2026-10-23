@@ -1,3 +1,4 @@
+import type { VatCategory } from "#/features/invoices/types";
 import { buildProductIntelligence } from "./product-intelligence";
 import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
 
@@ -20,6 +21,8 @@ export type { Supabase } from "./workspaces";
 
 export type ProductType = "product" | "service";
 
+const VAT_CATEGORIES: VatCategory[] = ["standard", "zero_rated", "exempt"];
+
 export type ProductRecord = {
 	id: string;
 	workspaceId: string;
@@ -30,6 +33,8 @@ export type ProductRecord = {
 	unitName: string | null;
 	defaultUnitPrice: number;
 	defaultTaxId: string | null;
+	defaultVatCategory: VatCategory | null;
+	defaultClassificationCode: string | null;
 	isActive: boolean;
 	createdAt: string;
 	updatedAt: string;
@@ -43,6 +48,8 @@ export type ProductInput = {
 	unitName?: string;
 	defaultUnitPrice: number;
 	defaultTaxId?: string;
+	defaultVatCategory?: VatCategory;
+	defaultClassificationCode?: string;
 	isActive: boolean;
 };
 
@@ -54,12 +61,19 @@ const normalize = (value?: string) => {
 function assertValidProductPayload(args: {
 	name: string;
 	defaultUnitPrice: number;
+	defaultVatCategory?: string;
 }) {
 	if (args.name.trim().length < 1) {
 		throw new Error("Product name is required.");
 	}
 	if (args.defaultUnitPrice < 0) {
 		throw new Error("Unit price must be non-negative.");
+	}
+	if (
+		args.defaultVatCategory &&
+		!VAT_CATEGORIES.includes(args.defaultVatCategory as VatCategory)
+	) {
+		throw new Error("Choose a valid VAT category.");
 	}
 }
 
@@ -79,7 +93,7 @@ export async function listProducts(
 	const { data, error } = await client
 		.from("products")
 		.select(
-			"id, workspace_id, type, name, description, sku, unit_name, default_unit_price, default_tax_id, is_active, created_at, updated_at, deleted_at",
+			"id, workspace_id, type, name, description, sku, unit_name, default_unit_price, default_tax_id, default_vat_category, default_classification_code, is_active, created_at, updated_at, deleted_at",
 		)
 		.eq("workspace_id", workspaceId)
 		.order("created_at", { ascending: false });
@@ -110,6 +124,8 @@ export async function listProducts(
 		unitName: p.unit_name,
 		defaultUnitPrice: Number(p.default_unit_price),
 		defaultTaxId: p.default_tax_id,
+		defaultVatCategory: p.default_vat_category as VatCategory | null,
+		defaultClassificationCode: p.default_classification_code,
 		isActive: p.is_active,
 		createdAt: p.created_at,
 		updatedAt: p.updated_at,
@@ -128,7 +144,7 @@ export async function getProductById(
 	const { data, error } = await client
 		.from("products")
 		.select(
-			"id, workspace_id, type, name, description, sku, unit_name, default_unit_price, default_tax_id, is_active, created_at, updated_at, deleted_at",
+			"id, workspace_id, type, name, description, sku, unit_name, default_unit_price, default_tax_id, default_vat_category, default_classification_code, is_active, created_at, updated_at, deleted_at",
 		)
 		.eq("id", id)
 		.eq("workspace_id", workspaceId)
@@ -146,6 +162,8 @@ export async function getProductById(
 		unitName: data.unit_name,
 		defaultUnitPrice: Number(data.default_unit_price),
 		defaultTaxId: data.default_tax_id,
+		defaultVatCategory: data.default_vat_category as VatCategory | null,
+		defaultClassificationCode: data.default_classification_code,
 		isActive: data.is_active,
 		createdAt: data.created_at,
 		updatedAt: data.updated_at,
@@ -164,6 +182,8 @@ export async function searchProducts(
 		sku: string | null;
 		defaultUnitPrice: number;
 		unitName: string | null;
+		defaultVatCategory: VatCategory | null;
+		defaultClassificationCode: string | null;
 		type: ProductType;
 	}>
 > {
@@ -176,7 +196,7 @@ export async function searchProducts(
 	const { data, error } = await client
 		.from("products")
 		.select(
-			"id, name, sku, default_unit_price, unit_name, type, is_active, deleted_at",
+			"id, name, sku, default_unit_price, unit_name, type, default_vat_category, default_classification_code, is_active, deleted_at",
 		)
 		.eq("workspace_id", workspaceId);
 	if (error) throw error;
@@ -198,6 +218,8 @@ export async function searchProducts(
 		sku: p.sku,
 		defaultUnitPrice: Number(p.default_unit_price),
 		unitName: p.unit_name,
+		defaultVatCategory: p.default_vat_category as VatCategory | null,
+		defaultClassificationCode: p.default_classification_code,
 		type: p.type as ProductType,
 	}));
 }
@@ -272,6 +294,8 @@ export async function createProduct(
 			unit_name: normalize(args.unitName),
 			default_unit_price: args.defaultUnitPrice,
 			default_tax_id: normalize(args.defaultTaxId),
+			default_vat_category: args.defaultVatCategory ?? null,
+			default_classification_code: normalize(args.defaultClassificationCode),
 			is_active: args.isActive,
 		})
 		.select("id")
@@ -302,6 +326,8 @@ export async function updateProduct(
 			unit_name: normalize(args.unitName),
 			default_unit_price: args.defaultUnitPrice,
 			default_tax_id: normalize(args.defaultTaxId),
+			default_vat_category: args.defaultVatCategory ?? null,
+			default_classification_code: normalize(args.defaultClassificationCode),
 			is_active: args.isActive,
 			updated_at: new Date().toISOString(),
 		})
@@ -347,7 +373,7 @@ export async function duplicateProduct(
 	const { data: source, error: readError } = await client
 		.from("products")
 		.select(
-			"type, name, description, sku, unit_name, default_unit_price, default_tax_id, is_active",
+			"type, name, description, sku, unit_name, default_unit_price, default_tax_id, default_vat_category, default_classification_code, is_active",
 		)
 		.eq("id", id)
 		.eq("workspace_id", workspaceId)
@@ -367,6 +393,8 @@ export async function duplicateProduct(
 			unit_name: source.unit_name,
 			default_unit_price: Number(source.default_unit_price),
 			default_tax_id: source.default_tax_id,
+			default_vat_category: source.default_vat_category,
+			default_classification_code: source.default_classification_code,
 			is_active: source.is_active,
 		})
 		.select("id")

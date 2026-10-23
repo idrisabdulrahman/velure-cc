@@ -90,13 +90,21 @@ function seedTables(): FakeTables {
 	};
 }
 
-function rowInput(customerName: string, status?: InvoiceImportRow["status"]) {
+function rowInput(
+	customerName: string,
+	status?: InvoiceImportRow["status"],
+	lineClassification: Pick<
+		InvoiceImportRow,
+		"unit" | "vatCategory" | "classificationCode"
+	> = {},
+) {
 	return {
 		customerName,
 		description: "Consulting",
 		quantity: 1,
 		price: 500,
 		status,
+		...lineClassification,
 	};
 }
 
@@ -123,7 +131,11 @@ describe("CSV import → workspace client linkage by email", () => {
 		const result = await importCsv(client, USER_A, [
 			// Free-text cell with surrounding whitespace and mixed case — the
 			// importer normalizes with trim().toLowerCase() on both sides.
-			rowInput(" Client-A@Example.TEST ", "unpaid"),
+			rowInput(" Client-A@Example.TEST ", "unpaid", {
+				unit: "hour",
+				vatCategory: "standard",
+				classificationCode: "SVC-001",
+			}),
 		]);
 
 		expect(result).toMatchObject({ created: 1, skipped: 0, errors: [] });
@@ -136,6 +148,51 @@ describe("CSV import → workspace client linkage by email", () => {
 		expect(rows[0]?.status).toBe("unpaid");
 		// Issued row WITH a linked buyer → the import flag stays silent.
 		expect(result.needsBuyerMatch).toBe(0);
+	});
+
+	it("demotes a buyer-matched issued row when line classification is incomplete", async () => {
+		const result = await importCsv(client, USER_A, [
+			rowInput("client-a@example.test", "unpaid"),
+		]);
+
+		const [row] = importedRows(WS_A);
+		expect(row?.customer_id).toBe(CLIENT_A);
+		expect(row?.status).toBe("draft");
+		expect(row?.delivered_at).toBeNull();
+		expect(row?.internal_notes).toContain('status "unpaid" was preserved');
+		expect(row?.internal_notes).toContain("goods/service code");
+		expect(result).toMatchObject({
+			created: 1,
+			needsBuyerMatch: 0,
+			needsLineClassification: 1,
+		});
+	});
+
+	it("imports a buyer-matched issued row when all line classifications are present", async () => {
+		const result = await importCsv(client, USER_A, [
+			rowInput("client-a@example.test", "unpaid", {
+				unit: "hour",
+				vatCategory: "standard",
+				classificationCode: "SVC-001",
+			}),
+		]);
+
+		const [row] = importedRows(WS_A);
+		expect(row?.customer_id).toBe(CLIENT_A);
+		expect(row?.status).toBe("unpaid");
+		expect(row?.delivered_at).toBeTruthy();
+		expect(row?.line_items).toMatchObject([
+			{
+				unit: "hour",
+				vatCategory: "standard",
+				classificationCode: "SVC-001",
+			},
+		]);
+		expect(result).toMatchObject({
+			created: 1,
+			needsBuyerMatch: 0,
+			needsLineClassification: 0,
+		});
 	});
 
 	it("never matches a client that belongs to another workspace", async () => {
@@ -230,6 +287,17 @@ describe("CSV import → workspace client linkage by email", () => {
 		expect(result.needsBuyerMatch).toBe(0);
 	});
 
+	it("keeps canceled rows unchanged and does not flag their incomplete lines", async () => {
+		const result = await importCsv(client, USER_A, [
+			rowInput("client-a@example.test", "canceled"),
+		]);
+		const [row] = importedRows(WS_A);
+
+		expect(row?.status).toBe("canceled");
+		expect(row?.canceled_at).toBeTruthy();
+		expect(result.needsLineClassification).toBe(0);
+	});
+
 	it("still matches a client that sits beyond one PostgREST page of workspace clients", async () => {
 		// PostgREST caps an UNBOUNDED SELECT at 1000 rows by default, and the
 		// fake now emulates that cap (`DEFAULT_MAX_ROWS` in
@@ -254,7 +322,11 @@ describe("CSV import → workspace client linkage by email", () => {
 		);
 
 		const result = await importCsv(client, USER_A, [
-			rowInput("deep-buyer@example.test", "unpaid"),
+			rowInput("deep-buyer@example.test", "unpaid", {
+				unit: "hour",
+				vatCategory: "standard",
+				classificationCode: "SVC-001",
+			}),
 		]);
 
 		expect(result).toMatchObject({

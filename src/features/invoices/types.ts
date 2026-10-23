@@ -24,7 +24,11 @@ export type InvoiceLineItem = {
 	price: number;
 	productId?: Id<"products">;
 	unit?: string;
+	vatCategory?: VatCategory;
+	classificationCode?: string;
 };
+
+export type VatCategory = "standard" | "zero_rated" | "exempt";
 
 export type InvoiceTemplateSettings = {
 	title?: string;

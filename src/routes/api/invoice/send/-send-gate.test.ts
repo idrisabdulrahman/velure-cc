@@ -64,7 +64,10 @@ vi.mock("resend", () => ({
 	},
 }));
 
-import { CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE } from "#/features/invoices/customer-gate";
+import {
+	CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE,
+	INVOICE_LINE_CLASSIFICATION_REQUIRED_MESSAGE,
+} from "#/features/invoices/customer-gate";
 import {
 	createFakeSupabase,
 	type FakeTables,
@@ -128,7 +131,17 @@ function draftInvoiceRow(overrides: Record<string, unknown> = {}) {
 		deleted_at: null,
 		delivered_at: null,
 		finalized_at: null,
-		line_items: [{ id: "li-1", name: "Service", quantity: 1, price: 100 }],
+		line_items: [
+			{
+				id: "li-1",
+				name: "Service",
+				quantity: 1,
+				price: 100,
+				unit: "hour",
+				vatCategory: "standard",
+				classificationCode: "SVC-001",
+			},
+		],
 		compliance: null,
 		fiscalization: null,
 		reminder: { enabled: true, paused: false, stage: "none" },
@@ -215,6 +228,39 @@ describe("POST /api/invoice/send/$id — B2 customer gate", () => {
 		expect(harness.recordDeliveryEventSpy).not.toHaveBeenCalled();
 		expect(tables.invoices?.[0]?.delivered_at).toBeNull();
 		expect(tables.invoice_delivery_events).toHaveLength(0);
+	});
+
+	it("rejects incomplete line classification as a 400 before email side effects", async () => {
+		seed(
+			draftInvoiceRow({
+				customer_id: CLIENT_A,
+				line_items: [
+					{
+						id: "li-1",
+						name: "Service",
+						quantity: 1,
+						price: 100,
+						unit: "hour",
+						vatCategory: "standard",
+						classificationCode: "",
+					},
+				],
+			}),
+		);
+
+		const response = await handle({
+			params: { id: "inv-1" },
+			request: sendRequest(),
+		});
+
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			ok: false,
+			error: INVOICE_LINE_CLASSIFICATION_REQUIRED_MESSAGE,
+		});
+		expect(renderInvoicePdf).not.toHaveBeenCalled();
+		expect(harness.resendSendSpy).not.toHaveBeenCalled();
+		expect(harness.recordDeliveryEventSpy).not.toHaveBeenCalled();
 	});
 
 	it("sends a draft with a linked workspace customer (unchanged success path)", async () => {

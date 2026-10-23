@@ -431,7 +431,17 @@ describe("invoice lifecycle wiring", () => {
 			currency: "NGN",
 			issueDate: "2026-10-16",
 			dueDate: "2026-11-01",
-			lineItems: [{ id: "li-1", name: "Service", quantity: 1, price: 5000 }],
+			lineItems: [
+				{
+					id: "li-1",
+					name: "Service",
+					quantity: 1,
+					price: 5000,
+					unit: "hour",
+					vatCategory: "standard",
+					classificationCode: "SVC-001",
+				},
+			],
 		});
 
 		expect(invoice.id).toBe("inv-new");

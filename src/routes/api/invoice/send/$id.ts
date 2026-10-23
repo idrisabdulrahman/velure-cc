@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
 import { Resend } from "resend";
-import { CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE } from "#/features/invoices/customer-gate";
+import {
+	CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE,
+	INVOICE_LINE_CLASSIFICATION_REQUIRED_MESSAGE,
+} from "#/features/invoices/customer-gate";
 import { assertSendCustomerGate } from "#/server/data/invoices";
 import { ensurePaystackTransferCharge } from "#/server/data/paystack-server";
 import { getServerEnv } from "#/server/env";
@@ -170,6 +173,7 @@ async function sendInvoiceEmail({
 		const gateMessage = errorMessage(error, "");
 		if (
 			gateMessage === CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE ||
+			gateMessage === INVOICE_LINE_CLASSIFICATION_REQUIRED_MESSAGE ||
 			gateMessage === "Customer not found."
 		) {
 			return Response.json({ ok: false, error: gateMessage }, { status: 400 });

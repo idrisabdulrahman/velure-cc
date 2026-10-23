@@ -101,7 +101,14 @@ import type {
 import { formatMoney } from "#/features/invoices/format";
 import type { ImportedInvoiceDraft } from "#/features/invoices/import-spreadsheet";
 import { toEditorDoc } from "#/features/invoices/midday-adapter";
-import type { InvoiceTemplateSettings } from "#/features/invoices/types";
+import type {
+	InvoiceLineItem,
+	InvoiceTemplateSettings,
+} from "#/features/invoices/types";
+import {
+	UNIT_OPTIONS,
+	VAT_CATEGORY_OPTIONS,
+} from "#/features/products/product-form-utils";
 import { useUnifiedAuth } from "#/lib/auth-hook";
 import type { EditorDoc } from "#/lib/midday-invoice/types";
 import { useSupabaseSession } from "#/lib/supabase-session";
@@ -119,14 +126,7 @@ import { cn } from "#/utils/cn";
 import { NotesEditor } from "./editor/notes-editor";
 import { InlineLabelInput } from "./inline-label-input";
 
-type LineItem = {
-	id: string;
-	name: string;
-	quantity: number;
-	price: number;
-	productId?: string;
-	unit?: string;
-};
+type LineItem = InvoiceLineItem;
 
 type CreateInvoicePanelProps = {
 	mode?: "page" | "sheet";
@@ -439,6 +439,7 @@ function createEmptyLineItem(): LineItem {
 		name: "",
 		quantity: 1,
 		price: 0,
+		unit: "",
 	};
 }
 
@@ -684,6 +685,8 @@ export function CreateInvoicePanel({
 					sku?: string;
 					defaultUnitPrice: number;
 					unitName?: string;
+					defaultVatCategory?: LineItem["vatCategory"];
+					defaultClassificationCode?: string;
 					type: "product" | "service";
 			  }>
 			| undefined) ?? []
@@ -819,6 +822,9 @@ export function CreateInvoicePanel({
 				name: item.name,
 				quantity: Math.max(1, item.quantity),
 				price: Math.max(0, item.price),
+				unit: item.unit,
+				vatCategory: item.vatCategory,
+				classificationCode: item.classificationCode,
 			})),
 		);
 		setPriceDrafts({});
@@ -1176,6 +1182,8 @@ export function CreateInvoicePanel({
 			price: Math.max(0, item.price),
 			productId: item.productId,
 			unit: item.unit,
+			vatCategory: item.vatCategory,
+			classificationCode: item.classificationCode,
 		})),
 		compliance: toPersistableCompliance({
 			...compliance,
@@ -1376,6 +1384,8 @@ export function CreateInvoicePanel({
 			sku?: string;
 			defaultUnitPrice: number;
 			unitName?: string;
+			defaultVatCategory?: LineItem["vatCategory"];
+			defaultClassificationCode?: string;
 		},
 	) => {
 		const lineId = lineItems[index]?.id;
@@ -1383,6 +1393,9 @@ export function CreateInvoicePanel({
 			name: product.name,
 			price: product.defaultUnitPrice,
 			productId: product.id,
+			unit: product.unitName ?? "",
+			vatCategory: product.defaultVatCategory,
+			classificationCode: product.defaultClassificationCode ?? "",
 		});
 		if (lineId) {
 			setPriceDrafts((prev) => ({
@@ -1731,6 +1744,8 @@ export function CreateInvoicePanel({
 						price: Math.max(0, item.price),
 						productId: item.productId,
 						unit: item.unit,
+						vatCategory: item.vatCategory,
+						classificationCode: item.classificationCode,
 					})),
 				compliance: toPersistableCompliance({
 					...compliance,
@@ -2718,6 +2733,11 @@ export function CreateInvoicePanel({
 																												name: item.name.trim(),
 																												defaultUnitPrice:
 																													item.price,
+																												unitName: item.unit,
+																												defaultVatCategory:
+																													item.vatCategory,
+																												defaultClassificationCode:
+																													item.classificationCode,
 																												isActive: true,
 																											},
 																										);
@@ -2870,6 +2890,85 @@ export function CreateInvoicePanel({
 																>
 																	<X className="h-3.5 w-3.5" />
 																</button>
+															</div>
+
+															<div className="mt-2 grid gap-2 sm:grid-cols-3">
+																<div className="min-w-0">
+																	<label
+																		className="mb-1 block text-[11px] text-ink-3"
+																		htmlFor={`invoice-line-unit-${item.id}`}
+																	>
+																		Unit of measure *
+																	</label>
+																	<select
+																		id={`invoice-line-unit-${item.id}`}
+																		value={item.unit ?? ""}
+																		onChange={(event) =>
+																			updateLine(index, {
+																				unit: event.target.value,
+																			})
+																		}
+																		className="h-9 w-full rounded-md border border-rule bg-paper px-2 text-[12px] text-ink"
+																	>
+																		<option value="">Choose unit</option>
+																		{UNIT_OPTIONS.map((option) => (
+																			<option
+																				key={option.value}
+																				value={option.value}
+																			>
+																				{option.label}
+																			</option>
+																		))}
+																	</select>
+																</div>
+																<div className="min-w-0">
+																	<label
+																		className="mb-1 block text-[11px] text-ink-3"
+																		htmlFor={`invoice-line-vat-${item.id}`}
+																	>
+																		VAT category *
+																	</label>
+																	<select
+																		id={`invoice-line-vat-${item.id}`}
+																		value={item.vatCategory ?? ""}
+																		onChange={(event) =>
+																			updateLine(index, {
+																				vatCategory: (event.target.value ||
+																					undefined) as LineItem["vatCategory"],
+																			})
+																		}
+																		className="h-9 w-full rounded-md border border-rule bg-paper px-2 text-[12px] text-ink"
+																	>
+																		<option value="">Choose category</option>
+																		{VAT_CATEGORY_OPTIONS.map((option) => (
+																			<option
+																				key={option.value}
+																				value={option.value}
+																			>
+																				{option.label}
+																			</option>
+																		))}
+																	</select>
+																</div>
+																<div className="min-w-0">
+																	<label
+																		className="mb-1 block text-[11px] text-ink-3"
+																		htmlFor={`invoice-line-code-${item.id}`}
+																	>
+																		Goods/service code *
+																	</label>
+																	<Input
+																		id={`invoice-line-code-${item.id}`}
+																		value={item.classificationCode ?? ""}
+																		onChange={(event) =>
+																			updateLine(index, {
+																				classificationCode: event.target.value,
+																			})
+																		}
+																		className="h-9 border-rule bg-paper px-2 text-[12px]"
+																		placeholder="Enter code"
+																	/>
+																</div>
 															</div>
 														</CreateSortableLineItem>
 													);

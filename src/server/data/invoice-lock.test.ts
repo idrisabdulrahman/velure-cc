@@ -108,7 +108,17 @@ function invoiceRow(id: string, overrides: Record<string, unknown> = {}) {
 		finalized_at: null,
 		scheduled_at: null,
 		schedule_version: null,
-		line_items: [{ id: "li-1", name: "Item", quantity: 1, price: 100 }],
+		line_items: [
+			{
+				id: "li-1",
+				name: "Item",
+				quantity: 1,
+				price: 100,
+				unit: "unit",
+				vatCategory: "standard",
+				classificationCode: "GOOD-01",
+			},
+		],
 		compliance: { buyer: { email: "buyer-a@example.test" } },
 		fiscalization: null,
 		reminder: null,
