@@ -22,7 +22,7 @@ Status: pending | ready | implementing | auditing | fixing | merged | blocked
 | WP11 | D3 | WP8,WP10 (merged) | **merged** (audit PASS; merge commit 88b958d; package commit 40a7c9f; integration 568 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp11 | af6088e | 1 | No open findings; live DB/provider tests not needed (pure state model) |
 | WP12 | D8 | WP10,WP5 | **merged** (audit PASS after 3 fix rounds; merge commit 5a90fd2; branch commit f8a08e9; integration 587 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp12 | 5164b35 | 4 | No open findings; no live Supabase RLS/provider checks available or needed for this pure validator and scoped loader |
 | WP13 | D2,D10 | WP10,WP11 | **merged** (audit PASS; merge commit e011da7; branch commit a8b0ded; integration 598 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp13 | 8baeb3d | 1 | No open findings; no live provider/Supabase test is applicable (mock-only adapter) |
-| WP14 | D4,D6,D9 | WP13 | pending | — | — | 0 | — |
+| WP14 | D4,D6,D9 | WP13 (merged) | **implementing** (prompt `prompts/einv-wp14.md`; isolated worktree `.worktrees/wp14`) | einv/wp14 | 42b0c8f | 0 | — |
 | WP15 | H2 | WP13 | pending | — | — | 0 | — |
 | WP16 | D5,D7,C4 | WP14 | pending | — | — | 0 | — |
 
