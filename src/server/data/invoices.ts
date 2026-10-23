@@ -74,7 +74,11 @@ export type LineItem = {
 	price: number;
 	productId?: string;
 	unit?: string;
+	vatCategory?: "standard" | "zero_rated" | "exempt";
+	classificationCode?: string;
 };
+
+const VAT_CATEGORIES = new Set(["standard", "zero_rated", "exempt"]);
 
 export type ShipmentDetails = {
 	weight?: string;
@@ -1346,13 +1350,25 @@ async function assertWorkspaceCustomer(
 export async function assertCustomerForIssueTransition(
 	client: Supabase,
 	workspaceId: string,
-	invoice: { customerId?: string },
+	invoice: { customerId?: string; lineItems: LineItem[] },
 	from: InvoiceStatus,
 	to: InvoiceStatus,
 ) {
 	if (!transitionLeavesDraft(from, to)) return;
 	if (!invoice.customerId) {
 		throw new Error(CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE);
+	}
+	if (
+		invoice.lineItems.some(
+			(item) =>
+				!item.unit?.trim() ||
+				!VAT_CATEGORIES.has(item.vatCategory ?? "") ||
+				!item.classificationCode?.trim(),
+		)
+	) {
+		throw new Error(
+			"Each invoice line needs a unit, VAT category, and goods/service code before leaving Draft.",
+		);
 	}
 	await assertWorkspaceCustomer(client, workspaceId, invoice.customerId);
 }
@@ -1372,7 +1388,7 @@ export async function assertCustomerForIssueTransition(
 export async function assertSendCustomerGate(
 	client: Supabase,
 	userId: string,
-	invoice: { customerId?: string },
+	invoice: { customerId?: string; lineItems: LineItem[] },
 ): Promise<void> {
 	const currentStatus = getDerivedInvoiceStatus(invoice);
 	if (currentStatus !== "draft") return;
@@ -1627,7 +1643,7 @@ export async function createDraft(
 	await assertCustomerForIssueTransition(
 		client,
 		workspaceId,
-		{ customerId: args.customerId },
+		{ customerId: args.customerId, lineItems: doc.lineItems },
 		"draft",
 		status,
 	);

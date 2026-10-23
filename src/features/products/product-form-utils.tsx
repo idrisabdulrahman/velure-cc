@@ -1,4 +1,5 @@
 import { Label } from "#/components/ui/label";
+import type { VatCategory } from "#/features/invoices/types";
 
 export type FormState = {
 	type: "product" | "service";
@@ -8,8 +9,19 @@ export type FormState = {
 	unitName: string;
 	defaultUnitPrice: string;
 	defaultTaxId: string;
+	defaultVatCategory: VatCategory | "";
+	defaultClassificationCode: string;
 	isActive: boolean;
 };
+
+export const VAT_CATEGORY_OPTIONS: Array<{
+	value: VatCategory;
+	label: string;
+}> = [
+	{ value: "standard", label: "Standard rated" },
+	{ value: "zero_rated", label: "Zero rated" },
+	{ value: "exempt", label: "Exempt" },
+];
 
 export const UNIT_OPTIONS = [
 	{ value: "pcs", label: "Pieces (pcs)" },
@@ -29,6 +41,10 @@ export type ProductFormValidation = {
 	priceError: string;
 	visibleNameError: string;
 	visiblePriceError: string;
+	vatCategoryError: string;
+	classificationCodeError: string;
+	visibleVatCategoryError: string;
+	visibleClassificationCodeError: string;
 	isValid: boolean;
 };
 
@@ -51,7 +67,18 @@ export function validateProductForm(
 	const visibleNameError = attemptedSubmit ? nameError : "";
 	const visiblePriceError =
 		attemptedSubmit || unitPriceText.length > 0 ? priceError : "";
-	const isValid = !nameError && !priceError;
+	const vatCategoryError = state.defaultVatCategory
+		? ""
+		: "VAT category is required";
+	const classificationCodeError = state.defaultClassificationCode.trim()
+		? ""
+		: "Goods/service code is required";
+	const visibleVatCategoryError = attemptedSubmit ? vatCategoryError : "";
+	const visibleClassificationCodeError = attemptedSubmit
+		? classificationCodeError
+		: "";
+	const isValid =
+		!nameError && !priceError && !vatCategoryError && !classificationCodeError;
 
 	return {
 		nameError,
@@ -60,6 +87,10 @@ export function validateProductForm(
 		priceError,
 		visibleNameError,
 		visiblePriceError,
+		vatCategoryError,
+		classificationCodeError,
+		visibleVatCategoryError,
+		visibleClassificationCodeError,
 		isValid,
 	};
 }
@@ -67,15 +98,19 @@ export function validateProductForm(
 export function Field({
 	label,
 	error,
+	htmlFor,
 	children,
 }: {
 	label: string;
 	error?: string;
+	htmlFor?: string;
 	children: React.ReactNode;
 }) {
 	return (
 		<div className="space-y-1.5">
-			<Label className="text-xs text-ink-3">{label}</Label>
+			<Label htmlFor={htmlFor} className="text-xs text-ink-3">
+				{label}
+			</Label>
 			{children}
 			{error ? <p className="text-xs text-danger">{error}</p> : null}
 		</div>

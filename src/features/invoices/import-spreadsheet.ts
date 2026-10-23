@@ -29,6 +29,9 @@ export type ImportedInvoiceDraft = {
 		name: string;
 		quantity: number;
 		price: number;
+		unit?: string;
+		vatCategory?: "standard" | "zero_rated" | "exempt";
+		classificationCode?: string;
 	}>;
 };
 

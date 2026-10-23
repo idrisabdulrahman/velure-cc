@@ -19,6 +19,7 @@ import type { FormState } from "#/features/products/product-form-utils";
 import {
 	Field,
 	UNIT_OPTIONS,
+	VAT_CATEGORY_OPTIONS,
 	validateProductForm,
 } from "#/features/products/product-form-utils";
 import { useUnifiedAuth } from "#/lib/auth-hook";
@@ -58,6 +59,8 @@ function ProductDetailPage() {
 			unitName: product.unitName ?? "unit",
 			defaultUnitPrice: String(product.defaultUnitPrice),
 			defaultTaxId: product.defaultTaxId ?? "",
+			defaultVatCategory: product.defaultVatCategory ?? "",
+			defaultClassificationCode: product.defaultClassificationCode ?? "",
 			isActive: product.isActive,
 		});
 		setAttemptedSubmit(false);
@@ -91,8 +94,14 @@ function ProductDetailPage() {
 		);
 	}
 
-	const { parsedUnitPrice, visibleNameError, visiblePriceError, isValid } =
-		validateProductForm(state, attemptedSubmit);
+	const {
+		parsedUnitPrice,
+		visibleNameError,
+		visiblePriceError,
+		visibleVatCategoryError,
+		visibleClassificationCodeError,
+		isValid,
+	} = validateProductForm(state, attemptedSubmit);
 	const inputClass =
 		"h-10 rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-brand focus-visible:ring-0";
 
@@ -112,6 +121,9 @@ function ProductDetailPage() {
 				unitName: state.unitName.trim() || undefined,
 				defaultUnitPrice: parsedUnitPrice,
 				defaultTaxId: state.defaultTaxId.trim() || undefined,
+				defaultVatCategory: state.defaultVatCategory || undefined,
+				defaultClassificationCode:
+					state.defaultClassificationCode.trim() || undefined,
 				isActive: state.isActive,
 			});
 
@@ -285,6 +297,65 @@ function ProductDetailPage() {
 								placeholder="Optional tax ID"
 							/>
 						</Field>
+
+						<div className="grid gap-3 md:grid-cols-2">
+							<Field
+								label="VAT category *"
+								htmlFor="product-vat-category"
+								error={visibleVatCategoryError}
+							>
+								<Select
+									value={state.defaultVatCategory || undefined}
+									onValueChange={(value) =>
+										setState((prev) =>
+											prev
+												? {
+														...prev,
+														defaultVatCategory:
+															value as FormState["defaultVatCategory"],
+													}
+												: prev,
+										)
+									}
+								>
+									<SelectTrigger
+										id="product-vat-category"
+										className={`${inputClass} w-full`}
+									>
+										<SelectValue placeholder="Choose VAT category" />
+									</SelectTrigger>
+									<SelectContent className="border-rule bg-paper-2 text-ink">
+										{VAT_CATEGORY_OPTIONS.map((option) => (
+											<SelectItem key={option.value} value={option.value}>
+												{option.label}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</Field>
+							<Field
+								label="Goods/service code *"
+								htmlFor="product-classification-code"
+								error={visibleClassificationCodeError}
+							>
+								<Input
+									id="product-classification-code"
+									value={state.defaultClassificationCode}
+									onChange={(event) =>
+										setState((prev) =>
+											prev
+												? {
+														...prev,
+														defaultClassificationCode: event.target.value,
+													}
+												: prev,
+										)
+									}
+									className={inputClass}
+									placeholder="Enter the applicable code"
+								/>
+							</Field>
+						</div>
 
 						<div className="inline-flex items-center gap-2 text-sm text-ink-2">
 							<Switch

@@ -1077,7 +1077,9 @@ export type Database = {
       products: {
         Row: {
           created_at: string
+          default_classification_code: string | null
           default_tax_id: string | null
+          default_vat_category: string | null
           default_unit_price: number
           deleted_at: string | null
           description: string | null
@@ -1092,7 +1094,9 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          default_classification_code?: string | null
           default_tax_id?: string | null
+          default_vat_category?: string | null
           default_unit_price: number
           deleted_at?: string | null
           description?: string | null
@@ -1107,7 +1111,9 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          default_classification_code?: string | null
           default_tax_id?: string | null
+          default_vat_category?: string | null
           default_unit_price?: number
           deleted_at?: string | null
           description?: string | null

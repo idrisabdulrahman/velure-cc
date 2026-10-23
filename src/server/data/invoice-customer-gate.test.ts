@@ -24,6 +24,7 @@ import {
 	CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE,
 } from "#/features/invoices/customer-gate";
 import {
+	assertCustomerForIssueTransition,
 	autosaveDraft,
 	convertProformaToInvoice,
 	createDraft,
@@ -103,7 +104,17 @@ function invoiceRow(
 		deleted_at: null,
 		delivered_at: null,
 		finalized_at: null,
-		line_items: [{ id: "li-1", name: "Item", quantity: 1, price: 100 }],
+		line_items: [
+			{
+				id: "li-1",
+				name: "Item",
+				quantity: 1,
+				price: 100,
+				unit: "unit",
+				vatCategory: "standard",
+				classificationCode: "GOOD-01",
+			},
+		],
 		compliance: { buyer: { email: `${id}@example.test` } },
 		fiscalization: null,
 		reminder: { enabled: true, paused: false, stage: "none" },
@@ -235,7 +246,17 @@ const draftInput = {
 	currency: "NGN",
 	issueDate: "2026-01-01",
 	dueDate: "2099-02-01",
-	lineItems: [{ id: "li-1", name: "Service", quantity: 1, price: 5000 }],
+	lineItems: [
+		{
+			id: "li-1",
+			name: "Service",
+			quantity: 1,
+			price: 5000,
+			unit: "hour",
+			vatCategory: "standard" as const,
+			classificationCode: "SVC-001",
+		},
+	],
 };
 
 beforeEach(() => {
@@ -338,6 +359,13 @@ describe("createDraft finalize gate", () => {
 		const stored = row(created.id);
 		expect(stored?.customer_id).toBe(CLIENT_A);
 		expect(stored?.workspace_id).toBe(WS_A);
+		expect(stored?.line_items).toMatchObject([
+			{
+				unit: "hour",
+				vatCategory: "standard",
+				classificationCode: "SVC-001",
+			},
+		]);
 	});
 
 	it("refuses finalize when the customer id is forged across workspaces", async () => {
@@ -389,6 +417,76 @@ describe("autosave stays customer-less", () => {
 		});
 		expect(draft.status).toBe("draft");
 		expect(row(draft.id)?.customer_id).toBeNull();
+	});
+});
+
+describe("line classification draft-exit gate", () => {
+	const invoice = {
+		customerId: CLIENT_A,
+		lineItems: [
+			{
+				id: "li-1",
+				name: "Service",
+				quantity: 1,
+				price: 100,
+				unit: "hour",
+				vatCategory: "standard" as const,
+				classificationCode: "SVC-01",
+			},
+		],
+	};
+
+	it("keeps incomplete draft lines saveable", async () => {
+		await expect(
+			assertCustomerForIssueTransition(
+				client,
+				WS_A,
+				{ ...invoice, lineItems: [{ ...invoice.lineItems[0], unit: "" }] },
+				"draft",
+				"draft",
+			),
+		).resolves.toBeUndefined();
+	});
+
+	it("rejects leaving Draft when any line lacks a unit, VAT category, or code", async () => {
+		await expect(
+			assertCustomerForIssueTransition(
+				client,
+				WS_A,
+				{
+					...invoice,
+					lineItems: [
+						{
+							...invoice.lineItems[0],
+							unit: " ",
+							vatCategory: undefined,
+							classificationCode: " ",
+						},
+					],
+				},
+				"draft",
+				"unpaid",
+			),
+		).rejects.toThrow(
+			"Each invoice line needs a unit, VAT category, and goods/service code before leaving Draft.",
+		);
+	});
+
+	it("rejects VAT categories outside the supported set", async () => {
+		await expect(
+			assertCustomerForIssueTransition(
+				client,
+				WS_A,
+				{
+					...invoice,
+					lineItems: [
+						{ ...invoice.lineItems[0], vatCategory: "other" as never },
+					],
+				},
+				"draft",
+				"unpaid",
+			),
+		).rejects.toThrow("Each invoice line needs a unit");
 	});
 });
 

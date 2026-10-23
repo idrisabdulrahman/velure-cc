@@ -128,7 +128,17 @@ function draftInvoiceRow(overrides: Record<string, unknown> = {}) {
 		deleted_at: null,
 		delivered_at: null,
 		finalized_at: null,
-		line_items: [{ id: "li-1", name: "Service", quantity: 1, price: 100 }],
+		line_items: [
+			{
+				id: "li-1",
+				name: "Service",
+				quantity: 1,
+				price: 100,
+				unit: "hour",
+				vatCategory: "standard",
+				classificationCode: "SVC-001",
+			},
+		],
 		compliance: null,
 		fiscalization: null,
 		reminder: { enabled: true, paused: false, stage: "none" },
