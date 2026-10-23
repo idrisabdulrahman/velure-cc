@@ -84,6 +84,11 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	// einvoice-validation.ts — caller session selects active workspace, then
 	// invoice and customer reads both carry that workspace filter.
 	validateWorkspaceInvoice: "app-scoped",
+	loadWorkspaceInvoiceSubmissionSnapshot: "app-scoped",
+	// einvoice-submissions.ts — active-workspace membership is verified with the user client, every admin mutation is workspace-filtered.
+	submissionBackoffMs: "pure",
+	queueInvoiceSubmission: "server-admin",
+	dispatchDueInvoiceSubmissions: "server-admin",
 	// compliance.ts
 	getWorkspaceSettings: "app-scoped",
 	SUPPLIER_PROFILE_REJECTION_PREFIX: "pure",
@@ -465,6 +470,9 @@ const ROUTE_CLASSIFICATIONS: Record<string, Classification> = {
 	"invoice/scheduled.ts": "server-admin",
 	// invoice read goes through getById(session client, session user, id)
 	"invoice/send/$id.ts": "session",
+	// Private submission endpoint; identity comes from the verified request session.
+	"invoice/submission/$id.ts": "session",
+	"invoice/submissions/scheduled.ts": "server-admin",
 	"payments/paystack/initialize.ts": "public-token",
 	"payments/paystack/webhook.ts": "server-admin",
 	"reminders/send-queue.ts": "session",

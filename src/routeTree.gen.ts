@@ -53,6 +53,8 @@ import { Route as ApiIntegrationsXeroConnectRouteImport } from './routes/api/int
 import { Route as ApiInvoiceDownloadIdRouteImport } from './routes/api/invoice/download/$id'
 import { Route as ApiInvoicePublicTokenRouteImport } from './routes/api/invoice/public/$token'
 import { Route as ApiInvoiceSendIdRouteImport } from './routes/api/invoice/send/$id'
+import { Route as ApiInvoiceSubmissionIdRouteImport } from './routes/api/invoice/submission/$id'
+import { Route as ApiInvoiceSubmissionsScheduledRouteImport } from './routes/api/invoice/submissions/scheduled'
 import { Route as ApiPaymentsPaystackInitializeRouteImport } from './routes/api/payments/paystack/initialize'
 import { Route as ApiPaymentsPaystackWebhookRouteImport } from './routes/api/payments/paystack/webhook'
 import { Route as ApiSecurityLinkStepupRequestRouteImport } from './routes/api/security/link-stepup/request'
@@ -285,6 +287,16 @@ const ApiInvoiceSendIdRoute = ApiInvoiceSendIdRouteImport.update({
   path: '/api/invoice/send/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiInvoiceSubmissionIdRoute = ApiInvoiceSubmissionIdRouteImport.update({
+  id: '/api/invoice/submission/$id',
+  path: '/api/invoice/submission/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInvoiceSubmissionsScheduledRoute = ApiInvoiceSubmissionsScheduledRouteImport.update({
+  id: '/api/invoice/submissions/scheduled',
+  path: '/api/invoice/submissions/scheduled',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPaymentsPaystackInitializeRoute =
   ApiPaymentsPaystackInitializeRouteImport.update({
     id: '/api/payments/paystack/initialize',
@@ -361,6 +373,8 @@ export interface FileRoutesByFullPath {
   '/api/invoice/download/$id': typeof ApiInvoiceDownloadIdRoute
   '/api/invoice/public/$token': typeof ApiInvoicePublicTokenRoute
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
+  '/api/invoice/submission/$id': typeof ApiInvoiceSubmissionIdRoute
+  '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
   '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
   '/api/payments/paystack/webhook': typeof ApiPaymentsPaystackWebhookRoute
   '/api/security/link-stepup/request': typeof ApiSecurityLinkStepupRequestRoute
@@ -408,6 +422,8 @@ export interface FileRoutesByTo {
   '/api/invoice/download/$id': typeof ApiInvoiceDownloadIdRoute
   '/api/invoice/public/$token': typeof ApiInvoicePublicTokenRoute
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
+  '/api/invoice/submission/$id': typeof ApiInvoiceSubmissionIdRoute
+  '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
   '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
   '/api/payments/paystack/webhook': typeof ApiPaymentsPaystackWebhookRoute
   '/api/security/link-stepup/request': typeof ApiSecurityLinkStepupRequestRoute
@@ -460,6 +476,8 @@ export interface FileRoutesById {
   '/api/invoice/download/$id': typeof ApiInvoiceDownloadIdRoute
   '/api/invoice/public/$token': typeof ApiInvoicePublicTokenRoute
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
+  '/api/invoice/submission/$id': typeof ApiInvoiceSubmissionIdRoute
+  '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
   '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
   '/api/payments/paystack/webhook': typeof ApiPaymentsPaystackWebhookRoute
   '/api/security/link-stepup/request': typeof ApiSecurityLinkStepupRequestRoute
@@ -649,6 +667,8 @@ export interface RootRouteChildren {
   ApiInvoiceDownloadIdRoute: typeof ApiInvoiceDownloadIdRoute
   ApiInvoicePublicTokenRoute: typeof ApiInvoicePublicTokenRoute
   ApiInvoiceSendIdRoute: typeof ApiInvoiceSendIdRoute
+  ApiInvoiceSubmissionIdRoute: typeof ApiInvoiceSubmissionIdRoute
+  ApiInvoiceSubmissionsScheduledRoute: typeof ApiInvoiceSubmissionsScheduledRoute
   ApiPaymentsPaystackInitializeRoute: typeof ApiPaymentsPaystackInitializeRoute
   ApiPaymentsPaystackWebhookRoute: typeof ApiPaymentsPaystackWebhookRoute
   ApiSecurityLinkStepupRequestRoute: typeof ApiSecurityLinkStepupRequestRoute
@@ -966,6 +986,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiInvoiceSendIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/invoice/submission/$id': {
+      id: '/api/invoice/submission/$id'
+      path: '/api/invoice/submission/$id'
+      fullPath: '/api/invoice/submission/$id'
+      preLoaderRoute: typeof ApiInvoiceSubmissionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/invoice/submissions/scheduled': {
+      id: '/api/invoice/submissions/scheduled'
+      path: '/api/invoice/submissions/scheduled'
+      fullPath: '/api/invoice/submissions/scheduled'
+      preLoaderRoute: typeof ApiInvoiceSubmissionsScheduledRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/payments/paystack/initialize': {
       id: '/api/payments/paystack/initialize'
       path: '/api/payments/paystack/initialize'
@@ -1111,6 +1145,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInvoiceDownloadIdRoute: ApiInvoiceDownloadIdRoute,
   ApiInvoicePublicTokenRoute: ApiInvoicePublicTokenRoute,
   ApiInvoiceSendIdRoute: ApiInvoiceSendIdRoute,
+  ApiInvoiceSubmissionIdRoute: ApiInvoiceSubmissionIdRoute,
+  ApiInvoiceSubmissionsScheduledRoute: ApiInvoiceSubmissionsScheduledRoute,
   ApiPaymentsPaystackInitializeRoute: ApiPaymentsPaystackInitializeRoute,
   ApiPaymentsPaystackWebhookRoute: ApiPaymentsPaystackWebhookRoute,
   ApiSecurityLinkStepupRequestRoute: ApiSecurityLinkStepupRequestRoute,

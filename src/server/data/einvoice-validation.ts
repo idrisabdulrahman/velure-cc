@@ -1,5 +1,8 @@
 import type { BuyerType } from "#/features/clients/buyer-profile";
-import { toCanonicalInvoice } from "#/features/einvoicing/canonical-invoice";
+import {
+	type CanonicalInvoice,
+	toCanonicalInvoice,
+} from "#/features/einvoicing/canonical-invoice";
 import {
 	type CanonicalInvoiceValidation,
 	validateCanonicalInvoice,
@@ -170,14 +173,24 @@ function invalidRawLineItems(value: unknown) {
 	return null;
 }
 
-/** Loads only trusted same-workspace buyer type; returns validation issues, never source rows. */
-export async function validateWorkspaceInvoice(
+export type WorkspaceInvoiceSubmissionSnapshot = Readonly<{
+	workspaceId: string | null;
+	canonical: CanonicalInvoice | null;
+	validation: CanonicalInvoiceValidation;
+}>;
+
+/**
+ * Loads one workspace-scoped invoice row and its same-workspace buyer type,
+ * then derives both the canonical payload and WP12 result from that exact row.
+ */
+export async function loadWorkspaceInvoiceSubmissionSnapshot(
 	client: Supabase,
 	userId: string,
 	invoiceId: string,
-): Promise<CanonicalInvoiceValidation> {
+): Promise<WorkspaceInvoiceSubmissionSnapshot> {
 	const workspaceId = await resolveActiveWorkspaceId(client, userId);
-	if (!workspaceId) return notFound;
+	if (!workspaceId)
+		return { workspaceId: null, canonical: null, validation: notFound };
 	const { data: row, error } = await client
 		.from("invoices")
 		.select("*")
@@ -186,25 +199,35 @@ export async function validateWorkspaceInvoice(
 		.is("deleted_at", null)
 		.maybeSingle();
 	if (error) throw error;
-	if (!row) return notFound;
+	if (!row) return { workspaceId, canonical: null, validation: notFound };
 	const rawRow = row as Record<string, unknown>;
 	if (!hasStoredComplianceSnapshot(rawRow.compliance)) {
 		return {
-			valid: false,
-			issues: [
-				{
-					code: "compliance_snapshot_invalid",
-					path: "compliance",
-					message:
-						"A complete stored compliance snapshot is required for validation.",
-				},
-			],
+			workspaceId,
+			canonical: null,
+			validation: {
+				valid: false,
+				issues: [
+					{
+						code: "compliance_snapshot_invalid",
+						path: "compliance",
+						message:
+							"A complete stored compliance snapshot is required for validation.",
+					},
+				],
+			},
 		};
 	}
 	const rawLineIssue = invalidRawLineItems(rawRow.line_items);
-	if (rawLineIssue) return { valid: false, issues: [rawLineIssue] };
+	if (rawLineIssue)
+		return {
+			workspaceId,
+			canonical: null,
+			validation: { valid: false, issues: [rawLineIssue] },
+		};
 	const invoiceDoc = rowToInvoiceDoc(row as never);
 	const invoice = mapInvoice(invoiceDoc);
+	const canonical = toCanonicalInvoice(invoice as unknown as InvoiceRecord);
 	let buyerType: BuyerType | undefined;
 	if (invoice.customerId) {
 		const { data: customer, error: customerError } = await client
@@ -216,8 +239,20 @@ export async function validateWorkspaceInvoice(
 		if (customerError) throw customerError;
 		if (customer) buyerType = customer.buyer_type === "b2c" ? "b2c" : "b2b";
 	}
-	return validateCanonicalInvoice(
-		toCanonicalInvoice(invoice as unknown as InvoiceRecord),
-		{ buyerType },
-	);
+	return {
+		workspaceId,
+		canonical,
+		validation: validateCanonicalInvoice(canonical, { buyerType }),
+	};
+}
+
+/** Validation-only compatibility wrapper for existing callers. */
+export async function validateWorkspaceInvoice(
+	client: Supabase,
+	userId: string,
+	invoiceId: string,
+): Promise<CanonicalInvoiceValidation> {
+	return (
+		await loadWorkspaceInvoiceSubmissionSnapshot(client, userId, invoiceId)
+	).validation;
 }

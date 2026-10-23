@@ -184,6 +184,35 @@ function uniqueNumberViolation(
 	return null;
 }
 
+function submissionUniqueViolation(
+	table: string,
+	existing: Row[],
+	incoming: Row[],
+): Result | null {
+	const uniqueFields =
+		table === "invoice_submission_queue"
+			? [
+					["workspace_id", "invoice_id"],
+					["workspace_id", "idempotency_key"],
+				]
+			: table === "invoice_submission_attempts"
+				? [["workspace_id", "submission_id", "attempt_number", "event_type"]]
+				: [];
+	for (const fields of uniqueFields) {
+		const key = (row: Row) => fields.map((field) => row[field]).join(":");
+		const seen = new Set(existing.map(key));
+		for (const row of incoming) {
+			if (seen.has(key(row)))
+				return {
+					data: null,
+					error: { code: "23505", message: "duplicate submission record" },
+				};
+			seen.add(key(row));
+		}
+	}
+	return null;
+}
+
 class FakeBuilder implements PromiseLike<Result> {
 	private action: "select" | "insert" | "update" | "delete" = "select";
 	private filters: Filter[] = [];
@@ -343,8 +372,23 @@ class FakeBuilder implements PromiseLike<Result> {
 			// duplicate numbers for EVERY writer, fake included.
 			const violation = uniqueNumberViolation(rows, this.values ?? []);
 			if (violation) return violation;
+			const submissionViolation = submissionUniqueViolation(
+				this.table,
+				rows,
+				this.values ?? [],
+			);
+			if (submissionViolation) return submissionViolation;
 			const inserted = (this.values ?? []).map((raw) => {
 				const value = { ...raw };
+				if (this.table === "invoice_submission_queue") {
+					value.idempotency_key ??= `generated-key-${rows.length + 1}`;
+					value.status ??= "queued";
+					value.attempt_count ??= 0;
+					value.max_attempts ??= 5;
+					value.next_attempt_at ??= new Date(0).toISOString();
+					value.lease_expires_at ??= null;
+					value.provider ??= "mock";
+				}
 				if (value.id === undefined) {
 					value.id = `${this.table}-row-${++this.counter}`;
 				}
@@ -422,9 +466,13 @@ export type FakeSupabase = { client: Supabase; tables: FakeTables };
  * shared by reference: tests can mutate/inspect it directly before and
  * after calling data-layer functions.
  */
-export function createFakeSupabase(tables: FakeTables): FakeSupabase {
+export function createFakeSupabase(
+	tables: FakeTables,
+	options: Readonly<{ onFrom?: (table: string) => void }> = {},
+): FakeSupabase {
 	const client = {
 		from(table: string) {
+			options.onFrom?.(table);
 			return new FakeBuilder(tables, table);
 		},
 		// Models the two RPCs WP8 adds (see the migrations each one ships

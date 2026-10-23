@@ -470,6 +470,18 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_submission_queue: {
+        Row: { id: string; workspace_id: string; invoice_id: string; idempotency_key: string; submission_snapshot: Json; provider: string; status: string; attempt_count: number; max_attempts: number; next_attempt_at: string; lease_expires_at: string | null; provider_reference: string | null; last_outcome: string | null; last_error_code: string | null; created_by: string; created_at: string; updated_at: string }
+        Insert: { id?: string; workspace_id: string; invoice_id: string; idempotency_key?: string; submission_snapshot: Json; provider?: string; status?: string; attempt_count?: number; max_attempts?: number; next_attempt_at?: string; lease_expires_at?: string | null; provider_reference?: string | null; last_outcome?: string | null; last_error_code?: string | null; created_by: string; created_at?: string; updated_at?: string }
+        Update: { id?: string; workspace_id?: string; invoice_id?: string; idempotency_key?: string; submission_snapshot?: Json; provider?: string; status?: string; attempt_count?: number; max_attempts?: number; next_attempt_at?: string; lease_expires_at?: string | null; provider_reference?: string | null; last_outcome?: string | null; last_error_code?: string | null; created_by?: string; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      invoice_submission_attempts: {
+        Row: { id: string; workspace_id: string; submission_id: string; attempt_number: number; event_type: string; outcome: string; request_snapshot: Json; response_snapshot: Json | null; error_code: string | null; started_at: string; finished_at: string | null }
+        Insert: { id?: string; workspace_id: string; submission_id: string; attempt_number: number; event_type: string; outcome: string; request_snapshot: Json; response_snapshot?: Json | null; error_code?: string | null; started_at: string; finished_at?: string | null }
+        Update: { id?: string; workspace_id?: string; submission_id?: string; attempt_number?: number; event_type?: string; outcome?: string; request_snapshot?: Json; response_snapshot?: Json | null; error_code?: string | null; started_at?: string; finished_at?: string | null }
+        Relationships: []
+      }
       invoice_audit_log: {
         Row: {
           action: string
