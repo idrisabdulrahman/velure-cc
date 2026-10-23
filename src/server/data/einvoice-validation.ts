@@ -177,12 +177,8 @@ export async function validateWorkspaceInvoice(
 		.maybeSingle();
 	if (error) throw error;
 	if (!row) return notFound;
-	const rawLineIssue = invalidRawLineItems(
-		(row as Record<string, unknown>).line_items,
-	);
-	if (rawLineIssue) return { valid: false, issues: [rawLineIssue] };
-	const invoiceDoc = rowToInvoiceDoc(row as never);
-	if (!hasStoredComplianceSnapshot(invoiceDoc.compliance)) {
+	const rawRow = row as Record<string, unknown>;
+	if (!hasStoredComplianceSnapshot(rawRow.compliance)) {
 		return {
 			valid: false,
 			issues: [
@@ -195,6 +191,9 @@ export async function validateWorkspaceInvoice(
 			],
 		};
 	}
+	const rawLineIssue = invalidRawLineItems(rawRow.line_items);
+	if (rawLineIssue) return { valid: false, issues: [rawLineIssue] };
+	const invoiceDoc = rowToInvoiceDoc(row as never);
 	const invoice = mapInvoice(invoiceDoc);
 	let buyerType: BuyerType | undefined;
 	if (invoice.customerId) {

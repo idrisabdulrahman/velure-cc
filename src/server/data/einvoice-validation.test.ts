@@ -265,4 +265,28 @@ describe("validateWorkspaceInvoice", () => {
 			message: "Stored line quantity and price must be finite numbers.",
 		});
 	});
+
+	it("rejects malformed raw compliance amounts before normalizeCompliance coerces them", async () => {
+		const state = tables("workspace-a");
+		(state.invoices[0].line_items as Array<Record<string, unknown>>)[0].price =
+			0;
+		state.invoices[0].compliance = {
+			...compliance,
+			subtotal: "garbage",
+			totalTax: 0,
+			grandTotal: 0,
+			netPayable: 0,
+			withholdingTaxAmount: 0,
+			taxLines: [],
+			withholding: { ...compliance.withholding, amount: 0 },
+		};
+		const { client } = createFakeSupabase(state);
+		const result = await validateWorkspaceInvoice(
+			client,
+			"user-a",
+			"invoice-a",
+		);
+		expect(result.valid).toBe(false);
+		expect(result.issues[0]?.code).toBe("compliance_snapshot_invalid");
+	});
 });
