@@ -21,7 +21,7 @@ Status: pending | ready | implementing | auditing | fixing | merged | blocked
 | WP10 | D1 | WP6,WP7,WP8,WP9 (merged) | **merged** (audit PASS after one fix round; merge commit 07a6755; branch commit b264778; integration 558 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp10 | a5aed99 | 2 | No open findings; live DB checks not applicable (pure mapper) |
 | WP11 | D3 | WP8,WP10 (merged) | **merged** (audit PASS; merge commit 88b958d; package commit 40a7c9f; integration 568 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp11 | af6088e | 1 | No open findings; live DB/provider tests not needed (pure state model) |
 | WP12 | D8 | WP10,WP5 | **merged** (audit PASS after 3 fix rounds; merge commit 5a90fd2; branch commit f8a08e9; integration 587 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp12 | 5164b35 | 4 | No open findings; no live Supabase RLS/provider checks available or needed for this pure validator and scoped loader |
-| WP13 | D2,D10 | WP10,WP11 | **auditing** (implementation commit a8b0ded; isolated worktree `.worktrees/wp13`) | einv/wp13 | 8baeb3d | 1 | No findings; auditor's test command blocked by read-only worktree, root rerunning after merge |
+| WP13 | D2,D10 | WP10,WP11 | **merged** (audit PASS; merge commit e011da7; branch commit a8b0ded; integration 598 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp13 | 8baeb3d | 1 | No open findings; no live provider/Supabase test is applicable (mock-only adapter) |
 | WP14 | D4,D6,D9 | WP13 | pending | — | — | 0 | — |
 | WP15 | H2 | WP13 | pending | — | — | 0 | — |
 | WP16 | D5,D7,C4 | WP14 | pending | — | — | 0 | — |
@@ -45,6 +45,7 @@ Status: pending | ready | implementing | auditing | fixing | merged | blocked
 - 54709b8: excluded `.worktrees/**` from biome and vitest. Before this, root-suite runs silently collected tests from every nested worktree checkout (859 stray vitest entries) — merge validation was over-reporting.
 - b3b7806 (WP5 merged): 191 passed / 55 skipped, typecheck 0, check 356 warnings.
 - 5a90fd2 (WP12 merged): **587 passed / 86 skipped, typecheck 0, check exit 0 / 356 existing warnings**; WP12 focused tests 21 passed.
+- e011da7 (WP13 merged): **598 passed / 86 skipped, typecheck 0, check exit 0 / 356 existing warnings**; WP13 focused tests 11 passed.
 - bde111d (WP2 merged): 280 passed / 55 skipped, typecheck 0, check 356 warnings.
 - 429c4dd (WP4 merged): 322 passed / 58 skipped, typecheck 0, check 356 warnings. One import-hunk conflict in src/server/data/compliance.ts (WP2 + WP4 both added imports) resolved by keeping both.
 - 46d9869 (WP3 merged): **383 passed / 86 skipped, typecheck 0, check 356 warnings** — wave 1 final state. 86 skipped = 28 pre-existing + 58 A10_LIVE-gated (now incl. the WP3 RLS matrix).
