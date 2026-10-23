@@ -6,6 +6,7 @@ import {
 	SheetTitle,
 } from "#/components/ui/sheet";
 import type { ImportedInvoiceDraft } from "#/features/invoices/import-spreadsheet";
+import type { InvoiceDocumentType } from "#/features/invoices/types";
 import { CreateInvoicePanel } from "./create-invoice-panel";
 
 type CreateInvoiceSheetProps = {
@@ -13,7 +14,7 @@ type CreateInvoiceSheetProps = {
 	onOpenChange: (open: boolean) => void;
 	onCreated?: (invoiceId: string) => void;
 	initialDraft?: ImportedInvoiceDraft | null;
-	initialDocumentType?: "standard" | "proforma";
+	initialDocumentType?: InvoiceDocumentType;
 };
 
 export function CreateInvoiceSheet({

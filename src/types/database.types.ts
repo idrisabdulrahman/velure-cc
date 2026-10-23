@@ -680,6 +680,7 @@ export type Database = {
           bottom_block: Json | null
           canceled_at: string | null
           compliance: Json | null
+          corrects_invoice_id: string | null
           created_at: string
           currency: string
           customer_id: string | null
@@ -728,6 +729,7 @@ export type Database = {
           bottom_block?: Json | null
           canceled_at?: string | null
           compliance?: Json | null
+          corrects_invoice_id?: string | null
           created_at?: string
           currency: string
           customer_id?: string | null
@@ -778,6 +780,7 @@ export type Database = {
           bottom_block?: Json | null
           canceled_at?: string | null
           compliance?: Json | null
+          corrects_invoice_id?: string | null
           created_at?: string
           currency?: string
           customer_id?: string | null
@@ -825,6 +828,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "invoices_corrects_invoice_same_workspace_fkey"
+            columns: ["corrects_invoice_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id", "workspace_id"]
+          },
           {
             foreignKeyName: "invoices_customer_id_fkey"
             columns: ["customer_id"]
@@ -1920,7 +1930,7 @@ export type Database = {
         | "clicked"
         | "failed"
       escalation_status: "idle" | "queued" | "sent" | "manual_review"
-      invoice_document_type: "standard" | "proforma"
+      invoice_document_type: "standard" | "credit_note" | "debit_note" | "proforma"
       invoice_number_mode: "prefix" | "business_name"
       invoice_status:
         | "draft"
@@ -2162,7 +2172,7 @@ export const Constants = {
         "failed",
       ],
       escalation_status: ["idle", "queued", "sent", "manual_review"],
-      invoice_document_type: ["standard", "proforma"],
+      invoice_document_type: ["standard", "credit_note", "debit_note", "proforma"],
       invoice_number_mode: ["prefix", "business_name"],
       invoice_status: [
         "draft",

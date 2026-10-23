@@ -339,6 +339,46 @@ describe("markInvoiceSent draft gate", () => {
 });
 
 describe("createDraft finalize gate", () => {
+	it("creates a correction linked to an issued same-workspace source without editing it", async () => {
+		const sourceBefore = { ...row("inv-a-issued-linked") };
+		const created = await createDraft(client, USER_A, {
+			...draftInput,
+			invoiceNumber: "CN-2026-0007",
+			customerId: CLIENT_A,
+			customerName: "Client A",
+			documentType: "credit_note",
+			correctsInvoiceId: "inv-a-issued-linked",
+		});
+
+		expect(created.documentType).toBe("credit_note");
+		expect(created.correctsInvoiceId).toBe("inv-a-issued-linked");
+		expect(row("inv-a-issued-linked")).toEqual(sourceBefore);
+		expect(row(created.id)?.corrects_invoice_id).toBe("inv-a-issued-linked");
+	});
+
+	it("rejects cross-workspace and unissued correction sources", async () => {
+		await expect(
+			createDraft(client, USER_A, {
+				...draftInput,
+				customerId: CLIENT_A,
+				documentType: "debit_note",
+				correctsInvoiceId: "inv-b-draft",
+			}),
+		).rejects.toThrow(
+			"Correction source must be an issued standard invoice in this workspace.",
+		);
+		await expect(
+			createDraft(client, USER_A, {
+				...draftInput,
+				customerId: CLIENT_A,
+				documentType: "debit_note",
+				correctsInvoiceId: "inv-a-legacy-unissued-linked",
+			}),
+		).rejects.toThrow(
+			"Correction source must be an issued standard invoice in this workspace.",
+		);
+	});
+
 	it("refuses to finalize a new invoice without a customer record", async () => {
 		await expect(createDraft(client, USER_A, draftInput)).rejects.toThrow(
 			CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE,
@@ -410,6 +450,24 @@ describe("createDraft finalize gate", () => {
 });
 
 describe("autosave stays customer-less", () => {
+	it("does not persist a correction draft without a verified source", async () => {
+		await expect(
+			autosaveDraft(client, USER_A, {
+				...draftInput,
+				documentType: "credit_note",
+				invoiceNumber: "CN-2026-0008",
+				customerId: CLIENT_A,
+			}),
+		).rejects.toThrow(
+			"Select an issued standard invoice for this correction note.",
+		);
+		expect(
+			(tables.invoices as Array<Record<string, unknown>>).some(
+				(entry) => entry.invoice_number === "CN-2026-0008",
+			),
+		).toBe(false);
+	});
+
 	it("keeps an autosaved draft in Draft without a customer", async () => {
 		const draft = await autosaveDraft(client, USER_A, {
 			...draftInput,

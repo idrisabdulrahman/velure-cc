@@ -93,4 +93,32 @@ describe("POST /api/invoice/send/$id (G1 audit non-atomicity)", () => {
 		expect(keys[0]).toMatch(/^invoice-email-[0-9a-f]{64}$/);
 		expect(keys[1]).toBe(keys[0]);
 	});
+
+	it("uses the correction document type in the email subject and body", async () => {
+		const { getAuthenticatedInvoiceById } = await import(
+			"#/server/invoice-repository"
+		);
+		vi.mocked(getAuthenticatedInvoiceById).mockResolvedValueOnce({
+			id: "inv-1",
+			token: "share-token",
+			invoiceNumber: "DN-2026-0001",
+			customerName: "Acme Ltd",
+			documentType: "debit_note",
+			updatedAt: 1_700_000_000_000,
+			lineItems: [{ id: "li-1", name: "Service", quantity: 1, price: 100 }],
+			deliveredAt: 1_700_000_000_000,
+		} as never);
+
+		const response = await handle({
+			params: { id: "inv-1" },
+			request: sendRequest(),
+		});
+		expect(response.status).toBe(200);
+		const payload = resendSendSpy.mock.calls.at(-1)?.[0] as {
+			subject?: string;
+			text?: string;
+		};
+		expect(payload.subject).toContain("Debit note DN-2026-0001");
+		expect(payload.text).toContain("debit note DN-2026-0001");
+	});
 });

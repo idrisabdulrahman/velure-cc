@@ -102,8 +102,13 @@ import { formatMoney } from "#/features/invoices/format";
 import type { ImportedInvoiceDraft } from "#/features/invoices/import-spreadsheet";
 import { toEditorDoc } from "#/features/invoices/midday-adapter";
 import type {
+	InvoiceDocumentType,
 	InvoiceLineItem,
 	InvoiceTemplateSettings,
+} from "#/features/invoices/types";
+import {
+	INVOICE_DOCUMENT_TYPE_LABELS,
+	isCorrectionDocumentType,
 } from "#/features/invoices/types";
 import {
 	UNIT_OPTIONS,
@@ -117,6 +122,7 @@ import {
 	autosaveDraft,
 	createDraft,
 	getTemplateDefaults,
+	list as listInvoices,
 	saveTemplateDefaults,
 } from "#/server/data/invoices";
 import { createProduct, searchProducts } from "#/server/data/products";
@@ -139,7 +145,6 @@ type ComposerStage = "editor" | "success";
 
 type CreateIntent = "create" | "open" | "create_and_send" | "scheduled";
 type AutosaveStatus = "idle" | "saving" | "saved" | "error";
-type InvoiceDocumentType = "standard" | "proforma";
 type DepositRequestKind = "amount" | "percentage";
 
 type CreatedInvoiceSummary = {
@@ -185,11 +190,19 @@ const PAYMENT_TERM_OPTIONS = [7, 14, 30] as const;
 const DOCUMENT_TYPE_OPTIONS = [
 	{
 		value: "standard",
-		label: "Standard",
+		label: INVOICE_DOCUMENT_TYPE_LABELS.standard,
+	},
+	{
+		value: "credit_note",
+		label: INVOICE_DOCUMENT_TYPE_LABELS.credit_note,
+	},
+	{
+		value: "debit_note",
+		label: INVOICE_DOCUMENT_TYPE_LABELS.debit_note,
 	},
 	{
 		value: "proforma",
-		label: "Pro-forma",
+		label: INVOICE_DOCUMENT_TYPE_LABELS.proforma,
 	},
 ] as const;
 
@@ -263,9 +276,13 @@ function generateInvoiceNumber(
 	const prefixSource =
 		documentType === "proforma"
 			? "PF"
-			: settings?.invoiceNumberMode === "business_name"
-				? settings.name
-				: settings?.invoiceNumberPrefix;
+			: documentType === "credit_note"
+				? "CN"
+				: documentType === "debit_note"
+					? "DN"
+					: settings?.invoiceNumberMode === "business_name"
+						? settings.name
+						: settings?.invoiceNumberPrefix;
 	const prefix =
 		(prefixSource || "INV")
 			.trim()
@@ -475,6 +492,9 @@ export function CreateInvoicePanel({
 		if (!supabaseClient || !userId) throw new Error("Session unavailable");
 		return { client: supabaseClient, userId };
 	};
+	const [documentType, setDocumentType] =
+		useState<InvoiceDocumentType>(initialDocumentType);
+	const [correctsInvoiceId, setCorrectsInvoiceId] = useState<string>();
 	const clientsQuery = useQuery({
 		queryKey: ["invoice-composer-clients", userId],
 		queryFn: () => {
@@ -489,6 +509,33 @@ export function CreateInvoicePanel({
 		email?: string;
 		currency?: string;
 	}>;
+	const correctionSourcesQuery = useQuery({
+		queryKey: ["invoice-correction-sources", userId],
+		queryFn: () => {
+			const context = requireSupabase();
+			return listInvoices(context.client, context.userId, {
+				documentType: "standard",
+			});
+		},
+		enabled: Boolean(
+			supabaseClient && userId && isCorrectionDocumentType(documentType),
+		),
+	});
+	const correctionSources = (correctionSourcesQuery.data ?? []).filter(
+		(invoice) =>
+			invoice.documentType === "standard" &&
+			invoice.status !== "draft" &&
+			invoice.status !== "canceled" &&
+			Boolean(
+				invoice.deliveredAt ||
+					invoice.paidAt ||
+					invoice.paymentReference ||
+					invoice.paymentAmount > 0 ||
+					invoice.lifecycle?.sentAt ||
+					invoice.lifecycle?.emailDeliveredAt ||
+					invoice.lifecycle?.paymentReceivedAt,
+			),
+	);
 	const workspaceQuery = useQuery({
 		queryKey: ["invoice-workspace", userId],
 		queryFn: () => {
@@ -514,8 +561,6 @@ export function CreateInvoicePanel({
 	const [invoiceNumber, setInvoiceNumber] = useState(() =>
 		generateInvoiceNumber(),
 	);
-	const [documentType, setDocumentType] =
-		useState<InvoiceDocumentType>(initialDocumentType);
 	const [issueDate, setIssueDate] = useState(() => buildIssueDate());
 	const [logoUrl, setLogoUrl] = useState("");
 	const [customerName, setCustomerName] = useState("");
@@ -798,6 +843,7 @@ export function CreateInvoicePanel({
 		setComposerStage("editor");
 		setCreatedInvoice(null);
 		setDocumentType(initialDocumentType);
+		setCorrectsInvoiceId(undefined);
 		if (initialDraft.invoiceNumber)
 			setInvoiceNumber(initialDraft.invoiceNumber);
 		if (initialDraft.issueDate) setIssueDate(initialDraft.issueDate);
@@ -807,6 +853,7 @@ export function CreateInvoicePanel({
 			setCustomerEmail(initialDraft.customerEmail);
 		setCustomerPoNumber("");
 		setCustomerId(undefined);
+		setCorrectsInvoiceId(undefined);
 		setCurrency(normalizeCurrency(initialDraft.currency));
 		if (initialDraft.notes) {
 			setNotes(toEditorDoc(initialDraft.notes));
@@ -1087,6 +1134,7 @@ export function CreateInvoicePanel({
 				dateFormat,
 				depositRequest,
 				documentType,
+				correctsInvoiceId,
 				dueDate,
 				fromEmail,
 				fromName,
@@ -1121,6 +1169,7 @@ export function CreateInvoicePanel({
 			dateFormat,
 			depositRequest,
 			documentType,
+			correctsInvoiceId,
 			dueDate,
 			fromEmail,
 			fromName,
@@ -1152,6 +1201,7 @@ export function CreateInvoicePanel({
 		id: id ?? undefined,
 		token: autosaveTokenRef.current,
 		documentType,
+		correctsInvoiceId,
 		shipmentDetails,
 		depositRequest,
 		invoiceNumber: id ? invoiceNumber.trim() : "",
@@ -1220,7 +1270,8 @@ export function CreateInvoicePanel({
 			composerStage !== "editor" ||
 			!hasMeaningfulDraft ||
 			!tinIsValid ||
-			!rcIsValid
+			!rcIsValid ||
+			(isCorrectionDocumentType(documentType) && !correctsInvoiceId)
 		) {
 			return;
 		}
@@ -1572,6 +1623,7 @@ export function CreateInvoicePanel({
 		setComposerStage("editor");
 		setCreatedInvoice(null);
 		setDocumentType(initialDocumentType);
+		setCorrectsInvoiceId(undefined);
 		setInvoiceNumber(
 			generateInvoiceNumber(
 				workspace
@@ -1708,10 +1760,16 @@ export function CreateInvoicePanel({
 		setSubmitting(true);
 		try {
 			if (!supabaseClient || !userId) throw new Error("Session unavailable");
+			if (isCorrectionDocumentType(documentType) && !correctsInvoiceId) {
+				throw new Error(
+					"Select an issued standard invoice for this correction note.",
+				);
+			}
 			const created = await createDraft(supabaseClient, userId, {
 				id: autosaveDraftIdRef.current ?? undefined,
 				token: `pub-${crypto.randomUUID()}`,
 				documentType,
+				correctsInvoiceId,
 				shipmentDetails,
 				depositRequest,
 				invoiceNumber: "",
@@ -1848,9 +1906,7 @@ export function CreateInvoicePanel({
 								</h2>
 								<p className="mt-2 text-sm text-ink-3">
 									Your{" "}
-									{createdInvoice.documentType === "proforma"
-										? "pro-forma invoice"
-										: "invoice"}{" "}
+									{INVOICE_DOCUMENT_TYPE_LABELS[createdInvoice.documentType]}{" "}
 									was created successfully.
 								</p>
 							</div>
@@ -1858,10 +1914,8 @@ export function CreateInvoicePanel({
 							<div className="relative my-auto border border-rule bg-paper-2 p-5 pb-7">
 								<div className="flex items-start justify-between gap-4 text-sm text-ink-3">
 									<div className="text-[13px]">
-										{createdInvoice.documentType === "proforma"
-											? "Pro-forma No"
-											: "Invoice No"}
-										:{" "}
+										{INVOICE_DOCUMENT_TYPE_LABELS[createdInvoice.documentType]}{" "}
+										No:{" "}
 										<span className="font-medium text-ink">
 											{createdInvoice.invoiceNumber}
 										</span>
@@ -1958,9 +2012,9 @@ export function CreateInvoicePanel({
 								className="inline-flex h-10 items-center rounded-md border border-rule bg-paper px-5 text-[14px] text-ink transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2"
 							>
 								View{" "}
-								{createdInvoice.documentType === "proforma"
-									? "pro-forma"
-									: "invoice"}
+								{INVOICE_DOCUMENT_TYPE_LABELS[
+									createdInvoice.documentType
+								].toLowerCase()}
 							</button>
 							<button
 								type="button"
@@ -2013,9 +2067,13 @@ export function CreateInvoicePanel({
 										<button
 											key={option.value}
 											type="button"
-											onClick={() =>
-												setDocumentType(option.value as InvoiceDocumentType)
-											}
+											onClick={() => {
+												const nextType = option.value as InvoiceDocumentType;
+												setDocumentType(nextType);
+												if (!isCorrectionDocumentType(nextType)) {
+													setCorrectsInvoiceId(undefined);
+												}
+											}}
 											aria-pressed={documentType === option.value}
 											className={cn(
 												"rounded-sm px-3 py-1.5 text-[12px] font-medium transition-colors",
@@ -2028,6 +2086,50 @@ export function CreateInvoicePanel({
 										</button>
 									))}
 								</div>
+								{isCorrectionDocumentType(documentType) ? (
+									<div className="mb-5 max-w-xl space-y-2">
+										<label
+											htmlFor="invoice-correction-source"
+											className="block text-[12px] font-medium text-ink"
+										>
+											Issued standard invoice being corrected
+										</label>
+										<select
+											id="invoice-correction-source"
+											value={correctsInvoiceId ?? ""}
+											required
+											disabled={correctionSourcesQuery.isPending}
+											onChange={(event) => {
+												const nextId = event.target.value;
+												setCorrectsInvoiceId(nextId || undefined);
+												const source = correctionSources.find(
+													(invoice) => invoice.id === nextId,
+												);
+												if (!source) return;
+												setCustomerId(source.customerId);
+												setCustomerName(source.customerName);
+												setCustomerEmail(
+													clients.find(
+														(client) => client.id === source.customerId,
+													)?.email ?? "",
+												);
+												setCurrency(normalizeCurrency(source.currency));
+											}}
+											className="h-10 w-full rounded-md border border-rule bg-paper px-3 text-[13px] text-ink"
+										>
+											<option value="">Select a source invoice</option>
+											{correctionSources.map((invoice) => (
+												<option key={invoice.id} value={invoice.id}>
+													{invoice.invoiceNumber} · {invoice.customerName}
+												</option>
+											))}
+										</select>
+										<p className="text-[11px] text-ink-3">
+											Creates a separate document and leaves the source invoice
+											unchanged.
+										</p>
+									</div>
+								) : null}
 
 								<div className="mb-7 grid gap-6 lg:grid-cols-[minmax(0,1fr)_96px] lg:items-start">
 									<div className="space-y-3">
