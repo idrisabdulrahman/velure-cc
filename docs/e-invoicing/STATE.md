@@ -17,7 +17,7 @@ Status: pending | ready | implementing | auditing | fixing | merged | blocked
 | WP6 | B2 | WP2 (merged) | **merged** (round 3 PASS @d4303ee; follow-up @00dbd9f independently audited PASS and merged; follow-up suite 481/86, typecheck 0, check 0 with 356 existing warnings) | einv/wp6 | bf82fad | 3 | No open findings. R1/R2/R3 customer-gate, import paging, legacy address, and live-fixture findings closed by d4303ee and 00dbd9f |
 | WP7 | B3 | WP5,WP6,WP8 (merged) | **merged** (audited PASS; merge commit 3878acc; WP7 branch 6e98e3f; integration 542 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp7 | 5901e58 | 1 | No open findings; live RLS validation unavailable without linked Supabase |
 | WP8 | C1,C2,C3 | WP4 (merged) | **merged** (round 1 FAIL @87b6869; audit-fix @c53139f; integration review found and closed manual second-payment reference overwrite; final integration checks: 530 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp8 | 96d5c49 | 2 | R1 findings and cross-package manual-payment reference issue closed with regressions. No live migration/application test |
-| WP9 | B6 | WP8 (merged) | **implementing** (prompt `prompts/einv-wp9.md`; isolated worktree starting from 646b9e1) | einv/wp9 | 48f6f26 | 0 | — |
+| WP9 | B6 | WP8 (merged) | **merged** (audit PASS; merge commit 4b90014; package commit a6e9384; integration 551 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp9 | 8ade385 | 1 | No open findings; live Supabase migration/RLS validation unavailable |
 | WP10 | D1 | WP6,WP7,WP8 | pending | — | — | 0 | — |
 | WP11 | D3 | WP8,WP10 | pending | — | — | 0 | — |
 | WP12 | D8 | WP10,WP5 | pending | — | — | 0 | — |
