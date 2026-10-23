@@ -6,6 +6,7 @@ dns.setDefaultResultOrder("ipv4first");
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { createClient as createClientRecord } from "./clients";
 import {
 	autosaveDraft,
 	getById as getInvoiceById,
@@ -337,6 +338,30 @@ function draftInput(customerName: string, price = 80000) {
 	};
 }
 
+/**
+ * B2 fixture: leaving Draft (updateStatus → unpaid) requires a REAL workspace
+ * customer, so the payable-invoice fixture creates one per invoice and passes
+ * its id — same pattern as `makePayableInvoice` in payments.live.test.ts
+ * (unique, suffix-scoped email so repeated live runs never collide).
+ */
+async function createWorkspaceCustomer(
+	client: Supabase,
+	user: { issuerUserId: string } | null,
+	name: string,
+) {
+	if (!user) throw new Error("signed-in user missing for customer fixture.");
+	const email = `${name.toLowerCase().replace(/\s+/g, "-")}-${suffix}@example.com`;
+	return createClientRecord(client, user.issuerUserId, {
+		name,
+		email,
+		currency: "NGN",
+		paymentTerms: "net-14",
+		contact: { fullName: name, email },
+		favorite: false,
+		status: "active",
+	});
+}
+
 describe.skipIf(!LIVE)("A10 reminders domain (live velure-cc)", () => {
 	beforeAll(async () => {
 		mgmtToken = process.env.SUPABASE_MANAGEMENT_TOKEN ?? "";
@@ -456,8 +481,16 @@ describe.skipIf(!LIVE)("A10 reminders domain (live velure-cc)", () => {
 
 	it("creates a payable invoice for each user", async () => {
 		const clientA = userScopedClient(userA!.jwt);
+		// B2 gate: updateStatus → unpaid needs a workspace customer, so the
+		// fixture creates one per invoice (payments.live.test.ts pattern).
+		const customerAId = await createWorkspaceCustomer(
+			clientA,
+			userA,
+			"Reminder Co",
+		);
 		const draft = await autosaveDraft(clientA, userA!.issuerUserId, {
 			...draftInput("Reminder Co"),
+			customerId: customerAId,
 		});
 		const full = await getInvoiceById(clientA, userA!.issuerUserId, draft.id);
 		if (!full) throw new Error("draft not found");
@@ -466,6 +499,7 @@ describe.skipIf(!LIVE)("A10 reminders domain (live velure-cc)", () => {
 			token: full.token,
 			documentType: "standard",
 			invoiceNumber: full.invoiceNumber,
+			customerId: customerAId,
 			customerName: "Reminder Co",
 			currency: "NGN",
 			type: "one-time",
@@ -485,8 +519,14 @@ describe.skipIf(!LIVE)("A10 reminders domain (live velure-cc)", () => {
 		invoiceAId = full.id;
 
 		const clientB = userScopedClient(userB!.jwt);
+		const customerBId = await createWorkspaceCustomer(
+			clientB,
+			userB,
+			"Other Co",
+		);
 		const draftB = await autosaveDraft(clientB, userB!.issuerUserId, {
 			...draftInput("Other Co"),
+			customerId: customerBId,
 		});
 		const fullB = await getInvoiceById(clientB, userB!.issuerUserId, draftB.id);
 		if (!fullB) throw new Error("draft B not found");
@@ -495,6 +535,7 @@ describe.skipIf(!LIVE)("A10 reminders domain (live velure-cc)", () => {
 			token: fullB.token,
 			documentType: "standard",
 			invoiceNumber: fullB.invoiceNumber,
+			customerId: customerBId,
 			customerName: "Other Co",
 			currency: "NGN",
 			type: "one-time",

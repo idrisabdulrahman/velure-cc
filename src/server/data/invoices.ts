@@ -3082,18 +3082,32 @@ export async function importCsv(
 		(group) => importRowCustomerEmail(group.customerName) !== null,
 	);
 	if (hasImportEmails) {
-		const { data: workspaceClients, error: clientsError } = await client
-			.from("clients")
-			.select("id, email")
-			.eq("workspace_id", workspaceId);
-		if (clientsError) throw clientsError;
-		for (const row of workspaceClients ?? []) {
-			const normalized = String(row.email ?? "")
-				.trim()
-				.toLowerCase();
-			if (normalized && !emailToClientId.has(normalized)) {
-				emailToClientId.set(normalized, String(row.id));
+		// PostgREST caps an unbounded SELECT (1000 rows by default), so a
+		// single all-clients read would silently truncate the email → id map
+		// for a workspace with more clients than one page. Read in ID-ordered
+		// pages instead and fold every page in until a short page ends the
+		// loop; normalization stays exactly as before (trim().toLowerCase()
+		// applied to both sides below), only the read is paged.
+		const CLIENT_PAGE_SIZE = 1000;
+		let offset = 0;
+		for (;;) {
+			const { data: pageClients, error: clientsError } = await client
+				.from("clients")
+				.select("id, email")
+				.eq("workspace_id", workspaceId)
+				.order("id", { ascending: true })
+				.range(offset, offset + CLIENT_PAGE_SIZE - 1);
+			if (clientsError) throw clientsError;
+			for (const row of pageClients ?? []) {
+				const normalized = String(row.email ?? "")
+					.trim()
+					.toLowerCase();
+				if (normalized && !emailToClientId.has(normalized)) {
+					emailToClientId.set(normalized, String(row.id));
+				}
 			}
+			if (!pageClients || pageClients.length < CLIENT_PAGE_SIZE) break;
+			offset += CLIENT_PAGE_SIZE;
 		}
 	}
 

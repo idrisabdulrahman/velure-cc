@@ -134,6 +134,53 @@ describe("buildClientBuyerColumns (B2 server boundary)", () => {
 		);
 	});
 
+	it("flags a stored legacy over-long address instead of rejecting the echoed edit", () => {
+		// WP6 finding 4: the edit dialog has no address field, so it resubmits
+		// the stored value verbatim. Echoing it back must FLAG, not reject.
+		const legacy = {
+			buyer_type: "b2b" as string | null,
+			tax_id: "8129473650" as string | null,
+			billing_address: "L".repeat(340),
+		};
+		const columns = buildClientBuyerColumns(legacy, {
+			...input,
+			billingAddress: legacy.billing_address,
+		});
+		expect(columns.billing_address).toBe(legacy.billing_address);
+		expect(columns.buyer_profile_status).toBe("needs_review");
+		expect(columns.buyer_profile_issues).toEqual(["address_too_long"]);
+		// Omitting the field entirely (another dialog shape) takes the same
+		// legacy path: the stored value falls back in and is still flagged.
+		const omitted = buildClientBuyerColumns(legacy, input);
+		expect(omitted.billing_address).toBe(legacy.billing_address);
+		expect(omitted.buyer_profile_issues).toEqual(["address_too_long"]);
+	});
+
+	it("still hard-fails a NEWLY typed over-long address", () => {
+		expect(() =>
+			buildClientBuyerColumns(
+				{
+					buyer_type: "b2b",
+					tax_id: "8129473650",
+					billing_address: "7 Marina",
+				},
+				{ ...input, billingAddress: "M".repeat(340) },
+			),
+		).toThrow(/300 characters or fewer/i);
+		// A legacy over-long row being overwritten with a DIFFERENT over-long
+		// value is new input too — same rule.
+		expect(() =>
+			buildClientBuyerColumns(
+				{
+					buyer_type: "b2b",
+					tax_id: "8129473650",
+					billing_address: "L".repeat(340),
+				},
+				{ ...input, billingAddress: "K".repeat(341) },
+			),
+		).toThrow(/300 characters or fewer/i);
+	});
+
 	it("only ever writes the whitelisted buyer columns", () => {
 		const columns = buildClientBuyerColumns(storedRow, input);
 		expect(Object.keys(columns).sort()).toEqual([
@@ -186,6 +233,32 @@ function seed(): FakeTables {
 				buyer_type: "b2b",
 				buyer_profile_status: "needs_review",
 				buyer_profile_issues: ["tin_placeholder", "address_required"],
+				currency: "NGN",
+				payment_terms: "Net 14",
+				internal_notes: null,
+				contact: {},
+				favorite: false,
+				status: "active",
+				created_at: "2026-01-01T00:00:00.000Z",
+				updated_at: "2026-01-01T00:00:00.000Z",
+			},
+			// Legacy pre-B2 row whose stored address predates the 300-char cap
+			// (WP6 finding 4). It was classified `complete` by the backfill —
+			// `address_too_long` is an app-only code the migration never wrote.
+			{
+				id: "client-legacy",
+				workspace_id: WS_B,
+				owner_id: USER_B,
+				name: "Legacy Overflow Limited",
+				company: null,
+				email: "legacy-overflow@example.test",
+				phone: null,
+				website: null,
+				billing_address: "L".repeat(340),
+				tax_id: "8129473650",
+				buyer_type: "b2b",
+				buyer_profile_status: "complete",
+				buyer_profile_issues: [],
 				currency: "NGN",
 				payment_terms: "Net 14",
 				internal_notes: null,
@@ -274,6 +347,45 @@ describe("client write paths store buyer flags", () => {
 			}),
 		).rejects.toThrow(/placeholder/i);
 		expect(row("client-b")).toEqual(snapshot);
+	});
+
+	it("updateClient lets a legacy over-long address be edited and archived (flagged, not blocked)", async () => {
+		// WP6 finding 4: the clients edit dialog has no address field, so it
+		// resubmits the STORED address. Echoing an over-long legacy value back
+		// must save (flagged) instead of dead-ending every edit and archive.
+		const dialogPayload = {
+			...clientInput,
+			billingAddress: "L".repeat(340),
+			taxId: "8129473650",
+			buyerType: "b2b" as const,
+		};
+		await updateClient(client, USER_B, "client-legacy", dialogPayload);
+		const edited = row("client-legacy");
+		expect(edited?.billing_address).toBe("L".repeat(340));
+		expect(edited?.buyer_profile_status).toBe("needs_review");
+		expect(edited?.buyer_profile_issues).toEqual(["address_too_long"]);
+
+		// The status-flip path that routes through `updateClient` (restore /
+		// archive from the dialog) is unblocked by the same carve-out.
+		await updateClient(client, USER_B, "client-legacy", {
+			...dialogPayload,
+			status: "archived",
+		});
+		expect(row("client-legacy")?.status).toBe("archived");
+		expect(row("client-legacy")?.billing_address).toBe("L".repeat(340));
+	});
+
+	it("updateClient still rejects a NEWLY typed over-long address", async () => {
+		const snapshot = { ...row("client-legacy") };
+		await expect(
+			updateClient(client, USER_B, "client-legacy", {
+				...clientInput,
+				billingAddress: "K".repeat(341),
+				taxId: "8129473650",
+				buyerType: "b2b",
+			}),
+		).rejects.toThrow(/300 characters or fewer/i);
+		expect(row("client-legacy")).toEqual(snapshot);
 	});
 
 	it("importClientsCsv skips format-invalid rows and imports flagged ones", async () => {

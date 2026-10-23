@@ -135,6 +135,16 @@ const MULTIPLE_ROWS = {
 	message: "fake-db: multiple rows returned where single was expected",
 };
 
+/**
+ * PostgREST's default cap on an UNBOUNDED read (Supabase `max-rows`). The
+ * fake emulates it for plain SELECTs so a data-layer query that must page (or
+ * must filter) fails here instead of passing against an infinite store.
+ * Explicit `.limit()` / `.range()` windows and `count: head` queries are not
+ * capped, and write paths deliberately keep matching every row so a partial
+ * write can never hide behind a green test.
+ */
+const DEFAULT_MAX_ROWS = 1000;
+
 class FakeBuilder implements PromiseLike<Result> {
 	private action: "select" | "insert" | "update" | "delete" = "select";
 	private filters: Filter[] = [];
@@ -143,6 +153,7 @@ class FakeBuilder implements PromiseLike<Result> {
 	private patch: Row | null = null;
 	private head = false;
 	private limitValue: number | null = null;
+	private rangeValue: { from: number; to: number } | null = null;
 	private orderValue: { column: string; ascending: boolean } | null = null;
 	private terminal: "none" | "single" | "maybeSingle" = "none";
 	private counter = 0;
@@ -231,6 +242,12 @@ class FakeBuilder implements PromiseLike<Result> {
 		return this;
 	}
 
+	/** Inclusive [from, to] row window — the PostgREST `Range` header. */
+	range(from: number, to: number) {
+		this.rangeValue = { from, to };
+		return this;
+	}
+
 	single() {
 		this.terminal = "single";
 		return this;
@@ -254,7 +271,14 @@ class FakeBuilder implements PromiseLike<Result> {
 					: compare(b[column], a[column]),
 			);
 		}
-		if (this.limitValue !== null) out = out.slice(0, this.limitValue);
+		if (this.rangeValue) {
+			const { from, to } = this.rangeValue;
+			out = out.slice(from, to + 1);
+		} else if (this.limitValue !== null) {
+			out = out.slice(0, this.limitValue);
+		} else if (this.action === "select" && !this.head) {
+			out = out.slice(0, DEFAULT_MAX_ROWS);
+		}
 		return out;
 	}
 

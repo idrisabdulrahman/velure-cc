@@ -339,6 +339,40 @@ describe("createDraft finalize gate", () => {
 			createDraft(client, USER_A, { ...draftInput, customerId: "client-b" }),
 		).rejects.toThrow("Customer not found.");
 	});
+
+	it("refuses a customer-less scheduled delivery (derived status scheduled)", async () => {
+		// `deliveryType: "scheduled"` derives `scheduled`, not `unpaid` — the
+		// gate must read the DERIVED status, so a schedule attempt on a
+		// customer-less draft is rejected before any row is written (no
+		// scheduled invoice can exist without a buyer link).
+		await expect(
+			createDraft(client, USER_A, {
+				...draftInput,
+				invoiceNumber: "INV-2026-0008",
+				deliveryType: "scheduled",
+				scheduledAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+				compliance: { buyer: { email: "scheduled-buyer@example.test" } },
+			}),
+		).rejects.toThrow(CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE);
+		expect(
+			(tables.invoices as Array<Record<string, unknown>>).filter(
+				(entry) => entry.invoice_number === "INV-2026-0008",
+			),
+		).toHaveLength(0);
+	});
+
+	it("schedules the same delivery when the customer resolves in the workspace", async () => {
+		const created = await createDraft(client, USER_A, {
+			...draftInput,
+			invoiceNumber: "INV-2026-0009",
+			customerId: CLIENT_A,
+			deliveryType: "scheduled",
+			scheduledAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+			compliance: { buyer: { email: "scheduled-buyer@example.test" } },
+		});
+		expect(created.status).toBe("scheduled");
+		expect(row(created.id)?.customer_id).toBe(CLIENT_A);
+	});
 });
 
 describe("autosave stays customer-less", () => {
