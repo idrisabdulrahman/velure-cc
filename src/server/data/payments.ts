@@ -273,6 +273,12 @@ export function payableInvoiceIssue(
 	invoice: InvoicePaymentState,
 	options: { allowDraft?: boolean } = {},
 ) {
+	if (
+		invoice.documentType === "credit_note" ||
+		invoice.documentType === "debit_note"
+	) {
+		return "Payments are not enabled for credit or debit notes.";
+	}
 	const { status, balance } = getInvoicePaymentSnapshot(invoice);
 	// `allowDraft` is for the owner's manual "Mark as paid" only — an unsent
 	// draft can still be settled offline. Public payment context and the

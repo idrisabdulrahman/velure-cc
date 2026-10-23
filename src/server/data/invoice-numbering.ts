@@ -202,7 +202,7 @@ export async function planInvoiceNumber(
 	client: Supabase,
 	args: {
 		workspaceId: string;
-		documentType?: "standard" | "proforma";
+		documentType?: "standard" | "credit_note" | "debit_note" | "proforma";
 		requestedInvoiceNumber?: string;
 		/** A row may keep its own number: ignore it in the collision check. */
 		exceptId?: string;
@@ -212,7 +212,11 @@ export async function planInvoiceNumber(
 	const prefix =
 		args.documentType === "proforma"
 			? "PF"
-			: resolveInvoiceNumberPrefix(workspace);
+			: args.documentType === "credit_note"
+				? "CN"
+				: args.documentType === "debit_note"
+					? "DN"
+					: resolveInvoiceNumberPrefix(workspace);
 	const year = new Date().getFullYear();
 	const minimumSequence = Math.max(
 		Number(workspace?.next_invoice_sequence ?? 1),

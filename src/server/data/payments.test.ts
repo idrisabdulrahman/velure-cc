@@ -66,4 +66,15 @@ describe("payableInvoiceIssue", () => {
 			null,
 		);
 	});
+
+	it("does not enable collection for correction notes", () => {
+		for (const documentType of ["credit_note", "debit_note"] as const) {
+			expect(
+				payableInvoiceIssue({
+					...paidInvoice(),
+					documentType,
+				}),
+			).toBe("Payments are not enabled for credit or debit notes.");
+		}
+	});
 });

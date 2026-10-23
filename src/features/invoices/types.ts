@@ -54,7 +54,25 @@ export type InvoiceTemplateSettings = {
 };
 
 export type InvoiceType = "one-time" | "recurring";
-export type InvoiceDocumentType = "standard" | "proforma";
+export type InvoiceDocumentType =
+	| "standard"
+	| "credit_note"
+	| "debit_note"
+	| "proforma";
+
+export const INVOICE_DOCUMENT_TYPE_LABELS: Record<InvoiceDocumentType, string> =
+	{
+		standard: "Standard invoice",
+		credit_note: "Credit note",
+		debit_note: "Debit note",
+		proforma: "Pro-forma",
+	};
+
+export function isCorrectionDocumentType(
+	documentType: InvoiceDocumentType,
+): documentType is "credit_note" | "debit_note" {
+	return documentType === "credit_note" || documentType === "debit_note";
+}
 export type InvoiceSize = "A4" | "LETTER";
 export type InvoiceDateFormat = "iso" | "us" | "ng";
 
@@ -85,6 +103,7 @@ export type InvoiceRecord = {
 	token: string;
 	tokenRevokedAt?: number;
 	documentType?: InvoiceDocumentType;
+	correctsInvoiceId?: Id<"invoices">;
 	convertedToInvoiceId?: Id<"invoices">;
 	shipmentDetails?: InvoiceShipmentDetails;
 	depositRequest?: InvoiceDepositRequest;

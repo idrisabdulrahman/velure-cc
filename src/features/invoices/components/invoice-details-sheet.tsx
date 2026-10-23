@@ -72,6 +72,7 @@ import { NotesEditor } from "#/features/invoices/components/editor/notes-editor"
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import { toEditorDoc } from "#/features/invoices/midday-adapter";
 import type { InvoiceLineItem, InvoiceRecord } from "#/features/invoices/types";
+import { INVOICE_DOCUMENT_TYPE_LABELS } from "#/features/invoices/types";
 import { useUnifiedAuth } from "#/lib/auth-hook";
 import type { EditorDoc } from "#/lib/midday-invoice/types";
 import { useSupabaseSession } from "#/lib/supabase-session";
@@ -127,7 +128,8 @@ function shareLinks(invoice: InvoiceRecord) {
 	const origin = typeof window !== "undefined" ? window.location.origin : "";
 	const publicUrl = `${origin}/i/${invoice.token}`;
 	const downloadUrl = `${publicUrl}?download=1`;
-	const label = invoice.documentType === "proforma" ? "Pro-forma" : "Invoice";
+	const label =
+		INVOICE_DOCUMENT_TYPE_LABELS[invoice.documentType ?? "standard"];
 	const text = `${label} ${invoice.invoiceNumber} for ${invoice.customerName}`;
 	const body = `${text}\n\nView & download: ${downloadUrl}`;
 
@@ -158,6 +160,7 @@ function serializeInvoiceDraft(invoice: InvoiceRecord) {
 		id: invoice.id,
 		token: invoice.token,
 		documentType: invoice.documentType,
+		correctsInvoiceId: invoice.correctsInvoiceId,
 		convertedToInvoiceId: invoice.convertedToInvoiceId,
 		shipmentDetails: invoice.shipmentDetails,
 		depositRequest: invoice.depositRequest,
@@ -920,7 +923,12 @@ export function InvoiceDetailsSheet({
 									<div className="flex items-start justify-between gap-6">
 										<div>
 											<SheetTitle className="text-[28px] font-semibold tracking-[-0.03em] text-ink">
-												{draft.invoiceNumber}
+												{
+													INVOICE_DOCUMENT_TYPE_LABELS[
+														draft.documentType ?? "standard"
+													]
+												}{" "}
+												· {draft.invoiceNumber}
 											</SheetTitle>
 											<SheetDescription className="mt-2 text-sm text-ink-2">
 												Edit the live invoice without leaving the list view.
@@ -1868,9 +1876,9 @@ export function InvoiceDetailsSheet({
 															const links = shareLinks(draft);
 															if (navigator.share) {
 																const label =
-																	draft.documentType === "proforma"
-																		? "Pro-forma"
-																		: "Invoice";
+																	INVOICE_DOCUMENT_TYPE_LABELS[
+																		draft.documentType ?? "standard"
+																	];
 																await navigator.share({
 																	title: `${label} ${draft.invoiceNumber}`,
 																	text: `${label} ${draft.invoiceNumber} for ${draft.customerName}`,

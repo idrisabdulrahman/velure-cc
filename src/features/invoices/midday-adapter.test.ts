@@ -101,6 +101,17 @@ describe("toMiddayInvoice", () => {
 		expect(invoice.lineItems[0]?.unit).toBe("month");
 	});
 
+	it("renders credit and debit notes with distinct document labels", () => {
+		for (const [documentType, title] of [
+			["credit_note", "Credit note"],
+			["debit_note", "Debit note"],
+		] as const) {
+			const rendered = toMiddayInvoice(buildInvoice({ documentType }));
+			expect(rendered.template.title).toBe(title);
+			expect(rendered.template.invoiceNoLabel).toBe(`${title} No`);
+		}
+	});
+
 	it("passes inline top and bottom blocks to both renderers", () => {
 		const topBlock = toEditorDoc("Project overview");
 		const bottomBlock = toEditorDoc("Payment is due as agreed");

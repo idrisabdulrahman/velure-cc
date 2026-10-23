@@ -4,6 +4,7 @@ import {
 	INVOICE_LINE_CLASSIFICATION_REQUIRED_MESSAGE,
 	transitionLeavesDraft,
 } from "#/features/invoices/customer-gate";
+import { isCorrectionDocumentType } from "#/features/invoices/types";
 import type { Database, Json } from "#/types/database.types";
 import { type InvoiceAuditWriter, recordInvoiceAudit } from "./audit-client";
 import {
@@ -62,7 +63,11 @@ export type InvoiceStatus =
 	| "overdue"
 	| "canceled"
 	| "scheduled";
-export type InvoiceDocumentType = "standard" | "proforma";
+export type InvoiceDocumentType =
+	| "standard"
+	| "credit_note"
+	| "debit_note"
+	| "proforma";
 export type InvoiceType = "one-time" | "recurring";
 export type InvoiceSize = "A4" | "LETTER";
 export type DateFormat = "iso" | "us" | "ng";
@@ -128,6 +133,7 @@ export type Invoice = {
 	token: string;
 	tokenRevokedAt?: number;
 	documentType: InvoiceDocumentType;
+	correctsInvoiceId?: string;
 	convertedToInvoiceId?: string;
 	shipmentDetails?: ShipmentDetails;
 	depositRequest?: DepositRequest;
@@ -179,6 +185,7 @@ export type InvoiceInput = {
 	id?: string;
 	token: string;
 	documentType?: InvoiceDocumentType;
+	correctsInvoiceId?: string;
 	shipmentDetails?: ShipmentDetails;
 	depositRequest?: DepositRequest;
 	invoiceNumber: string;
@@ -605,6 +612,7 @@ type InvoiceRow = {
 	token: string;
 	token_revoked_at: string | null;
 	document_type: InvoiceDocumentType;
+	corrects_invoice_id: string | null;
 	shipment_details: unknown | null;
 	invoice_number: string;
 	customer_id: string | null;
@@ -655,6 +663,7 @@ export function rowToInvoiceDoc(row: InvoiceRow) {
 		token: row.token,
 		tokenRevokedAt: epoch(row.token_revoked_at),
 		documentType: row.document_type,
+		correctsInvoiceId: row.corrects_invoice_id ?? undefined,
 		convertedToInvoiceId: lifecycle.convertedToInvoiceId as string | undefined,
 		shipmentDetails: (row.shipment_details as ShipmentDetails) ?? undefined,
 		depositRequest: (lifecycle.depositRequest as DepositRequest) ?? undefined,
@@ -724,6 +733,7 @@ export function mapInvoice(invoice: any): Invoice {
 		token: invoice.token,
 		tokenRevokedAt: invoice.tokenRevokedAt,
 		documentType: invoice.documentType ?? "standard",
+		correctsInvoiceId: invoice.correctsInvoiceId,
 		convertedToInvoiceId: invoice.convertedToInvoiceId,
 		shipmentDetails: invoice.shipmentDetails,
 		depositRequest: invoice.depositRequest,
@@ -1011,6 +1021,9 @@ export function buildInvoicePaymentScore(rows: any[]) {
 	const dayMs = 24 * 60 * 60 * 1000;
 	const paid = rows.filter((invoice) => {
 		if ((invoice.documentType ?? "standard") === "proforma") return false;
+		if (isCorrectionDocumentType(invoice.documentType ?? "standard")) {
+			return false;
+		}
 		return invoice.status === "paid" && Number(invoice.paidAt ?? 0) > 0;
 	});
 
@@ -1076,26 +1089,36 @@ export function buildInvoiceListSummary(rows: any[]) {
 		const total = Math.max(0, Number(invoice.total ?? 0));
 		const balance = Math.max(0, Number(invoice.balance ?? 0));
 		const isProforma = (invoice.documentType ?? "standard") === "proforma";
+		const isCorrection = isCorrectionDocumentType(
+			invoice.documentType ?? "standard",
+		);
 		const paidAmount = Math.max(0, Number(invoice.paymentAmount ?? 0));
 		const receivableTotal = isProforma ? paidAmount : total;
 		const receivableBalance = isProforma ? 0 : balance;
 
 		summary.totalCount += 1;
 
-		if (invoice.status === "paid" || (isProforma && paidAmount > 0)) {
+		if (
+			!isCorrection &&
+			(invoice.status === "paid" || (isProforma && paidAmount > 0))
+		) {
 			summary.paidAmount += receivableTotal;
 			summary.paidCount += 1;
-		} else if (!isProforma && invoice.status === "overdue") {
+		} else if (!isCorrection && !isProforma && invoice.status === "overdue") {
 			summary.overdueAmount += receivableBalance;
 			summary.overdueCount += 1;
-		} else if (!isProforma && pendingStatuses.has(invoice.status)) {
+		} else if (
+			!isCorrection &&
+			!isProforma &&
+			pendingStatuses.has(invoice.status)
+		) {
 			summary.openAmount += receivableBalance;
 			summary.openCount += 1;
 		}
 
 		currencySummaries.set(currency, summary);
 
-		if (invoice.status === "canceled") continue;
+		if (invoice.status === "canceled" || isCorrection) continue;
 
 		const date = new Date(invoice.issueDate);
 		if (Number.isNaN(date.getTime())) continue;
@@ -1335,6 +1358,42 @@ async function assertWorkspaceCustomer(
 	if (!data) throw new Error("Customer not found.");
 }
 
+async function assertCorrectionSource(
+	client: Supabase,
+	userId: string,
+	documentType: InvoiceDocumentType,
+	correctsInvoiceId?: string,
+	customerId?: string,
+): Promise<string | undefined> {
+	if (!isCorrectionDocumentType(documentType)) {
+		if (correctsInvoiceId) {
+			throw new Error(
+				"Only credit and debit notes can reference a source invoice.",
+			);
+		}
+		return undefined;
+	}
+	if (!correctsInvoiceId?.trim()) {
+		throw new Error(
+			"Select an issued standard invoice for this correction note.",
+		);
+	}
+	const source = await getById(client, userId, correctsInvoiceId);
+	if (
+		!source ||
+		source.documentType !== "standard" ||
+		source.status === "canceled" ||
+		!source.customerId ||
+		source.customerId !== customerId ||
+		!isInvoiceIssued(source)
+	) {
+		throw new Error(
+			"Correction source must be an issued standard invoice in this workspace.",
+		);
+	}
+	return source.id;
+}
+
 /**
  * B2 — customer required to leave Draft (SPEC §5.B row B2). A draft may
  * remain customer-less, but any transition out of Draft into an issued/
@@ -1405,6 +1464,7 @@ export async function assertSendCustomerGate(
 type DraftDoc = {
 	token: string;
 	documentType: InvoiceDocumentType;
+	correctsInvoiceId?: string;
 	shipmentDetails?: ShipmentDetails;
 	depositRequest?: DepositRequest;
 	invoiceNumber: string;
@@ -1459,6 +1519,7 @@ function docToInvoiceColumns(doc: DraftDoc) {
 	return {
 		token: doc.token,
 		document_type: doc.documentType,
+		corrects_invoice_id: doc.correctsInvoiceId ?? null,
 		shipment_details: json(doc.shipmentDetails ?? null),
 		invoice_number: doc.invoiceNumber,
 		customer_id: doc.customerId ?? null,
@@ -1531,6 +1592,13 @@ export async function createDraft(
 			throw new Error("Only draft invoices can be finalized.");
 		}
 	}
+	const correctsInvoiceId = await assertCorrectionSource(
+		client,
+		userId,
+		documentType,
+		args.correctsInvoiceId,
+		args.customerId,
+	);
 	await assertWorkspaceCustomer(client, workspaceId, args.customerId);
 	// WP8/C1: plan the number read-only (nothing consumed), validate, then
 	// commit it from the database allocator immediately before the write so
@@ -1587,6 +1655,7 @@ export async function createDraft(
 	const doc: DraftDoc = {
 		token: args.token,
 		documentType,
+		correctsInvoiceId,
 		shipmentDetails,
 		depositRequest,
 		invoiceNumber,
@@ -1712,6 +1781,13 @@ export async function autosaveDraft(
 	const normalizedCompliance = normalizeComplianceSnapshot(compliance);
 	const documentType = args.documentType ?? "standard";
 	const current = args.id ? await getById(client, userId, args.id) : null;
+	const correctsInvoiceId = await assertCorrectionSource(
+		client,
+		userId,
+		documentType,
+		args.correctsInvoiceId,
+		args.customerId,
+	);
 	await assertWorkspaceCustomer(client, workspaceId, args.customerId);
 	// WP8/C1: plan read-only, validate, commit the allocator's number right
 	// before the write (see createDraft).
@@ -1749,6 +1825,7 @@ export async function autosaveDraft(
 	const doc: DraftDoc = {
 		token: args.token,
 		documentType,
+		correctsInvoiceId,
 		shipmentDetails,
 		depositRequest,
 		invoiceNumber,
@@ -1902,6 +1979,13 @@ export async function save(
 	const compliance = args.compliance ?? defaultCompliance(args);
 	const normalizedCompliance = normalizeComplianceSnapshot(compliance);
 	const documentType = args.documentType ?? "standard";
+	const correctsInvoiceId = await assertCorrectionSource(
+		client,
+		userId,
+		documentType,
+		args.correctsInvoiceId,
+		args.customerId,
+	);
 	const shipmentDetails = normalizeShipmentDetails(
 		args.shipmentDetails,
 		documentType,
@@ -1934,6 +2018,7 @@ export async function save(
 	const patch = patchWithDerivedStatus(current, {
 		token: args.token,
 		documentType,
+		correctsInvoiceId,
 		shipmentDetails,
 		depositRequest,
 		invoiceNumber: args.invoiceNumber,
@@ -2776,6 +2861,7 @@ export async function duplicate(
 	const doc: DraftDoc = {
 		token: `pub-${crypto.randomUUID()}`,
 		documentType: source.documentType ?? "standard",
+		correctsInvoiceId: source.correctsInvoiceId,
 		shipmentDetails: source.shipmentDetails,
 		depositRequest: source.depositRequest,
 		invoiceNumber,

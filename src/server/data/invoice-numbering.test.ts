@@ -13,7 +13,12 @@ import {
 	sequenceFromInvoiceNumber,
 	workspaceNumberingLocked,
 } from "./invoice-numbering";
-import { mapInvoice, rowToInvoiceDoc } from "./invoices";
+import {
+	buildInvoiceListSummary,
+	mapInvoice,
+	mapPublicInvoice,
+	rowToInvoiceDoc,
+} from "./invoices";
 import { createFakeSupabase, type FakeTables } from "./testing/fake-db";
 
 /**
@@ -103,6 +108,13 @@ const MIGRATION_C1 = readFileSync(
 	),
 	"utf8",
 );
+const MIGRATION_B6 = readFileSync(
+	new URL(
+		"../../../supabase/migrations/20261023000000_einvoice_b6_document_types.sql",
+		import.meta.url,
+	),
+	"utf8",
+);
 const MIGRATION_C2_C3 = readFileSync(
 	new URL(
 		"../../../supabase/migrations/20261020000001_einvoice_c2_c3_invoice_lock_guard.sql",
@@ -179,6 +191,71 @@ describe("isInvoiceIssued (mirror of public.invoice_is_issued)", () => {
 });
 
 describe("mapInvoice exposes truthful delivery evidence", () => {
+	it("has a guarded reversible enum and issued-source down migration", () => {
+		expect(MIGRATION_B6).toContain(
+			"('standard', 'credit_note', 'debit_note', 'proforma')",
+		);
+		expect(MIGRATION_B6).toContain(
+			"Cannot rollback B6 while credit/debit notes exist",
+		);
+		expect(MIGRATION_B6).toContain("invoices_corrects_source_immutable");
+		expect(MIGRATION_B6).toContain("invoice_is_issued(old)");
+		expect(MIGRATION_B6).toContain(
+			"references public.invoices (id, workspace_id)",
+		);
+		expect(MIGRATION_B6).toContain("invoices_correction_source_type_check");
+	});
+
+	it("round-trips correction types and their private source reference", () => {
+		for (const documentType of ["credit_note", "debit_note"] as const) {
+			const mapped = mapInvoice(
+				rowToInvoiceDoc(
+					invoiceRow({
+						document_type: documentType,
+						corrects_invoice_id: "source-1",
+					}) as never,
+				),
+			);
+			expect(mapped.documentType).toBe(documentType);
+			expect(mapped.correctsInvoiceId).toBe("source-1");
+			expect(mapPublicInvoice(mapped)).not.toHaveProperty("correctsInvoiceId");
+		}
+	});
+
+	it("keeps correction values out of ordinary receivable and revenue totals", () => {
+		const summary = buildInvoiceListSummary([
+			{
+				documentType: "credit_note",
+				status: "paid",
+				total: 500,
+				balance: 0,
+				paymentAmount: 500,
+				currency: "NGN",
+				issueDate: "2026-01-01",
+			},
+			{
+				documentType: "debit_note",
+				status: "unpaid",
+				total: 900,
+				balance: 900,
+				paymentAmount: 0,
+				currency: "NGN",
+				issueDate: "2026-01-01",
+			},
+		]);
+		expect(summary.currencySummaries[0]).toMatchObject({
+			paidAmount: 0,
+			openAmount: 0,
+			overdueAmount: 0,
+		});
+		expect(summary.paymentScore.status).toBe("no_data");
+		expect(
+			summary.chartDataByCurrency.NGN?.every(
+				(point) => point.paidRevenue === 0 && point.unpaidRevenue === 0,
+			),
+		).toBe(true);
+	});
+
 	it("does not fabricate deliveredAt for a created-but-unsent invoice", () => {
 		// Regression pin: the mapped `deliveredAt` used to fall back to
 		// `updatedAt` for any stored status !== "draft", so every ordinary
