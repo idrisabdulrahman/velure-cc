@@ -23,7 +23,7 @@ Status: pending | ready | implementing | auditing | fixing | merged | blocked
 | WP12 | D8 | WP10,WP5 | **merged** (audit PASS after 3 fix rounds; merge commit 5a90fd2; branch commit f8a08e9; integration 587 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp12 | 5164b35 | 4 | No open findings; no live Supabase RLS/provider checks available or needed for this pure validator and scoped loader |
 | WP13 | D2,D10 | WP10,WP11 | **merged** (audit PASS; merge commit e011da7; branch commit a8b0ded; integration 598 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp13 | 8baeb3d | 1 | No open findings; no live provider/Supabase test is applicable (mock-only adapter) |
 | WP14 | D4,D6,D9 | WP13 (merged) | **merged** (round 3 PASS; branch commit 74b83d6; merge commit d8cbce0; integration suite 608 passed/86 skipped) | einv/wp14 | 42b0c8f | 3 | No open code findings; live RLS and deployment cron wiring remain unverified |
-| WP15 | H2 | WP13 | **auditing** | einv/wp15 | 259d45c | 1 | — |
+| WP15 | H2 | WP13 | **fixing** (round 1 MEDIUM: audit sanitizer misses snake_case secret keys) | einv/wp15 | 259d45c | 1 | Normalize credential key names before redaction and add snake_case regression cases |
 | WP16 | D5,D7,C4 | WP14 | pending | — | — | 0 | — |
 
 ## Coordination notes (wave-1 session, 2026-10-18 evening)
