@@ -192,8 +192,7 @@ function seedTables(): FakeTables {
 				delivered_at: "2026-01-05T00:00:00.000Z",
 				finalized_at: "2026-01-05T00:00:00.000Z",
 			}),
-			// Issued invoice WITH a linked buyer — its link must survive edits
-			// (audit round-2, finding 2).
+			// Issued invoice WITH a linked buyer.
 			invoiceRow("inv-a-issued-linked", WS_A, {
 				invoice_number: "INV-2026-0042",
 				customer_id: CLIENT_A,
@@ -201,6 +200,13 @@ function seedTables(): FakeTables {
 				status: "unpaid",
 				delivered_at: "2026-01-05T00:00:00.000Z",
 				finalized_at: "2026-01-05T00:00:00.000Z",
+			}),
+			// Legacy non-draft row without a delivery/payment issuance marker.
+			invoiceRow("inv-a-legacy-unissued-linked", WS_A, {
+				invoice_number: "INV-2026-0044",
+				customer_id: CLIENT_A,
+				customer_name: "Client A",
+				status: "unpaid",
 			}),
 			// Workspace B draft.
 			invoiceRow("inv-b-draft", WS_B, {
@@ -525,11 +531,9 @@ describe("tenant scoping of the gate", () => {
 });
 
 // Audit round-2, finding 2 (LOW): `save()` patched `customer_id` straight
-// from `args.customerId`, and the details-sheet payload omits `customerId`
-// entirely — an issued invoice that HAD passed the B2 gate could silently
-// lose its buyer link on the next edit. The gate makes the link load
-// bearing, so a non-Draft invoice now threads the stored id and refuses an
-// explicit clear.
+// from `args.customerId`, and the details-sheet payload omits `customerId`.
+// WP8 now blocks all issued edits; this test pins the same buyer-link guard
+// for legacy non-draft rows that have no delivery/payment issuance marker.
 describe("save() buyer-link guard", () => {
 	const saveInput = {
 		token: "pub-token-edit",
@@ -541,23 +545,27 @@ describe("save() buyer-link guard", () => {
 		lineItems: [{ id: "li-1", name: "Service", quantity: 1, price: 100 }],
 	};
 
-	it("threads the stored buyer link when an issued save omits customerId", async () => {
-		await save(client, USER_A, { ...saveInput, id: "inv-a-issued-linked" });
-		expect(row("inv-a-issued-linked")?.customer_id).toBe(CLIENT_A);
-		// The edit keeps the invoice issued (delivered_at + due 2099 → unpaid).
-		expect(row("inv-a-issued-linked")?.status).toBe("unpaid");
+	it("threads the stored buyer link when a legacy non-draft save omits customerId", async () => {
+		await save(client, USER_A, {
+			...saveInput,
+			invoiceNumber: "INV-2026-0044",
+			id: "inv-a-legacy-unissued-linked",
+		});
+		expect(row("inv-a-legacy-unissued-linked")?.customer_id).toBe(CLIENT_A);
+		expect(row("inv-a-legacy-unissued-linked")?.status).toBe("unpaid");
 	});
 
-	it("refuses an explicit clear of the buyer link on an issued invoice", async () => {
+	it("refuses an explicit clear of a legacy non-draft buyer link", async () => {
 		await expect(
 			save(client, USER_A, {
 				...saveInput,
-				id: "inv-a-issued-linked",
+				invoiceNumber: "INV-2026-0044",
+				id: "inv-a-legacy-unissued-linked",
 				customerId: "",
 			}),
 		).rejects.toThrow(CUSTOMER_LINK_CLEARED_ON_ISSUED_MESSAGE);
-		expect(row("inv-a-issued-linked")?.customer_id).toBe(CLIENT_A);
-		expect(row("inv-a-issued-linked")?.status).toBe("unpaid");
+		expect(row("inv-a-legacy-unissued-linked")?.customer_id).toBe(CLIENT_A);
+		expect(row("inv-a-legacy-unissued-linked")?.status).toBe("unpaid");
 	});
 
 	it("still lets a draft drop its buyer link (buyer-less drafts stay legal)", async () => {

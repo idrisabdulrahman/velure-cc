@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { recordInvoiceAudit } from "./data/audit";
 import { mapInvoice, rowToInvoiceDoc } from "./data/invoices";
 import { getServerEnv } from "./env";
 import { renderInvoicePdf } from "./pdf";
@@ -114,6 +115,36 @@ export async function dispatchScheduledInvoiceEmails(now = new Date()) {
 				sent_at: timestamp,
 				public_url: `${getServerEnv("SITE_URL") ?? ""}/i/${invoice.token}`,
 			} as never);
+			// C3: the scheduled send is this invoice's first crossing into
+			// issued (delivered_at + lifecycle.sentAt are set above), so it is
+			// logged as an issuance through the ONE audit service. This is a
+			// system job: the owner's active workspace may not match the row,
+			// hence the server-only `workspaceId` option. Nested try/catch on
+			// purpose — an audit failure must never fall into the reschedule
+			// branch below, which would re-send an email that already went out.
+			try {
+				await recordInvoiceAudit(
+					client,
+					String(row.user_id),
+					{
+						action: "invoice.send",
+						resourceId: invoice.id,
+						actor: { type: "system", id: "invoice-mailer:scheduled" },
+						before: { status: row.status, scheduledAt: row.scheduled_at },
+						after: {
+							status: "unpaid",
+							deliveredAt: timestamp,
+							providerMessageId: providerMessageId ?? null,
+						},
+						message: "Scheduled invoice email sent (system job).",
+					},
+					{ workspaceId: String(row.workspace_id) },
+				);
+			} catch {
+				// The send itself succeeded; the DB triggers still refuse any
+				// later mutation of this now-issued row, so losing only the
+				// audit row is the least-bad outcome here.
+			}
 			sent++;
 		} catch {
 			await client

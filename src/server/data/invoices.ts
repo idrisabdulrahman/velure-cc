@@ -6,11 +6,18 @@ import {
 import type { Database, Json } from "#/types/database.types";
 import { type InvoiceAuditWriter, recordInvoiceAudit } from "./audit-client";
 import {
+	assertInvoiceNumberAvailable,
+	candidateInvoiceNumber,
+	commitInvoiceNumber,
+	isInvoiceIssued,
+	planInvoiceNumber,
+	reserveInvoiceNumber,
+} from "./invoice-numbering";
+import {
 	assertValidRcNumber,
 	assertValidTin,
 	defaultTaxTreatmentForSellerTaxStatus,
 	defaultWithholdingSelection,
-	formatInvoiceNumber,
 	NIGERIA_FOREIGN_CURRENCY_WARNING,
 	NIGERIA_TAX_RULE_SET_VERSION,
 	NIGERIA_VAT_RATE,
@@ -574,165 +581,15 @@ export function assertInvoiceInput(args: {
 // Invoice number generation
 // ---------------------------------------------------------------------------
 
-function sequenceFromInvoiceNumber(
-	invoiceNumber: string,
-	prefix: string,
-	year: number,
-) {
-	const match = invoiceNumber.match(
-		new RegExp(`^${prefix}-(\\d{4})-(\\d{4,6})$`),
-	);
-	if (!match || Number(match[1]) !== year) return null;
-	const sequence = Number(match[2]);
-	return Number.isFinite(sequence) ? sequence : null;
-}
-
-async function getWorkspaceNumbering(client: Supabase, workspaceId: string) {
-	const { data, error } = await client
-		.from("workspaces")
-		.select(
-			"name, invoice_number_mode, invoice_number_prefix, next_invoice_sequence",
-		)
-		.eq("id", workspaceId)
-		.maybeSingle();
-	if (error) throw error;
-	return data;
-}
-
-async function nextInvoiceNumberForWorkspace(
-	client: Supabase,
-	workspaceId: string,
-	documentType: InvoiceDocumentType = "standard",
-) {
-	const workspace = await getWorkspaceNumbering(client, workspaceId);
-	const prefixSource =
-		documentType === "proforma"
-			? "PF"
-			: workspace?.invoice_number_mode === "business_name"
-				? workspace?.name
-				: workspace?.invoice_number_prefix;
-	const prefix =
-		String(prefixSource ?? "INV")
-			.trim()
-			.toUpperCase()
-			.replace(/[^A-Z0-9]/g, "")
-			.slice(0, 12) || "INV";
-
-	const { data: invoices, error } = await client
-		.from("invoices")
-		.select("invoice_number")
-		.eq("workspace_id", workspaceId);
-	if (error) throw error;
-
-	const year = new Date().getFullYear();
-	const pattern = new RegExp(`^${prefix}-(\\d{4})-(\\d{4,6})$`);
-	const maxSequence = (invoices ?? []).reduce((max: number, invoice) => {
-		const match = String(invoice.invoice_number).match(pattern);
-		if (!match || Number(match[1]) !== year) return max;
-		return Math.max(max, Number(match[2]));
-	}, 0);
-	const sequence = Math.max(
-		Number(workspace?.next_invoice_sequence ?? 1),
-		maxSequence + 1,
-	);
-	return {
-		prefix,
-		year,
-		sequence,
-		invoiceNumber:
-			prefix === "INV"
-				? formatInvoiceNumber(year, sequence)
-				: `${prefix}-${year}-${String(sequence).padStart(4, "0")}`,
-		nextSequence: sequence + 1,
-	};
-}
-
-function invoiceNumberForSequence(
-	prefix: string,
-	year: number,
-	sequence: number,
-) {
-	return prefix === "INV"
-		? formatInvoiceNumber(year, sequence)
-		: `${prefix}-${year}-${String(sequence).padStart(4, "0")}`;
-}
-
-async function assertUniqueInvoiceNumber(
-	client: Supabase,
-	args: {
-		workspaceId: string;
-		invoiceNumber: string;
-		exceptId?: string;
-	},
-) {
-	const { data, error } = await client
-		.from("invoices")
-		.select("id")
-		.eq("workspace_id", args.workspaceId)
-		.eq("invoice_number", args.invoiceNumber)
-		.limit(1)
-		.maybeSingle();
-	if (error) throw error;
-	if (data && data.id !== args.exceptId) {
-		throw new Error("Invoice number already exists in this workspace.");
-	}
-}
-
-async function prepareInvoiceNumberForInsert(
-	client: Supabase,
-	args: {
-		workspaceId: string;
-		requestedInvoiceNumber: string;
-		documentType: InvoiceDocumentType;
-		exceptId?: string;
-	},
-) {
-	const requestedInvoiceNumber = args.requestedInvoiceNumber.trim();
-	const generated = await nextInvoiceNumberForWorkspace(
-		client,
-		args.workspaceId,
-		args.documentType,
-	);
-	const hasValidRequestedNumber = /^[A-Z0-9]{2,12}-\d{4}-\d{4,6}$/.test(
-		requestedInvoiceNumber,
-	);
-	let existing: { id: string } | null = null;
-	if (hasValidRequestedNumber) {
-		const { data, error } = await client
-			.from("invoices")
-			.select("id")
-			.eq("workspace_id", args.workspaceId)
-			.eq("invoice_number", requestedInvoiceNumber)
-			.limit(1)
-			.maybeSingle();
-		if (error) throw error;
-		existing = data;
-	}
-	const requestedCollides = existing && existing.id !== args.exceptId;
-
-	if (
-		!hasValidRequestedNumber ||
-		requestedCollides ||
-		requestedInvoiceNumber === generated.invoiceNumber
-	) {
-		return generated;
-	}
-
-	const requestedSequence = sequenceFromInvoiceNumber(
-		requestedInvoiceNumber,
-		generated.prefix,
-		generated.year,
-	);
-
-	return {
-		...generated,
-		invoiceNumber: requestedInvoiceNumber,
-		nextSequence:
-			requestedSequence !== null && requestedSequence >= generated.sequence
-				? requestedSequence + 1
-				: undefined,
-	};
-}
+// ---------------------------------------------------------------------------
+// Invoice numbering: MOVED to ./invoice-numbering (WP8/C1). The database is
+// the number authority (allocate_invoice_number RPC + unique index); the
+// plan/commit helpers and the issued predicate live there and are imported
+// above. `invoiceHasExternalHistory` below stays: it is the broader
+// cleanup-routing predicate (it also covers firstViewedAt), while
+// `isInvoiceIssued` (imported) is the C2/C3 lock predicate that mirrors
+// public.invoice_is_issued 1:1.
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Row <-> doc conversion + mapInvoice
@@ -843,7 +700,18 @@ export function rowToInvoiceDoc(row: InvoiceRow) {
 export function mapInvoice(invoice: any): Invoice {
 	const total = invoiceAmount(invoice);
 	const paymentAmount = legacyPaymentAmount(invoice, total);
-	const deliveredAt = deliveredAtForInvoice(invoice);
+	// WP8/C2: expose the TRUTHFUL delivery evidence only (stored `delivered_at`
+	// plus lifecycle delivery), mirroring `public.invoice_is_issued`
+	// (20261020000000). The status-based `updatedAt` fallback in
+	// `deliveredAtForInvoice` fabricates a delivery time for every created
+	// but unsent invoice (stored status "unpaid"), which would make the
+	// C2/C3 lock predicate treat ordinary drafts as issued. That fallback
+	// stays where a delivery timestamp must be STAMPED or derived for
+	// display — never in the mapped field the lock predicate reads.
+	const deliveredAt =
+		invoice.deliveredAt ??
+		invoice.lifecycle?.emailDeliveredAt ??
+		invoice.lifecycle?.sentAt;
 	const status = getDerivedInvoiceStatus(invoice);
 
 	return {
@@ -1634,23 +1502,40 @@ export async function createDraft(
 			throw new Error("Draft invoice not found.");
 		}
 		if (getDerivedInvoiceStatus(existingDraft) !== "draft") {
+			if (isInvoiceIssued(existingDraft)) {
+				// C3: a blocked edit attempt on an issued invoice is logged
+				// before it is refused.
+				await recordInvoiceAudit(client, userId, {
+					action: "invoice.edit",
+					resourceId: args.id,
+					before: existingDraft,
+					after: args,
+					message: "Blocked: issued invoices are immutable.",
+				});
+			}
 			throw new Error("Only draft invoices can be finalized.");
 		}
 	}
 	await assertWorkspaceCustomer(client, workspaceId, args.customerId);
-	const preparedNumber =
-		existingDraft && !args.invoiceNumber.trim()
-			? {
-					invoiceNumber: existingDraft.invoiceNumber,
-					nextSequence: undefined,
-				}
-			: await prepareInvoiceNumberForInsert(client, {
-					workspaceId,
-					requestedInvoiceNumber: args.invoiceNumber,
-					documentType,
-					exceptId: args.id,
-				});
-	const invoiceNumber = preparedNumber.invoiceNumber;
+	// WP8/C1: plan the number read-only (nothing consumed), validate, then
+	// commit it from the database allocator immediately before the write so
+	// a validation failure never burns a sequence value. An existing draft
+	// keeps its number unless a new one is requested.
+	const keepExistingNumber =
+		Boolean(existingDraft) && !args.invoiceNumber.trim();
+	const numberPlan = keepExistingNumber
+		? null
+		: await planInvoiceNumber(client, {
+				workspaceId,
+				documentType,
+				requestedInvoiceNumber: args.invoiceNumber,
+				exceptId: args.id,
+			});
+	const numberCandidate = numberPlan
+		? candidateInvoiceNumber(numberPlan)
+		: null;
+	const invoiceNumber =
+		numberCandidate?.invoiceNumber ?? existingDraft?.invoiceNumber ?? "";
 	const normalizedCompliance = normalizeComplianceSnapshot(compliance);
 	assertInvoiceInput({
 		invoiceNumber,
@@ -1726,6 +1611,16 @@ export async function createDraft(
 		createdAt: existingDraft?.createdAt ?? now,
 		updatedAt: now,
 	};
+	if (numberPlan && numberCandidate) {
+		// WP8/C1: consume the number from the database allocator right before
+		// the write; under concurrency the committed number is authoritative
+		// and may differ from the planned candidate.
+		doc.invoiceNumber = await commitInvoiceNumber(
+			client,
+			numberPlan,
+			numberCandidate,
+		);
+	}
 	const status = getDerivedInvoiceStatus(doc);
 	// B2: finalizing a draft always leaves Draft — a customer record is
 	// required (all deliveryTypes: create, create_and_send, scheduled).
@@ -1760,13 +1655,6 @@ export async function createDraft(
 			.single();
 		if (error) throw error;
 		id = data.id;
-	}
-
-	if (preparedNumber.nextSequence) {
-		await client
-			.from("workspaces")
-			.update({ next_invoice_sequence: preparedNumber.nextSequence })
-			.eq("id", workspaceId);
 	}
 
 	const invoice = mapInvoice({
@@ -1810,19 +1698,22 @@ export async function autosaveDraft(
 	const documentType = args.documentType ?? "standard";
 	const current = args.id ? await getById(client, userId, args.id) : null;
 	await assertWorkspaceCustomer(client, workspaceId, args.customerId);
-	const preparedNumber =
-		current && !args.invoiceNumber.trim()
-			? {
-					invoiceNumber: current.invoiceNumber,
-					nextSequence: undefined,
-				}
-			: await prepareInvoiceNumberForInsert(client, {
-					workspaceId,
-					requestedInvoiceNumber: args.invoiceNumber,
-					documentType,
-					exceptId: args.id,
-				});
-	const invoiceNumber = preparedNumber.invoiceNumber;
+	// WP8/C1: plan read-only, validate, commit the allocator's number right
+	// before the write (see createDraft).
+	const keepExistingNumber = Boolean(current) && !args.invoiceNumber.trim();
+	const numberPlan = keepExistingNumber
+		? null
+		: await planInvoiceNumber(client, {
+				workspaceId,
+				documentType,
+				requestedInvoiceNumber: args.invoiceNumber,
+				exceptId: args.id,
+			});
+	const numberCandidate = numberPlan
+		? candidateInvoiceNumber(numberPlan)
+		: null;
+	const invoiceNumber =
+		numberCandidate?.invoiceNumber ?? current?.invoiceNumber ?? "";
 	const shipmentDetails = normalizeShipmentDetails(
 		args.shipmentDetails,
 		documentType,
@@ -1881,6 +1772,14 @@ export async function autosaveDraft(
 		createdAt: now,
 		updatedAt: now,
 	};
+	if (numberPlan && numberCandidate) {
+		// WP8/C1: the allocator's number wins under concurrency.
+		doc.invoiceNumber = await commitInvoiceNumber(
+			client,
+			numberPlan,
+			numberCandidate,
+		);
+	}
 	const columns = {
 		workspace_id: workspaceId,
 		user_id: userId,
@@ -1894,6 +1793,16 @@ export async function autosaveDraft(
 			throw new Error("Draft invoice not found.");
 		}
 		if (getDerivedInvoiceStatus(current) !== "draft") {
+			if (isInvoiceIssued(current)) {
+				// C3: log the blocked edit attempt on an issued invoice.
+				await recordInvoiceAudit(client, userId, {
+					action: "invoice.edit",
+					resourceId: args.id,
+					before: current,
+					after: args,
+					message: "Blocked: issued invoices are immutable.",
+				});
+			}
 			throw new Error("Only draft invoices can be autosaved.");
 		}
 		const { error } = await client
@@ -1914,13 +1823,6 @@ export async function autosaveDraft(
 			.single();
 		if (error) throw error;
 		id = data.id;
-	}
-
-	if (preparedNumber.nextSequence) {
-		await client
-			.from("workspaces")
-			.update({ next_invoice_sequence: preparedNumber.nextSequence })
-			.eq("id", workspaceId);
 	}
 
 	const invoice = mapInvoice({
@@ -1949,14 +1851,24 @@ export async function save(
 	if (!workspaceId) throw new Error("No active workspace.");
 	const current = await getById(client, userId, args.id);
 	if (!current) throw new Error("Invoice not found.");
-
-	// B2 (audit round-2, LOW): once an invoice is issued its buyer link is
-	// load bearing — the details-sheet save payload omits `customerId`
-	// entirely, so patching straight from `args.customerId` used to write
-	// NULL behind the gate. On a non-Draft invoice an OMITTED id threads the
-	// stored one, and an explicit clear (null / blank) is refused outright.
-	// Drafts keep today's semantics: a buyer-less draft stays legal.
 	const currentStatus = getDerivedInvoiceStatus(current);
+	if (isInvoiceIssued(current)) {
+		// C2/C3: issued invoices are immutable — log the blocked attempt,
+		// then refuse. Only soft cancellation is allowed past issuance.
+		await recordInvoiceAudit(client, userId, {
+			action: "invoice.edit",
+			resourceId: args.id,
+			before: current,
+			after: args,
+			message: "Blocked: issued invoices are immutable.",
+		});
+		throw new Error(
+			"Issued invoices are immutable; only cancellation is allowed.",
+		);
+	}
+
+	// B2: keep a stored buyer when the details-sheet payload omits it, and
+	// reject an explicit buyer clear on a non-draft invoice.
 	const requestedCustomerId = args.customerId?.trim();
 	if (
 		currentStatus !== "draft" &&
@@ -1970,7 +1882,7 @@ export async function save(
 		currentStatus === "draft" || requestedCustomerId !== undefined
 			? args.customerId
 			: current.customerId;
-	await assertWorkspaceCustomer(client, workspaceId, args.customerId);
+	await assertWorkspaceCustomer(client, workspaceId, customerId);
 
 	const compliance = args.compliance ?? defaultCompliance(args);
 	const normalizedCompliance = normalizeComplianceSnapshot(compliance);
@@ -1990,10 +1902,18 @@ export async function save(
 		templateSettings: args.templateSettings,
 		compliance: normalizedCompliance,
 	});
-	await assertUniqueInvoiceNumber(client, {
+	await assertInvoiceNumberAvailable(client, {
 		workspaceId,
 		invoiceNumber: args.invoiceNumber,
 		exceptId: args.id,
+	});
+	// WP8/C1: keep the allocator's counter past a user-chosen number so a
+	// later generated number can never collide with it. Idempotent, and a
+	// no-op for numbers outside the PREFIX-YYYY-NNNN format (the unique
+	// index still backstops exact duplicates).
+	await reserveInvoiceNumber(client, {
+		workspaceId,
+		invoiceNumber: args.invoiceNumber,
 	});
 
 	const patch = patchWithDerivedStatus(current, {
@@ -2077,6 +1997,18 @@ export async function saveDraftSettings(
 	if (!workspaceId) throw new Error("No active workspace.");
 	const current = await getById(client, userId, args.id);
 	if (!current) throw new Error("Invoice not found.");
+	if (isInvoiceIssued(current)) {
+		await recordInvoiceAudit(client, userId, {
+			action: "invoice.edit",
+			resourceId: args.id,
+			before: current,
+			after: args,
+			message: "Blocked: issued invoices are immutable.",
+		});
+		throw new Error(
+			"Issued invoices are immutable; only cancellation is allowed.",
+		);
+	}
 
 	const patch = patchWithDerivedStatus(current, {
 		invoiceSize: args.invoiceSize,
@@ -2244,8 +2176,14 @@ export async function updateStatus(
 			.eq("id", args.id)
 			.eq("workspace_id", workspaceId);
 		if (error) throw error;
+		// C3: money crossing into a not-yet-issued invoice takes it past the
+		// draft boundary — that first crossing is an issuance and is logged as
+		// one; settling an already-issued invoice stays an edit. Marking an
+		// invoice paid always makes it issued (status = 'paid'), so the
+		// crossing reduces to "was not issued before this write".
+		const crossingIntoIssued = !isInvoiceIssued(current);
 		await recordInvoiceAudit(client, userId, {
-			action: "invoice.edit",
+			action: crossingIntoIssued ? "invoice.send" : "invoice.edit",
 			resourceId: args.id,
 			before: current,
 			after: {
@@ -2255,12 +2193,30 @@ export async function updateStatus(
 				paymentReference:
 					args.paymentReference ?? current.paymentReference ?? null,
 			},
-			message: "Invoice marked as paid.",
+			message: crossingIntoIssued
+				? "Invoice issued when payment was recorded."
+				: "Invoice marked as paid.",
 		});
 		return { ok: true };
 	}
 
 	if (args.status === "unpaid" || args.status === "overdue") {
+		if (current.status === "paid") {
+			// C2/C3: the database trigger (20261020000001) refuses to move a
+			// paid invoice to any status but paid/canceled; mirror it here so
+			// the caller gets a friendly refusal and the blocked attempt is
+			// logged instead of a raw insufficient_privilege from Postgres.
+			await recordInvoiceAudit(client, userId, {
+				action: "invoice.edit",
+				resourceId: args.id,
+				before: current,
+				after: { status: args.status },
+				message: "Blocked: paid invoices cannot be marked unpaid.",
+			});
+			throw new Error(
+				"Paid invoices cannot be marked unpaid; corrections go through credit or debit notes.",
+			);
+		}
 		const deliveredAt = deliveredAtForInvoice(current) ?? Date.now();
 		const patch = patchWithDerivedStatus(current, {
 			deliveredAt,
@@ -2283,17 +2239,37 @@ export async function updateStatus(
 			.eq("id", args.id)
 			.eq("workspace_id", workspaceId);
 		if (error) throw error;
+		// C3: crossing into "issued" for the first time is an issuance and is
+		// logged as one; re-marking an already-issued invoice stays an edit.
+		const crossingIntoIssued =
+			!isInvoiceIssued(current) && isInvoiceIssued(patch);
 		await recordInvoiceAudit(client, userId, {
-			action: "invoice.edit",
+			action: crossingIntoIssued ? "invoice.send" : "invoice.edit",
 			resourceId: args.id,
 			before: current,
 			after: { status: patch.status, deliveredAt },
-			message: `Invoice marked as ${args.status}.`,
+			message: crossingIntoIssued
+				? `Invoice issued as ${args.status}.`
+				: `Invoice marked as ${args.status}.`,
 		});
 		return { ok: true };
 	}
 
 	if (args.status === "draft") {
+		if (isInvoiceIssued(current)) {
+			// C2/C3: un-issuing is refused and the blocked attempt logged;
+			// issued invoices are corrected through cancellation/notes.
+			await recordInvoiceAudit(client, userId, {
+				action: "invoice.edit",
+				resourceId: args.id,
+				before: current,
+				after: { status: "draft" },
+				message: "Blocked: issued invoices cannot be reverted to draft.",
+			});
+			throw new Error(
+				"Issued invoices cannot be reverted to draft; cancel instead.",
+			);
+		}
 		const { error } = await client
 			.from("invoices")
 			.update(
@@ -2329,6 +2305,17 @@ export async function cancelSchedule(
 	if (!invoice) throw new Error("Scheduled invoice not found.");
 	if (!invoice.scheduledAt || !invoice.scheduleVersion)
 		throw new Error("Invoice is not scheduled.");
+	if (isInvoiceIssued(invoice)) {
+		// C2: schedule columns are frozen once the invoice has been issued.
+		await recordInvoiceAudit(client, userId, {
+			action: "invoice.edit",
+			resourceId: invoiceId,
+			before: invoice,
+			after: { scheduledAt: null },
+			message: "Blocked: issued invoices cannot be unscheduled.",
+		});
+		throw new Error("Issued invoices cannot be unscheduled; cancel instead.");
+	}
 
 	const { error } = await client
 		.from("invoices")
@@ -2366,6 +2353,17 @@ export async function reschedule(
 	if (!invoice) throw new Error("Scheduled invoice not found.");
 	if (!invoice.scheduledAt || !invoice.scheduleVersion)
 		throw new Error("Invoice is not scheduled.");
+	if (isInvoiceIssued(invoice)) {
+		// C2: schedule columns are frozen once the invoice has been issued.
+		await recordInvoiceAudit(client, userId, {
+			action: "invoice.edit",
+			resourceId: args.invoiceId,
+			before: invoice,
+			after: { scheduledAt: args.scheduledAt },
+			message: "Blocked: issued invoices cannot be rescheduled.",
+		});
+		throw new Error("Issued invoices cannot be rescheduled; cancel instead.");
+	}
 
 	const now = Date.now();
 	const scheduledAt = parseFutureSchedule(args.scheduledAt, now);
@@ -2438,8 +2436,13 @@ function cleanupSummary(invoice: any, action: "hard-delete" | "archive") {
 
 async function cleanupPlanForInvoice(client: Supabase, invoice: any) {
 	const hasRelatedRecords = await invoiceHasRelatedRecords(client, invoice.id);
+	// Belt and braces: `isInvoiceIssued` (the C2/C3 lock predicate, mirrored
+	// from public.invoice_is_issued) joins the broader external-history scan
+	// so no issued row can ever be routed to hard-delete.
 	const hasExternalHistory =
-		hasRelatedRecords || invoiceHasExternalHistory(invoice);
+		hasRelatedRecords ||
+		invoiceHasExternalHistory(invoice) ||
+		isInvoiceIssued(invoice);
 
 	if (
 		["draft", "canceled"].includes(getDerivedInvoiceStatus(invoice)) &&
@@ -2502,6 +2505,16 @@ export async function remove(
 
 	const plan = await cleanupPlanForInvoice(client, invoice);
 	if (plan.action !== "hard-delete") {
+		if (isInvoiceIssued(invoice)) {
+			// C3: the blocked delete attempt is logged before it is refused.
+			await recordInvoiceAudit(client, userId, {
+				action: "invoice.delete",
+				resourceId: id,
+				before: invoice,
+				after: null,
+				message: "Blocked: issued invoices cannot be deleted; cancel instead.",
+			});
+		}
 		throw new Error("Only untouched draft invoices can be hard deleted.");
 	}
 
@@ -2511,6 +2524,16 @@ export async function remove(
 		.eq("id", id)
 		.eq("workspace_id", workspaceId);
 	if (error) throw error;
+	await recordInvoiceAudit(client, userId, {
+		action: "invoice.delete",
+		// The row is gone: the audit route resolves an `invoice` entry's
+		// resourceId in the caller's workspace and would answer 404 for a
+		// deleted id (tenancy check), so the identity travels in the payload.
+		resourceId: null,
+		before: { id, invoiceNumber: invoice.invoiceNumber },
+		after: null,
+		message: "Hard deleted an untouched draft invoice.",
+	});
 	return { ok: true };
 }
 
@@ -2545,6 +2568,16 @@ export async function bulkDeleteOrArchive(
 			.eq("id", item.id)
 			.eq("workspace_id", workspaceId);
 		if (error) throw error;
+		// C3: every hard delete leaves an audit row. `resourceId` stays null —
+		// the row is gone, and the audit route refuses to reference invoices
+		// it can no longer resolve in the caller's workspace (404).
+		await recordInvoiceAudit(client, userId, {
+			action: "invoice.delete",
+			resourceId: null,
+			before: { id: item.id, invoiceNumber: item.invoiceNumber },
+			after: null,
+			message: "Hard deleted an untouched draft invoice (bulk cleanup).",
+		});
 	}
 
 	for (const item of preview.archive) {
@@ -2561,6 +2594,24 @@ export async function bulkDeleteOrArchive(
 			.eq("id", item.id)
 			.eq("workspace_id", workspaceId);
 		if (error) throw error;
+		// Archiving is the soft-cancel path for issued invoices (C3): the row
+		// and its number stay, so it is logged as a cancellation. `resourceId`
+		// stays null — archiving sets `deleted_at`, and the audit route
+		// resolves an `invoice` entry's id through a lookup that filters
+		// `deleted_at IS NULL`, so a soft-deleted id would answer 404, throw,
+		// and abort the bulk loop with the remaining items unprocessed (same
+		// reason as the hard-delete branch above).
+		await recordInvoiceAudit(client, userId, {
+			action: "invoice.cancel",
+			resourceId: null,
+			before: {
+				id: item.id,
+				invoiceNumber: item.invoiceNumber,
+				status: item.status,
+			},
+			after: { status: "canceled" },
+			message: "Archived invoice (bulk cleanup).",
+		});
 	}
 
 	return {
@@ -2591,38 +2642,57 @@ export async function renumberInvoices(
 			continue;
 		}
 
-		const generated = await nextInvoiceNumberForWorkspace(
-			client,
+		if (isInvoiceIssued(invoice)) {
+			// C2/C3: an issued invoice's number is immutable — log the blocked
+			// attempt, keep the row's number, and report it as skipped.
+			await recordInvoiceAudit(client, userId, {
+				action: "invoice.edit",
+				resourceId: id,
+				before: { invoiceNumber: invoice.invoiceNumber },
+				after: null,
+				message: "Blocked: issued invoices cannot be renumbered.",
+			});
+			skipped.push({
+				id,
+				reason: "Issued invoices cannot be renumbered.",
+			});
+			continue;
+		}
+
+		// WP8/C1: the replacement number comes from the database allocator,
+		// which also advances the workspace's preview floor.
+		const plan = await planInvoiceNumber(client, {
 			workspaceId,
-			invoice.documentType ?? "standard",
+			documentType: invoice.documentType ?? "standard",
+		});
+		const newInvoiceNumber = await commitInvoiceNumber(
+			client,
+			plan,
+			candidateInvoiceNumber(plan),
 		);
 		const now = Date.now();
 		const { error } = await client
 			.from("invoices")
 			.update(
 				toUpdate({
-					invoice_number: generated.invoiceNumber,
+					invoice_number: newInvoiceNumber,
 					updated_at: iso(now),
 				}),
 			)
 			.eq("id", id)
 			.eq("workspace_id", workspaceId);
 		if (error) throw error;
-		await client
-			.from("workspaces")
-			.update({ next_invoice_sequence: generated.nextSequence })
-			.eq("id", workspaceId);
 		await recordInvoiceAudit(client, userId, {
 			action: "invoice.edit",
 			resourceId: id,
 			before: { invoiceNumber: invoice.invoiceNumber },
-			after: { invoiceNumber: generated.invoiceNumber },
+			after: { invoiceNumber: newInvoiceNumber },
 			message: "Renumbered invoice.",
 		});
 		renumbered.push({
 			id,
 			oldInvoiceNumber: invoice.invoiceNumber,
-			newInvoiceNumber: generated.invoiceNumber,
+			newInvoiceNumber,
 		});
 	}
 
@@ -2654,6 +2724,15 @@ export async function deleteEmptyDrafts(
 		if (error) throw error;
 	}
 
+	if (candidates.length > 0) {
+		// C3: batch cleanup leaves one audit row for the deletion run.
+		await recordInvoiceAudit(client, userId, {
+			action: "invoice.delete",
+			after: { deleted: candidates.length },
+			message: `Hard deleted ${candidates.length} empty draft(s).`,
+		});
+	}
+
 	return { deleted: candidates.length };
 }
 
@@ -2667,10 +2746,15 @@ export async function duplicate(
 	const source = await getById(client, userId, id);
 	if (!source) throw new Error("Invoice not found.");
 
-	const generated = await nextInvoiceNumberForWorkspace(
-		client,
+	// WP8/C1: the duplicate's number is allocated by the database.
+	const plan = await planInvoiceNumber(client, {
 		workspaceId,
-		source.documentType ?? "standard",
+		documentType: source.documentType ?? "standard",
+	});
+	const invoiceNumber = await commitInvoiceNumber(
+		client,
+		plan,
+		candidateInvoiceNumber(plan),
 	);
 	const now = Date.now();
 
@@ -2679,7 +2763,7 @@ export async function duplicate(
 		documentType: source.documentType ?? "standard",
 		shipmentDetails: source.shipmentDetails,
 		depositRequest: source.depositRequest,
-		invoiceNumber: generated.invoiceNumber,
+		invoiceNumber,
 		customerId: source.customerId,
 		customerName: source.customerName,
 		logoUrl: source.logoUrl,
@@ -2726,11 +2810,6 @@ export async function duplicate(
 		.single();
 	if (error) throw error;
 
-	await client
-		.from("workspaces")
-		.update({ next_invoice_sequence: generated.nextSequence })
-		.eq("id", workspaceId);
-
 	await recordInvoiceAudit(client, userId, {
 		action: "invoice.create",
 		resourceId: data.id,
@@ -2739,7 +2818,7 @@ export async function duplicate(
 		// in the message instead of being misreported as prior state).
 		before: null,
 		after: {
-			invoiceNumber: generated.invoiceNumber,
+			invoiceNumber,
 			duplicatedFrom: id,
 		},
 		message: `Duplicated invoice ${source.invoiceNumber}.`,
@@ -2765,10 +2844,12 @@ export async function convertProformaToInvoice(
 		return { id: source.convertedToInvoiceId };
 	}
 
-	const generated = await nextInvoiceNumberForWorkspace(
+	// WP8/C1: the converted invoice's number is allocated by the database.
+	const plan = await planInvoiceNumber(client, { workspaceId });
+	const invoiceNumber = await commitInvoiceNumber(
 		client,
-		workspaceId,
-		"standard",
+		plan,
+		candidateInvoiceNumber(plan),
 	);
 	const now = Date.now();
 	const total = invoiceAmount(source);
@@ -2780,7 +2861,7 @@ export async function convertProformaToInvoice(
 	const doc: DraftDoc = {
 		token: `pub-${crypto.randomUUID()}`,
 		documentType: "standard",
-		invoiceNumber: generated.invoiceNumber,
+		invoiceNumber,
 		customerId: source.customerId,
 		customerName: source.customerName,
 		logoUrl: source.logoUrl,
@@ -2879,10 +2960,6 @@ export async function convertProformaToInvoice(
 		)
 		.eq("id", id)
 		.eq("workspace_id", workspaceId);
-	await client
-		.from("workspaces")
-		.update({ next_invoice_sequence: generated.nextSequence })
-		.eq("id", workspaceId);
 
 	await recordInvoiceAudit(client, userId, {
 		action: "invoice.create",
@@ -2892,7 +2969,7 @@ export async function convertProformaToInvoice(
 		// travels in `after` / the message.
 		before: null,
 		after: {
-			invoiceNumber: generated.invoiceNumber,
+			invoiceNumber,
 			documentType: "standard",
 			convertedFromProformaId: id,
 		},
@@ -2967,7 +3044,6 @@ export async function importCsv(
 		}
 	};
 
-	const workspace = await getWorkspaceNumbering(client, workspaceId);
 	const { data: existing, error: existingError } = await client
 		.from("invoices")
 		.select("invoice_number")
@@ -2976,28 +3052,11 @@ export async function importCsv(
 	const usedNumbers = new Set(
 		(existing ?? []).map((invoice) => String(invoice.invoice_number)),
 	);
-	const prefixSource =
-		workspace?.invoice_number_mode === "business_name"
-			? workspace?.name
-			: workspace?.invoice_number_prefix;
-	const prefix =
-		String(prefixSource ?? "INV")
-			.trim()
-			.toUpperCase()
-			.replace(/[^A-Z0-9]/g, "")
-			.slice(0, 12) || "INV";
-	const year = new Date().getFullYear();
-	const pattern = new RegExp(`^${prefix}-(\\d{4})-(\\d{4,6})$`);
-	const maxSequence = (existing ?? []).reduce((max: number, invoice) => {
-		const match = String(invoice.invoice_number).match(pattern);
-		if (!match || Number(match[1]) !== year) return max;
-		return Math.max(max, Number(match[2]));
-	}, 0);
-	let nextSequence = Math.max(
-		Number(workspace?.next_invoice_sequence ?? 1),
-		maxSequence + 1,
-	);
-	let generatedInvoiceNumber = false;
+	// WP8/C1: one read-only plan; every generated number is consumed from the
+	// database allocator inside the loop, so an import can never hand out a
+	// number another concurrent writer already took. Custom imported numbers
+	// are reserved so the counter stays clear of them.
+	const numberPlan = await planInvoiceNumber(client, { workspaceId });
 	const groups = new Map<
 		string,
 		{
@@ -3118,9 +3177,21 @@ export async function importCsv(
 			!/^[A-Z0-9]{2,12}-\d{4}-\d{4,6}$/.test(invoiceNumber) ||
 			usedNumbers.has(invoiceNumber)
 		) {
-			invoiceNumber = invoiceNumberForSequence(prefix, year, nextSequence);
-			nextSequence += 1;
-			generatedInvoiceNumber = true;
+			// WP8/C1: consume a number from the database allocator — under
+			// concurrency the committed value is authoritative, so an import
+			// can never hand out a number another writer already took.
+			invoiceNumber = await commitInvoiceNumber(
+				client,
+				numberPlan,
+				candidateInvoiceNumber(numberPlan),
+			);
+		} else {
+			// WP8/C1: a custom imported number is reserved so the allocator's
+			// counter stays past it and later generated numbers never collide.
+			await reserveInvoiceNumber(client, {
+				workspaceId,
+				invoiceNumber,
+			});
 		}
 		usedNumbers.add(invoiceNumber);
 		const compliance = defaultCompliance({
@@ -3280,12 +3351,9 @@ export async function importCsv(
 		created.push(...(data ?? []).map((row) => row.id));
 	}
 
-	if (generatedInvoiceNumber) {
-		await client
-			.from("workspaces")
-			.update({ next_invoice_sequence: nextSequence })
-			.eq("id", workspaceId);
-	}
+	// WP8/C1: the allocator already advanced `workspaces.next_invoice_sequence`
+	// (monotonically, inside the same statement that consumed each number),
+	// so there is no second write here.
 
 	if (created.length > 0) {
 		await recordInvoiceAudit(client, userId, {
