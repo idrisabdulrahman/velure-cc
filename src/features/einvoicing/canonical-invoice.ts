@@ -15,7 +15,10 @@ export type CanonicalParty = Readonly<{
 	phone?: string;
 	address?: string;
 	website?: string;
-	countryCode?: string;
+	jurisdiction?: Readonly<{
+		scheme: "source.jurisdictionCode";
+		value: string;
+	}>;
 	identifiers?: readonly CanonicalIdentifier[];
 }>;
 
@@ -70,10 +73,17 @@ export type CanonicalInvoice = Readonly<{
 	buyer: CanonicalParty;
 	lines: readonly CanonicalInvoiceLine[];
 	taxContext?: Readonly<{
-		treatment: Readonly<{ scheme: "source.taxTreatment"; value: string }>;
+		placeOfSupply: Readonly<{
+			scheme: "source.jurisdictionCode";
+			value: string;
+		}>;
+		taxTreatment: Readonly<{ scheme: "source.taxTreatment"; value: string }>;
 		rate: number;
 		label: string;
-		ruleSet: Readonly<{ scheme: "source.taxRuleSetVersion"; value: string }>;
+		taxRuleSetVersion: Readonly<{
+			scheme: "source.taxRuleSetVersion";
+			value: string;
+		}>;
 	}>;
 	taxes?: readonly CanonicalTaxLine[];
 	withholding?: CanonicalWithholding;
@@ -152,7 +162,14 @@ function partyFromSnapshot(
 		phone: identity.phone,
 		address: identity.address,
 		website: identity.website,
-		countryCode: identity.countryCode,
+		...(identity.countryCode
+			? {
+					jurisdiction: {
+						scheme: "source.jurisdictionCode" as const,
+						value: identity.countryCode,
+					},
+				}
+			: {}),
 		...(identifiers.length ? { identifiers } : {}),
 	};
 }
@@ -207,13 +224,17 @@ export function toCanonicalInvoice(invoice: InvoiceRecord): CanonicalInvoice {
 		...(compliance
 			? {
 					taxContext: {
-						treatment: {
+						placeOfSupply: {
+							scheme: "source.jurisdictionCode" as const,
+							value: compliance.placeOfSupply,
+						},
+						taxTreatment: {
 							scheme: "source.taxTreatment" as const,
 							value: compliance.taxTreatment,
 						},
 						rate: compliance.taxRate,
 						label: compliance.taxLabel,
-						ruleSet: {
+						taxRuleSetVersion: {
 							scheme: "source.taxRuleSetVersion" as const,
 							value: compliance.taxRuleSetVersion,
 						},

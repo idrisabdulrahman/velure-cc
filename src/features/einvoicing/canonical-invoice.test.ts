@@ -115,7 +115,10 @@ describe("toCanonicalInvoice", () => {
 			currency: "NGN",
 			seller: {
 				legalName: "Velure Ltd",
-				countryCode: "NG",
+				jurisdiction: {
+					scheme: "source.jurisdictionCode",
+					value: "NG",
+				},
 				identifiers: [
 					{ scheme: "tax-id", value: "TIN-SELLER" },
 					{ scheme: "registration-number", value: "REG-123" },
@@ -145,13 +148,20 @@ describe("toCanonicalInvoice", () => {
 				},
 			],
 			taxContext: {
-				treatment: {
+				placeOfSupply: {
+					scheme: "source.jurisdictionCode",
+					value: "NG",
+				},
+				taxTreatment: {
 					scheme: "source.taxTreatment",
 					value: "exclusive_rate",
 				},
 				rate: 7.5,
 				label: "VAT",
-				ruleSet: { scheme: "source.taxRuleSetVersion", value: "ng-v1" },
+				taxRuleSetVersion: {
+					scheme: "source.taxRuleSetVersion",
+					value: "ng-v1",
+				},
 			},
 			withholding: {
 				amount: "0",
@@ -201,8 +211,12 @@ describe("toCanonicalInvoice", () => {
 		expect(toCanonicalInvoice(crossBorder)).toMatchObject({
 			documentType: "debit_note",
 			currency: "GBP",
-			seller: { countryCode: "GB" },
-			buyer: { countryCode: "US" },
+			seller: {
+				jurisdiction: { scheme: "source.jurisdictionCode", value: "GB" },
+			},
+			buyer: {
+				jurisdiction: { scheme: "source.jurisdictionCode", value: "US" },
+			},
 			relatedDocuments: [{ relation: "corrects", documentId: "source-42" }],
 			taxes: [
 				{
@@ -219,6 +233,45 @@ describe("toCanonicalInvoice", () => {
 		expect(
 			toCanonicalInvoice(invoice({ documentType: "proforma" })).documentType,
 		).toBe("proforma");
+	});
+
+	it("retains EU and OTHER source jurisdictions and supply context without tax lines", () => {
+		const source = invoice();
+		if (!source.compliance) throw new Error("Expected compliance fixture.");
+		const snapshot = invoice({
+			compliance: {
+				...source.compliance,
+				seller: { countryCode: "EU" },
+				buyer: { countryCode: "OTHER" },
+				placeOfSupply: "OTHER",
+				taxLines: [],
+			},
+		});
+		const canonical = toCanonicalInvoice(snapshot);
+
+		expect(canonical.seller.jurisdiction).toEqual({
+			scheme: "source.jurisdictionCode",
+			value: "EU",
+		});
+		expect(canonical.buyer.jurisdiction).toEqual({
+			scheme: "source.jurisdictionCode",
+			value: "OTHER",
+		});
+		expect(canonical.taxes).toEqual([]);
+		expect(canonical.taxContext).toMatchObject({
+			placeOfSupply: {
+				scheme: "source.jurisdictionCode",
+				value: "OTHER",
+			},
+			taxTreatment: {
+				scheme: "source.taxTreatment",
+				value: "exclusive_rate",
+			},
+			taxRuleSetVersion: {
+				scheme: "source.taxRuleSetVersion",
+				value: "ng-v1",
+			},
+		});
 	});
 
 	it("leaves unavailable optional data absent and preserves exact decimal edges", () => {
