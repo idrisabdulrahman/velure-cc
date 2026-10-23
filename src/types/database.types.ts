@@ -482,6 +482,12 @@ export type Database = {
         Update: { id?: string; workspace_id?: string; submission_id?: string; attempt_number?: number; event_type?: string; outcome?: string; request_snapshot?: Json; response_snapshot?: Json | null; error_code?: string | null; started_at?: string; finished_at?: string | null }
         Relationships: []
       }
+      einvoice_provider_credentials: {
+        Row: { id: string; workspace_id: string; provider_key: string; encrypted_bundle: string; created_at: string; updated_at: string }
+        Insert: { id?: string; workspace_id: string; provider_key: string; encrypted_bundle: string; created_at?: string; updated_at?: string }
+        Update: { id?: string; workspace_id?: string; provider_key?: string; encrypted_bundle?: string; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
       invoice_audit_log: {
         Row: {
           action: string

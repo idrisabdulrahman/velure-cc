@@ -103,6 +103,12 @@ const AUDIT_REDACTED_KEYS = new Set([
 	"tokenrevokedat",
 	"password",
 	"apikey",
+	"privatekey",
+	"certificate",
+	"clientcertificate",
+	"clientprivatekey",
+	"privatekeypem",
+	"certificatepem",
 	"secret",
 	"authorization",
 ]);
