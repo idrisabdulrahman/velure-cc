@@ -251,6 +251,37 @@ describe("validateCanonicalInvoice", () => {
 		}
 	});
 
+	it("rejects nonzero line tax or invoice tax totals for no-tax treatments", () => {
+		const base = invoice();
+		const noTax = treatmentContext(base, "exempt");
+		const taxLine = base.taxes?.[0];
+		if (!taxLine) throw new Error("Test invoice needs a tax line.");
+		const result = validateCanonicalInvoice(
+			invoice({
+				taxContext: noTax,
+				taxes: [
+					{
+						...taxLine,
+						amount: "0.01",
+						treatment: { scheme: "source.taxTreatment", value: "exempt" },
+					},
+				],
+				totals: {
+					invoiceTotal: "100.01",
+					subtotal: "100",
+					taxTotal: "0.01",
+					withholdingTotal: "0",
+					grossTotal: "100",
+					payableTotal: "100",
+				},
+			}),
+			{ buyerType: "b2b" },
+		);
+		expect(result.issues.map(({ code }) => code)).toContain(
+			"no_tax_treatment_has_tax",
+		);
+	});
+
 	it("does not mutate its canonical input", () => {
 		const value = invoice();
 		const before = structuredClone(value);

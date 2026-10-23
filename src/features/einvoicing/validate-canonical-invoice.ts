@@ -23,6 +23,12 @@ const TREATMENTS = new Set([
 	"exempt",
 	"zero_rated",
 ]);
+const NO_TAX_TREATMENTS = new Set([
+	"none",
+	"exempt",
+	"zero_rated",
+	"reverse_charge",
+]);
 
 type Decimal = { coefficient: bigint; scale: number };
 function decimal(value: CanonicalDecimal): Decimal | null {
@@ -354,6 +360,24 @@ export function validateCanonicalInvoice(
 			"taxContext.taxTreatment",
 			"A supported tax treatment is required.",
 		);
+	if (treatment && NO_TAX_TREATMENTS.has(treatment)) {
+		const storedTaxTotal = invoice.totals.taxTotal
+			? decimal(invoice.totals.taxTotal)
+			: null;
+		if (
+			!taxSum ||
+			taxSum.coefficient !== 0n ||
+			!storedTaxTotal ||
+			storedTaxTotal.coefficient !== 0n
+		) {
+			issue(
+				issues,
+				"no_tax_treatment_has_tax",
+				"taxes",
+				"This tax treatment requires zero tax lines and a zero tax total.",
+			);
+		}
+	}
 	if (taxSum && validLineMath && treatment && TREATMENTS.has(treatment)) {
 		const subtotal = roundCurrency(lineSubtotal);
 		const tax = roundCurrency(taxSum);

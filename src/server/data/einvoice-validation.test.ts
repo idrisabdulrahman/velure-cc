@@ -189,9 +189,30 @@ describe("validateWorkspaceInvoice", () => {
 	});
 
 	it("rejects malformed compliance data instead of filling defaults or throwing", async () => {
+		const withholding = compliance.withholding;
+		const requiredWithholdingFields = [
+			"mode",
+			"category",
+			"recipientEntityType",
+			"recipientResidency",
+			"ruleVersion",
+			"manualOverride",
+		] as const;
 		const malformedSnapshots = [
 			{},
 			{ ...compliance, withholding: {} },
+			{
+				...compliance,
+				withholding: {
+					amount: withholding.amount,
+					rate: withholding.rate,
+				},
+			},
+			...requiredWithholdingFields.map((field) => {
+				const partial = { ...withholding } as Record<string, unknown>;
+				delete partial[field];
+				return { ...compliance, withholding: partial };
+			}),
 			{
 				...compliance,
 				taxLines: [{ ...compliance.taxLines[0], amount: Number.NaN }],
@@ -225,5 +246,23 @@ describe("validateWorkspaceInvoice", () => {
 		expect(result.issues.map(({ code }) => code)).not.toContain(
 			"buyer_type_unverified",
 		);
+	});
+
+	it("rejects malformed raw line amounts before row normalization can coerce them", async () => {
+		const state = tables("workspace-a");
+		(state.invoices[0].line_items as Array<Record<string, unknown>>)[0].price =
+			"not-a-number";
+		const { client } = createFakeSupabase(state);
+		const result = await validateWorkspaceInvoice(
+			client,
+			"user-a",
+			"invoice-a",
+		);
+		expect(result.valid).toBe(false);
+		expect(result.issues[0]).toEqual({
+			code: "line_amount_invalid",
+			path: "lineItems[0].price",
+			message: "Stored line quantity and price must be finite numbers.",
+		});
 	});
 });

@@ -56,7 +56,42 @@ function hasStoredComplianceSnapshot(value: unknown): boolean {
 	const withholdingValid = (entry: unknown) => {
 		if (!record(entry)) return false;
 		const withholding = entry as Record<string, unknown>;
-		return finite(withholding.amount) && finite(withholding.rate);
+		const categories = new Set([
+			"none",
+			"goods_materials",
+			"general_services",
+			"professional_fees",
+			"major_construction",
+			"other_construction",
+			"telecom_colocation",
+			"brokerage",
+			"rent_hire_lease",
+		]);
+		const legacyPresets = new Set([
+			"none",
+			"contracts_supplies",
+			"consultancy_company",
+			"consultancy_individual",
+			"rent_interest",
+		]);
+		return (
+			finite(withholding.amount) &&
+			finite(withholding.rate) &&
+			(withholding.mode === "rule_based" ||
+				withholding.mode === "legacy_manual") &&
+			categories.has(String(withholding.category)) &&
+			(withholding.recipientEntityType === "corporate" ||
+				withholding.recipientEntityType === "non_corporate") &&
+			(withholding.recipientResidency === "resident" ||
+				withholding.recipientResidency === "non_resident") &&
+			typeof withholding.ruleVersion === "string" &&
+			withholding.ruleVersion.trim() !== "" &&
+			typeof withholding.manualOverride === "boolean" &&
+			(withholding.overrideNote === undefined ||
+				typeof withholding.overrideNote === "string") &&
+			(withholding.legacyPreset === undefined ||
+				legacyPresets.has(String(withholding.legacyPreset)))
+		);
 	};
 	return (
 		partyValid(snapshot.seller) &&
@@ -78,6 +113,53 @@ function hasStoredComplianceSnapshot(value: unknown): boolean {
 	);
 }
 
+function invalidRawLineItems(value: unknown) {
+	if (!Array.isArray(value) || value.length === 0) {
+		return {
+			code: "line_items_invalid",
+			path: "lineItems",
+			message: "Stored invoice lines must be a non-empty array.",
+		};
+	}
+	for (let index = 0; index < value.length; index += 1) {
+		const entry = value[index];
+		if (!entry || typeof entry !== "object") {
+			return {
+				code: "line_item_invalid",
+				path: `lineItems[${index}]`,
+				message: "Stored invoice line must be an object.",
+			};
+		}
+		const line = entry as Record<string, unknown>;
+		if (typeof line.name !== "string") {
+			return {
+				code: "line_description_invalid",
+				path: `lineItems[${index}].name`,
+				message: "Stored invoice line description must be text.",
+			};
+		}
+		for (const key of ["quantity", "price"] as const) {
+			if (typeof line[key] !== "number" || !Number.isFinite(line[key])) {
+				return {
+					code: "line_amount_invalid",
+					path: `lineItems[${index}].${key}`,
+					message: "Stored line quantity and price must be finite numbers.",
+				};
+			}
+		}
+		for (const key of ["unit", "vatCategory", "classificationCode"] as const) {
+			if (line[key] !== undefined && typeof line[key] !== "string") {
+				return {
+					code: "line_field_invalid",
+					path: `lineItems[${index}].${key}`,
+					message: "Stored invoice line classification fields must be text.",
+				};
+			}
+		}
+	}
+	return null;
+}
+
 /** Loads only trusted same-workspace buyer type; returns validation issues, never source rows. */
 export async function validateWorkspaceInvoice(
 	client: Supabase,
@@ -95,6 +177,10 @@ export async function validateWorkspaceInvoice(
 		.maybeSingle();
 	if (error) throw error;
 	if (!row) return notFound;
+	const rawLineIssue = invalidRawLineItems(
+		(row as Record<string, unknown>).line_items,
+	);
+	if (rawLineIssue) return { valid: false, issues: [rawLineIssue] };
 	const invoiceDoc = rowToInvoiceDoc(row as never);
 	if (!hasStoredComplianceSnapshot(invoiceDoc.compliance)) {
 		return {
