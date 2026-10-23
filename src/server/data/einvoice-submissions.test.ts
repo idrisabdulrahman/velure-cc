@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createMockProviderAdapter } from "#/features/einvoicing/provider-adapter";
+import type { recordInvoiceAudit } from "#/server/data/audit";
 import {
 	dispatchDueInvoiceSubmissions,
 	queueInvoiceSubmission,
@@ -168,6 +169,12 @@ describe("WP14 submission queue controls", () => {
 		let instant = new Date("2026-01-01T00:00:00Z");
 		const now = () => new Date(instant);
 		const adapter = createMockProviderAdapter();
+		const auditEntries: Array<{ message?: string | null; before?: unknown }> =
+			[];
+		const audit: typeof recordInvoiceAudit = async (...args) => {
+			const entry = args[2];
+			auditEntries.push({ message: entry.message, before: entry.before });
+		};
 		let firstReference = "";
 		const recordingAdapter = {
 			...adapter,
@@ -184,6 +191,7 @@ describe("WP14 submission queue controls", () => {
 				"invoice-a",
 				testOptions(client, now, {
 					adapter: recordingAdapter,
+					audit,
 					afterAdapterCall: () => {
 						throw new Error("simulated process crash");
 					},
@@ -204,7 +212,7 @@ describe("WP14 submission queue controls", () => {
 			client,
 			"user-a",
 			"invoice-a",
-			testOptions(client, now, { adapter: recordingAdapter }),
+			testOptions(client, now, { adapter: recordingAdapter, audit }),
 		);
 		expect(replay.status).toBe("completed");
 		expect(replay.message).toContain("Mock sandbox");
@@ -222,6 +230,23 @@ describe("WP14 submission queue controls", () => {
 			},
 			{ attempt_number: 2, event_type: "started", outcome: "started" },
 			{ attempt_number: 2, event_type: "result", outcome: "accepted" },
+		]);
+		expect(
+			auditEntries.filter(({ message }) =>
+				[
+					"Mock sandbox submission attempt started.",
+					"Reclaimed expired mock sandbox submission attempt.",
+				].includes(message ?? ""),
+			),
+		).toMatchObject([
+			{
+				message: "Mock sandbox submission attempt started.",
+				before: { status: "queued", attemptCount: 0 },
+			},
+			{
+				message: "Reclaimed expired mock sandbox submission attempt.",
+				before: { status: "processing", attemptCount: 1 },
+			},
 		]);
 		expect(
 			tables.invoice_submission_attempts[1].request_snapshot as Record<

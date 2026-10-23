@@ -130,6 +130,8 @@ async function processQueuedSubmission({
 			},
 			options.systemActor ? { workspaceId } : undefined,
 		);
+	const priorStatus = initialRow.status;
+	const priorAttemptCount = initialRow.attempt_count;
 	let row = initialRow;
 	if (["completed", "rejected", "dead_letter"].includes(row.status)) {
 		return safeResponse(row.status, row.attempt_count, row.next_attempt_at);
@@ -142,6 +144,10 @@ async function processQueuedSubmission({
 	) {
 		return safeResponse("processing", row.attempt_count, row.next_attempt_at);
 	}
+	const isExpiredLeaseReclaim =
+		initialRow.status === "processing" &&
+		initialRow.lease_expires_at !== null &&
+		new Date(initialRow.lease_expires_at) <= instant;
 	if (row.status === "queued" && new Date(row.next_attempt_at) > instant) {
 		return safeResponse("queued", row.attempt_count, row.next_attempt_at);
 	}
@@ -259,8 +265,13 @@ async function processQueuedSubmission({
 		action: "invoice.send",
 		resourceType: "einvoice_submission",
 		resourceId: row.id,
-		message: "Mock sandbox submission attempt started.",
-		before: { status: "queued", attemptCount: attemptNumber - 1 },
+		message: isExpiredLeaseReclaim
+			? "Reclaimed expired mock sandbox submission attempt."
+			: "Mock sandbox submission attempt started.",
+		before: {
+			status: priorStatus,
+			attemptCount: priorAttemptCount,
+		},
 		after: { status: "processing", attemptCount: attemptNumber },
 	});
 	let responseSnapshot: Json | null = null;
