@@ -85,6 +85,10 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	// invoice and customer reads both carry that workspace filter.
 	validateWorkspaceInvoice: "app-scoped",
 	loadWorkspaceInvoiceSubmissionSnapshot: "app-scoped",
+	// einvoice-provider-credentials.ts — derives active workspace with the
+	// verified user client, then scopes service-role ciphertext access by it.
+	saveEInvoiceProviderCredentials: "server-admin",
+	createWorkspaceProviderAdapter: "server-admin",
 	// einvoice-submissions.ts — active-workspace membership is verified with the user client, every admin mutation is workspace-filtered.
 	submissionBackoffMs: "pure",
 	queueInvoiceSubmission: "server-admin",
