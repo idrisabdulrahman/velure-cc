@@ -33,9 +33,16 @@ create trigger invoices_mock_clearance_immutable
   before update of fiscalization on public.invoices
   for each row execute function public.guard_mock_clearance_artifacts();
 
--- Rollback:
+-- Safe rollback for append-only history:
+-- The trigger/function are removed, but `cleared` stays in the outcome check.
+-- Attempt rows are append-only, so narrowing the check would fail after any
+-- mock-clearance attempt is recorded; rewriting/deleting those audit rows is
+-- not an acceptable rollback. This retains only the historical enum value,
+-- not WP16's artifact-writing behavior.
+--
+-- Down migration:
 -- drop trigger if exists invoices_mock_clearance_immutable on public.invoices;
 -- drop function if exists public.guard_mock_clearance_artifacts();
 -- alter table public.invoice_submission_attempts drop constraint invoice_submission_attempts_outcome_check;
 -- alter table public.invoice_submission_attempts add constraint invoice_submission_attempts_outcome_check
---   check (outcome in ('started','accepted','rejected','timeout','duplicate','interrupted','error'));
+--   check (outcome in ('started','accepted','cleared','rejected','timeout','duplicate','interrupted','error'));

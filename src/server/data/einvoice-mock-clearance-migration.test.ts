@@ -16,6 +16,17 @@ describe("WP16 mock-clearance migration", () => {
 		expect(migration).toContain("MOCK-SANDBOX|NOT-NRS-CLEARED|%");
 		expect(migration).toContain("mock clearance artifacts are immutable");
 		expect(migration).toContain("drop trigger if exists");
-		expect(migration).toContain("Rollback");
+		expect(migration).toContain("Safe rollback for append-only history");
+		expect(migration).toContain("not an acceptable rollback");
+		const downMigration = migration.split("-- Down migration:")[1];
+		expect(downMigration).toContain("drop trigger if exists");
+		expect(downMigration).toContain("drop function if exists");
+		expect(downMigration).toContain("'cleared'");
+		expect(downMigration).not.toContain(
+			"delete from public.invoice_submission_attempts",
+		);
+		expect(downMigration).not.toContain(
+			"update public.invoice_submission_attempts",
+		);
 	});
 });
