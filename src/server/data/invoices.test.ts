@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	INVOICE_LIST_PAGE_SIZE,
+	mapInvoice,
 	mapPublicInvoice,
 	paginateInvoiceRows,
 	rowToInvoiceDoc,
@@ -113,19 +114,21 @@ describe("public invoice fiscalization projection", () => {
 		expect(JSON.stringify(mock)).not.toContain("private provider detail");
 	});
 
-	it("preserves legacy non-mock fiscalization fields but never trusts compliance JSON as clearance", () => {
-		const mapped = mapPublicInvoice(
-			invoice({
-				status: "fiscalized",
-				uid: "possibly-real-irn",
-				qrCodePayload: "unverified",
-				lastError: "private error",
-			}),
-		);
-		expect(mapped.fiscalization).toMatchObject({
+	it("hides legacy fiscalization artifacts publicly but never trusts compliance JSON as clearance", () => {
+		const legacyFiscalization = {
 			status: "fiscalized",
 			uid: "possibly-real-irn",
-		});
+			qrCodePayload: "unverified",
+			lastError: "private error",
+		};
+		const mapped = mapPublicInvoice(invoice(legacyFiscalization));
+		expect(mapped.fiscalization).toEqual({ status: "not_configured" });
+		expect(JSON.stringify(mapped)).not.toContain("possibly-real-irn");
+		expect(JSON.stringify(mapped)).not.toContain("unverified");
+		expect(JSON.stringify(mapped)).not.toContain("private error");
+		expect(mapInvoice(invoice(legacyFiscalization)).fiscalization).toEqual(
+			legacyFiscalization,
+		);
 		const draftInvoice = {
 			...(invoice({}) as unknown as Record<string, unknown>),
 		};

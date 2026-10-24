@@ -808,26 +808,23 @@ export function mapPublicInvoice(invoice: Parameters<typeof mapInvoice>[0]) {
 	);
 	const rawFiscalization = mapped.fiscalization as Record<string, unknown>;
 	const publicFiscalization =
-		rawFiscalization.status !== "mock_cleared"
-			? mapped.fiscalization
-			: rawFiscalization.provider === "mock" &&
-					rawFiscalization.environment === "sandbox" &&
-					rawFiscalization.mock === true &&
-					typeof rawFiscalization.mockIrn === "string" &&
-					rawFiscalization.mockIrn.startsWith("MOCK-IRN-") &&
-					typeof rawFiscalization.qrCodePayload === "string" &&
-					rawFiscalization.qrCodePayload.startsWith(
-						"MOCK-SANDBOX|NOT-NRS-CLEARED|",
-					)
-				? {
-						status: "mock_cleared",
-						provider: "mock",
-						environment: "sandbox",
-						mock: true,
-						mockIrn: rawFiscalization.mockIrn,
-						qrCodePayload: rawFiscalization.qrCodePayload,
-					}
-				: { status: "not_configured" };
+		rawFiscalization.status === "mock_cleared" &&
+		rawFiscalization.provider === "mock" &&
+		rawFiscalization.environment === "sandbox" &&
+		rawFiscalization.mock === true &&
+		typeof rawFiscalization.mockIrn === "string" &&
+		rawFiscalization.mockIrn.startsWith("MOCK-IRN-") &&
+		typeof rawFiscalization.qrCodePayload === "string" &&
+		rawFiscalization.qrCodePayload.startsWith("MOCK-SANDBOX|NOT-NRS-CLEARED|")
+			? {
+					status: "mock_cleared",
+					provider: "mock",
+					environment: "sandbox",
+					mock: true,
+					mockIrn: rawFiscalization.mockIrn,
+					qrCodePayload: rawFiscalization.qrCodePayload,
+				}
+			: { status: "not_configured" };
 
 	return {
 		id: mapped.id,
