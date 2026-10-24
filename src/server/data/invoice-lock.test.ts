@@ -27,6 +27,7 @@ import {
 	autosaveDraft,
 	bulkDeleteOrArchive,
 	cancelSchedule,
+	createDraft,
 	markInvoiceSent,
 	remove,
 	renumberInvoices,
@@ -372,6 +373,66 @@ describe("drafts stay editable", () => {
 			message: "Hard deleted an untouched draft invoice.",
 			resourceType: "invoice",
 		});
+	});
+});
+
+describe("fiscalization artifacts are server-owned", () => {
+	const forged = {
+		status: "mock_cleared",
+		provider: "mock",
+		environment: "sandbox",
+		mock: true,
+		mockIrn: "MOCK-IRN-client-forged",
+		qrCodePayload: "MOCK-SANDBOX|NOT-NRS-CLEARED|client-forged",
+	};
+
+	it("ignores client fiscalization on draft insert flows", async () => {
+		for (const create of [autosaveDraft, createDraft]) {
+			const { client, tables } = createFakeSupabase(seed({ invoices: [] }));
+			const created = await create(client, USER, {
+				...invoiceInput,
+				customerId: "client-a",
+				lineItems: [
+					{
+						...invoiceInput.lineItems[0],
+						unit: "unit",
+						vatCategory: "standard",
+						classificationCode: "GOOD-01",
+					},
+				],
+				fiscalization: forged,
+				compliance: { fiscalization: forged },
+			});
+			const stored = row(tables, created.id);
+			expect(stored?.fiscalization).toEqual({ status: "not_configured" });
+			expect(stored?.compliance).not.toHaveProperty("fiscalization");
+		}
+	});
+
+	it("preserves the server snapshot and ignores client fiscalization on save", async () => {
+		const serverSnapshot = {
+			status: "mock_cleared",
+			provider: "mock",
+			environment: "sandbox",
+			mock: true,
+			mockIrn: "MOCK-IRN-server-owned",
+			qrCodePayload: "MOCK-SANDBOX|NOT-NRS-CLEARED|server-owned",
+		};
+		const { client, tables } = createFakeSupabase(
+			seed({
+				invoices: [
+					invoiceRow(DRAFT, { fiscalization: serverSnapshot }) as never,
+				],
+			}),
+		);
+		await save(client, USER, {
+			...invoiceInput,
+			id: DRAFT,
+			fiscalization: forged,
+			compliance: { fiscalization: forged },
+		});
+		expect(row(tables, DRAFT)?.fiscalization).toEqual(serverSnapshot);
+		expect(row(tables, DRAFT)?.compliance).not.toHaveProperty("fiscalization");
 	});
 });
 

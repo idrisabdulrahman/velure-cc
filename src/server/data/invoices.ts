@@ -397,6 +397,16 @@ function normalizeComplianceSnapshot(compliance: any) {
 	};
 }
 
+/** User invoice writes may edit tax/compliance data, but fiscalization snapshots
+ * are server-owned and never accepted from either compliance JSON or a setter. */
+function stripClientFiscalization<T extends Record<string, unknown>>(
+	compliance: T,
+): T {
+	const snapshot = { ...compliance };
+	delete snapshot.fiscalization;
+	return snapshot as T;
+}
+
 function normalizeJurisdictionCode(value: unknown) {
 	return value === "NGN" ? "NG" : value;
 }
@@ -1648,7 +1658,9 @@ export async function createDraft(
 		: null;
 	const invoiceNumber =
 		numberCandidate?.invoiceNumber ?? existingDraft?.invoiceNumber ?? "";
-	const normalizedCompliance = normalizeComplianceSnapshot(compliance);
+	const normalizedCompliance = stripClientFiscalization(
+		normalizeComplianceSnapshot(compliance),
+	);
 	assertInvoiceInput({
 		invoiceNumber,
 		currency: args.currency,
@@ -1714,10 +1726,9 @@ export async function createDraft(
 		internalNotes: args.internalNotes,
 		lineItems: args.lineItems,
 		compliance: normalizedCompliance,
-		fiscalization: (args.fiscalization as Record<string, unknown>) ??
-			(normalizedCompliance.fiscalization as Record<string, unknown>) ?? {
-				status: "not_configured",
-			},
+		fiscalization: existingDraft?.fiscalization ?? {
+			status: "not_configured",
+		},
 		reminder,
 		sync,
 		lifecycle: {},
@@ -1807,7 +1818,9 @@ export async function autosaveDraft(
 			customerName: args.customerName,
 			lineItems,
 		});
-	const normalizedCompliance = normalizeComplianceSnapshot(compliance);
+	const normalizedCompliance = stripClientFiscalization(
+		normalizeComplianceSnapshot(compliance),
+	);
 	const documentType = args.documentType ?? "standard";
 	const current = args.id ? await getById(client, userId, args.id) : null;
 	const correctsInvoiceId = await assertCorrectionSource(
@@ -1883,10 +1896,9 @@ export async function autosaveDraft(
 		internalNotes: args.internalNotes,
 		lineItems,
 		compliance: normalizedCompliance,
-		fiscalization: (args.fiscalization as Record<string, unknown>) ??
-			(normalizedCompliance.fiscalization as Record<string, unknown>) ?? {
-				status: "not_configured",
-			},
+		fiscalization: current?.fiscalization ?? {
+			status: "not_configured",
+		},
 		reminder: args.reminder ?? defaultReminder(),
 		sync: args.sync ?? defaultSync(),
 		lifecycle: {},
@@ -2006,7 +2018,9 @@ export async function save(
 	await assertWorkspaceCustomer(client, workspaceId, customerId);
 
 	const compliance = args.compliance ?? defaultCompliance(args);
-	const normalizedCompliance = normalizeComplianceSnapshot(compliance);
+	const normalizedCompliance = stripClientFiscalization(
+		normalizeComplianceSnapshot(compliance),
+	);
 	const documentType = args.documentType ?? "standard";
 	const correctsInvoiceId = await assertCorrectionSource(
 		client,
@@ -2071,10 +2085,7 @@ export async function save(
 		internalNotes: args.internalNotes,
 		lineItems: args.lineItems,
 		compliance: normalizedCompliance,
-		fiscalization:
-			(args.fiscalization as Record<string, unknown>) ??
-			(normalizedCompliance.fiscalization as Record<string, unknown>) ??
-			current.fiscalization,
+		fiscalization: current.fiscalization,
 		reminder: args.reminder ?? defaultReminder(),
 		sync: args.sync ?? defaultSync(),
 		updatedAt: Date.now(),
