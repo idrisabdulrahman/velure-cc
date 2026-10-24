@@ -24,7 +24,7 @@ Status: pending | ready | implementing | auditing | fixing | merged | blocked
 | WP13 | D2,D10 | WP10,WP11 | **merged** (audit PASS; merge commit e011da7; branch commit a8b0ded; integration 598 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp13 | 8baeb3d | 1 | No open findings; no live provider/Supabase test is applicable (mock-only adapter) |
 | WP14 | D4,D6,D9 | WP13 (merged) | **merged** (round 3 PASS; branch commit 74b83d6; merge commit d8cbce0; integration suite 608 passed/86 skipped) | einv/wp14 | 42b0c8f | 3 | No open code findings; live RLS and deployment cron wiring remain unverified |
 | WP15 | H2 | WP13 | **merged** (round 2 audit clear; branch commit 2040798; merge commit 9ba33b5; integration suite 612 passed/86 skipped) | einv/wp15 | 259d45c | 2 | No open code findings; live Supabase/provider validation unavailable |
-| WP16 | D5,D7,C4 | WP14 | **fixing** (round 2: normal invoice inputs can still write non-mock fiscalization artifacts) | einv/wp16 | d910eba | 2 | Restrict invoice insert/update artifact writes to server-only mock-clearance persistence and test client-input rejection |
+| WP16 | D5,D7,C4 | WP14 | **auditing** (round 3; client artifact-write fix 97b9abd) | einv/wp16 | d910eba | 3 | Prior public projection and client-write findings fixed; live DB trigger validation unavailable |
 
 ## Coordination notes (wave-1 session, 2026-10-18 evening)
 
