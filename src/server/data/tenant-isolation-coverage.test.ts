@@ -91,6 +91,7 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	createWorkspaceProviderAdapter: "server-admin",
 	// einvoice-submissions.ts — active-workspace membership is verified with the user client, every admin mutation is workspace-filtered.
 	submissionBackoffMs: "pure",
+	getInvoiceSubmissionGuidance: "server-admin",
 	queueInvoiceSubmission: "server-admin",
 	dispatchDueInvoiceSubmissions: "server-admin",
 	// compliance.ts

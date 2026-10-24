@@ -397,6 +397,16 @@ function normalizeComplianceSnapshot(compliance: any) {
 	};
 }
 
+/** User invoice writes may edit tax/compliance data, but fiscalization snapshots
+ * are server-owned and never accepted from either compliance JSON or a setter. */
+function stripClientFiscalization<T extends Record<string, unknown>>(
+	compliance: T,
+): T {
+	const snapshot = { ...compliance };
+	delete snapshot.fiscalization;
+	return snapshot as T;
+}
+
 function normalizeJurisdictionCode(value: unknown) {
 	return value === "NGN" ? "NG" : value;
 }
@@ -782,10 +792,15 @@ export function mapInvoice(invoice: any): Invoice {
 				customerName: invoice.customerName,
 				lineItems: invoice.lineItems ?? [],
 			}),
-		fiscalization: invoice.fiscalization ??
-			(invoice.compliance?.fiscalization as Record<string, unknown>) ?? {
-				status: "not_configured",
-			},
+		fiscalization:
+			invoice.fiscalization ??
+			((
+				invoice.compliance?.fiscalization as Record<string, unknown> | undefined
+			)?.status === "mock_cleared"
+				? { status: "not_configured" }
+				: ((invoice.compliance?.fiscalization as
+						| Record<string, unknown>
+						| undefined) ?? { status: "not_configured" })),
 		reminder: invoice.reminder ?? defaultReminder(),
 		sync: invoice.sync ?? defaultSync(),
 		lifecycle: invoice.lifecycle ?? {},
@@ -796,6 +811,30 @@ export function mapInvoice(invoice: any): Invoice {
 
 export function mapPublicInvoice(invoice: Parameters<typeof mapInvoice>[0]) {
 	const mapped = mapInvoice(invoice);
+	const publicCompliance = Object.fromEntries(
+		Object.entries(mapped.compliance ?? {}).filter(
+			([key]) => key !== "fiscalization",
+		),
+	);
+	const rawFiscalization = mapped.fiscalization as Record<string, unknown>;
+	const publicFiscalization =
+		rawFiscalization.status === "mock_cleared" &&
+		rawFiscalization.provider === "mock" &&
+		rawFiscalization.environment === "sandbox" &&
+		rawFiscalization.mock === true &&
+		typeof rawFiscalization.mockIrn === "string" &&
+		rawFiscalization.mockIrn.startsWith("MOCK-IRN-") &&
+		typeof rawFiscalization.qrCodePayload === "string" &&
+		rawFiscalization.qrCodePayload.startsWith("MOCK-SANDBOX|NOT-NRS-CLEARED|")
+			? {
+					status: "mock_cleared",
+					provider: "mock",
+					environment: "sandbox",
+					mock: true,
+					mockIrn: rawFiscalization.mockIrn,
+					qrCodePayload: rawFiscalization.qrCodePayload,
+				}
+			: { status: "not_configured" };
 
 	return {
 		id: mapped.id,
@@ -828,8 +867,8 @@ export function mapPublicInvoice(invoice: Parameters<typeof mapInvoice>[0]) {
 		canceledAt: mapped.canceledAt,
 		notes: mapped.notes,
 		lineItems: mapped.lineItems,
-		compliance: mapped.compliance,
-		fiscalization: mapped.fiscalization,
+		compliance: publicCompliance,
+		fiscalization: publicFiscalization,
 		lifecycle: mapped.lifecycle,
 		createdAt: mapped.createdAt,
 		updatedAt: mapped.updatedAt,
@@ -1619,7 +1658,9 @@ export async function createDraft(
 		: null;
 	const invoiceNumber =
 		numberCandidate?.invoiceNumber ?? existingDraft?.invoiceNumber ?? "";
-	const normalizedCompliance = normalizeComplianceSnapshot(compliance);
+	const normalizedCompliance = stripClientFiscalization(
+		normalizeComplianceSnapshot(compliance),
+	);
 	assertInvoiceInput({
 		invoiceNumber,
 		currency: args.currency,
@@ -1685,10 +1726,9 @@ export async function createDraft(
 		internalNotes: args.internalNotes,
 		lineItems: args.lineItems,
 		compliance: normalizedCompliance,
-		fiscalization: (args.fiscalization as Record<string, unknown>) ??
-			(normalizedCompliance.fiscalization as Record<string, unknown>) ?? {
-				status: "not_configured",
-			},
+		fiscalization: existingDraft?.fiscalization ?? {
+			status: "not_configured",
+		},
 		reminder,
 		sync,
 		lifecycle: {},
@@ -1778,7 +1818,9 @@ export async function autosaveDraft(
 			customerName: args.customerName,
 			lineItems,
 		});
-	const normalizedCompliance = normalizeComplianceSnapshot(compliance);
+	const normalizedCompliance = stripClientFiscalization(
+		normalizeComplianceSnapshot(compliance),
+	);
 	const documentType = args.documentType ?? "standard";
 	const current = args.id ? await getById(client, userId, args.id) : null;
 	const correctsInvoiceId = await assertCorrectionSource(
@@ -1854,10 +1896,9 @@ export async function autosaveDraft(
 		internalNotes: args.internalNotes,
 		lineItems,
 		compliance: normalizedCompliance,
-		fiscalization: (args.fiscalization as Record<string, unknown>) ??
-			(normalizedCompliance.fiscalization as Record<string, unknown>) ?? {
-				status: "not_configured",
-			},
+		fiscalization: current?.fiscalization ?? {
+			status: "not_configured",
+		},
 		reminder: args.reminder ?? defaultReminder(),
 		sync: args.sync ?? defaultSync(),
 		lifecycle: {},
@@ -1977,7 +2018,9 @@ export async function save(
 	await assertWorkspaceCustomer(client, workspaceId, customerId);
 
 	const compliance = args.compliance ?? defaultCompliance(args);
-	const normalizedCompliance = normalizeComplianceSnapshot(compliance);
+	const normalizedCompliance = stripClientFiscalization(
+		normalizeComplianceSnapshot(compliance),
+	);
 	const documentType = args.documentType ?? "standard";
 	const correctsInvoiceId = await assertCorrectionSource(
 		client,
@@ -2042,10 +2085,7 @@ export async function save(
 		internalNotes: args.internalNotes,
 		lineItems: args.lineItems,
 		compliance: normalizedCompliance,
-		fiscalization:
-			(args.fiscalization as Record<string, unknown>) ??
-			(normalizedCompliance.fiscalization as Record<string, unknown>) ??
-			current.fiscalization,
+		fiscalization: current.fiscalization,
 		reminder: args.reminder ?? defaultReminder(),
 		sync: args.sync ?? defaultSync(),
 		updatedAt: Date.now(),
@@ -2884,13 +2924,11 @@ export async function duplicate(
 		notes: source.notes,
 		internalNotes: source.internalNotes,
 		lineItems: source.lineItems,
-		compliance:
+		compliance: stripClientFiscalization(
 			(source.compliance as Record<string, unknown>) ??
-			defaultCompliance(source),
-		fiscalization: (source.fiscalization as Record<string, unknown>) ??
-			(source.compliance?.fiscalization as Record<string, unknown>) ?? {
-				status: "not_configured",
-			},
+				defaultCompliance(source),
+		),
+		fiscalization: { status: "not_configured" },
 		reminder: defaultReminder(),
 		sync: defaultSync(),
 		lifecycle: {},
@@ -2985,13 +3023,11 @@ export async function convertProformaToInvoice(
 		notes: source.notes,
 		internalNotes: source.internalNotes,
 		lineItems: source.lineItems,
-		compliance:
+		compliance: stripClientFiscalization(
 			(source.compliance as Record<string, unknown>) ??
-			defaultCompliance(source),
-		fiscalization: (source.fiscalization as Record<string, unknown>) ??
-			(source.compliance?.fiscalization as Record<string, unknown>) ?? {
-				status: "not_configured",
-			},
+				defaultCompliance(source),
+		),
+		fiscalization: { status: "not_configured" },
 		reminder:
 			carriedPaymentAmount >= total && total > 0
 				? {

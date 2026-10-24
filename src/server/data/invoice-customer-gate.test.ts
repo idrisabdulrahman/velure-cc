@@ -549,6 +549,33 @@ describe("line classification draft-exit gate", () => {
 });
 
 describe("convertProformaToInvoice draft gate", () => {
+	it("does not copy mock clearance artifacts from the source pro-forma", async () => {
+		const serverSnapshot = {
+			status: "mock_cleared",
+			provider: "mock",
+			environment: "sandbox",
+			mock: true,
+			mockIrn: "MOCK-IRN-proforma",
+			qrCodePayload: "MOCK-SANDBOX|NOT-NRS-CLEARED|proforma",
+		};
+		tables.invoices = [
+			...(tables.invoices as Array<Record<string, unknown>>),
+			invoiceRow("inv-a-proforma", WS_A, {
+				document_type: "proforma",
+				fiscalization: serverSnapshot,
+				compliance: { fiscalization: serverSnapshot },
+			}),
+		];
+		const { id } = await convertProformaToInvoice(
+			client,
+			USER_A,
+			"inv-a-proforma",
+		);
+		expect(row("inv-a-proforma")?.fiscalization).toEqual(serverSnapshot);
+		expect(row(id)?.fiscalization).toEqual({ status: "not_configured" });
+		expect(row(id)?.compliance).not.toHaveProperty("fiscalization");
+	});
+
 	it("leaves a zero-deposit conversion in Draft (draft → draft is not gated)", async () => {
 		tables.invoices = [
 			...(tables.invoices as Array<Record<string, unknown>>),

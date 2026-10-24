@@ -171,6 +171,21 @@ export function toMiddayInvoice(invoice: InvoiceRecord): MiddayInvoice {
 	const amount = compliance.grandTotal || amountFromLineItems(invoice);
 	const netPayable = amount - (compliance.withholdingTaxAmount || 0);
 	const customerName = invoice.customerName || null;
+	const fiscalization = invoice.fiscalization;
+	const mockClearance =
+		fiscalization?.status === "mock_cleared" &&
+		fiscalization.mock === true &&
+		fiscalization.provider === "mock" &&
+		fiscalization.environment === "sandbox" &&
+		typeof fiscalization.mockIrn === "string" &&
+		fiscalization.mockIrn.startsWith("MOCK-IRN-") &&
+		typeof fiscalization.qrCodePayload === "string" &&
+		fiscalization.qrCodePayload.startsWith("MOCK-SANDBOX|NOT-NRS-CLEARED|")
+			? {
+					irn: fiscalization.mockIrn,
+					qrPayload: fiscalization.qrCodePayload,
+				}
+			: undefined;
 	const shipmentLines = invoice.shipmentDetails
 		? [
 				invoice.shipmentDetails.weight
@@ -272,5 +287,6 @@ export function toMiddayInvoice(invoice: InvoiceRecord): MiddayInvoice {
 		team: {
 			name: "Velure",
 		},
+		...(mockClearance ? { mockClearance } : {}),
 	};
 }

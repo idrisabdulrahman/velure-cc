@@ -18,6 +18,7 @@ export type ProviderValidationResult = ProviderMetadata &
 
 export type ProviderSubmissionOutcome =
 	| "accepted"
+	| "cleared"
 	| "rejected"
 	| "timeout"
 	| "duplicate";
@@ -29,10 +30,12 @@ export type ProviderSubmissionResult = ProviderMetadata &
 		reference: string;
 		issues?: CanonicalInvoiceValidation["issues"];
 		rejectionCode?: string;
+		mockClearance?: Readonly<{ irn: string; qrPayload: string }>;
 	}>;
 
 export type ProviderStatus =
 	| "submitted"
+	| "cleared"
 	| "rejected"
 	| "timeout"
 	| "duplicate"
@@ -74,7 +77,12 @@ export type ProviderAdapter = Readonly<{
 	): Promise<ProviderActionResult>;
 }>;
 
-export type MockScenario = "success" | "rejection" | "timeout" | "duplicate";
+export type MockScenario =
+	| "success"
+	| "cleared"
+	| "rejection"
+	| "timeout"
+	| "duplicate";
 
 type StoredMockSubmission = {
 	result: ProviderSubmissionResult;
@@ -99,6 +107,14 @@ function referenceFor(idempotencyKey: string): string {
 		hash = (hash * 1_099_511_628_211n) & 0xffff_ffff_ffff_ffffn;
 	}
 	return `mock-${hash.toString(16).padStart(16, "0")}`;
+}
+
+function mockClearanceFor(reference: string) {
+	const irn = `MOCK-IRN-${reference}`;
+	return {
+		irn,
+		qrPayload: `MOCK-SANDBOX|NOT-NRS-CLEARED|IRN=${irn}|REFERENCE=${reference}`,
+	};
 }
 
 /**
@@ -152,16 +168,20 @@ export function createMockProviderAdapter(
 				outcome =
 					scenario === "success"
 						? "accepted"
-						: scenario === "rejection"
-							? "rejected"
-							: scenario;
+						: scenario === "cleared"
+							? "cleared"
+							: scenario === "rejection"
+								? "rejected"
+								: scenario;
 				status =
 					scenario === "success"
 						? "submitted"
-						: scenario === "rejection"
-							? "rejected"
-							: scenario;
-				if (scenario === "rejection") rejectionCode = "MOCK_REJECTION";
+						: scenario === "cleared"
+							? "cleared"
+							: scenario === "rejection"
+								? "rejected"
+								: scenario;
+				if (scenario === "rejection") rejectionCode = "BUYER_TIN_INVALID";
 			}
 			const result: ProviderSubmissionResult = {
 				...MOCK_METADATA,
@@ -170,6 +190,9 @@ export function createMockProviderAdapter(
 				reference,
 				...(issues ? { issues } : {}),
 				...(rejectionCode ? { rejectionCode } : {}),
+				...(outcome === "cleared"
+					? { mockClearance: mockClearanceFor(reference) }
+					: {}),
 			};
 			const stored = { result, status, invoiceId: invoice.id };
 			if (key) byKey.set(key, stored);

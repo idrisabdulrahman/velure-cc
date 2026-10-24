@@ -49,7 +49,13 @@ describe("mock provider adapter", () => {
 		expect(JSON.stringify(result).toLowerCase()).not.toContain("cleared");
 	});
 
-	it.each<MockScenario>(["success", "rejection", "timeout", "duplicate"])(
+	it.each<MockScenario>([
+		"success",
+		"cleared",
+		"rejection",
+		"timeout",
+		"duplicate",
+	])(
 		"returns deterministic %s submission results and replays by idempotency key",
 		async (scenario) => {
 			const adapter = createMockProviderAdapter({ scenario });
@@ -69,11 +75,27 @@ describe("mock provider adapter", () => {
 			expect(first.outcome).toBe(
 				scenario === "success"
 					? "accepted"
-					: scenario === "rejection"
-						? "rejected"
-						: scenario,
+					: scenario === "cleared"
+						? "cleared"
+						: scenario === "rejection"
+							? "rejected"
+							: scenario,
 			);
 			expect(first.reference).toContain("mock-");
+			if (scenario === "cleared") {
+				expect(first.mockClearance).toMatchObject({
+					irn: expect.stringMatching(/^MOCK-IRN-/),
+					qrPayload: expect.stringContaining("MOCK-SANDBOX|NOT-NRS-CLEARED|"),
+				});
+				expect(await adapter.getStatus(first.reference)).toMatchObject({
+					status: "cleared",
+					mock: true,
+					environment: "sandbox",
+				});
+			}
+			if (scenario === "rejection") {
+				expect(first.rejectionCode).toBe("BUYER_TIN_INVALID");
+			}
 		},
 	);
 

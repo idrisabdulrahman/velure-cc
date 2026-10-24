@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { FiscalizationSnapshot } from "#/features/compliance/types";
 import { mergeDocBlocks, toEditorDoc, toMiddayInvoice } from "./midday-adapter";
 import type { InvoiceRecord } from "./types";
 
@@ -126,6 +127,32 @@ describe("toMiddayInvoice", () => {
 	});
 	it("passes customer PO numbers through to invoice templates", () => {
 		expect(toMiddayInvoice(buildInvoice()).customerPoNumber).toBe("PO-ACME-42");
+	});
+
+	it("projects mock IRN and QR payload only from an explicit mock-cleared snapshot", () => {
+		const artifacts = {
+			status: "mock_cleared",
+			provider: "mock",
+			environment: "sandbox",
+			mock: true,
+			mockIrn: "MOCK-IRN-demo-1",
+			qrCodePayload: "MOCK-SANDBOX|NOT-NRS-CLEARED|IRN=MOCK-IRN-demo-1",
+		} as const;
+		expect(
+			toMiddayInvoice(buildInvoice({ fiscalization: artifacts })).mockClearance,
+		).toEqual({
+			irn: artifacts.mockIrn,
+			qrPayload: artifacts.qrCodePayload,
+		});
+		for (const fiscalization of [
+			{ ...artifacts, status: "fiscalized", mock: false },
+			{ ...artifacts, provider: "other" },
+			{ ...artifacts, qrCodePayload: "real-looking-payload" },
+		] as FiscalizationSnapshot[]) {
+			expect(
+				toMiddayInvoice(buildInvoice({ fiscalization })).mockClearance,
+			).toBeUndefined();
+		}
 	});
 
 	it("uses null when an invoice is not backed by a customer PO", () => {

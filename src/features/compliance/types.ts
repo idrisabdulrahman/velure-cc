@@ -93,10 +93,21 @@ export type InvoiceWithholdingSnapshot = {
 };
 
 export type FiscalizationSnapshot = {
-	status: "not_configured" | "ready" | "pending" | "fiscalized" | "failed";
+	status:
+		| "not_configured"
+		| "ready"
+		| "pending"
+		| "fiscalized"
+		| "mock_cleared"
+		| "failed";
+	provider?: "mock";
+	environment?: "sandbox";
+	mock?: boolean;
+	mockIrn?: string;
 	uid?: string;
 	sid?: string;
 	qrCodePayload?: string;
+	clearedAt?: number;
 	lastError?: string;
 	lastAttemptAt?: number;
 };

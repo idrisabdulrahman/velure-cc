@@ -30,8 +30,10 @@ export async function PdfTemplate({
 	topBlock,
 	bottomBlock,
 	token,
+	mockClearance,
 }: Invoice) {
 	let qrCode = null;
+	let clearanceQrCode = null;
 
 	if (template.includeQr) {
 		const origin =
@@ -43,6 +45,12 @@ export async function PdfTemplate({
 				width: 40 * 3,
 			},
 		);
+	}
+	if (mockClearance) {
+		clearanceQrCode = await QRCodeUtil.toDataURL(mockClearance.qrPayload, {
+			margin: 0,
+			width: 40 * 3,
+		});
 	}
 
 	return (
@@ -164,6 +172,17 @@ export async function PdfTemplate({
 							/>
 
 							{qrCode && <QRCode data={qrCode} />}
+							{mockClearance && clearanceQrCode ? (
+								<View style={{ marginTop: 16 }}>
+									<Text style={{ fontSize: 8, fontWeight: 700 }}>
+										MOCK SANDBOX — NOT NRS CLEARED
+									</Text>
+									<Text style={{ fontSize: 8, marginTop: 4 }}>
+										Mock IRN: {mockClearance.irn}
+									</Text>
+									<QRCode data={clearanceQrCode} />
+								</View>
+							) : null}
 						</View>
 
 						<View style={{ flex: 1, marginLeft: 10 }}>

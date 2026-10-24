@@ -73,6 +73,7 @@ export type Invoice = {
 	team: {
 		name: string | null;
 	} | null;
+	mockClearance?: Readonly<{ irn: string; qrPayload: string }>;
 };
 
 export type Template = {
