@@ -782,10 +782,15 @@ export function mapInvoice(invoice: any): Invoice {
 				customerName: invoice.customerName,
 				lineItems: invoice.lineItems ?? [],
 			}),
-		fiscalization: invoice.fiscalization ??
-			(invoice.compliance?.fiscalization as Record<string, unknown>) ?? {
-				status: "not_configured",
-			},
+		fiscalization:
+			invoice.fiscalization ??
+			((
+				invoice.compliance?.fiscalization as Record<string, unknown> | undefined
+			)?.status === "mock_cleared"
+				? { status: "not_configured" }
+				: ((invoice.compliance?.fiscalization as
+						| Record<string, unknown>
+						| undefined) ?? { status: "not_configured" })),
 		reminder: invoice.reminder ?? defaultReminder(),
 		sync: invoice.sync ?? defaultSync(),
 		lifecycle: invoice.lifecycle ?? {},
@@ -796,6 +801,33 @@ export function mapInvoice(invoice: any): Invoice {
 
 export function mapPublicInvoice(invoice: Parameters<typeof mapInvoice>[0]) {
 	const mapped = mapInvoice(invoice);
+	const publicCompliance = Object.fromEntries(
+		Object.entries(mapped.compliance ?? {}).filter(
+			([key]) => key !== "fiscalization",
+		),
+	);
+	const rawFiscalization = mapped.fiscalization as Record<string, unknown>;
+	const publicFiscalization =
+		rawFiscalization.status !== "mock_cleared"
+			? mapped.fiscalization
+			: rawFiscalization.provider === "mock" &&
+					rawFiscalization.environment === "sandbox" &&
+					rawFiscalization.mock === true &&
+					typeof rawFiscalization.mockIrn === "string" &&
+					rawFiscalization.mockIrn.startsWith("MOCK-IRN-") &&
+					typeof rawFiscalization.qrCodePayload === "string" &&
+					rawFiscalization.qrCodePayload.startsWith(
+						"MOCK-SANDBOX|NOT-NRS-CLEARED|",
+					)
+				? {
+						status: "mock_cleared",
+						provider: "mock",
+						environment: "sandbox",
+						mock: true,
+						mockIrn: rawFiscalization.mockIrn,
+						qrCodePayload: rawFiscalization.qrCodePayload,
+					}
+				: { status: "not_configured" };
 
 	return {
 		id: mapped.id,
@@ -828,8 +860,8 @@ export function mapPublicInvoice(invoice: Parameters<typeof mapInvoice>[0]) {
 		canceledAt: mapped.canceledAt,
 		notes: mapped.notes,
 		lineItems: mapped.lineItems,
-		compliance: mapped.compliance,
-		fiscalization: mapped.fiscalization,
+		compliance: publicCompliance,
+		fiscalization: publicFiscalization,
 		lifecycle: mapped.lifecycle,
 		createdAt: mapped.createdAt,
 		updatedAt: mapped.updatedAt,

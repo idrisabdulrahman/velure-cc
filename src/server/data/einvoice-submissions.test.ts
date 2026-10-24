@@ -4,6 +4,7 @@ import { createMockProviderAdapter } from "#/features/einvoicing/provider-adapte
 import type { recordInvoiceAudit } from "#/server/data/audit";
 import {
 	dispatchDueInvoiceSubmissions,
+	getInvoiceSubmissionGuidance,
 	queueInvoiceSubmission,
 	submissionBackoffMs,
 } from "./einvoice-submissions";
@@ -274,6 +275,115 @@ describe("WP14 submission queue controls", () => {
 		expect(tables.invoice_submission_attempts).toHaveLength(4);
 	});
 
+	it("stores immutable, visibly mock clearance artifacts only for the explicit cleared result", async () => {
+		const { client, tables } = createFakeSupabase(submissionFixture());
+		const initialInvoice = tables.invoices[0];
+		const result = await queueInvoiceSubmission(
+			client,
+			"user-a",
+			"invoice-a",
+			testOptions(client, () => new Date("2026-01-01T00:00:00Z"), {
+				scenario: "cleared",
+			}),
+		);
+		expect(result).toMatchObject({
+			status: "completed",
+			providerOutcome: "cleared",
+			message: expect.stringContaining("not NRS clearance"),
+		});
+		expect(initialInvoice.fiscalization).toMatchObject({
+			status: "mock_cleared",
+			provider: "mock",
+			environment: "sandbox",
+			mock: true,
+			mockIrn: expect.stringMatching(/^MOCK-IRN-/),
+			qrCodePayload: expect.stringContaining("MOCK-SANDBOX|NOT-NRS-CLEARED|"),
+		});
+		expect(initialInvoice.status).toBe("unpaid");
+		expect(initialInvoice.lifecycle).toBe(null);
+		expect(tables.invoice_submission_attempts).toMatchObject([
+			{ event_type: "started", outcome: "started" },
+			{ event_type: "result", outcome: "cleared" },
+		]);
+
+		const repeated = await queueInvoiceSubmission(
+			client,
+			"user-a",
+			"invoice-a",
+			testOptions(client, () => new Date("2026-01-01T00:01:00Z"), {
+				scenario: "success",
+			}),
+		);
+		expect(repeated.status).toBe("completed");
+		expect(tables.invoice_submission_attempts).toHaveLength(2);
+		expect(initialInvoice.fiscalization).toMatchObject({ mock: true });
+	});
+
+	it("returns only fixed rejection guidance for the workspace invoice", async () => {
+		const { client, tables } = createFakeSupabase(submissionFixture());
+		const rejected = await queueInvoiceSubmission(
+			client,
+			"user-a",
+			"invoice-a",
+			testOptions(client, () => new Date("2026-01-01T00:00:00Z"), {
+				scenario: "rejection",
+			}),
+		);
+		expect(rejected.rejectionGuidance).toEqual({
+			code: "BUYER_TIN_INVALID",
+			fix: "Check the buyer TIN and update the buyer record before retrying.",
+		});
+		const stored = await getInvoiceSubmissionGuidance(
+			client,
+			"user-a",
+			"invoice-a",
+			client,
+		);
+		expect(stored).toEqual({
+			status: "rejected",
+			rejectionGuidance: rejected.rejectionGuidance,
+		});
+		expect(JSON.stringify(stored)).not.toContain("response_snapshot");
+		expect(tables.invoices[0].status).toBe("unpaid");
+	});
+
+	it("replays the immutable mock scenario on scheduled retry", async () => {
+		const { client, tables } = createFakeSupabase(submissionFixture());
+		let instant = new Date("2026-01-01T00:00:00Z");
+		const now = () => new Date(instant);
+		const queued = await queueInvoiceSubmission(
+			client,
+			"user-a",
+			"invoice-a",
+			testOptions(client, now, { scenario: "timeout" }),
+		);
+		expect(queued.status).toBe("queued");
+		expect(
+			(
+				tables.invoice_submission_queue[0].submission_snapshot as Record<
+					string,
+					unknown
+				>
+			).mockScenario,
+		).toBe("timeout");
+		instant = new Date("2026-01-01T00:00:31Z");
+		const dispatch = await dispatchDueInvoiceSubmissions({
+			adminClient: client,
+			now,
+			audit: async () => {},
+		});
+		expect(dispatch.queued).toBe(1);
+		expect(tables.invoice_submission_queue[0].last_outcome).toBe("timeout");
+		expect(tables.invoice_submission_attempts).toMatchObject([
+			{ attempt_number: 1, event_type: "started", outcome: "started" },
+			{ attempt_number: 1, event_type: "result", outcome: "timeout" },
+			{ attempt_number: 2, event_type: "started", outcome: "started" },
+			{ attempt_number: 2, event_type: "result", outcome: "timeout" },
+		]);
+		expect(tables.invoices[0].status).toBe("unpaid");
+		expect(tables.invoices[0].lifecycle).toBe(null);
+	});
+
 	it("derives canonical payload and WP12 result from one captured invoice row", async () => {
 		const state = submissionFixture();
 		let invoiceReads = 0;
@@ -423,7 +533,7 @@ describe("WP14 submission queue controls", () => {
 		expect(result.status).toBe("rejected");
 		expect(tables.invoice_submission_attempts[1].outcome).toBe("rejected");
 		expect(tables.invoice_submission_queue[0].last_error_code).toBe(
-			"MOCK_REJECTION",
+			"BUYER_TIN_INVALID",
 		);
 		expect(tables.invoices[0].status).toBe("unpaid");
 	});

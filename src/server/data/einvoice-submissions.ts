@@ -1,8 +1,11 @@
 import type { CanonicalInvoice } from "#/features/einvoicing/canonical-invoice";
 import {
 	createMockProviderAdapter,
+	type MockScenario,
 	type ProviderAdapter,
+	type ProviderSubmissionResult,
 } from "#/features/einvoicing/provider-adapter";
+import { mapRejectionCodeToGuidance } from "#/features/einvoicing/rejection-guidance";
 import type { CanonicalInvoiceValidation } from "#/features/einvoicing/validate-canonical-invoice";
 import { recordInvoiceAudit } from "#/server/data/audit";
 import { loadWorkspaceInvoiceSubmissionSnapshot } from "#/server/data/einvoice-validation";
@@ -30,6 +33,9 @@ export type SubmissionResult = {
 	nextAttemptAt?: string;
 	attemptCount?: number;
 	issues?: readonly unknown[];
+	providerOutcome?: string;
+	rejectionGuidance?: ReturnType<typeof mapRejectionCodeToGuidance>;
+	mockClearance?: { irn: string; qrPayload: string };
 };
 
 export function submissionBackoffMs(attemptNumber: number): number {
@@ -50,7 +56,7 @@ function safeResponse(
 		processing:
 			"Sandbox submission is processing. The invoice has not been sent.",
 		completed:
-			"Mock sandbox submission was accepted. The invoice has not been sent or delivered.",
+			"Mock sandbox run completed. This is not NRS clearance, and the invoice has not been sent or delivered.",
 		rejected:
 			"Mock sandbox submission was rejected. The invoice has not been sent.",
 		dead_letter:
@@ -84,6 +90,7 @@ type QueueRow = {
 type SubmissionSnapshot = {
 	provider: "mock";
 	environment: "sandbox";
+	mockScenario?: MockScenario;
 	invoice: CanonicalInvoice;
 	validation: CanonicalInvoiceValidation;
 };
@@ -102,6 +109,66 @@ type ProcessingOptions = Readonly<{
 		systemActor?: boolean;
 	};
 }>;
+
+async function persistMockClearance(
+	admin: Supabase,
+	workspaceId: string,
+	invoiceId: string,
+	result: ProviderSubmissionResult,
+) {
+	const artifacts = result.mockClearance;
+	if (
+		!result.mock ||
+		result.provider !== "mock" ||
+		result.environment !== "sandbox" ||
+		!artifacts ||
+		!artifacts.irn.startsWith("MOCK-IRN-") ||
+		!artifacts.qrPayload.startsWith("MOCK-SANDBOX|NOT-NRS-CLEARED|")
+	) {
+		throw new Error("Mock provider returned invalid clearance artifacts.");
+	}
+	const existingInvoice = await admin
+		.from("invoices")
+		.select("fiscalization")
+		.eq("workspace_id", workspaceId)
+		.eq("id", invoiceId)
+		.is("deleted_at", null)
+		.maybeSingle();
+	if (existingInvoice.error || !existingInvoice.data) {
+		throw existingInvoice.error ?? new Error("Invoice not found.");
+	}
+	const previous = existingInvoice.data.fiscalization as Record<
+		string,
+		unknown
+	> | null;
+	if (previous?.status === "mock_cleared") {
+		if (
+			previous.mockIrn !== artifacts.irn ||
+			previous.qrCodePayload !== artifacts.qrPayload
+		) {
+			throw new Error("Mock clearance artifacts are immutable.");
+		}
+		return;
+	}
+	if (previous?.status === "fiscalized" || previous?.uid || previous?.sid) {
+		throw new Error("Existing fiscalization artifacts cannot be replaced.");
+	}
+	const { error } = await admin
+		.from("invoices")
+		.update({
+			fiscalization: {
+				status: "mock_cleared",
+				provider: "mock",
+				environment: "sandbox",
+				mock: true,
+				mockIrn: artifacts.irn,
+				qrCodePayload: artifacts.qrPayload,
+			},
+		})
+		.eq("workspace_id", workspaceId)
+		.eq("id", invoiceId);
+	if (error) throw error;
+}
 
 async function processQueuedSubmission({
 	admin,
@@ -277,20 +344,27 @@ async function processQueuedSubmission({
 	let responseSnapshot: Json | null = null;
 	let outcome:
 		| "accepted"
+		| "cleared"
 		| "rejected"
 		| "timeout"
 		| "duplicate"
 		| "interrupted"
 		| "error" = "error";
 	let errorCode: string | null = null;
+	let providerResult: ProviderSubmissionResult | undefined;
 	try {
-		const result = await (options.adapter ?? MOCK_PROVIDER).submit({
+		const adapter =
+			options.adapter ??
+			(snapshot.mockScenario
+				? createMockProviderAdapter({ scenario: snapshot.mockScenario })
+				: MOCK_PROVIDER);
+		providerResult = await adapter.submit({
 			invoice: snapshot.invoice,
 			validation: snapshot.validation,
 			idempotencyKey: row.idempotency_key,
 		});
-		responseSnapshot = result as unknown as Json;
-		outcome = result.outcome;
+		responseSnapshot = providerResult as unknown as Json;
+		outcome = providerResult.outcome;
 	} catch {
 		outcome = "interrupted";
 		errorCode = "MOCK_PROVIDER_UNAVAILABLE";
@@ -305,6 +379,14 @@ async function processQueuedSubmission({
 		typeof responseSnapshot.rejectionCode === "string"
 	) {
 		errorCode = responseSnapshot.rejectionCode;
+	}
+	if (outcome === "cleared" && providerResult) {
+		await persistMockClearance(
+			admin,
+			workspaceId,
+			row.invoice_id,
+			providerResult,
+		);
 	}
 	options.afterAdapterCall?.();
 	const finishedAt = now().toISOString();
@@ -323,7 +405,7 @@ async function processQueuedSubmission({
 	if (attemptInsert.error) throw attemptInsert.error;
 	let nextStatus: QueueRow["status"];
 	let nextAt: string | undefined;
-	if (outcome === "accepted") nextStatus = "completed";
+	if (outcome === "accepted" || outcome === "cleared") nextStatus = "completed";
 	else if (outcome === "rejected" || outcome === "duplicate")
 		nextStatus = "rejected";
 	else if (attemptNumber >= row.max_attempts) nextStatus = "dead_letter";
@@ -364,7 +446,16 @@ async function processQueuedSubmission({
 		before: { status: "processing", attemptCount: attemptNumber - 1 },
 		after: { status: nextStatus, attemptCount: attemptNumber, outcome },
 	});
-	return safeResponse(nextStatus, attemptNumber, nextAt);
+	return {
+		...safeResponse(nextStatus, attemptNumber, nextAt),
+		providerOutcome: outcome,
+		...(outcome === "cleared" && providerResult?.mockClearance
+			? { mockClearance: providerResult.mockClearance }
+			: {}),
+		...(outcome === "rejected" || outcome === "duplicate"
+			? { rejectionGuidance: mapRejectionCodeToGuidance(errorCode) }
+			: {}),
+	};
 }
 
 /** Authenticated workspace enqueue + one bounded mock attempt. Never mutates invoice status/lifecycle. */
@@ -374,6 +465,7 @@ export async function queueInvoiceSubmission(
 	invoiceId: string,
 	options: Readonly<{
 		adapter?: ProviderAdapter;
+		scenario?: MockScenario;
 		now?: () => Date;
 		afterAdapterCall?: () => void;
 		adminClient?: Supabase;
@@ -401,6 +493,7 @@ export async function queueInvoiceSubmission(
 	const submissionSnapshot: SubmissionSnapshot = {
 		provider: "mock",
 		environment: "sandbox",
+		mockScenario: options.scenario ?? "success",
 		invoice: loaded.canonical,
 		validation: loaded.validation,
 	};
@@ -460,6 +553,30 @@ export async function queueInvoiceSubmission(
 		row,
 		options,
 	});
+}
+
+export async function getInvoiceSubmissionGuidance(
+	client: Supabase,
+	userId: string,
+	invoiceId: string,
+	adminClient?: Supabase,
+) {
+	const context = await getWorkspaceContext(client, userId);
+	if (!context) return { status: "not_found" as const };
+	const admin =
+		adminClient ?? (getSupabaseAdminClient() as unknown as Supabase);
+	const { data, error } = await admin
+		.from("invoice_submission_queue")
+		.select("status,last_error_code")
+		.eq("workspace_id", context.workspaceId)
+		.eq("invoice_id", invoiceId)
+		.maybeSingle();
+	if (error) throw error;
+	if (!data) return { status: "not_queued" as const };
+	return {
+		status: data.status,
+		rejectionGuidance: mapRejectionCodeToGuidance(data.last_error_code),
+	};
 }
 
 /** Server scheduler batch. It trusts only the immutable validated queue snapshot and DB-owned tenant references. */
@@ -544,6 +661,10 @@ export async function dispatchDueInvoiceSubmissions(
 		if (
 			snapshot.provider !== "mock" ||
 			snapshot.environment !== "sandbox" ||
+			(snapshot.mockScenario !== undefined &&
+				!["success", "cleared", "rejection", "timeout", "duplicate"].includes(
+					snapshot.mockScenario,
+				)) ||
 			!snapshot.validation?.valid ||
 			!snapshot.invoice?.id ||
 			snapshot.invoice.id !== row.invoice_id
