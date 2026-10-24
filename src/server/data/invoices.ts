@@ -2924,13 +2924,11 @@ export async function duplicate(
 		notes: source.notes,
 		internalNotes: source.internalNotes,
 		lineItems: source.lineItems,
-		compliance:
+		compliance: stripClientFiscalization(
 			(source.compliance as Record<string, unknown>) ??
-			defaultCompliance(source),
-		fiscalization: (source.fiscalization as Record<string, unknown>) ??
-			(source.compliance?.fiscalization as Record<string, unknown>) ?? {
-				status: "not_configured",
-			},
+				defaultCompliance(source),
+		),
+		fiscalization: { status: "not_configured" },
 		reminder: defaultReminder(),
 		sync: defaultSync(),
 		lifecycle: {},
@@ -3025,13 +3023,11 @@ export async function convertProformaToInvoice(
 		notes: source.notes,
 		internalNotes: source.internalNotes,
 		lineItems: source.lineItems,
-		compliance:
+		compliance: stripClientFiscalization(
 			(source.compliance as Record<string, unknown>) ??
-			defaultCompliance(source),
-		fiscalization: (source.fiscalization as Record<string, unknown>) ??
-			(source.compliance?.fiscalization as Record<string, unknown>) ?? {
-				status: "not_configured",
-			},
+				defaultCompliance(source),
+		),
+		fiscalization: { status: "not_configured" },
 		reminder:
 			carriedPaymentAmount >= total && total > 0
 				? {

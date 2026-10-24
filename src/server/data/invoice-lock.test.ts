@@ -28,6 +28,7 @@ import {
 	bulkDeleteOrArchive,
 	cancelSchedule,
 	createDraft,
+	duplicate,
 	markInvoiceSent,
 	remove,
 	renumberInvoices,
@@ -433,6 +434,33 @@ describe("fiscalization artifacts are server-owned", () => {
 		});
 		expect(row(tables, DRAFT)?.fiscalization).toEqual(serverSnapshot);
 		expect(row(tables, DRAFT)?.compliance).not.toHaveProperty("fiscalization");
+	});
+
+	it("does not copy fiscalization artifacts when duplicating a cleared invoice", async () => {
+		const serverSnapshot = {
+			status: "mock_cleared",
+			provider: "mock",
+			environment: "sandbox",
+			mock: true,
+			mockIrn: "MOCK-IRN-original",
+			qrCodePayload: "MOCK-SANDBOX|NOT-NRS-CLEARED|original",
+		};
+		const { client, tables } = createFakeSupabase(
+			seed({
+				invoices: [
+					invoiceRow(DRAFT, {
+						fiscalization: serverSnapshot,
+						compliance: { fiscalization: serverSnapshot },
+					}) as never,
+				],
+			}),
+		);
+		const { id } = await duplicate(client, USER, DRAFT);
+		const original = row(tables, DRAFT);
+		const copied = row(tables, id);
+		expect(original?.fiscalization).toEqual(serverSnapshot);
+		expect(copied?.fiscalization).toEqual({ status: "not_configured" });
+		expect(copied?.compliance).not.toHaveProperty("fiscalization");
 	});
 });
 
