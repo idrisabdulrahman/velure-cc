@@ -5,7 +5,7 @@ certs/
 .DS_Store
 dist
 dist-ssr
-# tests/
+tests/
 *.local
 .env
 .env.local
@@ -52,3 +52,6 @@ REDESIGN_PROMPT.MD
 .hallmark/
 .zcode/
 .worktrees/
+prompts/
+docs/
+design/
