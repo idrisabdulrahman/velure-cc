@@ -14,17 +14,17 @@ Status: pending | ready | implementing | auditing | fixing | merged | blocked
 | WP3 | H1 | none | **merged** (round 1 PASS; 3 LOW guard-hardening items fixed in 0abf333; merge commit 46d9869; final-audit MEDIUM/LOW fixes in 58d55af, re-merged db20a28) | einv/wp3 | f9dad76 (ff'd onto integration tip before work) | 1 | No leaks found — app-layer predicates proven load-bearing for all classified exports (60+ data exports, 20 API routes); live RLS matrix (25 tables) not executed here (needs linked Supabase: `pnpm test:wp3-tenant-isolation-live`); rls-only functions verified by code read only. Package complete — no further dispatch needed |
 | WP4 | G1 | none | **merged** (round 1 FAIL: BLOCKER service-role writer reachable from browser; fix round; round 2 PASS; merge commit 429c4dd) | einv/wp4 | 536f564 | 2 | MEDIUM logged: audit POST failure after invoice insert commits → retry can duplicate the draft (non-atomic; fix = idempotency per mutation). LOW logged: client-asserted audit content is a documented trust boundary; autosave writes one full-snapshot audit row per debounce (coalescing deferred, G2 retention is "Later"); no live test for service-key DELETE rejection (A10_LIVE-gated); scheduled-invoice mailer writes no audit row (needs system-actor entry point); audit endpoint has no rate limit |
 | WP5 | E2 | none | **merged** (round 1 PASS + WHT-base parameterized; round 2 PASS dbdedc0; merge commit b3b7806) | einv/wp5 | 536f564 | 2 | LOW: WHT base (inclusive vs exclusive) needs tax-adviser confirmation — module requires explicit parameter, no default assumed; stale Results line in prompts/wp5 file (disk-only, prompts/ gitignored) |
-| WP6 | B2 | WP2 (merged) | **implementing** (worktree .worktrees/wp6) | einv/wp6 | f9dad76 | 0 | — |
-| WP7 | B3 | WP5 (merged) | ready — held for batch B (serialized: shares invoice "leave Draft" validation seam with WP6) | — | — | 0 | — |
-| WP8 | C1,C2,C3 | WP4 (merged) | **implementing** (worktree .worktrees/wp8) | einv/wp8 | f9dad76 | 0 | — |
-| WP9 | B6 | WP8 | pending | — | — | 0 | — |
-| WP10 | D1 | WP6,WP7,WP8 | pending | — | — | 0 | — |
-| WP11 | D3 | WP8,WP10 | pending | — | — | 0 | — |
-| WP12 | D8 | WP10,WP5 | pending | — | — | 0 | — |
-| WP13 | D2,D10 | WP10,WP11 | pending | — | — | 0 | — |
-| WP14 | D4,D6,D9 | WP13 | pending | — | — | 0 | — |
-| WP15 | H2 | WP13 | pending | — | — | 0 | — |
-| WP16 | D5,D7,C4 | WP14 | pending | — | — | 0 | — |
+| WP6 | B2 | WP2 (merged) | **merged** (round 3 PASS @d4303ee; follow-up @00dbd9f independently audited PASS and merged; follow-up suite 481/86, typecheck 0, check 0 with 356 existing warnings) | einv/wp6 | bf82fad | 3 | No open findings. R1/R2/R3 customer-gate, import paging, legacy address, and live-fixture findings closed by d4303ee and 00dbd9f |
+| WP7 | B3 | WP5,WP6,WP8 (merged) | **merged** (audited PASS; merge commit 3878acc; WP7 branch 6e98e3f; integration 542 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp7 | 5901e58 | 1 | No open findings; live RLS validation unavailable without linked Supabase |
+| WP8 | C1,C2,C3 | WP4 (merged) | **merged** (round 1 FAIL @87b6869; audit-fix @c53139f; integration review found and closed manual second-payment reference overwrite; final integration checks: 530 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp8 | 96d5c49 | 2 | R1 findings and cross-package manual-payment reference issue closed with regressions. No live migration/application test |
+| WP9 | B6 | WP8 (merged) | **merged** (audit PASS; merge commit 4b90014; package commit a6e9384; integration 551 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp9 | 8ade385 | 1 | No open findings; live Supabase migration/RLS validation unavailable |
+| WP10 | D1 | WP6,WP7,WP8,WP9 (merged) | **merged** (audit PASS after one fix round; merge commit 07a6755; branch commit b264778; integration 558 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp10 | a5aed99 | 2 | No open findings; live DB checks not applicable (pure mapper) |
+| WP11 | D3 | WP8,WP10 (merged) | **merged** (audit PASS; merge commit 88b958d; package commit 40a7c9f; integration 568 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp11 | af6088e | 1 | No open findings; live DB/provider tests not needed (pure state model) |
+| WP12 | D8 | WP10,WP5 | **merged** (audit PASS after 3 fix rounds; merge commit 5a90fd2; branch commit f8a08e9; integration 587 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp12 | 5164b35 | 4 | No open findings; no live Supabase RLS/provider checks available or needed for this pure validator and scoped loader |
+| WP13 | D2,D10 | WP10,WP11 | **merged** (audit PASS; merge commit e011da7; branch commit a8b0ded; integration 598 passed/86 skipped, typecheck 0, check 0 with 356 existing warnings) | einv/wp13 | 8baeb3d | 1 | No open findings; no live provider/Supabase test is applicable (mock-only adapter) |
+| WP14 | D4,D6,D9 | WP13 (merged) | **merged** (round 3 PASS; branch commit 74b83d6; merge commit d8cbce0; integration suite 608 passed/86 skipped) | einv/wp14 | 42b0c8f | 3 | No open code findings; live RLS and deployment cron wiring remain unverified |
+| WP15 | H2 | WP13 | **merged** (round 2 audit clear; branch commit 2040798; merge commit 9ba33b5; integration suite 612 passed/86 skipped) | einv/wp15 | 259d45c | 2 | No open code findings; live Supabase/provider validation unavailable |
+| WP16 | D5,D7,C4 | WP14 | **merged** (round-3 review; final MEDIUM fixed in 23c625f and root-verified; merge commit 7ee8dca; integration suite 628 passed/86 skipped) | einv/wp16 | d910eba | 3 | No open code findings; live Supabase trigger execution unavailable |
 
 ## Coordination notes (wave-1 session, 2026-10-18 evening)
 
@@ -44,6 +44,8 @@ Status: pending | ready | implementing | auditing | fixing | merged | blocked
 
 - 54709b8: excluded `.worktrees/**` from biome and vitest. Before this, root-suite runs silently collected tests from every nested worktree checkout (859 stray vitest entries) — merge validation was over-reporting.
 - b3b7806 (WP5 merged): 191 passed / 55 skipped, typecheck 0, check 356 warnings.
+- 5a90fd2 (WP12 merged): **587 passed / 86 skipped, typecheck 0, check exit 0 / 356 existing warnings**; WP12 focused tests 21 passed.
+- e011da7 (WP13 merged): **598 passed / 86 skipped, typecheck 0, check exit 0 / 356 existing warnings**; WP13 focused tests 11 passed.
 - bde111d (WP2 merged): 280 passed / 55 skipped, typecheck 0, check 356 warnings.
 - 429c4dd (WP4 merged): 322 passed / 58 skipped, typecheck 0, check 356 warnings. One import-hunk conflict in src/server/data/compliance.ts (WP2 + WP4 both added imports) resolved by keeping both.
 - 46d9869 (WP3 merged): **383 passed / 86 skipped, typecheck 0, check 356 warnings** — wave 1 final state. 86 skipped = 28 pre-existing + 58 A10_LIVE-gated (now incl. the WP3 RLS matrix).

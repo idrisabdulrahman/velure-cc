@@ -274,6 +274,8 @@ function seedTables(): FakeTables {
 				unit_name: "unit",
 				default_unit_price: 1000,
 				default_tax_id: null,
+				default_vat_category: "standard",
+				default_classification_code: "SVC-01",
 				is_active: true,
 				deleted_at: null,
 				created_at: "2026-01-01T00:00:00.000Z",
@@ -290,6 +292,8 @@ function seedTables(): FakeTables {
 				unit_name: "unit",
 				default_unit_price: 2000,
 				default_tax_id: null,
+				default_vat_category: "exempt",
+				default_classification_code: "SVC-02",
 				is_active: true,
 				deleted_at: null,
 				created_at: "2026-01-01T00:00:00.000Z",
@@ -701,6 +705,8 @@ const productInput = {
 	unitName: "unit",
 	defaultUnitPrice: 500,
 	defaultTaxId: undefined,
+	defaultVatCategory: "zero_rated" as const,
+	defaultClassificationCode: "GOOD-01",
 	isActive: true,
 };
 
@@ -842,6 +848,10 @@ describe("products", () => {
 		expect(listed.map((entry) => entry.name)).toEqual(["Widget B"]);
 		const searched = await searchProducts(clientB, USER_B, "Widget");
 		expect(searched.map((entry) => entry.name)).toEqual(["Widget B"]);
+		expect(searched[0]).toMatchObject({
+			defaultVatCategory: "exempt",
+			defaultClassificationCode: "SVC-02",
+		});
 	});
 
 	it("does not read A's product by id", async () => {
@@ -867,6 +877,19 @@ describe("products", () => {
 	it("creates B's product inside B's workspace", async () => {
 		const id = await createProduct(clientB, USER_B, productInput);
 		expect(row("products", id)?.workspace_id).toBe(WS_B);
+		expect(row("products", id)).toMatchObject({
+			default_vat_category: "zero_rated",
+			default_classification_code: "GOOD-01",
+		});
+	});
+
+	it("duplicates the product's VAT category and classification code", async () => {
+		const id = await duplicateProduct(clientB, USER_B, "product-b");
+		expect(row("products", id)).toMatchObject({
+			workspace_id: WS_B,
+			default_vat_category: "exempt",
+			default_classification_code: "SVC-02",
+		});
 	});
 
 	it("aggregates product analytics from B's workspace only", async () => {

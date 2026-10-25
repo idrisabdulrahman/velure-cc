@@ -17,6 +17,7 @@ import {
 	toMiddayInvoice,
 } from "#/features/invoices/midday-adapter";
 import type { InvoiceRecord } from "#/features/invoices/types";
+import { INVOICE_DOCUMENT_TYPE_LABELS } from "#/features/invoices/types";
 import { HtmlTemplate } from "#/lib/midday-invoice/templates/html";
 import type {
 	PaymentSource,
@@ -122,7 +123,8 @@ function PublicInvoicePage() {
 		invoice.compliance?.seller.legalName?.trim() ||
 		invoice.compliance?.seller.tradingName?.trim() ||
 		"Invoice";
-	const isProforma = invoice.documentType === "proforma";
+	const documentLabel =
+		INVOICE_DOCUMENT_TYPE_LABELS[invoice.documentType ?? "standard"];
 	const statusLabel =
 		invoice.status === "unpaid"
 			? "Sent"
@@ -345,7 +347,7 @@ function PublicInvoicePage() {
 							) : (
 								<div className="mt-4 rounded-md border border-rule bg-paper p-3 text-sm text-ink-3">
 									{paymentContext?.payableIssue ??
-										`Online collection is not available for this ${isProforma ? "pro-forma" : "invoice"}.`}
+										`Online collection is not available for this ${documentLabel.toLowerCase()}.`}
 								</div>
 							)}
 						</div>
@@ -356,7 +358,7 @@ function PublicInvoicePage() {
 								<p className="text-sm font-medium text-ink">Payment history</p>
 								<p className="mt-1 text-xs text-ink-3">
 									Confirmed payments linked to this{" "}
-									{isProforma ? "pro-forma" : "invoice"}.
+									{documentLabel.toLowerCase()}.
 								</p>
 							</div>
 							<ReceiptText className="h-5 w-5 text-ink-2" />
@@ -393,7 +395,7 @@ function PublicInvoicePage() {
 						) : (
 							<div className="mt-4 rounded-md border border-rule bg-paper p-3 text-sm text-ink-3">
 								No confirmed payments have been recorded for this{" "}
-								{isProforma ? "pro-forma" : "invoice"}.
+								{documentLabel.toLowerCase()}.
 							</div>
 						)}
 					</section>

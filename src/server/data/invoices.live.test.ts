@@ -316,6 +316,30 @@ function draftInput(customerName: string, price = 250000) {
 	};
 }
 
+/**
+ * B2 fixture: any path that leaves Draft needs a REAL workspace client, so a
+ * test that finalizes / issues a new invoice creates one first and passes its
+ * id — same pattern as `makePayableInvoice` in payments.live.test.ts (unique,
+ * suffix-scoped email so repeated live runs never collide).
+ */
+async function createWorkspaceCustomer(
+	client: Supabase,
+	user: { issuerUserId: string } | null,
+	name: string,
+) {
+	if (!user) throw new Error("signed-in user missing for customer fixture.");
+	const email = `${name.toLowerCase().replace(/\s+/g, "-")}-${suffix}@example.com`;
+	return createClientRecord(client, user.issuerUserId, {
+		name,
+		email,
+		currency: "NGN",
+		paymentTerms: "net-14",
+		contact: { fullName: name, email },
+		favorite: false,
+		status: "active",
+	});
+}
+
 describe.skipIf(!LIVE)("A10 invoices domain (live velure-cc)", () => {
 	beforeAll(async () => {
 		mgmtToken = process.env.SUPABASE_MANAGEMENT_TOKEN ?? "";
@@ -548,8 +572,17 @@ describe.skipIf(!LIVE)("A10 invoices domain (live velure-cc)", () => {
 
 	it("converts a proforma into a standard invoice", async () => {
 		const clientA = userScopedClient(userA!.jwt);
+		// B2 gate: finalizing the proforma (deliveryType "create") derives a
+		// non-Draft status, so the draft must carry a workspace customer
+		// before it leaves Draft — fixture mirrors payments.live.test.ts.
+		const proformaCustomerId = await createWorkspaceCustomer(
+			clientA,
+			userA,
+			"Proforma Co",
+		);
 		const proforma = await createDraft(clientA, userA!.issuerUserId, {
 			...draftInput("Proforma Co", 100000),
+			customerId: proformaCustomerId,
 			documentType: "proforma",
 			deliveryType: "create",
 		});

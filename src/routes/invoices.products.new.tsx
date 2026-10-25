@@ -16,6 +16,7 @@ import type { FormState } from "#/features/products/product-form-utils";
 import {
 	Field,
 	UNIT_OPTIONS,
+	VAT_CATEGORY_OPTIONS,
 	validateProductForm,
 } from "#/features/products/product-form-utils";
 import { useUnifiedAuth } from "#/lib/auth-hook";
@@ -34,6 +35,8 @@ const initialState: FormState = {
 	unitName: "pcs",
 	defaultUnitPrice: "",
 	defaultTaxId: "",
+	defaultVatCategory: "",
+	defaultClassificationCode: "",
 	isActive: true,
 };
 
@@ -69,8 +72,14 @@ function NewProductPage() {
 	const [submitting, setSubmitting] = useState(false);
 	const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
-	const { parsedUnitPrice, visibleNameError, visiblePriceError, isValid } =
-		validateProductForm(state, attemptedSubmit);
+	const {
+		parsedUnitPrice,
+		visibleNameError,
+		visiblePriceError,
+		visibleVatCategoryError,
+		visibleClassificationCodeError,
+		isValid,
+	} = validateProductForm(state, attemptedSubmit);
 	const previewUnitPrice = Number(state.defaultUnitPrice);
 	const hasPreviewUnitPrice =
 		state.defaultUnitPrice.trim().length > 0 &&
@@ -97,6 +106,9 @@ function NewProductPage() {
 					unitName: state.unitName.trim() || undefined,
 					defaultUnitPrice: parsedUnitPrice,
 					defaultTaxId: state.defaultTaxId.trim() || undefined,
+					defaultVatCategory: state.defaultVatCategory || undefined,
+					defaultClassificationCode:
+						state.defaultClassificationCode.trim() || undefined,
 					isActive: state.isActive,
 				}),
 				20_000,
@@ -244,6 +256,57 @@ function NewProductPage() {
 									placeholder="Optional tax ID"
 								/>
 							</Field>
+
+							<div className="grid gap-3 md:grid-cols-2">
+								<Field
+									label="VAT category *"
+									htmlFor="product-vat-category"
+									error={visibleVatCategoryError}
+								>
+									<Select
+										value={state.defaultVatCategory || undefined}
+										onValueChange={(value) =>
+											setState((prev) => ({
+												...prev,
+												defaultVatCategory:
+													value as FormState["defaultVatCategory"],
+											}))
+										}
+									>
+										<SelectTrigger
+											id="product-vat-category"
+											className={`${inputClass} w-full`}
+										>
+											<SelectValue placeholder="Choose VAT category" />
+										</SelectTrigger>
+										<SelectContent className="border-rule bg-paper-2 text-ink">
+											{VAT_CATEGORY_OPTIONS.map((option) => (
+												<SelectItem key={option.value} value={option.value}>
+													{option.label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</Field>
+								<Field
+									label="Goods/service code *"
+									htmlFor="product-classification-code"
+									error={visibleClassificationCodeError}
+								>
+									<Input
+										id="product-classification-code"
+										value={state.defaultClassificationCode}
+										onChange={(event) =>
+											setState((prev) => ({
+												...prev,
+												defaultClassificationCode: event.target.value,
+											}))
+										}
+										className={inputClass}
+										placeholder="Enter the applicable code"
+									/>
+								</Field>
+							</div>
 
 							<div className="inline-flex items-center gap-2 text-sm text-ink-2">
 								<Switch

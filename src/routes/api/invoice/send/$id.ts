@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
 import { Resend } from "resend";
+import {
+	CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE,
+	INVOICE_LINE_CLASSIFICATION_REQUIRED_MESSAGE,
+} from "#/features/invoices/customer-gate";
+import { assertSendCustomerGate } from "#/server/data/invoices";
 import { ensurePaystackTransferCharge } from "#/server/data/paystack-server";
 import { getServerEnv } from "#/server/env";
 import { safeErrorDetails } from "#/server/http-security";
@@ -157,12 +162,38 @@ async function sendInvoiceEmail({
 		);
 	}
 
+	// B2 — customer required to leave Draft: a `sent` delivery event derives a
+	// Draft invoice out of Draft (delivered_at → unpaid/overdue), so a
+	// customer-less draft is rejected HERE, before the PDF render, the provider
+	// call and any delivery-event write. Only the gate's own rejections are
+	// mapped; anything else still bubbles to the route's 500 handler.
+	try {
+		await assertSendCustomerGate(context.client, context.userId, invoice);
+	} catch (error) {
+		const gateMessage = errorMessage(error, "");
+		if (
+			gateMessage === CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE ||
+			gateMessage === INVOICE_LINE_CLASSIFICATION_REQUIRED_MESSAGE ||
+			gateMessage === "Customer not found."
+		) {
+			return Response.json({ ok: false, error: gateMessage }, { status: 400 });
+		}
+		throw error;
+	}
+
 	const publicUrl = `${new URL(request.url).origin}/i/${invoice.token}`;
 	const safeInvoiceNumber = escapeHtml(invoice.invoiceNumber);
 	const safeCustomerName = escapeHtml(invoice.customerName);
 	const safePublicUrl = escapeHtml(publicUrl);
 	const isProforma = invoice.documentType === "proforma";
-	const mailLabel = isProforma ? "pro-forma invoice" : "invoice";
+	const mailLabel =
+		invoice.documentType === "credit_note"
+			? "credit note"
+			: invoice.documentType === "debit_note"
+				? "debit note"
+				: isProforma
+					? "pro-forma invoice"
+					: "invoice";
 
 	let pdfBytes: Uint8Array;
 	try {
@@ -191,11 +222,11 @@ async function sendInvoiceEmail({
 			{
 				from: sanitizeFromAddress(getServerEnv("RESEND_FROM_EMAIL")),
 				to,
-				subject: `${isProforma ? "Pro-forma" : "Invoice"} ${invoice.invoiceNumber}`,
+				subject: `${mailLabel.replace(/^./, (letter) => letter.toUpperCase())} ${invoice.invoiceNumber}`,
 				text: `Your ${mailLabel} ${invoice.invoiceNumber} for ${invoice.customerName} is attached as a PDF. You can also view it online: ${publicUrl}`,
 				html: `
         <div style="font-family: Arial, sans-serif; color: #111; line-height: 1.5;">
-			  <h2 style="margin: 0 0 12px;">${isProforma ? "Pro-forma invoice" : "Invoice"} ${safeInvoiceNumber}</h2>
+			  <h2 style="margin: 0 0 12px;">${escapeHtml(mailLabel.replace(/^./, (letter) => letter.toUpperCase()))} ${safeInvoiceNumber}</h2>
           <p style="margin: 0 0 12px;">Hi,</p>
           <p style="margin: 0 0 12px;">
 			  Your ${mailLabel} for <strong>${safeCustomerName}</strong> is attached as a PDF.

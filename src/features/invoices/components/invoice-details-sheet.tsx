@@ -67,11 +67,13 @@ import {
 	type WithholdingRecipientEntityType,
 	type WithholdingRecipientResidency,
 } from "#/features/compliance/types";
+import type { MockScenario } from "#/features/einvoicing/provider-adapter";
 import { invoiceTotal } from "#/features/invoices/calculate";
 import { NotesEditor } from "#/features/invoices/components/editor/notes-editor";
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import { toEditorDoc } from "#/features/invoices/midday-adapter";
 import type { InvoiceLineItem, InvoiceRecord } from "#/features/invoices/types";
+import { INVOICE_DOCUMENT_TYPE_LABELS } from "#/features/invoices/types";
 import { useUnifiedAuth } from "#/lib/auth-hook";
 import type { EditorDoc } from "#/lib/midday-invoice/types";
 import { useSupabaseSession } from "#/lib/supabase-session";
@@ -93,6 +95,13 @@ type Props = {
 		amount: number,
 		reference?: string,
 	) => Promise<void> | void;
+};
+
+type SubmissionGuidanceResponse = {
+	ok: boolean;
+	status?: string;
+	rejectionGuidance?: { code: string; fix: string } | null;
+	error?: string;
 };
 
 const AUTOSAVE_DEBOUNCE_MS = 1600;
@@ -127,7 +136,8 @@ function shareLinks(invoice: InvoiceRecord) {
 	const origin = typeof window !== "undefined" ? window.location.origin : "";
 	const publicUrl = `${origin}/i/${invoice.token}`;
 	const downloadUrl = `${publicUrl}?download=1`;
-	const label = invoice.documentType === "proforma" ? "Pro-forma" : "Invoice";
+	const label =
+		INVOICE_DOCUMENT_TYPE_LABELS[invoice.documentType ?? "standard"];
 	const text = `${label} ${invoice.invoiceNumber} for ${invoice.customerName}`;
 	const body = `${text}\n\nView & download: ${downloadUrl}`;
 
@@ -158,6 +168,7 @@ function serializeInvoiceDraft(invoice: InvoiceRecord) {
 		id: invoice.id,
 		token: invoice.token,
 		documentType: invoice.documentType,
+		correctsInvoiceId: invoice.correctsInvoiceId,
 		convertedToInvoiceId: invoice.convertedToInvoiceId,
 		shipmentDetails: invoice.shipmentDetails,
 		depositRequest: invoice.depositRequest,
@@ -514,6 +525,21 @@ export function InvoiceDetailsSheet({
 		enabled: Boolean(supabaseClient && userId),
 	});
 	const workspace = workspaceQuery.data;
+	const submissionGuidanceQuery = useQuery({
+		queryKey: ["invoice-submission-guidance", userId, invoice?.id],
+		queryFn: async () => {
+			const response = await fetch(
+				`/api/invoice/submission/${encodeURIComponent(invoice!.id)}`,
+				{ credentials: "include" },
+			);
+			const payload = (await response.json()) as SubmissionGuidanceResponse;
+			if (!response.ok || !payload.ok) {
+				throw new Error(payload.error ?? "Could not load sandbox status.");
+			}
+			return payload;
+		},
+		enabled: Boolean(open && invoice?.id && supabaseClient && userId),
+	});
 	const [draft, setDraft] = useState<InvoiceRecord | null>(
 		invoice ? withDerivedCompliance(invoice) : null,
 	);
@@ -527,6 +553,13 @@ export function InvoiceDetailsSheet({
 	const [recipientEmail, setRecipientEmail] = useState("");
 	const [paymentReference, setPaymentReference] = useState("");
 	const [isSendingEmail, setIsSendingEmail] = useState(false);
+	const [isSubmittingEInvoice, setIsSubmittingEInvoice] = useState(false);
+	const [submissionScenario, setSubmissionScenario] =
+		useState<MockScenario>("success");
+	const [submissionError, setSubmissionError] = useState<string | null>(null);
+	const [submissionMessage, setSubmissionMessage] = useState<string | null>(
+		null,
+	);
 	const [rescheduleAt, setRescheduleAt] = useState("");
 	const [emailStatus, setEmailStatus] = useState<string | null>(null);
 	const [showCompliance, setShowCompliance] = useState(false);
@@ -825,6 +858,63 @@ export function InvoiceDetailsSheet({
 		}
 	};
 
+	const onRunMockSubmission = async () => {
+		if (!draft) return;
+		setIsSubmittingEInvoice(true);
+		setSubmissionError(null);
+		setSubmissionMessage(null);
+		try {
+			const response = await fetch(
+				`/api/invoice/submission/${encodeURIComponent(draft.id)}`,
+				{
+					method: "POST",
+					credentials: "include",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ scenario: submissionScenario }),
+				},
+			);
+			const payload = (await response.json()) as SubmissionGuidanceResponse & {
+				message?: string;
+				issues?: Array<{ message?: string }>;
+				mockClearance?: { irn: string; qrPayload: string };
+			};
+			if (!response.ok || !payload.ok) {
+				setSubmissionError(
+					payload.issues
+						?.map((issue) => issue.message)
+						.filter(Boolean)
+						.join(" ") ||
+						payload.error ||
+						"Could not run the mock sandbox submission.",
+				);
+				return;
+			}
+			setSubmissionMessage(payload.message ?? "Mock sandbox run completed.");
+			if (payload.mockClearance) {
+				setDraft((previous) =>
+					previous
+						? {
+								...previous,
+								fiscalization: {
+									status: "mock_cleared",
+									provider: "mock",
+									environment: "sandbox",
+									mock: true,
+									mockIrn: payload.mockClearance?.irn,
+									qrCodePayload: payload.mockClearance?.qrPayload,
+								},
+							}
+						: previous,
+				);
+			}
+			await submissionGuidanceQuery.refetch();
+		} catch {
+			setSubmissionError("Could not run the mock sandbox submission.");
+		} finally {
+			setIsSubmittingEInvoice(false);
+		}
+	};
+
 	const activityItems = draft
 		? [
 				{
@@ -920,7 +1010,12 @@ export function InvoiceDetailsSheet({
 									<div className="flex items-start justify-between gap-6">
 										<div>
 											<SheetTitle className="text-[28px] font-semibold tracking-[-0.03em] text-ink">
-												{draft.invoiceNumber}
+												{
+													INVOICE_DOCUMENT_TYPE_LABELS[
+														draft.documentType ?? "standard"
+													]
+												}{" "}
+												· {draft.invoiceNumber}
 											</SheetTitle>
 											<SheetDescription className="mt-2 text-sm text-ink-2">
 												Edit the live invoice without leaving the list view.
@@ -1809,6 +1904,101 @@ export function InvoiceDetailsSheet({
 											</div>
 										</Section>
 
+										<Section title="E-invoicing sandbox">
+											<div className="space-y-3">
+												<p className="rounded-md border border-warning-line bg-warning-soft p-3 text-sm text-ink">
+													<strong>MOCK SANDBOX — NOT NRS CLEARED.</strong> No
+													invoice is submitted to or cleared by an external
+													provider, NRS, or MBS.
+												</p>
+												<label
+													htmlFor="mock-submission-scenario"
+													className="block text-xs font-medium text-ink-2"
+												>
+													Mock result scenario
+												</label>
+												<select
+													id="mock-submission-scenario"
+													value={submissionScenario}
+													onChange={(event) =>
+														setSubmissionScenario(
+															event.target.value as MockScenario,
+														)
+													}
+													className="h-10 w-full rounded-md border border-rule bg-paper px-3 text-sm text-ink outline-none"
+												>
+													<option value="success">
+														Accepted mock submission
+													</option>
+													<option value="rejection">
+														Mock buyer TIN rejection
+													</option>
+													<option value="timeout">Mock timeout</option>
+													<option value="duplicate">Mock duplicate</option>
+													<option value="cleared">
+														Mock-cleared demo artifacts
+													</option>
+												</select>
+												<Button
+													type="button"
+													variant="ghost"
+													disabled={
+														isSubmittingEInvoice ||
+														["completed", "rejected", "dead_letter"].includes(
+															submissionGuidanceQuery.data?.status ?? "",
+														)
+													}
+													onClick={onRunMockSubmission}
+													className="h-9 rounded-md border border-rule bg-paper px-4 text-sm text-ink-2 hover:bg-paper-2 hover:text-ink"
+												>
+													{isSubmittingEInvoice
+														? "Running mock scenario…"
+														: "Run mock sandbox scenario"}
+												</Button>
+												{submissionGuidanceQuery.data?.status ? (
+													<p className="text-xs text-ink-2">
+														Stored sandbox status:{" "}
+														{submissionGuidanceQuery.data.status}.
+													</p>
+												) : null}
+												{submissionMessage ? (
+													<p role="status" className="text-sm text-ink-2">
+														{submissionMessage}
+													</p>
+												) : null}
+												{submissionError ? (
+													<p role="alert" className="text-sm text-danger">
+														{submissionError}
+													</p>
+												) : null}
+												{submissionGuidanceQuery.data?.rejectionGuidance ? (
+													<div className="rounded-md border border-danger-line bg-danger-soft p-3 text-sm">
+														<p className="font-medium text-danger">
+															Invoice needs a fix
+														</p>
+														<p className="mt-1 text-ink-2">
+															{
+																submissionGuidanceQuery.data.rejectionGuidance
+																	.fix
+															}
+														</p>
+													</div>
+												) : null}
+												{draft.fiscalization?.status === "mock_cleared" &&
+												draft.fiscalization.mock === true &&
+												draft.fiscalization.provider === "mock" ? (
+													<div className="rounded-md border border-rule bg-paper-2 p-3 text-sm">
+														<p className="font-semibold">
+															MOCK SANDBOX — NOT NRS CLEARED
+														</p>
+														<p className="mt-1 text-ink-2">
+															Mock IRN: {draft.fiscalization.mockIrn}
+														</p>
+													</div>
+												) : null}
+											</div>
+										</Section>
+
 										<Section title="Share">
 											<div className="space-y-3">
 												<div>
@@ -1868,9 +2058,9 @@ export function InvoiceDetailsSheet({
 															const links = shareLinks(draft);
 															if (navigator.share) {
 																const label =
-																	draft.documentType === "proforma"
-																		? "Pro-forma"
-																		: "Invoice";
+																	INVOICE_DOCUMENT_TYPE_LABELS[
+																		draft.documentType ?? "standard"
+																	];
 																await navigator.share({
 																	title: `${label} ${draft.invoiceNumber}`,
 																	text: `${label} ${draft.invoiceNumber} for ${draft.customerName}`,

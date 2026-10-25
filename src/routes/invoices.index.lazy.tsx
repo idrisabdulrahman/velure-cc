@@ -91,7 +91,12 @@ import {
 	keepVisibleInvoiceSelection,
 	setInvoiceSelectionForIds,
 } from "#/features/invoices/selection";
-import type { InvoiceRecord, InvoiceStatus } from "#/features/invoices/types";
+import type {
+	InvoiceDocumentType,
+	InvoiceRecord,
+	InvoiceStatus,
+} from "#/features/invoices/types";
+import { INVOICE_DOCUMENT_TYPE_LABELS } from "#/features/invoices/types";
 import { useUnifiedAuth } from "#/lib/auth-hook";
 import { useSupabaseSession } from "#/lib/supabase-session";
 import {
@@ -118,7 +123,7 @@ export const Route = createLazyFileRoute("/invoices/")({
 });
 
 type InvoiceTypeFilter = "all" | "one-time" | "recurring";
-type DocumentTypeFilter = "all" | "standard" | "proforma";
+type DocumentTypeFilter = "all" | InvoiceDocumentType;
 type DueDateFilter = "all" | "this-month" | "next-month" | "past-due";
 
 type InvoiceRow = InvoiceRecord & {
@@ -895,7 +900,7 @@ function InvoicesIndex() {
 			render: (invoice) => (
 				<span className="flex flex-col gap-1 capitalize">
 					<span className="text-ink-2">
-						{invoice.documentType === "proforma" ? "Pro-forma" : "Standard"}
+						{INVOICE_DOCUMENT_TYPE_LABELS[invoice.documentType ?? "standard"]}
 					</span>
 					{invoice.convertedToInvoiceId ? (
 						<span className="text-[10px] font-medium text-brand">
@@ -1277,11 +1282,21 @@ function InvoicesIndex() {
 				const { client, userId } = requireSupabase();
 				const result = await importCsv(client, userId, rows);
 				const issueCount = result.errors?.length ?? 0;
+				// B2/B3 import flags report rows demoted to Draft because their
+				// buyer or line classifications need attention.
+				const buyerNote =
+					result.needsBuyerMatch > 0
+						? `, ${result.needsBuyerMatch} without a linked buyer`
+						: "";
+				const classificationNote =
+					result.needsLineClassification > 0
+						? `, ${result.needsLineClassification} need complete line classification`
+						: "";
 				toast({
 					title: "Invoice import finished",
 					description: `${result.created} created, ${result.skipped} skipped${
 						issueCount > 0 ? `, ${issueCount} row issues reported` : ""
-					}.`,
+					}${buyerNote}${classificationNote}.`,
 					variant: "success",
 				});
 				return;
@@ -1975,6 +1990,8 @@ function AdvancedInvoiceFilters({
 							<SelectContent className="border-rule bg-paper-2 text-ink">
 								<SelectItem value="all">All document kinds</SelectItem>
 								<SelectItem value="standard">Standard</SelectItem>
+								<SelectItem value="credit_note">Credit note</SelectItem>
+								<SelectItem value="debit_note">Debit note</SelectItem>
 								<SelectItem value="proforma">Pro-forma</SelectItem>
 							</SelectContent>
 						</Select>

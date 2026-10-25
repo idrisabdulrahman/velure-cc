@@ -75,10 +75,25 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	removeClient: "app-scoped",
 	toggleClientFavorite: "app-scoped",
 	importClientsCsv: "app-scoped",
+	CLIENT_BUYER_REJECTION_PREFIX: "pure",
+	buildClientBuyerColumns: "pure",
 	// compliance-dashboard.ts
 	buildComplianceDashboardReport: "pure",
 	// compliance-export.ts
 	buildInvoiceExportContent: "pure",
+	// einvoice-validation.ts — caller session selects active workspace, then
+	// invoice and customer reads both carry that workspace filter.
+	validateWorkspaceInvoice: "app-scoped",
+	loadWorkspaceInvoiceSubmissionSnapshot: "app-scoped",
+	// einvoice-provider-credentials.ts — derives active workspace with the
+	// verified user client, then scopes service-role ciphertext access by it.
+	saveEInvoiceProviderCredentials: "server-admin",
+	createWorkspaceProviderAdapter: "server-admin",
+	// einvoice-submissions.ts — active-workspace membership is verified with the user client, every admin mutation is workspace-filtered.
+	submissionBackoffMs: "pure",
+	getInvoiceSubmissionGuidance: "server-admin",
+	queueInvoiceSubmission: "server-admin",
+	dispatchDueInvoiceSubmissions: "server-admin",
 	// compliance.ts
 	getWorkspaceSettings: "app-scoped",
 	SUPPLIER_PROFILE_REJECTION_PREFIX: "pure",
@@ -101,6 +116,22 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	recordSyncJobResult: "app-scoped",
 	retrySyncJob: "rls-only",
 	updateInvoiceSyncState: "app-scoped",
+	// invoice-numbering.ts (WP8/C1 — the ONE number authority)
+	isInvoiceIssued: "pure",
+	sequenceFromInvoiceNumber: "pure",
+	invoiceNumberForSequence: "pure",
+	resolveInvoiceNumberPrefix: "pure",
+	candidateInvoiceNumber: "pure",
+	// reads workspaces/invoices by a workspace id every caller first resolved
+	// through resolveActiveWorkspaceId; the collision check is eq-filtered
+	planInvoiceNumber: "app-scoped",
+	assertInvoiceNumberAvailable: "app-scoped",
+	// scope is enforced inside allocate_invoice_number / has_issued_invoice
+	// from the caller's own JWT (app.is_workspace_member), never a passed flag
+	reserveInvoiceNumber: "app-scoped",
+	commitInvoiceNumber: "app-scoped",
+	workspaceNumberingLocked: "app-scoped",
+	assertSequenceCounterChangeAllowed: "app-scoped",
 	// invoices.ts
 	INVOICE_LIST_PAGE_SIZE: "pure",
 	getDerivedInvoiceStatus: "pure",
@@ -129,6 +160,10 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	saveDraftSettings: "app-scoped",
 	saveTemplateDefaults: "app-scoped",
 	updateStatus: "app-scoped",
+	// B2 leave-Draft gates: workspace id resolved from the verified session,
+	// customer lookup scoped to that workspace (resolveActiveWorkspaceId)
+	assertCustomerForIssueTransition: "app-scoped",
+	assertSendCustomerGate: "app-scoped",
 	cancelSchedule: "app-scoped",
 	reschedule: "app-scoped",
 	remove: "app-scoped",
@@ -440,6 +475,9 @@ const ROUTE_CLASSIFICATIONS: Record<string, Classification> = {
 	"invoice/scheduled.ts": "server-admin",
 	// invoice read goes through getById(session client, session user, id)
 	"invoice/send/$id.ts": "session",
+	// Private submission endpoint; identity comes from the verified request session.
+	"invoice/submission/$id.ts": "session",
+	"invoice/submissions/scheduled.ts": "server-admin",
 	"payments/paystack/initialize.ts": "public-token",
 	"payments/paystack/webhook.ts": "server-admin",
 	"reminders/send-queue.ts": "session",

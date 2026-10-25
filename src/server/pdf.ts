@@ -60,6 +60,21 @@ function renderFallbackPdf(invoice: Invoice): Uint8Array {
 		rows.push(`WHT deduction: ${wht.toFixed(2)} ${invoice.currency}`);
 	rows.push(`Total: ${grandTotal.toFixed(2)} ${invoice.currency}`);
 	rows.push(`Net payable: ${netPayable.toFixed(2)} ${invoice.currency}`);
+	const fiscalization = invoice.fiscalization;
+	if (
+		fiscalization?.status === "mock_cleared" &&
+		fiscalization.mock === true &&
+		fiscalization.provider === "mock" &&
+		fiscalization.environment === "sandbox" &&
+		typeof fiscalization.mockIrn === "string" &&
+		fiscalization.mockIrn.startsWith("MOCK-IRN-") &&
+		typeof fiscalization.qrCodePayload === "string" &&
+		fiscalization.qrCodePayload.startsWith("MOCK-SANDBOX|NOT-NRS-CLEARED|")
+	) {
+		rows.push("MOCK SANDBOX — NOT NRS CLEARED");
+		rows.push(`Mock IRN: ${fiscalization.mockIrn}`);
+		rows.push(`Mock QR payload: ${fiscalization.qrCodePayload}`);
+	}
 	if (invoice.notes) rows.push(`Notes: ${invoice.notes}`);
 
 	const textOps = rows

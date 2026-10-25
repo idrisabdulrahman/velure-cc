@@ -1,3 +1,4 @@
+import { isInvoiceIssued } from "../invoice-numbering";
 import type { Supabase } from "../workspaces";
 
 /**
@@ -135,6 +136,83 @@ const MULTIPLE_ROWS = {
 	message: "fake-db: multiple rows returned where single was expected",
 };
 
+/**
+ * PostgREST's default cap on an UNBOUNDED read (Supabase `max-rows`). The
+ * fake emulates it for plain SELECTs so a data-layer query that must page (or
+ * must filter) fails here instead of passing against an infinite store.
+ * Explicit `.limit()` / `.range()` windows and `count: head` queries are not
+ * capped, and write paths deliberately keep matching every row so a partial
+ * write can never hide behind a green test.
+ */
+const DEFAULT_MAX_ROWS = 1000;
+
+/**
+ * Emulation of `invoices_workspace_number_unique` (migration 20261020000000):
+ * every writer rejects duplicate (workspace_id, invoice_number) pairs with
+ * SQLSTATE 23505, matching the database unique index.
+ */
+function uniqueNumberViolation(
+	existing: Row[],
+	incoming: Row[],
+): Result | null {
+	const seen = new Set<string>();
+	const keyOf = (row: Row) =>
+		row.workspace_id === undefined || row.invoice_number === undefined
+			? null
+			: `${row.workspace_id} ${row.invoice_number}`;
+	for (const row of existing) {
+		const key = keyOf(row);
+		if (key) seen.add(key);
+	}
+	for (const row of incoming) {
+		const key = keyOf(row);
+		if (!key) continue;
+		if (seen.has(key)) {
+			return {
+				data: null,
+				error: {
+					code: "23505",
+					message:
+						'duplicate key value violates unique constraint "invoices_workspace_number_unique"',
+					details: `Key (${key.replace(" ", ", ")}) already exists.`,
+					hint: null,
+				},
+			};
+		}
+		seen.add(key);
+	}
+	return null;
+}
+
+function submissionUniqueViolation(
+	table: string,
+	existing: Row[],
+	incoming: Row[],
+): Result | null {
+	const uniqueFields =
+		table === "invoice_submission_queue"
+			? [
+					["workspace_id", "invoice_id"],
+					["workspace_id", "idempotency_key"],
+				]
+			: table === "invoice_submission_attempts"
+				? [["workspace_id", "submission_id", "attempt_number", "event_type"]]
+				: [];
+	for (const fields of uniqueFields) {
+		const key = (row: Row) => fields.map((field) => row[field]).join(":");
+		const seen = new Set(existing.map(key));
+		for (const row of incoming) {
+			if (seen.has(key(row)))
+				return {
+					data: null,
+					error: { code: "23505", message: "duplicate submission record" },
+				};
+			seen.add(key(row));
+		}
+	}
+	return null;
+}
+
 class FakeBuilder implements PromiseLike<Result> {
 	private action: "select" | "insert" | "update" | "delete" = "select";
 	private filters: Filter[] = [];
@@ -143,6 +221,7 @@ class FakeBuilder implements PromiseLike<Result> {
 	private patch: Row | null = null;
 	private head = false;
 	private limitValue: number | null = null;
+	private rangeValue: { from: number; to: number } | null = null;
 	private orderValue: { column: string; ascending: boolean } | null = null;
 	private terminal: "none" | "single" | "maybeSingle" = "none";
 	private counter = 0;
@@ -231,6 +310,12 @@ class FakeBuilder implements PromiseLike<Result> {
 		return this;
 	}
 
+	/** Inclusive [from, to] row window — the PostgREST `Range` header. */
+	range(from: number, to: number) {
+		this.rangeValue = { from, to };
+		return this;
+	}
+
 	single() {
 		this.terminal = "single";
 		return this;
@@ -254,7 +339,14 @@ class FakeBuilder implements PromiseLike<Result> {
 					: compare(b[column], a[column]),
 			);
 		}
-		if (this.limitValue !== null) out = out.slice(0, this.limitValue);
+		if (this.rangeValue) {
+			const { from, to } = this.rangeValue;
+			out = out.slice(from, to + 1);
+		} else if (this.limitValue !== null) {
+			out = out.slice(0, this.limitValue);
+		} else if (this.action === "select" && !this.head) {
+			out = out.slice(0, DEFAULT_MAX_ROWS);
+		}
 		return out;
 	}
 
@@ -275,8 +367,28 @@ class FakeBuilder implements PromiseLike<Result> {
 			return { data, error: null };
 		}
 		if (this.action === "insert") {
+			// Model the real DB constraint (migration 20261020000000): the
+			// unique index on invoices (workspace_id, invoice_number) rejects
+			// duplicate numbers for EVERY writer, fake included.
+			const violation = uniqueNumberViolation(rows, this.values ?? []);
+			if (violation) return violation;
+			const submissionViolation = submissionUniqueViolation(
+				this.table,
+				rows,
+				this.values ?? [],
+			);
+			if (submissionViolation) return submissionViolation;
 			const inserted = (this.values ?? []).map((raw) => {
 				const value = { ...raw };
+				if (this.table === "invoice_submission_queue") {
+					value.idempotency_key ??= `generated-key-${rows.length + 1}`;
+					value.status ??= "queued";
+					value.attempt_count ??= 0;
+					value.max_attempts ??= 5;
+					value.next_attempt_at ??= new Date(0).toISOString();
+					value.lease_expires_at ??= null;
+					value.provider ??= "mock";
+				}
 				if (value.id === undefined) {
 					value.id = `${this.table}-row-${++this.counter}`;
 				}
@@ -305,6 +417,21 @@ class FakeBuilder implements PromiseLike<Result> {
 		}
 		const matched = this.selected();
 		if (this.action === "update") {
+			if (
+				this.table === "invoices" &&
+				this.patch &&
+				"invoice_number" in this.patch
+			) {
+				// Unique-index emulation on the update path: a renumbering that
+				// would collide with another row fails before anything mutates.
+				const candidates = matched.map((row) => ({
+					...row,
+					...(this.patch as Row),
+				}));
+				const others = rows.filter((row) => !matched.includes(row));
+				const violation = uniqueNumberViolation(others, candidates);
+				if (violation) return violation;
+			}
 			for (const row of matched) Object.assign(row, this.patch ?? {});
 		} else {
 			const doomed = new Set(matched);
@@ -339,14 +466,134 @@ export type FakeSupabase = { client: Supabase; tables: FakeTables };
  * shared by reference: tests can mutate/inspect it directly before and
  * after calling data-layer functions.
  */
-export function createFakeSupabase(tables: FakeTables): FakeSupabase {
+export function createFakeSupabase(
+	tables: FakeTables,
+	options: Readonly<{ onFrom?: (table: string) => void }> = {},
+): FakeSupabase {
 	const client = {
 		from(table: string) {
+			options.onFrom?.(table);
 			return new FakeBuilder(tables, table);
 		},
-		rpc(name: string) {
+		// Models the two RPCs WP8 adds (see the migrations each one ships
+		// with). Anything else still throws loudly, per the fake's contract.
+		rpc(name: string, args: Record<string, unknown> = {}) {
+			if (name === "allocate_invoice_number") {
+				return Promise.resolve(
+					allocateInvoiceNumber(tables, {
+						workspaceId: String(args.p_workspace_id),
+						prefix: String(args.p_prefix ?? "INV"),
+						year: Number(args.p_year),
+						minimumSequence: Number(args.p_minimum_sequence ?? 1),
+						reserveOnly: Boolean(args.p_reserve_only),
+					}),
+				);
+			}
+			if (name === "has_issued_invoice") {
+				const workspaceId = String(args.p_workspace_id);
+				const issued = (tables.invoices ?? []).some(
+					(row) => row.workspace_id === workspaceId && rowIsIssued(row),
+				);
+				return Promise.resolve({ data: issued, error: null });
+			}
 			throw new Error(`fake-db: rpc "${name}" is not supported`);
 		},
 	};
 	return { client: client as unknown as Supabase, tables };
+}
+
+/**
+ * Snake-case adapter for the ONE issued predicate: `isInvoiceIssued` is
+ * written against the camelCase document shape (and mirrors
+ * `public.invoice_is_issued` 1:1), while fake rows are raw column names.
+ * Keeping the predicate itself single-sourced is the point — the fake must
+ * agree with the SQL about what "issued" means.
+ */
+function rowIsIssued(row: Row): boolean {
+	// Timestamp columns arrive as ISO strings in real rows; the predicate is
+	// numeric, so normalize exactly like `epoch()` in invoices.ts.
+	const epoch = (value: unknown): number | null => {
+		if (typeof value === "number") return value;
+		if (typeof value === "string") {
+			const parsed = Date.parse(value);
+			return Number.isFinite(parsed) ? parsed : null;
+		}
+		return null;
+	};
+	return isInvoiceIssued({
+		deliveredAt: epoch(row.delivered_at),
+		paidAt: epoch(row.paid_at),
+		paymentReference: (row.payment_reference as string | null) ?? null,
+		paymentAmount: (row.payment_amount as number | null) ?? null,
+		status: (row.status as string | null) ?? null,
+		lifecycle: (row.lifecycle as Record<string, unknown> | null) ?? null,
+	});
+}
+
+/**
+ * Model of `public.allocate_invoice_number` (migration 20261020000000).
+ *
+ * The real function is ONE atomic `INSERT … ON CONFLICT DO UPDATE …
+ * RETURNING` that takes the row lock, so concurrent callers serialize. This
+ * mirror is a synchronous read-modify-write: JavaScript runs it without an
+ * await inside, so no interleaving is possible — the same guarantee by a
+ * different mechanism. The floor (`greatest(last_value + 1, minimum)`) and
+ * the reserve mode (`greatest(last_value, minimum)`) match the SQL, as does
+ * the monotone advance of the human-facing preview in
+ * `workspaces.next_invoice_sequence`.
+ */
+function allocateInvoiceNumber(
+	tables: FakeTables,
+	args: {
+		workspaceId: string;
+		prefix: string;
+		year: number;
+		minimumSequence: number;
+		reserveOnly: boolean;
+	},
+): { data: unknown; error: unknown } {
+	// Mirrors the SQL: `left(regexp_replace(prefix, '[^A-Z0-9]', '', 'g'), 12)`
+	// (case-sensitive — lowercase is stripped, exactly like the migration).
+	const prefix = args.prefix.replace(/[^A-Z0-9]/g, "").slice(0, 12) || "INV";
+	const minimum = Math.max(
+		Number.isFinite(args.minimumSequence) ? args.minimumSequence : 1,
+		1,
+	);
+	if (!tables.invoice_number_sequences) {
+		tables.invoice_number_sequences = [];
+	}
+	const sequences = tables.invoice_number_sequences;
+	let row = sequences.find(
+		(candidate) =>
+			candidate.workspace_id === args.workspaceId &&
+			candidate.prefix === prefix &&
+			candidate.year === args.year,
+	);
+	let sequence: number;
+	if (!row) {
+		sequence = minimum;
+		row = {
+			workspace_id: args.workspaceId,
+			prefix,
+			year: args.year,
+			last_value: sequence,
+			updated_at: new Date().toISOString(),
+		};
+		sequences.push(row);
+	} else {
+		sequence = args.reserveOnly
+			? Math.max(Number(row.last_value), minimum)
+			: Math.max(Number(row.last_value) + 1, minimum);
+		row.last_value = sequence;
+	}
+	const workspace = (tables.workspaces ?? []).find(
+		(candidate) => candidate.id === args.workspaceId,
+	);
+	if (workspace) {
+		workspace.next_invoice_sequence = Math.max(
+			sequence + 1,
+			Number(workspace.next_invoice_sequence ?? 1),
+		);
+	}
+	return { data: sequence, error: null };
 }

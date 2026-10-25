@@ -1,4 +1,4 @@
-import type { InvoiceStatus } from "./types";
+import type { InvoiceStatus, VatCategory } from "./types";
 
 export type InvoiceImportRow = {
 	invoiceNumber?: string;
@@ -10,6 +10,9 @@ export type InvoiceImportRow = {
 	description: string;
 	quantity?: number;
 	price?: number;
+	unit?: string;
+	vatCategory?: VatCategory;
+	classificationCode?: string;
 	notes?: string;
 	paymentDetails?: string;
 	paymentLink?: string;
@@ -29,6 +32,9 @@ export type ImportedInvoiceDraft = {
 		name: string;
 		quantity: number;
 		price: number;
+		unit?: string;
+		vatCategory?: "standard" | "zero_rated" | "exempt";
+		classificationCode?: string;
 	}>;
 };
 
@@ -211,6 +217,13 @@ export function parseInvoiceCsv(text: string): InvoiceImportRow[] {
 					]) ?? "",
 				quantity,
 				price,
+				unit: at(cells, ["unit", "unitofmeasure", "uom"]),
+				vatCategory: parseVatCategory(at(cells, ["vatcategory", "vat"])),
+				classificationCode: at(cells, [
+					"classificationcode",
+					"goodsservicecode",
+					"itemcode",
+				]),
 				notes: at(cells, ["notes", "note", "memo"]),
 				paymentDetails: at(cells, ["paymentdetails", "bankdetails"]),
 				paymentLink: at(cells, ["paymentlink", "paylink"]),
@@ -219,6 +232,15 @@ export function parseInvoiceCsv(text: string): InvoiceImportRow[] {
 		.filter(
 			(row) => row.customerName && row.description && (row.price ?? 0) > 0,
 		);
+}
+
+function parseVatCategory(value?: string): VatCategory | undefined {
+	const category = value?.trim().toLowerCase().replace(/[ -]+/g, "_");
+	return category === "standard" ||
+		category === "zero_rated" ||
+		category === "exempt"
+		? category
+		: undefined;
 }
 
 function valueAfterLabel(row: string[], labelIndex: number) {

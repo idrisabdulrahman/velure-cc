@@ -8,6 +8,7 @@ import type {
 } from "#/lib/midday-invoice/types";
 import { normalizeCurrencyCode, resolveCurrencyLocale } from "./format";
 import type { InvoiceRecord } from "./types";
+import { INVOICE_DOCUMENT_TYPE_LABELS } from "./types";
 
 export function toEditorDoc(
 	text: string | EditorDoc | null | undefined,
@@ -60,6 +61,8 @@ function buildIdentityDoc(lines: Array<string | null | undefined>) {
 
 function buildTemplate(invoice: InvoiceRecord): Template {
 	const isProforma = invoice.documentType === "proforma";
+	const documentLabel =
+		INVOICE_DOCUMENT_TYPE_LABELS[invoice.documentType ?? "standard"];
 	const templateSize = invoice.invoiceSize === "LETTER" ? "letter" : "a4";
 	const dateFormat =
 		invoice.dateFormat === "us"
@@ -83,10 +86,9 @@ function buildTemplate(invoice: InvoiceRecord): Template {
 	const settings = invoice.templateSettings ?? {};
 	return {
 		customerLabel: settings.customerLabel ?? "To",
-		title: settings.title ?? (isProforma ? "Pro-forma Invoice" : "Invoice"),
+		title: settings.title ?? documentLabel,
 		fromLabel: settings.fromLabel ?? "From",
-		invoiceNoLabel:
-			settings.invoiceNoLabel ?? (isProforma ? "Pro-forma No" : "Invoice No"),
+		invoiceNoLabel: settings.invoiceNoLabel ?? `${documentLabel} No`,
 		issueDateLabel: settings.issueDateLabel ?? "Issue Date",
 		dueDateLabel: settings.dueDateLabel ?? "Due Date",
 		descriptionLabel: settings.descriptionLabel ?? "Description",
@@ -169,6 +171,21 @@ export function toMiddayInvoice(invoice: InvoiceRecord): MiddayInvoice {
 	const amount = compliance.grandTotal || amountFromLineItems(invoice);
 	const netPayable = amount - (compliance.withholdingTaxAmount || 0);
 	const customerName = invoice.customerName || null;
+	const fiscalization = invoice.fiscalization;
+	const mockClearance =
+		fiscalization?.status === "mock_cleared" &&
+		fiscalization.mock === true &&
+		fiscalization.provider === "mock" &&
+		fiscalization.environment === "sandbox" &&
+		typeof fiscalization.mockIrn === "string" &&
+		fiscalization.mockIrn.startsWith("MOCK-IRN-") &&
+		typeof fiscalization.qrCodePayload === "string" &&
+		fiscalization.qrCodePayload.startsWith("MOCK-SANDBOX|NOT-NRS-CLEARED|")
+			? {
+					irn: fiscalization.mockIrn,
+					qrPayload: fiscalization.qrCodePayload,
+				}
+			: undefined;
 	const shipmentLines = invoice.shipmentDetails
 		? [
 				invoice.shipmentDetails.weight
@@ -270,5 +287,6 @@ export function toMiddayInvoice(invoice: InvoiceRecord): MiddayInvoice {
 		team: {
 			name: "Velure",
 		},
+		...(mockClearance ? { mockClearance } : {}),
 	};
 }

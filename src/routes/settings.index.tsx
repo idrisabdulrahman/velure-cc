@@ -784,15 +784,21 @@ function SettingsPage() {
 								<FormField
 									label="Next invoice number"
 									error={errors.nextInvoiceSequence}
+									hint={
+										workspace?.numberingLocked
+											? "Locked: your first invoice has been issued, so numbering is now managed automatically."
+											: undefined
+									}
 								>
 									<Input
 										type="number"
 										min={1}
 										value={form.nextInvoiceSequence}
+										disabled={workspace?.numberingLocked === true}
 										onChange={(event) =>
 											updateField("nextInvoiceSequence", event.target.value)
 										}
-										className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
+										className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand disabled:opacity-50"
 									/>
 								</FormField>
 							</div>

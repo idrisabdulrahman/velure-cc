@@ -40,6 +40,7 @@ import {
 	SELLER_TAX_STATUS_OPTIONS,
 	WITHHOLDING_CATEGORY_OPTIONS,
 } from "#/features/compliance/nigeria";
+import { MockSandboxNotice } from "#/features/einvoicing/mock-sandbox-notice";
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import { useUnifiedAuth } from "#/lib/auth-hook";
 import { useSupabaseSession } from "#/lib/supabase-session";
@@ -411,6 +412,7 @@ function ComplianceSettingsPage() {
 				e-invoicing provider and does not submit invoices to the NRS for
 				clearance.
 			</div>
+			<MockSandboxNotice />
 
 			<section aria-label="Official sources">
 				<h2 className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-3">

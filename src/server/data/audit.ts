@@ -67,6 +67,11 @@ export const INVOICE_AUDIT_ACTIONS = [
 	"invoice.send",
 	"invoice.cancel",
 	"invoice.export",
+	// WP8/C3: hard deletes (draft cleanup) and blocked delete attempts on
+	// issued invoices get their own action instead of overloading
+	// invoice.edit; the DB CHECK grows in lockstep (migration
+	// 20261020000002, whose down re-adds the old five-action set NOT VALID).
+	"invoice.delete",
 ] as const;
 
 export type InvoiceAuditAction = (typeof INVOICE_AUDIT_ACTIONS)[number];
@@ -96,8 +101,17 @@ type InvoiceAuditLogInsert =
 const AUDIT_REDACTED_KEYS = new Set([
 	"token",
 	"tokenrevokedat",
+	"accesstoken",
+	"refreshtoken",
+	"clientsecret",
 	"password",
 	"apikey",
+	"privatekey",
+	"certificate",
+	"clientcertificate",
+	"clientprivatekey",
+	"privatekeypem",
+	"certificatepem",
 	"secret",
 	"authorization",
 ]);
@@ -114,7 +128,8 @@ export function sanitizeAuditPayload(value: unknown, depth = 0): Json | null {
 	if (typeof value === "object") {
 		const sanitized: Record<string, Json> = {};
 		for (const [key, item] of Object.entries(value)) {
-			if (AUDIT_REDACTED_KEYS.has(key.toLowerCase())) continue;
+			const normalizedKey = key.toLowerCase().replace(/[_-]/g, "");
+			if (AUDIT_REDACTED_KEYS.has(normalizedKey)) continue;
 			sanitized[key] = sanitizeAuditPayload(item, depth + 1);
 		}
 		return sanitized;
@@ -157,11 +172,20 @@ export function buildInvoiceAuditRow(args: {
  * `userId` must be that session's user id. The workspace is resolved from
  * the client and the row is written with the service-role client. Throws —
  * fail-closed — when the workspace is missing or the insert fails.
+ *
+ * `options.workspaceId` is a SERVER-ONLY escape hatch for system jobs (the
+ * scheduled-send dispatcher in src/server/invoice-mailer.ts) that act on a
+ * row whose workspace is known from the database but whose owner's
+ * `active_workspaces` row may point somewhere else — resolving through the
+ * active workspace would file the event under the wrong tenant. Never pass
+ * a client-supplied value: the browser transport (./audit-client and the
+ * audit POST route) has no way to set it, so no request can steer tenancy.
  */
 export async function recordInvoiceAudit(
 	client: Supabase,
 	userId: string,
 	entry: InvoiceAuditEntry,
+	options?: { workspaceId?: string },
 ): Promise<void> {
 	if (typeof window !== "undefined") {
 		// Tripwire: the service-role key cannot exist in a browser. Client
@@ -170,7 +194,8 @@ export async function recordInvoiceAudit(
 			"recordInvoiceAudit is server-only; browser callers must use ./audit-client.",
 		);
 	}
-	const workspaceId = await resolveActiveWorkspaceId(client, userId);
+	const workspaceId =
+		options?.workspaceId ?? (await resolveActiveWorkspaceId(client, userId));
 	if (!workspaceId) throw new Error("No active workspace.");
 	const { error } = await getSupabaseAdminClient()
 		.from("invoice_audit_log")

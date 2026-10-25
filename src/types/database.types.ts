@@ -99,6 +99,9 @@ export type Database = {
       clients: {
         Row: {
           billing_address: string | null
+          buyer_profile_issues: Json
+          buyer_profile_status: string
+          buyer_type: string
           company: string | null
           contact: Json
           created_at: string | null
@@ -119,6 +122,9 @@ export type Database = {
         }
         Insert: {
           billing_address?: string | null
+          buyer_profile_issues?: Json
+          buyer_profile_status?: string
+          buyer_type?: string
           company?: string | null
           contact: Json
           created_at?: string | null
@@ -139,6 +145,9 @@ export type Database = {
         }
         Update: {
           billing_address?: string | null
+          buyer_profile_issues?: Json
+          buyer_profile_status?: string
+          buyer_type?: string
           company?: string | null
           contact?: Json
           created_at?: string | null
@@ -461,6 +470,24 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_submission_queue: {
+        Row: { id: string; workspace_id: string; invoice_id: string; idempotency_key: string; submission_snapshot: Json; provider: string; status: string; attempt_count: number; max_attempts: number; next_attempt_at: string; lease_expires_at: string | null; provider_reference: string | null; last_outcome: string | null; last_error_code: string | null; created_by: string; created_at: string; updated_at: string }
+        Insert: { id?: string; workspace_id: string; invoice_id: string; idempotency_key?: string; submission_snapshot: Json; provider?: string; status?: string; attempt_count?: number; max_attempts?: number; next_attempt_at?: string; lease_expires_at?: string | null; provider_reference?: string | null; last_outcome?: string | null; last_error_code?: string | null; created_by: string; created_at?: string; updated_at?: string }
+        Update: { id?: string; workspace_id?: string; invoice_id?: string; idempotency_key?: string; submission_snapshot?: Json; provider?: string; status?: string; attempt_count?: number; max_attempts?: number; next_attempt_at?: string; lease_expires_at?: string | null; provider_reference?: string | null; last_outcome?: string | null; last_error_code?: string | null; created_by?: string; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      invoice_submission_attempts: {
+        Row: { id: string; workspace_id: string; submission_id: string; attempt_number: number; event_type: string; outcome: string; request_snapshot: Json; response_snapshot: Json | null; error_code: string | null; started_at: string; finished_at: string | null }
+        Insert: { id?: string; workspace_id: string; submission_id: string; attempt_number: number; event_type: string; outcome: string; request_snapshot: Json; response_snapshot?: Json | null; error_code?: string | null; started_at: string; finished_at?: string | null }
+        Update: { id?: string; workspace_id?: string; submission_id?: string; attempt_number?: number; event_type?: string; outcome?: string; request_snapshot?: Json; response_snapshot?: Json | null; error_code?: string | null; started_at?: string; finished_at?: string | null }
+        Relationships: []
+      }
+      einvoice_provider_credentials: {
+        Row: { id: string; workspace_id: string; provider_key: string; encrypted_bundle: string; created_at: string; updated_at: string }
+        Insert: { id?: string; workspace_id: string; provider_key: string; encrypted_bundle: string; created_at?: string; updated_at?: string }
+        Update: { id?: string; workspace_id?: string; provider_key?: string; encrypted_bundle?: string; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
       invoice_audit_log: {
         Row: {
           action: string
@@ -634,11 +661,44 @@ export type Database = {
           },
         ]
       }
+      invoice_number_sequences: {
+        Row: {
+          last_value: number
+          prefix: string
+          updated_at: string
+          workspace_id: string
+          year: number
+        }
+        Insert: {
+          last_value: number
+          prefix: string
+          updated_at?: string
+          workspace_id: string
+          year: number
+        }
+        Update: {
+          last_value?: number
+          prefix?: string
+          updated_at?: string
+          workspace_id?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_number_sequences_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
           bottom_block: Json | null
           canceled_at: string | null
           compliance: Json | null
+          corrects_invoice_id: string | null
           created_at: string
           currency: string
           customer_id: string | null
@@ -687,6 +747,7 @@ export type Database = {
           bottom_block?: Json | null
           canceled_at?: string | null
           compliance?: Json | null
+          corrects_invoice_id?: string | null
           created_at?: string
           currency: string
           customer_id?: string | null
@@ -737,6 +798,7 @@ export type Database = {
           bottom_block?: Json | null
           canceled_at?: string | null
           compliance?: Json | null
+          corrects_invoice_id?: string | null
           created_at?: string
           currency?: string
           customer_id?: string | null
@@ -784,6 +846,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "invoices_corrects_invoice_same_workspace_fkey"
+            columns: ["corrects_invoice_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id", "workspace_id"]
+          },
           {
             foreignKeyName: "invoices_customer_id_fkey"
             columns: ["customer_id"]
@@ -1036,7 +1105,9 @@ export type Database = {
       products: {
         Row: {
           created_at: string
+          default_classification_code: string | null
           default_tax_id: string | null
+          default_vat_category: string | null
           default_unit_price: number
           deleted_at: string | null
           description: string | null
@@ -1051,7 +1122,9 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          default_classification_code?: string | null
           default_tax_id?: string | null
+          default_vat_category?: string | null
           default_unit_price: number
           deleted_at?: string | null
           description?: string | null
@@ -1066,7 +1139,9 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          default_classification_code?: string | null
           default_tax_id?: string | null
+          default_vat_category?: string | null
           default_unit_price?: number
           deleted_at?: string | null
           description?: string | null
@@ -1791,6 +1866,16 @@ export type Database = {
       }
     }
     Functions: {
+      allocate_invoice_number: {
+        Args: {
+          p_minimum_sequence?: number
+          p_prefix: string
+          p_reserve_only?: boolean
+          p_workspace_id: string
+          p_year: number
+        }
+        Returns: number
+      }
       confirm_paystack_payment: {
         Args: {
           input_amount: number
@@ -1813,6 +1898,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_issued_invoice: { Args: { p_workspace_id: string }; Returns: boolean }
       public_invoice_by_token: { Args: { input_token: string }; Returns: Json }
     }
     Enums: {
@@ -1862,7 +1948,7 @@ export type Database = {
         | "clicked"
         | "failed"
       escalation_status: "idle" | "queued" | "sent" | "manual_review"
-      invoice_document_type: "standard" | "proforma"
+      invoice_document_type: "standard" | "credit_note" | "debit_note" | "proforma"
       invoice_number_mode: "prefix" | "business_name"
       invoice_status:
         | "draft"
@@ -2104,7 +2190,7 @@ export const Constants = {
         "failed",
       ],
       escalation_status: ["idle", "queued", "sent", "manual_review"],
-      invoice_document_type: ["standard", "proforma"],
+      invoice_document_type: ["standard", "credit_note", "debit_note", "proforma"],
       invoice_number_mode: ["prefix", "business_name"],
       invoice_status: [
         "draft",

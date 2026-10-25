@@ -118,6 +118,12 @@ describe("POST /api/invoice/send/$id — cross-tenant id swap", () => {
 			customerName: "Beta Ltd",
 			documentType: "standard",
 			updatedAt: 1_700_000_000_000,
+			// Ordinary issued invoice (line items + delivered): keeps the send
+			// route's B2 customer gate out of the way so this probe still
+			// isolates id resolution — the gate itself is pinned in
+			// -send-gate.test.ts.
+			lineItems: [{ id: "li-1", name: "Service", quantity: 1, price: 100 }],
+			deliveredAt: 1_700_000_000_000,
 		});
 
 		// A forged identity/resource hint in the body must not steer the lookup.

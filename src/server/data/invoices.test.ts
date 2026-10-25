@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
 	INVOICE_LIST_PAGE_SIZE,
+	mapInvoice,
+	mapPublicInvoice,
 	paginateInvoiceRows,
 	rowToInvoiceDoc,
 } from "./invoices";
@@ -68,5 +70,83 @@ describe("invoice list contracts", () => {
 		);
 		expect(source).toContain('.is("deleted_at", null)');
 		console.log("deletion visibility contract passed");
+	});
+});
+
+describe("public invoice fiscalization projection", () => {
+	const invoice = (fiscalization: Record<string, unknown>) =>
+		({
+			id: "invoice-a",
+			token: "public-token",
+			invoiceNumber: "INV-1",
+			customerName: "Buyer",
+			currency: "NGN",
+			status: "unpaid",
+			lineItems: [],
+			total: 0,
+			balance: 0,
+			paymentAmount: 0,
+			createdAt: 1,
+			updatedAt: 1,
+			fiscalization,
+		}) as never;
+
+	it("only exposes fully marked mock clearance artifacts and strips private fields", () => {
+		const mock = mapPublicInvoice(
+			invoice({
+				status: "mock_cleared",
+				provider: "mock",
+				environment: "sandbox",
+				mock: true,
+				mockIrn: "MOCK-IRN-demo",
+				qrCodePayload: "MOCK-SANDBOX|NOT-NRS-CLEARED|IRN=MOCK-IRN-demo",
+				lastError: "private provider detail",
+			}),
+		);
+		expect(mock.fiscalization).toEqual({
+			status: "mock_cleared",
+			provider: "mock",
+			environment: "sandbox",
+			mock: true,
+			mockIrn: "MOCK-IRN-demo",
+			qrCodePayload: "MOCK-SANDBOX|NOT-NRS-CLEARED|IRN=MOCK-IRN-demo",
+		});
+		expect(JSON.stringify(mock)).not.toContain("private provider detail");
+	});
+
+	it("hides legacy fiscalization artifacts publicly but never trusts compliance JSON as clearance", () => {
+		const legacyFiscalization = {
+			status: "fiscalized",
+			uid: "possibly-real-irn",
+			qrCodePayload: "unverified",
+			lastError: "private error",
+		};
+		const mapped = mapPublicInvoice(invoice(legacyFiscalization));
+		expect(mapped.fiscalization).toEqual({ status: "not_configured" });
+		expect(JSON.stringify(mapped)).not.toContain("possibly-real-irn");
+		expect(JSON.stringify(mapped)).not.toContain("unverified");
+		expect(JSON.stringify(mapped)).not.toContain("private error");
+		expect(mapInvoice(invoice(legacyFiscalization)).fiscalization).toEqual(
+			legacyFiscalization,
+		);
+		const draftInvoice = {
+			...(invoice({}) as unknown as Record<string, unknown>),
+		};
+		delete draftInvoice.fiscalization;
+		draftInvoice.compliance = {
+			fiscalization: {
+				status: "mock_cleared",
+				provider: "mock",
+				environment: "sandbox",
+				mock: true,
+				mockIrn: "MOCK-IRN-forged",
+				qrCodePayload: "MOCK-SANDBOX|NOT-NRS-CLEARED|forged",
+			},
+		};
+		const forgedFromCompliance = mapPublicInvoice(draftInvoice as never);
+		expect(forgedFromCompliance.fiscalization).toEqual({
+			status: "not_configured",
+		});
+		expect(forgedFromCompliance.compliance).not.toHaveProperty("fiscalization");
 	});
 });

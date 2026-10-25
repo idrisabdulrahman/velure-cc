@@ -16,6 +16,11 @@ vi.mock("#/server/invoice-repository", () => ({
 		customerName: "Acme Ltd",
 		documentType: "standard",
 		updatedAt: 1_700_000_000_000,
+		// Ordinary issued invoice: line items keep the send-route B2 gate
+		// derivation cheap, deliveredAt keeps it out of Draft (the gate only
+		// rejects customer-less drafts — see -send-gate.test.ts).
+		lineItems: [{ id: "li-1", name: "Service", quantity: 1, price: 100 }],
+		deliveredAt: 1_700_000_000_000,
 	})),
 	// The delivery event + invoice send audit row fail after the email
 	// already committed (G1 non-atomicity, finding 4).
@@ -87,5 +92,33 @@ describe("POST /api/invoice/send/$id (G1 audit non-atomicity)", () => {
 		expect(keys).toHaveLength(2);
 		expect(keys[0]).toMatch(/^invoice-email-[0-9a-f]{64}$/);
 		expect(keys[1]).toBe(keys[0]);
+	});
+
+	it("uses the correction document type in the email subject and body", async () => {
+		const { getAuthenticatedInvoiceById } = await import(
+			"#/server/invoice-repository"
+		);
+		vi.mocked(getAuthenticatedInvoiceById).mockResolvedValueOnce({
+			id: "inv-1",
+			token: "share-token",
+			invoiceNumber: "DN-2026-0001",
+			customerName: "Acme Ltd",
+			documentType: "debit_note",
+			updatedAt: 1_700_000_000_000,
+			lineItems: [{ id: "li-1", name: "Service", quantity: 1, price: 100 }],
+			deliveredAt: 1_700_000_000_000,
+		} as never);
+
+		const response = await handle({
+			params: { id: "inv-1" },
+			request: sendRequest(),
+		});
+		expect(response.status).toBe(200);
+		const payload = resendSendSpy.mock.calls.at(-1)?.[0] as {
+			subject?: string;
+			text?: string;
+		};
+		expect(payload.subject).toContain("Debit note DN-2026-0001");
+		expect(payload.text).toContain("debit note DN-2026-0001");
 	});
 });

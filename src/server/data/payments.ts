@@ -1,6 +1,11 @@
 import type { Database, Json } from "#/types/database.types";
 import { recordInvoiceAudit } from "./audit-client";
-import { getById as getInvoiceById } from "./invoices";
+import { isInvoiceIssued } from "./invoice-numbering";
+import {
+	assertCustomerForIssueTransition,
+	getDerivedInvoiceStatus,
+	getById as getInvoiceById,
+} from "./invoices";
 import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
 
 /**
@@ -268,6 +273,12 @@ export function payableInvoiceIssue(
 	invoice: InvoicePaymentState,
 	options: { allowDraft?: boolean } = {},
 ) {
+	if (
+		invoice.documentType === "credit_note" ||
+		invoice.documentType === "debit_note"
+	) {
+		return "Payments are not enabled for credit or debit notes.";
+	}
 	const { status, balance } = getInvoicePaymentSnapshot(invoice);
 	// `allowDraft` is for the owner's manual "Mark as paid" only — an unsent
 	// draft can still be settled offline. Public payment context and the
@@ -472,6 +483,20 @@ export async function recordPayment(
 	const workspaceId = await resolveActiveWorkspaceId(client, userId);
 	if (!workspaceId) throw new Error("No active workspace.");
 
+	// B2 — customer required to leave Draft: a settlement moves a derived-Draft
+	// invoice straight to paid / partially-paid, so it runs the same gate as
+	// every other leave-Draft path BEFORE the transaction row and the invoice
+	// patch are written. Invoices that do not derive Draft (issued / legacy
+	// rows, including ones without a customer) are unaffected —
+	// transitionLeavesDraft returns before any customer lookup.
+	await assertCustomerForIssueTransition(
+		client,
+		workspaceId,
+		invoice,
+		getDerivedInvoiceStatus(invoice),
+		payment.isPaid ? "paid" : "partially-paid",
+	);
+
 	const { error: insertError } = await client
 		.from("payment_transactions")
 		.insert({
@@ -490,7 +515,9 @@ export async function recordPayment(
 	const invoicePatch: Record<string, unknown> = {
 		payment_amount: payment.nextPaymentAmount,
 		paid_at: payment.isPaid ? iso(now) : iso(invoice.paidAt),
-		payment_reference: args.reference ?? invoice.paymentReference,
+		// C2 keeps this invoice-level pointer forward-only once set; each
+		// manual payment retains its own reference on payment_transactions.
+		payment_reference: invoice.paymentReference ?? args.reference ?? null,
 		updated_at: iso(now),
 	};
 	const currentReminder = (invoice.reminder as
@@ -530,14 +557,21 @@ export async function recordPayment(
 
 	// Append-only audit row for the money path (spec G1): the server records
 	// the payment it just applied, with the invoice state before and after.
+	// C3: money crossing a not-yet-issued invoice past the draft boundary is
+	// its first issuance — logged as `invoice.send`; later payments on an
+	// already-issued invoice stay `invoice.edit`.
 	const updated =
 		(await getInvoiceById(client, userId, args.invoiceId)) ?? invoice;
+	const crossingIntoIssued =
+		!isInvoiceIssued(invoice) && isInvoiceIssued(updated);
 	await recordInvoiceAudit(client, userId, {
-		action: "invoice.edit",
+		action: crossingIntoIssued ? "invoice.send" : "invoice.edit",
 		resourceId: args.invoiceId,
 		before: invoice,
 		after: updated,
-		message: "Recorded a payment.",
+		message: crossingIntoIssued
+			? "Invoice issued when a payment was recorded."
+			: "Recorded a payment.",
 	});
 
 	return { ok: true, duplicate: false, invoiceId: args.invoiceId };
