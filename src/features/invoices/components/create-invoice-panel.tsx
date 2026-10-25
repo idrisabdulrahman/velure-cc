@@ -452,7 +452,7 @@ function CreateSortableLineItem({
 			>
 				<GripVertical className="h-4 w-4" />
 			</button>
-			{children}
+			<div className="min-w-0 flex-1">{children}</div>
 		</div>
 	);
 }
