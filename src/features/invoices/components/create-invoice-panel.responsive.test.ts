@@ -7,13 +7,14 @@ const source = readFileSync(
 );
 
 describe("invoice editor responsive contract", () => {
-	it("stacks line-item fields below md without losing accessible controls", () => {
+	it("stacks line-item fields below the composer container breakpoint", () => {
 		expect(source).toContain(
-			"grid-cols-[minmax(0,1fr)_auto] items-end gap-2 md:grid-cols-[minmax(0,1.4fr)_112px_minmax(0,1fr)_minmax(0,1.1fr)_24px]",
+			"grid-cols-[minmax(0,1fr)_auto] items-end gap-2 @md:grid-cols-[minmax(0,1.4fr)_112px_minmax(0,1fr)_minmax(0,1.1fr)_24px]",
 		);
-		expect(source).toContain("md:sr-only");
+		expect(source).toContain("@md:sr-only");
 		expect(source).toContain('aria-label="Drag to reorder"');
-		expect(source).toContain("md:group-hover:opacity-100");
+		expect(source).toContain("@md:group-hover:opacity-100");
+		expect(source).toContain('className="mt-2 grid gap-2 @md:grid-cols-3"');
 		expect(source).toContain("<PopoverAnchor asChild>");
 		expect(source).toContain(
 			"w-[min(560px,calc(100vw-2rem))] border-rule bg-paper",
@@ -39,7 +40,7 @@ describe("invoice editor responsive contract", () => {
 
 	it("scopes Midday-style inline controls to the invoice paper", () => {
 		expect(source).toContain(
-			'<div className="invoice-paper-controls flex min-h-0 flex-1 flex-col',
+			'<div className="invoice-paper-controls @container flex min-h-0 flex-1 flex-col',
 		);
 	});
 });

@@ -2049,7 +2049,7 @@ export function CreateInvoicePanel({
 						className={`mx-auto flex h-[calc(100dvh-7rem)] min-h-0 w-full flex-col overflow-hidden border border-rule bg-paper shadow-[0_18px_60px_rgba(0,0,0,0.08)] ${isSheetMode ? "h-full" : "max-h-[960px]"} ${paperFrameClass}`}
 					>
 						<div className="flex min-h-0 flex-1 flex-col">
-							<div className="invoice-paper-controls flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-5 pb-16 pt-5 sm:px-6 md:px-8 md:pt-7 lg:px-10">
+							<div className="invoice-paper-controls @container flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-5 pb-16 pt-5 sm:px-6 md:px-8 md:pt-7 lg:px-10">
 								{!isSheetMode ? (
 									<ol
 										aria-label="Create your first invoice in three steps"
@@ -2560,7 +2560,7 @@ export function CreateInvoicePanel({
 									</div>
 								) : null}
 
-								<div className="mb-3 hidden items-center gap-3 border-b border-rule px-2 pb-2 text-[12px] text-ink-3 md:flex">
+								<div className="mb-3 hidden items-center gap-3 border-b border-rule px-2 pb-2 text-[12px] text-ink-3 @md:flex">
 									{/* Mirrors CreateSortableLineItem's structure —16px drag
 									 * handle + gap-3 — so the label cells sit exactly above
 									 * their row columns. */}
@@ -2638,10 +2638,10 @@ export function CreateInvoicePanel({
 																isExiting && "invoice-line-exit",
 															)}
 														>
-															<div className="relative grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-end gap-2 md:grid-cols-[minmax(0,1.4fr)_112px_minmax(0,1fr)_minmax(0,1.1fr)_24px] md:items-center">
-																<div className="relative col-span-2 min-w-0 md:col-span-1">
+															<div className="relative grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-end gap-2 @md:grid-cols-[minmax(0,1.4fr)_112px_minmax(0,1fr)_minmax(0,1.1fr)_24px] @md:items-center">
+																<div className="relative col-span-2 min-w-0 @md:col-span-1">
 																	<label
-																		className="mb-1 block text-[11px] text-ink-3 md:sr-only"
+																		className="mb-1 block text-[11px] text-ink-3 @md:sr-only"
 																		htmlFor={`invoice-line-description-${item.id}`}
 																	>
 																		Description
@@ -2888,10 +2888,10 @@ export function CreateInvoicePanel({
 																</div>
 
 																<div className="min-w-0">
-																	<div className="mb-1 text-[11px] text-ink-3 md:sr-only">
+																	<div className="mb-1 text-[11px] text-ink-3 @md:sr-only">
 																		Qty
 																	</div>
-																	<div className="flex items-center gap-1 text-ink-3 md:gap-1.5">
+																	<div className="flex items-center gap-1 text-ink-3 @md:gap-1.5">
 																		<button
 																			type="button"
 																			onClick={() => decrementQuantity(index)}
@@ -2937,7 +2937,7 @@ export function CreateInvoicePanel({
 
 																<div className="min-w-0">
 																	<label
-																		className="mb-1 block text-[11px] text-ink-3 md:sr-only"
+																		className="mb-1 block text-[11px] text-ink-3 @md:sr-only"
 																		htmlFor={`invoice-line-price-${item.id}`}
 																	>
 																		Price
@@ -2979,8 +2979,8 @@ export function CreateInvoicePanel({
 																	/>
 																</div>
 
-																<div className="col-span-2 flex items-baseline justify-between border-t border-rule pt-2 text-[13px] text-ink md:col-span-1 md:block md:border-0 md:pt-0 md:text-right md:font-mono">
-																	<span className="text-[11px] text-ink-3 md:hidden">
+																<div className="col-span-2 flex items-baseline justify-between border-t border-rule pt-2 text-[13px] text-ink @md:col-span-1 @md:block @md:border-0 @md:pt-0 @md:text-right @md:font-mono">
+																	<span className="text-[11px] text-ink-3 @md:hidden">
 																		Total
 																	</span>
 																	<span className="font-mono">
@@ -2994,14 +2994,14 @@ export function CreateInvoicePanel({
 																<button
 																	type="button"
 																	onClick={() => removeLine(index)}
-																	className="absolute right-0 top-0 inline-flex h-7 w-7 items-center justify-center rounded-md border border-rule bg-paper text-ink-3 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink md:static md:border-transparent md:bg-transparent md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+																	className="absolute right-0 top-0 inline-flex h-7 w-7 items-center justify-center rounded-md border border-rule bg-paper text-ink-3 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink @md:static @md:border-transparent @md:bg-transparent @md:opacity-0 @md:group-hover:opacity-100 @md:group-focus-within:opacity-100"
 																	aria-label={`Remove line item ${index + 1}`}
 																>
 																	<X className="h-3.5 w-3.5" />
 																</button>
 															</div>
 
-															<div className="mt-2 grid gap-2 md:grid-cols-3">
+															<div className="mt-2 grid gap-2 @md:grid-cols-3">
 																<div className="min-w-0">
 																	<label
 																		className="mb-1 block text-[11px] text-ink-3"
