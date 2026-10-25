@@ -21,10 +21,20 @@ import { Input } from "#/components/ui/input";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
 import { NIGERIA_TAX_RULE_SET_VERSION } from "#/features/compliance/nigeria";
+import {
+	composeSupplierAddress,
+	SUPPLIER_ADDRESS_MAX_LENGTHS,
+	type SupplierProfileIssueCode,
+	type SupplierProfileValidation,
+	supplierProfileBanner,
+	supplierProfileIssueMessage,
+	validateSupplierProfile,
+} from "#/features/compliance/supplier-profile";
 import { authClient } from "#/lib/auth-client";
 import { useSupabaseSession } from "#/lib/supabase-session";
 import {
 	getWorkspaceSettings,
+	SUPPLIER_PROFILE_REJECTION_PREFIX,
 	upsertWorkspaceSettings,
 } from "#/server/data/compliance";
 export const Route = createFileRoute("/settings/")({
@@ -36,7 +46,10 @@ type BusinessForm = {
 	legalName: string;
 	email: string;
 	phone: string;
-	address: string;
+	addressStreet: string;
+	addressLga: string;
+	addressState: string;
+	country: string;
 	logoUrl: string;
 	taxId: string;
 	rcNumber: string;
@@ -55,7 +68,10 @@ const initialForm: BusinessForm = {
 	legalName: "",
 	email: "",
 	phone: "",
-	address: "",
+	addressStreet: "",
+	addressLga: "",
+	addressState: "",
+	country: "NG",
 	logoUrl: "",
 	taxId: "",
 	rcNumber: "",
@@ -116,6 +132,36 @@ function invoicePreviewNumber(form: BusinessForm) {
 	return `${prefix}-2026-${n.padStart(6, "0")}`;
 }
 
+const PROFILE_ISSUE_FIELDS: Partial<
+	Record<SupplierProfileIssueCode, keyof BusinessForm>
+> = {
+	tin_required: "taxId",
+	tin_format: "taxId",
+	tin_placeholder: "taxId",
+	cac_rc_required: "rcNumber",
+	cac_rc_format: "rcNumber",
+	cac_rc_placeholder: "rcNumber",
+	address_street_required: "addressStreet",
+	address_street_too_long: "addressStreet",
+	address_lga_too_long: "addressLga",
+	address_state_required: "addressState",
+	address_state_too_long: "addressState",
+	address_country_required: "country",
+};
+
+function profileValidationFor(form: BusinessForm): SupplierProfileValidation {
+	return validateSupplierProfile({
+		tin: form.taxId,
+		rcNumber: form.rcNumber,
+		address: {
+			street: form.addressStreet,
+			lga: form.addressLga,
+			state: form.addressState,
+			countryCode: form.country,
+		},
+	});
+}
+
 function validate(form: BusinessForm): FormErrors {
 	const errors: FormErrors = {};
 
@@ -125,13 +171,16 @@ function validate(form: BusinessForm): FormErrors {
 	} else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
 		errors.email = "Enter a valid email address.";
 	}
-	if (!form.address.trim()) errors.address = "Business address is required.";
-	if (form.taxId.trim() && !/^\d{10}$/.test(form.taxId.trim())) {
-		errors.taxId = "TIN must be exactly 10 numeric digits.";
+
+	// B1 supplier profile: validated TIN, required CAC RC, structured address.
+	// Same rules the server enforces — the client check is UX, the server is
+	// the boundary.
+	const profile = profileValidationFor(form);
+	for (const issue of profile.issues) {
+		const field = PROFILE_ISSUE_FIELDS[issue.code];
+		if (field && !errors[field]) errors[field] = issue.message;
 	}
-	if (form.rcNumber.trim() && !/^RC-\d{7}$/i.test(form.rcNumber.trim())) {
-		errors.rcNumber = "CAC RC Number must use RC-1234567 format.";
-	}
+
 	if (
 		form.defaultCurrency.trim() &&
 		!/^[A-Z]{3}$/.test(form.defaultCurrency.trim())
@@ -167,6 +216,11 @@ function SettingsPage() {
 
 	const [form, setForm] = useState<BusinessForm>(initialForm);
 	const [savedForm, setSavedForm] = useState<BusinessForm>(initialForm);
+	// Validation of the values from the last successful save; recomputes the
+	// flagged-for-review banner immediately after saving instead of waiting
+	// for the workspace refetch. Null until something is saved this session.
+	const [savedProfile, setSavedProfile] =
+		useState<SupplierProfileValidation | null>(null);
 	const [errors, setErrors] = useState<FormErrors>({});
 	const [logoPreview, setLogoPreview] = useState<string | null>(() => {
 		if (typeof window === "undefined") return null;
@@ -188,10 +242,13 @@ function SettingsPage() {
 			legalName: workspace.legalName ?? "",
 			email: workspace.email || session?.user.email || "",
 			phone: workspace.phone ?? "",
-			address: workspace.address ?? "",
+			addressStreet: workspace.addressStreet ?? workspace.address ?? "",
+			addressLga: workspace.addressLga ?? "",
+			addressState: workspace.addressState ?? "",
+			country: workspace.countryCode ?? "NG",
 			logoUrl: workspace.logoUrl ?? "",
 			taxId: workspace.taxId ?? "",
-			rcNumber: (workspace as { rcNumber?: string }).rcNumber ?? "",
+			rcNumber: workspace.rcNumber ?? "",
 			paymentDetails: workspace.paymentDetails ?? "",
 			defaultCurrency: workspace.baseCurrency ?? "NGN",
 			defaultPaymentTermsDays: String(workspace.defaultPaymentTermsDays ?? 14),
@@ -202,6 +259,9 @@ function SettingsPage() {
 
 		setForm(nextForm);
 		setSavedForm(nextForm);
+		// A fresh workspace read carries the authoritative flag columns, so it
+		// supersedes any local post-save recomputation.
+		setSavedProfile(null);
 	}, [workspace, session?.user.email]);
 
 	const updateField = (field: keyof BusinessForm, value: string) => {
@@ -253,11 +313,16 @@ function SettingsPage() {
 				legalName: form.legalName.trim() || form.name.trim(),
 				email: form.email.trim(),
 				phone: form.phone.trim() || undefined,
-				address: form.address.trim(),
 				website: workspace.website || undefined,
-				taxId: form.taxId.trim() || undefined,
-				rcNumber: form.rcNumber.trim() || undefined,
-				countryCode: workspace.countryCode,
+				taxId: form.taxId.trim(),
+				rcNumber: form.rcNumber.trim(),
+				addressStreet: form.addressStreet.trim(),
+				// Empty string is an explicit clear; only `undefined` means "keep
+				// the stored value" on the server, so never coerce a cleared LGA
+				// back to undefined here.
+				addressLga: form.addressLga.trim(),
+				addressState: form.addressState.trim(),
+				countryCode: form.country.trim().toUpperCase(),
 				baseCurrency: form.defaultCurrency,
 				sellerTaxStatus:
 					(
@@ -294,11 +359,27 @@ function SettingsPage() {
 			});
 			setSavedForm(form);
 			setSavedLogo(logoPreview);
+			// Recompute the flagged-for-review banner from the values that were
+			// just persisted (the server only accepts valid profiles), then
+			// refresh the workspace so the stored flag columns catch up too.
+			setSavedProfile(profileValidationFor(form));
+			await refetchSettings();
 			toast({ title: "Profile updated", variant: "success" });
 		} catch (error) {
+			const message = error instanceof Error ? error.message : "Unknown error";
+			// A rejected registration profile names the failing fields and
+			// limits (e.g. the 300/200/200 address caps); surface that text
+			// directly instead of a generic save-failure message.
+			const profileRejected = message.startsWith(
+				SUPPLIER_PROFILE_REJECTION_PREFIX,
+			);
 			toast({
-				title: "Could not update profile",
-				description: error instanceof Error ? error.message : "Unknown error",
+				title: profileRejected
+					? "Check your registration details"
+					: "Could not update profile",
+				description: profileRejected
+					? message.slice(SUPPLIER_PROFILE_REJECTION_PREFIX.length).trim()
+					: message,
 				variant: "error",
 			});
 		} finally {
@@ -343,7 +424,11 @@ function SettingsPage() {
 		JSON.stringify(form) !== JSON.stringify(savedForm) ||
 		logoPreview !== savedLogo;
 	const requiredInvalid =
-		!form.name.trim() || !form.email.trim() || !form.address.trim();
+		!form.name.trim() ||
+		!form.email.trim() ||
+		!form.addressStreet.trim() ||
+		!form.addressState.trim() ||
+		!form.country.trim();
 	const loaded = Boolean(workspace);
 	const nameError =
 		errors.name ??
@@ -351,11 +436,19 @@ function SettingsPage() {
 	const emailError =
 		errors.email ??
 		(loaded && !form.email.trim() ? "Business email is required." : undefined);
-	const addressError =
-		errors.address ??
-		(loaded && !form.address.trim()
-			? "Business address is required."
-			: undefined);
+	const profileBanner = supplierProfileBanner(
+		{
+			status: workspace?.supplierProfileStatus,
+			issues: workspace?.supplierProfileIssues,
+		},
+		savedProfile,
+	);
+	const profileFlagged = profileBanner.flagged;
+	const previewAddress = composeSupplierAddress({
+		street: form.addressStreet,
+		lga: form.addressLga,
+		state: form.addressState,
+	});
 
 	const previewNumber = invoicePreviewNumber(form);
 	const previewSymbol = currencySymbol(form.defaultCurrency);
@@ -405,6 +498,46 @@ function SettingsPage() {
 						sub="Shown on every invoice you send."
 					>
 						<div className="grid gap-5">
+							{profileBanner.setupRequired ? (
+								<div
+									role="status"
+									className="rounded-md border border-rule bg-paper-2 px-4 py-3"
+								>
+									<p className="text-sm font-medium text-ink">
+										Complete your business profile
+									</p>
+									<p className="mt-1 text-sm text-ink-3">
+										Add your TIN, CAC RC number and structured address below,
+										then save. They print on every invoice you send.
+									</p>
+								</div>
+							) : null}
+							{profileFlagged ? (
+								<div
+									role="status"
+									className="rounded-md border border-warn-line bg-warn-soft px-4 py-3"
+								>
+									<p className="text-sm font-medium text-warn">
+										Supplier profile flagged for review
+									</p>
+									<p className="mt-1 text-sm text-ink-2">
+										Saved registration details are incomplete or use a
+										placeholder. Complete the TIN, CAC RC number and structured
+										address below, then save. Nothing was deleted.
+									</p>
+									{profileBanner.codes.length ? (
+										<ul className="mt-2 list-disc pl-5 text-xs text-ink-2">
+											{profileBanner.codes.map((code) => (
+												<li key={code}>
+													{supplierProfileIssueMessage(
+														code as SupplierProfileIssueCode,
+													)}
+												</li>
+											))}
+										</ul>
+									) : null}
+								</div>
+							) : null}
 							<div className="flex flex-wrap items-center gap-4">
 								<button
 									type="button"
@@ -490,7 +623,11 @@ function SettingsPage() {
 										className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
 									/>
 								</FormField>
-								<FormField label="TIN" error={errors.taxId}>
+								<FormField
+									label="TIN *"
+									error={errors.taxId}
+									hint="10 digits from your tax record. Placeholder values are rejected."
+								>
 									<Input
 										value={form.taxId}
 										onChange={(event) =>
@@ -500,6 +637,7 @@ function SettingsPage() {
 											)
 										}
 										placeholder="10-digit TIN"
+										inputMode="numeric"
 										aria-invalid={Boolean(errors.taxId)}
 										className={`rounded-md bg-paper text-ink focus-visible:border-brand ${
 											errors.taxId ? "border-danger" : "border-rule"
@@ -507,13 +645,9 @@ function SettingsPage() {
 									/>
 								</FormField>
 								<FormField
-									label="CAC RC number"
+									label="CAC RC number *"
 									error={errors.rcNumber}
-									hint={
-										errors.rcNumber || form.rcNumber.trim()
-											? undefined
-											: "Not set. Add it so it prints on invoices."
-									}
+									hint="Company registration number, e.g. RC-1234567."
 								>
 									<Input
 										value={form.rcNumber}
@@ -674,14 +808,81 @@ function SettingsPage() {
 						</div>
 					</Panel>
 
-					<Panel title="Address" sub="Printed in the invoice header.">
-						<FormField label="Business address *" error={addressError}>
-							<Textarea
-								value={form.address}
-								onChange={(event) => updateField("address", event.target.value)}
-								className="min-h-28 rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
-							/>
-						</FormField>
+					<Panel
+						title="Address"
+						sub="Structured address, printed in the invoice header."
+					>
+						<div className="grid gap-5">
+							<FormField
+								label="Street address *"
+								error={errors.addressStreet}
+								hint={`Up to ${SUPPLIER_ADDRESS_MAX_LENGTHS.street} characters.`}
+							>
+								<Textarea
+									value={form.addressStreet}
+									maxLength={SUPPLIER_ADDRESS_MAX_LENGTHS.street}
+									onChange={(event) =>
+										updateField("addressStreet", event.target.value)
+									}
+									className="min-h-20 rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
+								/>
+							</FormField>
+							<div className="grid gap-5 sm:grid-cols-3">
+								<FormField
+									label="LGA"
+									error={errors.addressLga}
+									hint={`Up to ${SUPPLIER_ADDRESS_MAX_LENGTHS.lga} characters.`}
+								>
+									<Input
+										value={form.addressLga}
+										maxLength={SUPPLIER_ADDRESS_MAX_LENGTHS.lga}
+										onChange={(event) =>
+											updateField("addressLga", event.target.value)
+										}
+										placeholder="Local government area"
+										className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
+									/>
+								</FormField>
+								<FormField
+									label="State / region *"
+									error={errors.addressState}
+									hint={`Up to ${SUPPLIER_ADDRESS_MAX_LENGTHS.state} characters.`}
+								>
+									<Input
+										value={form.addressState}
+										maxLength={SUPPLIER_ADDRESS_MAX_LENGTHS.state}
+										onChange={(event) =>
+											updateField("addressState", event.target.value)
+										}
+										placeholder="e.g. Lagos"
+										className="rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
+									/>
+								</FormField>
+								<FormField
+									label="Country *"
+									error={errors.country}
+									hint="2-letter code."
+								>
+									<Input
+										value={form.country}
+										onChange={(event) =>
+											updateField(
+												"country",
+												event.target.value
+													.toUpperCase()
+													.replace(/[^A-Z]/g, "")
+													.slice(0, 2),
+											)
+										}
+										placeholder="NG"
+										aria-invalid={Boolean(errors.country)}
+										className={`rounded-md bg-paper text-ink focus-visible:border-brand ${
+											errors.country ? "border-danger" : "border-rule"
+										}`}
+									/>
+								</FormField>
+							</div>
+						</div>
 					</Panel>
 
 					<Panel
@@ -728,7 +929,7 @@ function SettingsPage() {
 											{form.name.trim() || "Workspace name"}
 										</p>
 										<p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-ink-3">
-											{form.address.trim() || "Business address"}
+											{previewAddress || "Business address"}
 										</p>
 									</div>
 								</div>

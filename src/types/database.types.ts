@@ -461,6 +461,56 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_audit_log: {
+        Row: {
+          action: string
+          actor_id: string
+          actor_type: string
+          after_payload: Json | null
+          before_payload: Json | null
+          created_at: string
+          id: string
+          message: string | null
+          resource_id: string | null
+          resource_type: string
+          workspace_id: string
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          actor_type: string
+          after_payload?: Json | null
+          before_payload?: Json | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          resource_id?: string | null
+          resource_type?: string
+          workspace_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          actor_type?: string
+          after_payload?: Json | null
+          before_payload?: Json | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          resource_id?: string | null
+          resource_type?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_audit_log_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoice_delivery_events: {
         Row: {
           channel: string
@@ -1535,6 +1585,9 @@ export type Database = {
       workspaces: {
         Row: {
           address: string | null
+          address_lga: string | null
+          address_state: string | null
+          address_street: string | null
           atrs: Json | null
           base_currency: string
           country_code: string
@@ -1562,6 +1615,8 @@ export type Database = {
           seller_tax_status:
             | Database["public"]["Enums"]["seller_tax_status"]
             | null
+          supplier_profile_issues: Json
+          supplier_profile_status: string
           tax_id: string | null
           tax_rule_set_version: string | null
           updated_at: string
@@ -1569,6 +1624,9 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          address_lga?: string | null
+          address_state?: string | null
+          address_street?: string | null
           atrs?: Json | null
           base_currency: string
           country_code: string
@@ -1596,6 +1654,8 @@ export type Database = {
           seller_tax_status?:
             | Database["public"]["Enums"]["seller_tax_status"]
             | null
+          supplier_profile_issues?: Json
+          supplier_profile_status?: string
           tax_id?: string | null
           tax_rule_set_version?: string | null
           updated_at?: string
@@ -1603,6 +1663,9 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          address_lga?: string | null
+          address_state?: string | null
+          address_street?: string | null
           atrs?: Json | null
           base_currency?: string
           country_code?: string
@@ -1630,6 +1693,8 @@ export type Database = {
           seller_tax_status?:
             | Database["public"]["Enums"]["seller_tax_status"]
             | null
+          supplier_profile_issues?: Json
+          supplier_profile_status?: string
           tax_id?: string | null
           tax_rule_set_version?: string | null
           updated_at?: string

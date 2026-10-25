@@ -5,7 +5,7 @@ import dns from "node:dns";
 dns.setDefaultResultOrder("ipv4first");
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
 	autosaveDraft,
 	getById as getInvoiceById,
@@ -19,6 +19,18 @@ import {
 	recordPayment,
 } from "./payments";
 import { ensureWorkspaceForUser, type Supabase } from "./workspaces";
+
+// The browser writes audit rows through POST /api/invoice/audit; this gate
+// runs in Node with no web origin, so route that transport to the real
+// server-only audit service — the same write the gate exercised before the
+// G1 browser/server split. The HTTP boundary itself is covered by
+// audit.test.ts and src/routes/api/invoice/-audit.test.ts.
+vi.mock("#/server/data/audit-client", async (importOriginal) => {
+	const original =
+		await importOriginal<typeof import("#/server/data/audit-client")>();
+	const { recordInvoiceAudit } = await import("#/server/data/audit");
+	return { ...original, recordInvoiceAudit };
+});
 
 /**
  * A10 live gate for the payments domain — REAL OIDC JWT + REAL velure-cc.

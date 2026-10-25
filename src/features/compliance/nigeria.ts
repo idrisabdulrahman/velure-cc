@@ -10,6 +10,54 @@ import type {
 
 export const NIGERIA_DEFAULT_CURRENCY = "NGN";
 export const NIGERIA_AUTHORITY_LABEL = "Nigeria Revenue Service (NRS)";
+/**
+ * Standard disclaimer for the Compliance surface and every generated
+ * tax/compliance export (e-invoicing SPEC A2). Velure has no NRS clearance
+ * integration, so no compliance output may imply one exists.
+ */
+export const NRS_INFORMATIONAL_DISCLAIMER =
+	"Informational summary. Not a tax filing and not NRS-cleared.";
+/**
+ * Intro for the Official sources block on the Compliance surface
+ * (e-invoicing SPEC A1–A3 grounding). These are references behind the
+ * informational copy only; naming them is not a claim of compliance,
+ * clearance, certification, or partnership with the NRS.
+ */
+export const NRS_OFFICIAL_SOURCES_INTRO =
+	"These are the official references behind the informational copy on this page. Velure is not connected to or endorsed by the NRS.";
+
+export type NrsOfficialSource = {
+	title: string;
+	url: string;
+	description: string;
+};
+
+/** Verified official NRS references. The URLs and https scheme are pinned by
+ * `nrs-claims.test.ts`; each entry describes the source, never Velure. */
+export const NRS_OFFICIAL_SOURCES: readonly NrsOfficialSource[] = [
+	{
+		title: "What is the MBS E-Invoicing System?",
+		url: "https://community.nrsmbs.com/kb/what-is-mbs-e-invoicing",
+		description:
+			"Official NRS developer knowledge base article explaining the Merchant Buyer Solution, the UBL invoice framework, and how MBS connects with CAC, NIBSS, CBN and NCS.",
+	},
+	{
+		title: "E-Invoice Clearance and Reporting Model",
+		url: "https://community.nrsmbs.com/kb/clearance-reporting",
+		description:
+			"Official NRS knowledge base article describing the B2B clearance model and the B2C reporting model, including the 24-hour reporting window and fiscalization by the NRS.",
+	},
+	{
+		title: "NRS e-invoicing portal (MBS)",
+		url: "https://einvoice.nrs.gov.ng/",
+		description: "The official NRS e-invoicing portal for the MBS.",
+	},
+	{
+		title: "Nigeria Revenue Service",
+		url: "https://nrs.gov.ng/",
+		description: "The official website of the Nigeria Revenue Service.",
+	},
+];
 export const NIGERIA_TAX_RULE_SET_VERSION = "ng-2026-q1";
 export const NIGERIA_FOREIGN_CURRENCY_WARNING =
 	"Foreign currency invoices must be settled through a CBN-licensed financial institution. Confirm with your accountant before issuing.";

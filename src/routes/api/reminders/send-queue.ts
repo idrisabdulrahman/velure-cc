@@ -12,7 +12,7 @@ import { getInvoiceUserContext } from "#/server/invoice-repository";
  * see the key). Auth + tenancy come from the JWT-minted user context; the
  * data function still scopes every row by owner/workspace.
  */
-async function handleSendQueue(request: Request) {
+export async function handleSendQueue(request: Request) {
 	const resendApiKey = getServerEnv("RESEND_API_KEY");
 	if (!resendApiKey) {
 		return Response.json(
@@ -46,10 +46,13 @@ async function handleSendQueue(request: Request) {
 	}
 }
 
+export const handle = ({ request }: { request: Request }) =>
+	handleSendQueue(request);
+
 export const Route = createFileRoute("/api/reminders/send-queue")({
 	server: {
 		handlers: {
-			POST: ({ request }) => handleSendQueue(request),
+			POST: handle,
 		},
 	},
 });

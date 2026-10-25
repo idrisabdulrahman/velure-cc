@@ -219,8 +219,9 @@ function LandingPage() {
 									</span>
 								</h1>
 								<p className="hm-lede mx-auto mt-[26px] max-w-[54ch] text-[clamp(1rem,1.6vw,1.1875rem)]">
-									Velure turns invoices, clients, tax lines, reminders, PDFs,
-									and exports into one tight workspace for Nigerian businesses.
+									Velure turns invoices, clients, VAT and WHT fields, reminders,
+									PDFs, and exports into one tight workspace for Nigerian
+									businesses.
 								</p>
 								<div className="mt-[34px] flex flex-wrap justify-center gap-3">
 									<Link
@@ -460,6 +461,14 @@ function LandingPage() {
 								</ul>
 								<p
 									className="mt-[26px] max-w-[46ch] text-sm text-[#ffd6cc]"
+									data-fade-scroll
+								>
+									Velure is not an NRS-certified e-invoicing provider. It does
+									not submit invoices to the NRS, and it cannot get invoices
+									cleared through the MBS.
+								</p>
+								<p
+									className="mt-3 max-w-[46ch] text-sm text-[#ffd6cc]"
 									data-fade-scroll
 								>
 									Velure helps structure invoice data for Nigerian finance

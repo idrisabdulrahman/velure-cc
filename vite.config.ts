@@ -40,7 +40,12 @@ const config = defineConfig({
 		},
 	},
 	test: {
-		exclude: ["**/node_modules/**", "**/dist/**", "**/tests/e2e/**"],
+		exclude: [
+			"**/node_modules/**",
+			"**/dist/**",
+			"**/tests/e2e/**",
+			"**/.worktrees/**",
+		],
 	},
 	ssr: {
 		// @visx 4.0.1-alpha.0 ships an ESM build with extensionless internal

@@ -26,7 +26,7 @@ function TermsPage() {
 						<p className="mt-2">
 							Velure provides invoice formatting and calculation support. It
 							does not replace legal, tax, or accounting advice. Confirm VAT,
-							WHT, FIRS, and record-keeping requirements with your accountant or
+							WHT, NRS, and record-keeping requirements with your accountant or
 							tax adviser.
 						</p>
 					</section>
