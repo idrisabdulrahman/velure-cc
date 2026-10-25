@@ -295,12 +295,12 @@ function LandingPage() {
 									</p>
 								</div>
 
-								<div className="grid gap-3.5 lg:grid-cols-6">
+								<div className="grid grid-cols-1 gap-3.5 lg:grid-cols-6">
 									{bentoTiles.map((tile, index) => (
 										<article
 											key={tile.title}
 											data-fade-scroll
-											className={`hm-card hm-card--lift flex min-h-[280px] flex-col p-6 ${tile.className}`}
+											className={`hm-card hm-card--lift flex min-h-[280px] min-w-0 flex-col p-6 ${tile.className}`}
 										>
 											<h3 className="hm-title font-medium leading-[1.55] text-xl">
 												{tile.title}
@@ -380,7 +380,10 @@ function LandingPage() {
 						</section>
 
 						{/* ── 5 · COMPLIANCE DIPTYCH ── */}
-						<section id="compliance" className="grid lg:grid-cols-2">
+						<section
+							id="compliance"
+							className="grid grid-cols-1 lg:grid-cols-2"
+						>
 							<div className="flex flex-col justify-center bg-[var(--hm-paper-2)] px-5 py-[70px] sm:px-7 lg:py-[90px] lg:pl-[max(1.75rem,calc((100vw-1160px)/2+1.75rem))] lg:pr-14">
 								{/* design/landing.html `.big` is display *sans* at 500, not the
 								    numeral role — the reference sets `font: 500 … var(--sans)`.

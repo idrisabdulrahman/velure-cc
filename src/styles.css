@@ -1461,6 +1461,20 @@ body {
   color: var(--hm-ink-2);
 }
 
+.hm-mobile-menu {
+  position: absolute;
+  inset-inline: 0.75rem;
+  top: calc(100% - 0.75rem);
+  z-index: 50;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border: 1px solid var(--hm-rule);
+  border-radius: var(--hm-r-card);
+  background: var(--hm-paper-2);
+  box-shadow: var(--hm-shadow);
+}
+
 .hm-lede {
   color: var(--hm-ink-2);
   /* design/landing.html `body{font:16px/1.55}` — every lead inherits 1.55 */

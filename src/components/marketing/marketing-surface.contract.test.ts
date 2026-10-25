@@ -5,6 +5,10 @@ const styles = readFileSync(
 	new URL("../../styles.css", import.meta.url),
 	"utf8",
 );
+const marketingLayout = readFileSync(
+	new URL("./MarketingLayout.tsx", import.meta.url),
+	"utf8",
+);
 
 describe("marketing surface contract", () => {
 	it("paints the marketing surface from the .hm token scope when the document theme is dark", () => {
@@ -42,5 +46,12 @@ describe("marketing surface contract", () => {
 		]) {
 			expect(marketingScope).toContain(token);
 		}
+	});
+
+	it("keeps the mobile navigation overlaid and closes it after choosing a link", () => {
+		expect(styles).toMatch(/\.hm-mobile-menu\s*{[^}]*position:\s*absolute/s);
+		expect(marketingLayout).toContain(
+			'closest("details")?.removeAttribute("open")',
+		);
 	});
 });

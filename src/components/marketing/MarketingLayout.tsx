@@ -147,7 +147,7 @@ export function MarketingNav() {
 				</div>
 			</div>
 
-			<details className="px-5 pb-3 lg:hidden">
+			<details className="relative px-5 pb-3 lg:hidden">
 				{/* design/landing.html has no mobile menu — it drops `.nav-links`
 				    outright. We keep one so section links stay reachable under
 				    1024px, sized to a 44px touch target instead of the reference's
@@ -155,13 +155,16 @@ export function MarketingNav() {
 				<summary className="hm-label inline-flex min-h-11 w-fit cursor-pointer list-none items-center rounded-full border border-[var(--hm-accent-line)] bg-[var(--hm-accent-soft)] px-4 text-[var(--hm-accent-on-soft)]">
 					Menu
 				</summary>
-				<div className="mt-3 grid gap-1">
+				<div className="hm-mobile-menu">
 					{primaryNav.map((item) => (
 						<Link
 							key={item.label}
 							to={"to" in item ? item.to : "/"}
 							hash={"hash" in item ? item.hash : undefined}
 							className="hm-navlink flex min-h-11 items-center rounded-lg px-3 hover:bg-[var(--hm-paper-3)]"
+							onClick={(event) => {
+								event.currentTarget.closest("details")?.removeAttribute("open");
+							}}
 						>
 							{item.label}
 						</Link>

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 330" role="img" aria-labelledby="title desc">
+  <title id="title">Velure system map</title>
+  <desc id="desc">A user works in the browser. TanStack Start verifies identity and workspace access before server routes use Supabase Postgres. E-invoice submission goes only to the mock sandbox adapter, not NRS or MBS.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#181512"/><stop offset="1" stop-color="#0e1012"/></linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10z" fill="#817970"/></marker>
+    <style>
+      .title{font:600 21px ui-sans-serif,system-ui;fill:#f4eee8}
+      .body{font:14px ui-sans-serif,system-ui;fill:#b3aaa0}
+      .small{font:12px ui-sans-serif,system-ui;fill:#a49a91}
+      .card{fill:#211e1b;stroke:#39322c;stroke-width:1.5}
+      .accent{font:600 11px ui-sans-serif,system-ui;letter-spacing:1.5px;fill:#e95b4e}
+    </style>
+  </defs>
+  <rect x="1" y="1" width="1198" height="328" rx="22" fill="url(#bg)" stroke="#312b26"/>
+  <text x="42" y="48" class="accent">THE TRUST BOUNDARY</text>
+  <text x="42" y="77" class="body">Identity and workspace checks happen on the server before private data is accessed.</text>
+
+  <g transform="translate(42 118)">
+    <rect width="220" height="120" rx="14" class="card"/>
+    <text x="22" y="44" class="title">Your browser</text>
+    <text x="22" y="72" class="body">Invoices, clients,</text>
+    <text x="22" y="94" class="body">reports, settings</text>
+  </g>
+  <path d="M270 178h58" stroke="#817970" stroke-width="2" marker-end="url(#arrow)"/>
+  <g transform="translate(342 118)">
+    <rect width="278" height="120" rx="14" class="card"/>
+    <text x="22" y="44" class="title">TanStack Start</text>
+    <text x="22" y="72" class="body">Better Auth session</text>
+    <text x="22" y="94" class="body">Workspace-scoped server routes</text>
+  </g>
+  <path d="M628 178h58" stroke="#817970" stroke-width="2" marker-end="url(#arrow)"/>
+  <g transform="translate(700 118)">
+    <rect width="230" height="120" rx="14" class="card"/>
+    <text x="22" y="44" class="title">Supabase</text>
+    <text x="22" y="72" class="body">Postgres data</text>
+    <text x="22" y="94" class="body">Workspace scoped access</text>
+  </g>
+  <path d="M938 178h38" stroke="#817970" stroke-width="2" marker-end="url(#arrow)"/>
+  <g transform="translate(988 118)">
+    <rect width="170" height="120" rx="14" fill="#281e1a" stroke="#9b493e" stroke-width="1.5"/>
+    <text x="18" y="42" class="title">Mock adapter</text>
+    <text x="18" y="70" class="body">Sandbox only</text>
+    <text x="18" y="94" class="small">No NRS / MBS link</text>
+  </g>
+  <text x="42" y="285" class="small">Never trust ownership identifiers supplied by the browser. The server derives access from the verified session.</text>
+</svg>

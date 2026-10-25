@@ -292,11 +292,12 @@ const ApiInvoiceSubmissionIdRoute = ApiInvoiceSubmissionIdRouteImport.update({
   path: '/api/invoice/submission/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiInvoiceSubmissionsScheduledRoute = ApiInvoiceSubmissionsScheduledRouteImport.update({
-  id: '/api/invoice/submissions/scheduled',
-  path: '/api/invoice/submissions/scheduled',
-  getParentRoute: () => rootRouteImport,
-} as any)
+const ApiInvoiceSubmissionsScheduledRoute =
+  ApiInvoiceSubmissionsScheduledRouteImport.update({
+    id: '/api/invoice/submissions/scheduled',
+    path: '/api/invoice/submissions/scheduled',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPaymentsPaystackInitializeRoute =
   ApiPaymentsPaystackInitializeRouteImport.update({
     id: '/api/payments/paystack/initialize',
@@ -531,6 +532,8 @@ export interface FileRouteTypes {
     | '/api/invoice/download/$id'
     | '/api/invoice/public/$token'
     | '/api/invoice/send/$id'
+    | '/api/invoice/submission/$id'
+    | '/api/invoice/submissions/scheduled'
     | '/api/payments/paystack/initialize'
     | '/api/payments/paystack/webhook'
     | '/api/security/link-stepup/request'
@@ -578,6 +581,8 @@ export interface FileRouteTypes {
     | '/api/invoice/download/$id'
     | '/api/invoice/public/$token'
     | '/api/invoice/send/$id'
+    | '/api/invoice/submission/$id'
+    | '/api/invoice/submissions/scheduled'
     | '/api/payments/paystack/initialize'
     | '/api/payments/paystack/webhook'
     | '/api/security/link-stepup/request'
@@ -629,6 +634,8 @@ export interface FileRouteTypes {
     | '/api/invoice/download/$id'
     | '/api/invoice/public/$token'
     | '/api/invoice/send/$id'
+    | '/api/invoice/submission/$id'
+    | '/api/invoice/submissions/scheduled'
     | '/api/payments/paystack/initialize'
     | '/api/payments/paystack/webhook'
     | '/api/security/link-stepup/request'

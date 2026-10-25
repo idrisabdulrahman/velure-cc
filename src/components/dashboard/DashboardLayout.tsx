@@ -700,9 +700,13 @@ export function DashboardLayout() {
 							</button>
 							<p className="flex min-w-0 items-center gap-2 text-[13px] text-ink-3">
 								<VelureSymbol className="h-5 w-5" />
-								<span className="truncate">{workspaceLabel}</span>
-								<span className="mx-2">/</span>
-								<span className="font-medium text-ink">{activePageLabel}</span>
+								<span className="hidden min-w-0 truncate sm:inline">
+									{workspaceLabel}
+								</span>
+								<span className="mx-2 hidden sm:inline">/</span>
+								<span className="min-w-0 truncate font-medium text-ink">
+									{activePageLabel}
+								</span>
 							</p>
 						</div>
 
