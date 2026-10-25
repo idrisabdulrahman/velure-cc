@@ -71,6 +71,13 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "#/components/ui/popover";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "#/components/ui/select";
 import { toast } from "#/components/ui/use-toast";
 import { calculateInvoiceCompliance } from "#/features/compliance/calculate";
 import {
@@ -2994,7 +3001,7 @@ export function CreateInvoicePanel({
 																</button>
 															</div>
 
-															<div className="mt-2 grid gap-2 sm:grid-cols-3">
+															<div className="mt-2 grid gap-2 md:grid-cols-3">
 																<div className="min-w-0">
 																	<label
 																		className="mb-1 block text-[11px] text-ink-3"
@@ -3002,26 +3009,29 @@ export function CreateInvoicePanel({
 																	>
 																		Unit of measure *
 																	</label>
-																	<select
-																		id={`invoice-line-unit-${item.id}`}
-																		value={item.unit ?? ""}
-																		onChange={(event) =>
-																			updateLine(index, {
-																				unit: event.target.value,
-																			})
+																	<Select
+																		value={item.unit || undefined}
+																		onValueChange={(unit) =>
+																			updateLine(index, { unit })
 																		}
-																		className="h-9 w-full rounded-md border border-rule bg-paper px-2 text-[12px] text-ink"
 																	>
-																		<option value="">Choose unit</option>
-																		{UNIT_OPTIONS.map((option) => (
-																			<option
-																				key={option.value}
-																				value={option.value}
-																			>
-																				{option.label}
-																			</option>
-																		))}
-																	</select>
+																		<SelectTrigger
+																			id={`invoice-line-unit-${item.id}`}
+																			className="h-9 px-2 text-[12px]"
+																		>
+																			<SelectValue placeholder="Choose unit" />
+																		</SelectTrigger>
+																		<SelectContent>
+																			{UNIT_OPTIONS.map((option) => (
+																				<SelectItem
+																					key={option.value}
+																					value={option.value}
+																				>
+																					{option.label}
+																				</SelectItem>
+																			))}
+																		</SelectContent>
+																	</Select>
 																</div>
 																<div className="min-w-0">
 																	<label
@@ -3030,27 +3040,32 @@ export function CreateInvoicePanel({
 																	>
 																		VAT category *
 																	</label>
-																	<select
-																		id={`invoice-line-vat-${item.id}`}
-																		value={item.vatCategory ?? ""}
-																		onChange={(event) =>
+																	<Select
+																		value={item.vatCategory || undefined}
+																		onValueChange={(vatCategory) =>
 																			updateLine(index, {
-																				vatCategory: (event.target.value ||
-																					undefined) as LineItem["vatCategory"],
+																				vatCategory:
+																					vatCategory as LineItem["vatCategory"],
 																			})
 																		}
-																		className="h-9 w-full rounded-md border border-rule bg-paper px-2 text-[12px] text-ink"
 																	>
-																		<option value="">Choose category</option>
-																		{VAT_CATEGORY_OPTIONS.map((option) => (
-																			<option
-																				key={option.value}
-																				value={option.value}
-																			>
-																				{option.label}
-																			</option>
-																		))}
-																	</select>
+																		<SelectTrigger
+																			id={`invoice-line-vat-${item.id}`}
+																			className="h-9 px-2 text-[12px]"
+																		>
+																			<SelectValue placeholder="Choose category" />
+																		</SelectTrigger>
+																		<SelectContent>
+																			{VAT_CATEGORY_OPTIONS.map((option) => (
+																				<SelectItem
+																					key={option.value}
+																					value={option.value}
+																				>
+																					{option.label}
+																				</SelectItem>
+																			))}
+																		</SelectContent>
+																	</Select>
 																</div>
 																<div className="min-w-0">
 																	<label
