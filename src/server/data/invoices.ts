@@ -102,6 +102,7 @@ export type DepositRequest = {
 };
 
 export type InvoiceTemplateSettings = {
+	defaultVatCategory?: "standard" | "zero_rated" | "exempt";
 	title?: string;
 	customerLabel?: string;
 	fromLabel?: string;
@@ -2215,6 +2216,12 @@ export async function saveTemplateDefaults(
 	) as InvoiceTemplateSettings;
 	if ((trimmed.discount ?? 0) < 0)
 		throw new Error("Discount must be non-negative.");
+	if (
+		trimmed.defaultVatCategory &&
+		!["standard", "zero_rated", "exempt"].includes(trimmed.defaultVatCategory)
+	) {
+		throw new Error("Choose a valid default VAT category.");
+	}
 
 	const { error } = await client
 		.from("workspaces")

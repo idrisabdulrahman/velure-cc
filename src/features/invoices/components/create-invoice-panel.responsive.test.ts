@@ -8,17 +8,17 @@ const source = readFileSync(
 
 describe("invoice editor responsive contract", () => {
 	it("stacks line-item fields below the composer container breakpoint", () => {
-		expect(source).toContain(
-			"grid-cols-[minmax(0,1fr)_auto] items-end gap-2 @md:grid-cols-[minmax(0,1.4fr)_112px_minmax(0,1fr)_minmax(0,1.1fr)_24px]",
-		);
+		expect(source).toContain("const LINE_ITEM_GRID_COLUMNS =");
+		expect(source.match(/LINE_ITEM_GRID_COLUMNS/g)?.length).toBe(3);
 		expect(source).toContain("@md:sr-only");
 		expect(source).toContain('aria-label="Drag to reorder"');
 		expect(source).toContain("@md:group-hover:opacity-100");
 		expect(source).toContain('className="mt-2 grid gap-2 @md:grid-cols-3"');
-		expect(source).toContain("<PopoverAnchor asChild>");
 		expect(source).toContain(
-			"w-[min(560px,calc(100vw-2rem))] border-rule bg-paper",
+			"absolute left-0 top-full z-50 mt-1 w-full max-w-[calc(100vw-16px)]",
 		);
+		expect(source).not.toContain("max-h-[250px] overflow-y-auto");
+		expect(source).toContain('className="min-h-[52px] shrink-0"');
 		expect(source).not.toContain(
 			'className="mb-3 grid grid-cols-[minmax(0,1.7fr)_84px_120px_140px_32px]',
 		);

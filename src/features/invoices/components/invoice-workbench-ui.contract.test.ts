@@ -46,16 +46,16 @@ describe("invoice workbench UI contract", () => {
 		expect(panelSource).toMatch(/<Settings2[^>]*\/>\s*Settings/);
 	});
 
-	it("lets the catalog popup escape the compact line-item scroller", () => {
-		const productPicker = panelSource.slice(
-			panelSource.indexOf("<Popover open={isProductSearchOpen}"),
-			panelSource.indexOf("<Popover open={isProductSearchOpen}") + 14_000,
+	it("anchors catalog results to the description and lets line items grow", () => {
+		const pickerStart = panelSource.indexOf("id={`invoice-line-description-");
+		const productPicker = panelSource.slice(pickerStart, pickerStart + 14_000);
+		expect(productPicker).toContain(
+			"absolute left-0 top-full z-50 mt-1 w-full max-w-[calc(100vw-16px)]",
 		);
-		expect(productPicker).toContain("<PopoverAnchor asChild>");
-		expect(productPicker).toContain("<PopoverContent");
 		expect(productPicker).toContain(
 			'className="max-h-64 overflow-y-auto overscroll-contain"',
 		);
-		expect(productPicker).not.toContain("absolute left-0 top-full");
+		expect(panelSource).toContain('className="min-h-[52px] shrink-0"');
+		expect(panelSource).not.toContain("max-h-[250px] overflow-y-auto");
 	});
 });

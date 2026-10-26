@@ -31,6 +31,7 @@ export type InvoiceLineItem = {
 export type VatCategory = "standard" | "zero_rated" | "exempt";
 
 export type InvoiceTemplateSettings = {
+	defaultVatCategory?: VatCategory;
 	title?: string;
 	customerLabel?: string;
 	fromLabel?: string;

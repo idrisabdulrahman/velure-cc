@@ -1,3 +1,4 @@
+import { priceToKobo, subtotalKobo } from "#/features/invoices/line-money";
 import {
 	defaultTaxTreatmentForSellerTaxStatus,
 	defaultWithholdingSelection,
@@ -45,8 +46,15 @@ export function roundCurrency(value: number) {
 }
 
 export function invoiceSubtotal(lineItems: InvoiceLineLike[]) {
-	return roundCurrency(
-		lineItems.reduce((sum, item) => sum + item.quantity * item.price, 0),
+	return subtotalKobo(lineItems) / 100;
+}
+
+function percentageKobo(amountKobo: number, rate: number, inclusive = false) {
+	const rateBasisPoints = BigInt(priceToKobo(rate));
+	const denominator = inclusive ? 10_000n + rateBasisPoints : 10_000n;
+	if (denominator <= 0n) return 0;
+	return Number(
+		(BigInt(amountKobo) * rateBasisPoints + denominator / 2n) / denominator,
 	);
 }
 
@@ -159,7 +167,8 @@ function resolveDomesticTaxDefaults(
 export function calculateInvoiceCompliance(
 	input: ComplianceInput,
 ): InvoiceComplianceSnapshot {
-	const subtotal = invoiceSubtotal(input.lineItems);
+	const subtotalMinor = subtotalKobo(input.lineItems);
+	const subtotal = subtotalMinor / 100;
 	const sellerCountry = input.seller?.countryCode;
 	const buyerCountry = input.buyer?.countryCode;
 	const sellerTaxStatus = input.sellerTaxStatus;
@@ -177,16 +186,17 @@ export function calculateInvoiceCompliance(
 	const taxRuleSetVersion =
 		input.taxRuleSetVersion ?? NIGERIA_TAX_RULE_SET_VERSION;
 
-	let totalTax = 0;
-	let grandTotal = subtotal;
+	let totalTaxMinor = 0;
+	let grandTotalMinor = subtotalMinor;
 
 	if (taxTreatment === "exclusive_rate") {
-		totalTax = roundCurrency((subtotal * taxRate) / 100);
-		grandTotal = roundCurrency(subtotal + totalTax);
+		totalTaxMinor = percentageKobo(subtotalMinor, taxRate);
+		grandTotalMinor += totalTaxMinor;
 	} else if (taxTreatment === "inclusive_rate" && taxRate > 0) {
-		totalTax = roundCurrency(subtotal - subtotal / (1 + taxRate / 100));
-		grandTotal = subtotal;
+		totalTaxMinor = percentageKobo(subtotalMinor, taxRate, true);
 	}
+	const totalTax = totalTaxMinor / 100;
+	const grandTotal = grandTotalMinor / 100;
 
 	const fallbackWithholding =
 		input.withholdingTaxPreset && input.withholdingTaxPreset !== "none"
@@ -223,15 +233,16 @@ export function calculateInvoiceCompliance(
 		}),
 		amount: 0,
 	};
-	const withholdingTaxAmount =
+	const withholdingTaxMinor =
 		resolvedWithholdingBase.category === "none"
 			? 0
-			: roundCurrency((grandTotal * resolvedWithholdingBase.rate) / 100);
+			: percentageKobo(grandTotalMinor, resolvedWithholdingBase.rate);
+	const withholdingTaxAmount = withholdingTaxMinor / 100;
 	const withholding = {
 		...resolvedWithholdingBase,
 		amount: withholdingTaxAmount,
 	};
-	const netPayable = roundCurrency(grandTotal - withholdingTaxAmount);
+	const netPayable = (grandTotalMinor - withholdingTaxMinor) / 100;
 	const normalizedCurrency = input.currency?.trim().toUpperCase();
 	const regulatoryNotice =
 		normalizedCurrency && normalizedCurrency !== "NGN" && placeOfSupply === "NG"

@@ -175,6 +175,7 @@ export async function searchProducts(
 	client: Supabase,
 	userId: string,
 	q: string,
+	signal?: AbortSignal,
 ): Promise<
 	Array<{
 		id: string;
@@ -193,12 +194,13 @@ export async function searchProducts(
 	const queryText = q.toLowerCase().trim();
 	if (queryText.length === 0) return [];
 
-	const { data, error } = await client
+	const query = client
 		.from("products")
 		.select(
 			"id, name, sku, default_unit_price, unit_name, type, default_vat_category, default_classification_code, is_active, deleted_at",
 		)
 		.eq("workspace_id", workspaceId);
+	const { data, error } = await (signal ? query.abortSignal(signal) : query);
 	if (error) throw error;
 
 	const matches = (data ?? [])

@@ -67,7 +67,6 @@ import {
 import { Input } from "#/components/ui/input";
 import {
 	Popover,
-	PopoverAnchor,
 	PopoverContent,
 	PopoverTrigger,
 } from "#/components/ui/popover";
@@ -78,6 +77,12 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
+} from "#/components/ui/tooltip";
 import { toast } from "#/components/ui/use-toast";
 import { calculateInvoiceCompliance } from "#/features/compliance/calculate";
 import {
@@ -107,6 +112,7 @@ import type {
 } from "#/features/compliance/types";
 import { formatMoney } from "#/features/invoices/format";
 import type { ImportedInvoiceDraft } from "#/features/invoices/import-spreadsheet";
+import { lineTotalKobo, priceToKobo } from "#/features/invoices/line-money";
 import { toEditorDoc } from "#/features/invoices/midday-adapter";
 import type {
 	InvoiceDocumentType,
@@ -132,7 +138,7 @@ import {
 	list as listInvoices,
 	saveTemplateDefaults,
 } from "#/server/data/invoices";
-import { createProduct, searchProducts } from "#/server/data/products";
+import { searchProducts } from "#/server/data/products";
 import { getInvoiceWorkspaceSettings } from "#/server/data/workspaces";
 import { cn } from "#/utils/cn";
 
@@ -225,6 +231,8 @@ const PAYMENT_DETAILS_PLACEHOLDER =
 	"Add bank details, wallet address, or payment instructions";
 const NOTE_PLACEHOLDER =
 	"E.g. Thank you for your business. Payment due within 14 days.";
+const LINE_ITEM_GRID_COLUMNS =
+	"@md:grid-cols-[minmax(0,1.4fr)_112px_minmax(0,1fr)_minmax(0,1.1fr)_32px]";
 
 type SupportedCurrency = (typeof INVOICE_CURRENCY_OPTIONS)[number]["code"];
 type SupportedTemplateName = (typeof TEMPLATE_OPTIONS)[number]["value"];
@@ -381,11 +389,13 @@ function sanitizeDecimalInput(raw: string) {
 }
 
 function parsePriceInput(raw: string) {
-	const trimmed = raw.trim();
-	if (!trimmed) return 0;
-	const parsed = Number.parseFloat(trimmed);
-	if (!Number.isFinite(parsed)) return 0;
-	return parsed;
+	return priceToKobo(raw) / 100;
+}
+
+function formatPriceInput(price: number) {
+	return new Intl.NumberFormat("en-NG", { maximumFractionDigits: 2 }).format(
+		priceToKobo(price) / 100,
+	);
 }
 
 function toPersistableCompliance(compliance: InvoiceComplianceSnapshot) {
@@ -439,13 +449,13 @@ function CreateSortableLineItem({
 			ref={setNodeRef}
 			style={style}
 			className={cn(
-				"group relative flex min-w-0 items-start gap-2 border border-rule bg-paper px-2 py-2 md:items-center md:gap-3",
+				"group relative flex min-w-0 items-start gap-2 border border-rule bg-paper px-2 py-2 md:gap-3",
 				className,
 			)}
 		>
 			<button
 				type="button"
-				className="shrink-0 cursor-grab touch-none text-ink-3 hover:text-ink active:cursor-grabbing"
+				className="inline-flex h-8 w-8 shrink-0 cursor-grab touch-none items-center justify-center text-ink-3 hover:text-ink active:cursor-grabbing"
 				aria-label="Drag to reorder"
 				{...attributes}
 				{...listeners}
@@ -586,6 +596,8 @@ export function CreateInvoicePanel({
 	const [paymentTermDays, setPaymentTermDays] = useState(14);
 	const [dueDate, setDueDate] = useState(() => buildDueDate(14));
 	const [includeDecimals, setIncludeDecimals] = useState(true);
+	const [defaultVatCategory, setDefaultVatCategory] =
+		useState<NonNullable<LineItem["vatCategory"]>>("standard");
 	const [includeUnits, setIncludeUnits] = useState(false);
 	const [includeQr, setIncludeQr] = useState(false);
 	const [includeDiscount, setIncludeDiscount] = useState(false);
@@ -693,6 +705,7 @@ export function CreateInvoicePanel({
 	const [lineItems, setLineItems] = useState<LineItem[]>([
 		createEmptyLineItem(),
 	]);
+	const [expandedTaxLineIds, setExpandedTaxLineIds] = useState<string[]>([]);
 	const [enteringLineIds, setEnteringLineIds] = useState<string[]>([]);
 	const [exitingLineIds, setExitingLineIds] = useState<string[]>([]);
 	const [pendingFocusLineId, setPendingFocusLineId] = useState<string | null>(
@@ -702,11 +715,9 @@ export function CreateInvoicePanel({
 		null,
 	);
 	const [productSearchQuery, setProductSearchQuery] = useState("");
+	const [debouncedProductSearchQuery, setDebouncedProductSearchQuery] =
+		useState("");
 	const [productActiveIndex, setProductActiveIndex] = useState(0);
-	const [addingToCatalogIndex, setAddingToCatalogIndex] = useState<
-		number | null
-	>(null);
-	const lineItemsScrollRef = useRef<HTMLDivElement | null>(null);
 	const pendingLineInputRef = useRef<HTMLInputElement | null>(null);
 	const autosaveDraftIdRef = useRef<string | null>(null);
 	const autosaveTokenRef = useRef(`pub-${crypto.randomUUID()}`);
@@ -715,17 +726,46 @@ export function CreateInvoicePanel({
 	const autosavePendingRef = useRef(false);
 	const autosaveNowRef = useRef<() => void>(() => {});
 
+	useEffect(() => {
+		if (productSearchIndex === null) {
+			setDebouncedProductSearchQuery("");
+			return;
+		}
+		const timer = window.setTimeout(
+			() => setDebouncedProductSearchQuery(productSearchQuery.trim()),
+			250,
+		);
+		return () => window.clearTimeout(timer);
+	}, [productSearchIndex, productSearchQuery]);
+
 	const productSearchQueryResult = useQuery({
-		queryKey: ["invoice-product-search", userId, productSearchQuery],
-		queryFn: () => {
+		queryKey: ["invoice-product-search", userId, debouncedProductSearchQuery],
+		queryFn: ({ signal }) => {
 			const context = requireSupabase();
-			return searchProducts(context.client, context.userId, productSearchQuery);
+			const timeout = AbortSignal.timeout(5_000);
+			const searchSignal = AbortSignal.any([signal, timeout]);
+			return Promise.race([
+				searchProducts(
+					context.client,
+					context.userId,
+					debouncedProductSearchQuery,
+					searchSignal,
+				),
+				new Promise<never>((_, reject) =>
+					searchSignal.addEventListener(
+						"abort",
+						() => reject(searchSignal.reason),
+						{ once: true },
+					),
+				),
+			]);
 		},
+		retry: false,
 		enabled: Boolean(
 			supabaseClient &&
 				userId &&
 				productSearchIndex !== null &&
-				productSearchQuery.trim(),
+				debouncedProductSearchQuery,
 		),
 	});
 	const productSearchResults = productSearchQueryResult.data;
@@ -792,6 +832,9 @@ export function CreateInvoicePanel({
 
 	useEffect(() => {
 		if (!savedTemplateSettings) return;
+		setDefaultVatCategory(
+			savedTemplateSettings.defaultVatCategory ?? "standard",
+		);
 		setIncludeDecimals(savedTemplateSettings.includeDecimals ?? true);
 		setIncludeUnits(savedTemplateSettings.includeUnits ?? false);
 		setIncludeQr(savedTemplateSettings.includeQr ?? false);
@@ -809,6 +852,7 @@ export function CreateInvoicePanel({
 
 	const templateSettings: InvoiceTemplateSettings = {
 		...templateLabels,
+		defaultVatCategory,
 		includeDecimals,
 		includeUnits,
 		includeQr,
@@ -874,7 +918,7 @@ export function CreateInvoicePanel({
 			initialDraft.lineItems.map((item) => ({
 				id: `li-${crypto.randomUUID()}`,
 				name: item.name,
-				quantity: Math.max(1, item.quantity),
+				quantity: Math.max(1, Math.trunc(item.quantity)),
 				price: Math.max(0, item.price),
 				unit: item.unit,
 				vatCategory: item.vatCategory,
@@ -1047,25 +1091,29 @@ export function CreateInvoicePanel({
 	const hasPricedLineItem = lineItems.some(
 		(item) => item.name.trim().length > 0 && item.price > 0,
 	);
+	const dueDateInvalid = Boolean(issueDate && dueDate && dueDate < issueDate);
 	const canSubmit =
 		customerName.trim().length > 1 &&
 		Boolean(customerId) &&
 		hasPricedLineItem &&
+		!dueDateInvalid &&
 		!submitting;
 	// B2: finalizing requires a saved client record (the server rejects a
 	// customer-less invoice leaving Draft), so the blocker names the picker.
-	const submitBlockerText = !customerId
-		? "Select or create a saved client before creating."
-		: !customerName.trim()
-			? "Select or enter a client before creating."
-			: !hasPricedLineItem
-				? "Add at least one priced line item."
-				: "";
+	const submitBlockerText = dueDateInvalid
+		? "Due date is before issue date."
+		: !customerId
+			? "Select or create a saved client before creating."
+			: !customerName.trim()
+				? "Select or enter a client before creating."
+				: !hasPricedLineItem
+					? "Add at least one priced line item."
+					: "";
 	const autosaveStatusText =
 		autosaveStatus === "saving"
 			? "Saving draft..."
 			: autosaveStatus === "saved"
-				? "Draft saved"
+				? "Saved"
 				: autosaveStatus === "error"
 					? "Draft not saved"
 					: "";
@@ -1239,7 +1287,7 @@ export function CreateInvoicePanel({
 			price: Math.max(0, item.price),
 			productId: item.productId,
 			unit: item.unit,
-			vatCategory: item.vatCategory,
+			vatCategory: item.vatCategory ?? defaultVatCategory,
 			classificationCode: item.classificationCode,
 		})),
 		compliance: toPersistableCompliance({
@@ -1452,14 +1500,15 @@ export function CreateInvoicePanel({
 			price: product.defaultUnitPrice,
 			productId: product.id,
 			unit: product.unitName ?? "",
-			vatCategory: product.defaultVatCategory,
+			vatCategory: product.defaultVatCategory ?? defaultVatCategory,
 			classificationCode: product.defaultClassificationCode ?? "",
 		});
 		if (lineId) {
-			setPriceDrafts((prev) => ({
-				...prev,
-				[lineId]: String(product.defaultUnitPrice),
-			}));
+			setPriceDrafts((prev) => {
+				const next = { ...prev };
+				delete next[lineId];
+				return next;
+			});
 		}
 		setProductSearchIndex(null);
 		setProductSearchQuery("");
@@ -1495,10 +1544,6 @@ export function CreateInvoicePanel({
 
 	useEffect(() => {
 		if (!pendingFocusLineId) return;
-		lineItemsScrollRef.current?.scrollTo({
-			top: lineItemsScrollRef.current.scrollHeight,
-			behavior: "smooth",
-		});
 		const focusTimer = window.setTimeout(() => {
 			pendingLineInputRef.current?.focus();
 			setPendingFocusLineId(null);
@@ -1562,11 +1607,14 @@ export function CreateInvoicePanel({
 		}));
 	};
 
-	const onPriceChange = (lineId: string, value: string) => {
+	const onPriceChange = (lineId: string, index: number, value: string) => {
+		const raw = sanitizeDecimalInput(value);
+		if (raw.split(".")[0].length > 13) return;
 		setPriceDrafts((prev) => ({
 			...prev,
-			[lineId]: sanitizeDecimalInput(value),
+			[lineId]: raw,
 		}));
+		updateLine(index, { price: parsePriceInput(raw) });
 	};
 
 	const commitPriceDraft = (
@@ -1809,7 +1857,7 @@ export function CreateInvoicePanel({
 						price: Math.max(0, item.price),
 						productId: item.productId,
 						unit: item.unit,
-						vatCategory: item.vatCategory,
+						vatCategory: item.vatCategory ?? defaultVatCategory,
 						classificationCode: item.classificationCode,
 					})),
 				compliance: toPersistableCompliance({
@@ -2061,7 +2109,7 @@ export function CreateInvoicePanel({
 											"Create and send",
 										].map((step, index) => (
 											<li key={step} className="flex items-center gap-2">
-												<span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-rule bg-paper-2 text-[11px] font-medium text-ink">
+												<span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-rule bg-paper-2 text-[12px] font-medium text-ink">
 													{index + 1}
 												</span>
 												{step}
@@ -2131,7 +2179,7 @@ export function CreateInvoicePanel({
 												</option>
 											))}
 										</select>
-										<p className="text-[11px] text-ink-3">
+										<p className="text-[12px] text-ink-3">
 											Creates a separate document and leaves the source invoice
 											unchanged.
 										</p>
@@ -2150,7 +2198,7 @@ export function CreateInvoicePanel({
 															invoiceNoLabel: value,
 														}))
 													}
-													className="text-[11px] text-ink-3"
+													className="text-[12px] text-ink-3"
 												/>
 												<div className="mt-1 font-mono text-[14px] text-ink">
 													{invoiceNumber}
@@ -2165,7 +2213,7 @@ export function CreateInvoicePanel({
 															issueDateLabel: value,
 														}))
 													}
-													className="text-[11px] text-ink-3"
+													className="text-[12px] text-ink-3"
 												/>
 												<InvoiceDateField
 													value={issueDate}
@@ -2174,7 +2222,12 @@ export function CreateInvoicePanel({
 													label="Issue date"
 												/>
 											</div>
-											<div className="min-h-[60px] border-b border-brand px-1 py-2">
+											<div
+												className={cn(
+													"min-h-[60px] border-b px-1 py-2",
+													dueDateInvalid ? "border-warn" : "border-rule",
+												)}
+											>
 												<InlineLabelInput
 													value={templateLabels.dueDateLabel}
 													onChange={(value) =>
@@ -2183,7 +2236,7 @@ export function CreateInvoicePanel({
 															dueDateLabel: value,
 														}))
 													}
-													className="text-[11px] text-ink-3"
+													className="text-[12px] text-ink-3"
 												/>
 												<InvoiceDateField
 													value={dueDate}
@@ -2192,6 +2245,14 @@ export function CreateInvoicePanel({
 													label="Due date"
 													min={issueDate}
 												/>
+												{dueDateInvalid ? (
+													<p
+														className="mt-1 text-[12px] text-warn"
+														role="alert"
+													>
+														Due date is before issue date.
+													</p>
+												) : null}
 											</div>
 										</div>
 									</div>
@@ -2206,12 +2267,12 @@ export function CreateInvoicePanel({
 														className="h-full w-full object-contain"
 													/>
 												) : (
-													<div className="flex h-full w-full items-center justify-center text-[11px] text-ink-3">
+													<div className="flex h-full w-full items-center justify-center text-[12px] text-ink-3">
 														Logo
 													</div>
 												)}
 											</div>
-											<label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-rule bg-paper px-2.5 text-[11px] text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink">
+											<label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-rule bg-paper px-2.5 text-[12px] text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink">
 												<ImagePlus className="h-3.5 w-3.5" />
 												Upload
 												<input
@@ -2295,129 +2356,117 @@ export function CreateInvoicePanel({
 												</button>
 											</div>
 										) : null}
-										<div className="mb-1">
-											<div className="relative w-full">
-												<button
-													type="button"
-													aria-haspopup="listbox"
-													aria-expanded={customerPickerOpen}
-													onClick={() => {
-														setCustomerActiveIndex(0);
-														setCustomerPickerOpen((prev) => !prev);
-													}}
-													className="flex h-9 w-full items-center justify-between rounded-md border border-rule bg-paper px-3 text-[13px] text-ink-2"
-												>
-													{customerName || "Select client"}
-													<ChevronDown className="h-3.5 w-3.5 text-ink-3" />
-												</button>
-												{customerPickerOpen ? (
-													<div className="absolute left-0 top-10 z-20 w-full min-w-[260px] rounded-md border border-rule bg-paper p-2 shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
-														<div className="mb-2 flex h-8 items-center gap-2 rounded-md border border-rule bg-paper px-2">
-															<Search className="h-3.5 w-3.5 text-ink-3" />
-															<input
-																role="combobox"
-																aria-autocomplete="list"
-																aria-controls="invoice-customer-options"
-																aria-expanded={customerPickerOpen}
-																value={customerSearch}
-																onChange={(event) => {
-																	setCustomerSearch(event.target.value);
-																	setCustomerActiveIndex(0);
-																}}
-																onKeyDown={(event) => {
-																	if (event.key === "Escape") {
-																		setCustomerPickerOpen(false);
-																		return;
-																	}
-																	if (!filteredClients.length) return;
-																	if (
-																		event.key === "ArrowDown" ||
-																		event.key === "ArrowUp"
-																	) {
-																		event.preventDefault();
-																		setCustomerActiveIndex((current) =>
-																			event.key === "ArrowDown"
-																				? (current + 1) % filteredClients.length
-																				: (current -
-																						1 +
-																						filteredClients.length) %
-																					filteredClients.length,
-																		);
-																	} else if (event.key === "Enter") {
-																		event.preventDefault();
-																		selectClient(
-																			filteredClients[customerActiveIndex],
-																		);
-																	}
-																}}
-																placeholder="Search customer..."
-																className="h-full w-full bg-transparent text-xs text-ink-2 outline-none placeholder:text-ink-3"
-															/>
-														</div>
-														<div
-															id="invoice-customer-options"
-															role="listbox"
-															className="max-h-48 overflow-y-auto overscroll-contain"
-														>
-															{filteredClients.map((client, clientIndex) => (
-																<button
-																	key={client.id ?? client.name}
-																	type="button"
-																	role="option"
-																	aria-selected={
-																		clientIndex === customerActiveIndex
-																	}
-																	onMouseEnter={() =>
-																		setCustomerActiveIndex(clientIndex)
-																	}
-																	onClick={() => selectClient(client)}
-																	className={cn(
-																		"flex h-8 w-full items-center rounded-md px-2 text-left text-[13px] text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2",
-																		clientIndex === customerActiveIndex &&
-																			"bg-paper-2 text-ink",
-																	)}
-																>
-																	{client.name}
-																</button>
-															))}
-															{filteredClients.length === 0 ? (
-																<div className="px-2 py-2 text-xs text-ink-3">
-																	No customers found.
-																</div>
-															) : null}
-														</div>
-														<div className="mt-2 border-t border-rule pt-2">
-															<button
-																type="button"
-																onClick={() => setCreateClientOpen(true)}
-																className="h-8 rounded-md px-2 text-[13px] text-brand transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:text-brand-hi"
+										{clients.length > 0 ? (
+											<div className="mb-1">
+												<div className="relative w-full">
+													<button
+														type="button"
+														aria-haspopup="listbox"
+														aria-expanded={customerPickerOpen}
+														onClick={() => {
+															setCustomerActiveIndex(0);
+															setCustomerPickerOpen((prev) => !prev);
+														}}
+														className="flex h-9 w-full items-center justify-between rounded-md border border-rule bg-paper px-3 text-[13px] text-ink-2"
+													>
+														{customerName || "Select client"}
+														<ChevronDown className="h-3.5 w-3.5 text-ink-3" />
+													</button>
+													{customerPickerOpen ? (
+														<div className="absolute left-0 top-10 z-20 w-full min-w-[260px] rounded-md border border-rule bg-paper p-2 shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
+															<div className="mb-2 flex h-8 items-center gap-2 rounded-md border border-rule bg-paper px-2">
+																<Search className="h-3.5 w-3.5 text-ink-3" />
+																<input
+																	role="combobox"
+																	aria-autocomplete="list"
+																	aria-controls="invoice-customer-options"
+																	aria-expanded={customerPickerOpen}
+																	value={customerSearch}
+																	onChange={(event) => {
+																		setCustomerSearch(event.target.value);
+																		setCustomerActiveIndex(0);
+																	}}
+																	onKeyDown={(event) => {
+																		if (event.key === "Escape") {
+																			setCustomerPickerOpen(false);
+																			return;
+																		}
+																		if (!filteredClients.length) return;
+																		if (
+																			event.key === "ArrowDown" ||
+																			event.key === "ArrowUp"
+																		) {
+																			event.preventDefault();
+																			setCustomerActiveIndex((current) =>
+																				event.key === "ArrowDown"
+																					? (current + 1) %
+																						filteredClients.length
+																					: (current -
+																							1 +
+																							filteredClients.length) %
+																						filteredClients.length,
+																			);
+																		} else if (event.key === "Enter") {
+																			event.preventDefault();
+																			selectClient(
+																				filteredClients[customerActiveIndex],
+																			);
+																		}
+																	}}
+																	placeholder="Search customer..."
+																	className="h-full w-full bg-transparent text-xs text-ink-2 outline-none placeholder:text-ink-3"
+																/>
+															</div>
+															<div
+																id="invoice-customer-options"
+																role="listbox"
+																className="max-h-48 overflow-y-auto overscroll-contain"
 															>
-																Create customer
-															</button>
+																{filteredClients.map((client, clientIndex) => (
+																	<button
+																		key={client.id ?? client.name}
+																		type="button"
+																		role="option"
+																		aria-selected={
+																			clientIndex === customerActiveIndex
+																		}
+																		onMouseEnter={() =>
+																			setCustomerActiveIndex(clientIndex)
+																		}
+																		onClick={() => selectClient(client)}
+																		className={cn(
+																			"flex h-8 w-full items-center rounded-md px-2 text-left text-[13px] text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2",
+																			clientIndex === customerActiveIndex &&
+																				"bg-paper-2 text-ink",
+																		)}
+																	>
+																		{client.name}
+																	</button>
+																))}
+																{filteredClients.length === 0 ? (
+																	<div className="px-2 py-2 text-xs text-ink-3">
+																		No customers found.
+																	</div>
+																) : null}
+															</div>
+															<div className="mt-2 border-t border-rule pt-2">
+																<button
+																	type="button"
+																	onClick={() => setCreateClientOpen(true)}
+																	className="h-8 rounded-md px-2 text-[13px] text-brand transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:text-brand-hi"
+																>
+																	Create customer
+																</button>
+															</div>
 														</div>
-													</div>
-												) : null}
+													) : null}
+												</div>
 											</div>
-										</div>
-
-										<Input
-											value={customerName}
-											onChange={(event) => {
-												setCustomerId(undefined);
-												setCustomerName(event.target.value);
-											}}
-											placeholder="Client name"
-											className="h-9 w-full border-rule bg-paper px-3 text-[14px] font-medium text-ink"
-										/>
-										{showCustomerEmail ? (
-											<Input
-												value={customerEmail}
-												onChange={(event) =>
-													setCustomerEmail(event.target.value)
-												}
-												placeholder="client@email.com"
-												className="h-9 w-full border-rule bg-paper px-3 text-[13px] text-ink-2"
-											/>
+										) : null}
+										{showCustomerEmail && customerId && customerEmail ? (
+											<p className="min-w-0 truncate px-3 text-[12px] text-ink-2">
+												{customerEmail}
+											</p>
 										) : null}
 										<Input
 											value={customerPoNumber}
@@ -2560,12 +2609,27 @@ export function CreateInvoicePanel({
 									</div>
 								) : null}
 
+								<NotesEditor
+									key={`top-${draftKey}`}
+									initialContent={topBlock}
+									onChange={(content) =>
+										setTopBlock(content as EditorDoc | null)
+									}
+									placeholder="Optional introduction or terms above line items"
+									className="mb-4 min-h-14 border-y border-dashed border-rule bg-paper px-1 py-3"
+								/>
+
 								<div className="mb-3 hidden items-center gap-3 border-b border-rule px-2 pb-2 text-[12px] text-ink-3 @md:flex">
-									{/* Mirrors CreateSortableLineItem's structure —16px drag
+									{/* Mirrors CreateSortableLineItem's 32px drag
 									 * handle + gap-3 — so the label cells sit exactly above
 									 * their row columns. */}
-									<span className="w-4 shrink-0" aria-hidden />
-									<div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1.4fr)_112px_minmax(0,1fr)_minmax(0,1.1fr)_24px] items-center gap-2">
+									<span className="w-8 shrink-0" aria-hidden />
+									<div
+										className={cn(
+											"grid min-w-0 flex-1 items-center gap-2",
+											LINE_ITEM_GRID_COLUMNS,
+										)}
+									>
 										<InlineLabelInput
 											value={templateLabels.descriptionLabel}
 											onChange={(value) =>
@@ -2583,6 +2647,7 @@ export function CreateInvoicePanel({
 													quantityLabel: value,
 												}))
 											}
+											className="text-right"
 										/>
 										<InlineLabelInput
 											value={templateLabels.priceLabel}
@@ -2592,6 +2657,7 @@ export function CreateInvoicePanel({
 													priceLabel: value,
 												}))
 											}
+											className="text-right"
 										/>
 										<InlineLabelInput
 											value={templateLabels.totalLabel}
@@ -2607,10 +2673,7 @@ export function CreateInvoicePanel({
 									</div>
 								</div>
 
-								<div
-									ref={lineItemsScrollRef}
-									className="min-h-[52px] max-h-[250px] scroll-smooth overflow-y-auto"
-								>
+								<div className="min-h-[52px] shrink-0">
 									<div className="space-y-2">
 										<DndContext
 											sensors={dndSensors}
@@ -2622,11 +2685,17 @@ export function CreateInvoicePanel({
 												strategy={verticalListSortingStrategy}
 											>
 												{lineItems.map((item, index) => {
-													const lineTotal = item.quantity * item.price;
+													const lineTotal = lineTotalKobo(item) / 100;
 													const isEntering = enteringLineIds.includes(item.id);
 													const isExiting = exitingLineIds.includes(item.id);
 													const isProductSearchOpen =
 														productSearchIndex === index;
+													const missingTaxDetails =
+														!item.unit?.trim() ||
+														!item.classificationCode?.trim();
+													const taxDetailsOpen =
+														missingTaxDetails ||
+														expandedTaxLineIds.includes(item.id);
 
 													return (
 														<CreateSortableLineItem
@@ -2638,264 +2707,218 @@ export function CreateInvoicePanel({
 																isExiting && "invoice-line-exit",
 															)}
 														>
-															<div className="relative grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-end gap-2 @md:grid-cols-[minmax(0,1.4fr)_112px_minmax(0,1fr)_minmax(0,1.1fr)_24px] @md:items-center">
+															<div
+																className={cn(
+																	"relative grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-2 @md:items-center",
+																	LINE_ITEM_GRID_COLUMNS,
+																)}
+															>
 																<div className="relative col-span-2 min-w-0 @md:col-span-1">
 																	<label
-																		className="mb-1 block text-[11px] text-ink-3 @md:sr-only"
+																		className="mb-1 block text-[12px] text-ink-3 @md:sr-only"
 																		htmlFor={`invoice-line-description-${item.id}`}
 																	>
 																		Description
 																	</label>
-																	<Popover open={isProductSearchOpen}>
-																		<PopoverAnchor asChild>
-																			<Input
-																				id={`invoice-line-description-${item.id}`}
-																				role="combobox"
-																				aria-autocomplete="list"
-																				aria-expanded={isProductSearchOpen}
-																				aria-controls={`invoice-product-options-${index}`}
-																				ref={
-																					item.id === pendingFocusLineId
-																						? pendingLineInputRef
-																						: undefined
-																				}
-																				value={item.name}
-																				onFocus={(e) => {
-																					e.target.select();
-																					setProductSearchIndex(index);
-																					setProductSearchQuery(
-																						e.target.value.trim(),
-																					);
-																				}}
-																				onChange={(event) => {
-																					updateLine(index, {
-																						name: event.target.value,
-																					});
-																					setProductSearchIndex(index);
-																					setProductSearchQuery(
-																						event.target.value,
-																					);
-																					setProductActiveIndex(0);
-																				}}
-																				onKeyDown={(event) => {
-																					if (event.key === "Escape") {
-																						setProductSearchIndex(null);
-																						setProductSearchQuery("");
-																						return;
-																					}
-																					if (
-																						!visibleProductSearchResults.length
-																					)
-																						return;
-																					if (
-																						event.key === "ArrowDown" ||
-																						event.key === "ArrowUp"
-																					) {
-																						event.preventDefault();
-																						setProductActiveIndex((current) =>
-																							event.key === "ArrowDown"
-																								? (current + 1) %
-																									visibleProductSearchResults.length
-																								: (current -
-																										1 +
-																										visibleProductSearchResults.length) %
-																									visibleProductSearchResults.length,
-																						);
-																					} else if (event.key === "Enter") {
-																						event.preventDefault();
-																						selectProduct(
-																							index,
-																							visibleProductSearchResults[
-																								productActiveIndex
-																							],
-																						);
-																					}
-																				}}
-																				onBlur={() => {
-																					setTimeout(() => {
-																						setProductSearchIndex(null);
-																						setProductSearchQuery("");
-																					}, 200);
-																				}}
-																				placeholder="Search product..."
-																				className="h-10 border-rule bg-paper px-3 text-[13px] leading-none text-ink placeholder:text-ink-3"
-																			/>
-																		</PopoverAnchor>
-																		{isProductSearchOpen &&
-																		(visibleProductSearchResults.length > 0 ||
-																			productSearchQuery.trim().length > 0) ? (
-																			<PopoverContent
-																				align="start"
-																				sideOffset={4}
-																				onOpenAutoFocus={(event) =>
-																					event.preventDefault()
-																				}
-																				onCloseAutoFocus={(event) =>
-																					event.preventDefault()
-																				}
-																				className="w-[min(560px,calc(100vw-2rem))] border-rule bg-paper p-0 shadow-lg"
-																			>
-																				{visibleProductSearchResults.length >
+																	<Input
+																		id={`invoice-line-description-${item.id}`}
+																		role="combobox"
+																		aria-autocomplete="list"
+																		aria-expanded={isProductSearchOpen}
+																		aria-controls={`invoice-product-options-${index}`}
+																		ref={
+																			item.id === pendingFocusLineId
+																				? pendingLineInputRef
+																				: undefined
+																		}
+																		value={item.name}
+																		onFocus={(e) => {
+																			e.target.setSelectionRange(0, 0);
+																			e.target.scrollLeft = 0;
+																			setProductSearchIndex(index);
+																			setProductSearchQuery(
+																				e.target.value.trim(),
+																			);
+																		}}
+																		onChange={(event) => {
+																			updateLine(index, {
+																				name: event.target.value,
+																			});
+																			setProductSearchIndex(index);
+																			setProductSearchQuery(event.target.value);
+																			setProductActiveIndex(0);
+																		}}
+																		onKeyDown={(event) => {
+																			if (event.key === "Escape") {
+																				setProductSearchIndex(null);
+																				setProductSearchQuery("");
+																				return;
+																			}
+																			if (!visibleProductSearchResults.length)
+																				return;
+																			if (
+																				event.key === "ArrowDown" ||
+																				event.key === "ArrowUp"
+																			) {
+																				event.preventDefault();
+																				setProductActiveIndex((current) =>
+																					event.key === "ArrowDown"
+																						? (current + 1) %
+																							visibleProductSearchResults.length
+																						: (current -
+																								1 +
+																								visibleProductSearchResults.length) %
+																							visibleProductSearchResults.length,
+																				);
+																			} else if (event.key === "Enter") {
+																				event.preventDefault();
+																				selectProduct(
+																					index,
+																					visibleProductSearchResults[
+																						productActiveIndex
+																					],
+																				);
+																			}
+																		}}
+																		onBlur={(event) => {
+																			event.currentTarget.scrollLeft = 0;
+																			setTimeout(() => {
+																				setProductSearchIndex(null);
+																				setProductSearchQuery("");
+																			}, 200);
+																		}}
+																		placeholder="Search product..."
+																		className="h-10 min-w-0 truncate border-rule bg-paper px-3 text-[13px] leading-none text-ink placeholder:text-ink-3"
+																	/>
+
+																	{isProductSearchOpen &&
+																	productSearchQuery.trim() ? (
+																		<div
+																			id={`invoice-product-options-${index}`}
+																			role="listbox"
+																			className="absolute left-0 top-full z-50 mt-1 w-full max-w-[calc(100vw-16px)] rounded-md border border-rule bg-paper p-0 shadow-lg"
+																		>
+																			{productSearchQueryResult.isError &&
+																			debouncedProductSearchQuery ===
+																				productSearchQuery.trim() ? (
+																				<div className="flex items-center justify-between gap-2 px-3 py-2 text-[12px] text-warn">
+																					<span>Catalog search failed.</span>
+																					<button
+																						type="button"
+																						className="h-8 px-2 text-brand"
+																						onMouseDown={(event) =>
+																							event.preventDefault()
+																						}
+																						onClick={() =>
+																							void productSearchQueryResult.refetch()
+																						}
+																					>
+																						Retry
+																					</button>
+																				</div>
+																			) : debouncedProductSearchQuery !==
+																					productSearchQuery.trim() ||
+																				productSearchQueryResult.isFetching ? (
+																				<div className="flex items-center gap-2 px-3 py-2 text-[12px] text-ink-2">
+																					<Loader2 className="h-4 w-4 animate-spin" />{" "}
+																					Searching catalog…
+																				</div>
+																			) : visibleProductSearchResults.length >
 																				0 ? (
-																					<>
-																						<div className="border-b border-rule px-3 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-ink-3">
-																							{productSearchQuery.trim()
-																								.length > 0
-																								? "Matching products"
-																								: "Catalog products"}
-																						</div>
-																						<div
-																							id={`invoice-product-options-${index}`}
-																							role="listbox"
-																							className="max-h-64 overflow-y-auto overscroll-contain"
-																						>
-																							{visibleProductSearchResults.map(
-																								(product, productIndex) => (
-																									<button
-																										type="button"
-																										role="option"
-																										aria-selected={
-																											productIndex ===
-																											productActiveIndex
-																										}
-																										onMouseEnter={() =>
-																											setProductActiveIndex(
-																												productIndex,
-																											)
-																										}
-																										key={product.id}
-																										onMouseDown={(e) => {
-																											e.preventDefault();
-																											selectProduct(
-																												index,
-																												product,
-																											);
-																										}}
-																										className={cn(
-																											"flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13px] text-ink hover:bg-paper-2",
-																											productIndex ===
-																												productActiveIndex &&
-																												"bg-paper-2",
-																										)}
-																									>
-																										<span className="min-w-0">
-																											<span className="block truncate">
-																												{product.name}
-																											</span>
-																											<span className="mt-0.5 block text-[11px] capitalize text-ink-3">
-																												{product.type}
-																												{product.unitName
-																													? ` / ${product.unitName}`
-																													: ""}
-																												{product.sku
-																													? ` / SKU ${product.sku}`
-																													: ""}
-																											</span>
-																										</span>
-																										<span className="shrink-0 font-mono text-brand">
-																											{formatMoney(
-																												product.defaultUnitPrice,
-																												currency,
-																											)}
-																										</span>
-																									</button>
-																								),
-																							)}
-																						</div>
-																					</>
-																				) : productSearchResults ===
-																					undefined ? (
-																					<div className="px-3 py-2 text-[12px] text-ink-3">
-																						Searching catalog...
+																				<>
+																					<div className="border-b border-rule px-3 py-2 text-[12px] font-medium uppercase tracking-[0.12em] text-ink-3">
+																						{productSearchQuery.trim().length >
+																						0
+																							? "Matching products"
+																							: "Catalog products"}
 																					</div>
-																				) : (
-																					<>
-																						<div className="px-3 py-2 text-[12px] text-ink-3">
-																							<span className="block truncate font-medium text-ink">
-																								{item.name.trim()}
-																							</span>
-																							<span className="mt-1 block">
-																								No catalog match
-																							</span>
-																						</div>
-																						<button
-																							type="button"
-																							disabled={
-																								addingToCatalogIndex === index
-																							}
-																							onMouseDown={async (e) => {
-																								e.preventDefault();
-																								if (
-																									addingToCatalogIndex !== null
-																								)
-																									return;
-																								setAddingToCatalogIndex(index);
-																								try {
-																									const context =
-																										requireSupabase();
-																									const id =
-																										await createProduct(
-																											context.client,
-																											context.userId,
-																											{
-																												type: "product",
-																												name: item.name.trim(),
-																												defaultUnitPrice:
-																													item.price,
-																												unitName: item.unit,
-																												defaultVatCategory:
-																													item.vatCategory,
-																												defaultClassificationCode:
-																													item.classificationCode,
-																												isActive: true,
-																											},
+																					<div
+																						role="listbox"
+																						className="max-h-64 overflow-y-auto overscroll-contain"
+																					>
+																						{visibleProductSearchResults.map(
+																							(product, productIndex) => (
+																								<button
+																									type="button"
+																									role="option"
+																									aria-selected={
+																										productIndex ===
+																										productActiveIndex
+																									}
+																									onMouseEnter={() =>
+																										setProductActiveIndex(
+																											productIndex,
+																										)
+																									}
+																									key={product.id}
+																									onMouseDown={(e) => {
+																										e.preventDefault();
+																										selectProduct(
+																											index,
+																											product,
 																										);
-																									updateLine(index, {
-																										productId: id,
-																									});
-																									toast({
-																										title:
-																											"Added to product catalog",
-																										variant: "success",
-																									});
-																								} catch {
-																									toast({
-																										title:
-																											"Failed to add to catalog",
-																										variant: "error",
-																									});
-																								} finally {
-																									setAddingToCatalogIndex(null);
-																									setProductSearchIndex(null);
-																									setProductSearchQuery("");
-																								}
-																							}}
-																							className="flex w-full items-center gap-2 border-t border-rule px-3 py-2 text-left text-[12px] text-brand hover:bg-paper-2 disabled:opacity-50"
-																						>
-																							{addingToCatalogIndex ===
-																							index ? (
-																								<Loader2 className="h-3 w-3 animate-spin" />
-																							) : (
-																								<Plus className="h-3 w-3" />
-																							)}
-																							Add to catalog
-																						</button>
-																					</>
-																				)}
-																			</PopoverContent>
-																		) : null}
-																	</Popover>
+																									}}
+																									className={cn(
+																										"flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13px] text-ink hover:bg-paper-2",
+																										productIndex ===
+																											productActiveIndex &&
+																											"bg-paper-2",
+																									)}
+																								>
+																									<span className="min-w-0">
+																										<span className="block truncate">
+																											{product.name}
+																										</span>
+																										<span className="mt-0.5 block text-[12px] capitalize text-ink-3">
+																											{product.type}
+																											{product.unitName
+																												? ` / ${product.unitName}`
+																												: ""}
+																											{product.sku
+																												? ` / SKU ${product.sku}`
+																												: ""}
+																										</span>
+																									</span>
+																									<span className="shrink-0 font-mono text-brand">
+																										{formatMoney(
+																											product.defaultUnitPrice,
+																											currency,
+																										)}
+																									</span>
+																								</button>
+																							),
+																						)}
+																					</div>
+																				</>
+																			) : (
+																				<button
+																					type="button"
+																					role="option"
+																					aria-selected={false}
+																					className="flex min-h-8 w-full items-center px-3 py-2 text-left text-[12px] text-ink-2 hover:bg-paper-2"
+																					onMouseDown={(event) => {
+																						event.preventDefault();
+																						setProductSearchIndex(null);
+																						setProductSearchQuery("");
+																					}}
+																				>
+																					No match – use ‘{item.name.trim()}’ as
+																					a custom item
+																				</button>
+																			)}
+																		</div>
+																	) : null}
 																</div>
 
 																<div className="min-w-0">
-																	<div className="mb-1 text-[11px] text-ink-3 @md:sr-only">
+																	<div className="mb-1 text-[12px] text-ink-3 @md:sr-only">
 																		Qty
 																	</div>
-																	<div className="flex items-center gap-1 text-ink-3 @md:gap-1.5">
+																	<div className="flex items-center justify-end gap-1 text-ink-3 @md:gap-1.5">
 																		<button
 																			type="button"
 																			onClick={() => decrementQuantity(index)}
-																			className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink"
+																			className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink"
 																			aria-label="Decrease quantity"
 																		>
 																			<Minus className="h-3 w-3" />
@@ -2910,7 +2933,9 @@ export function CreateInvoicePanel({
 																				updateLine(index, {
 																					quantity: Math.max(
 																						1,
-																						Number(event.target.value) || 1,
+																						Math.trunc(
+																							Number(event.target.value),
+																						) || 1,
 																					),
 																				})
 																			}
@@ -2918,7 +2943,9 @@ export function CreateInvoicePanel({
 																				updateLine(index, {
 																					quantity: Math.max(
 																						1,
-																						Number(event.target.value) || 1,
+																						Math.trunc(
+																							Number(event.target.value),
+																						) || 1,
 																					),
 																				})
 																			}
@@ -2927,7 +2954,7 @@ export function CreateInvoicePanel({
 																		<button
 																			type="button"
 																			onClick={() => incrementQuantity(index)}
-																			className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink"
+																			className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink"
 																			aria-label="Increase quantity"
 																		>
 																			<Plus className="h-3 w-3" />
@@ -2937,7 +2964,7 @@ export function CreateInvoicePanel({
 
 																<div className="min-w-0">
 																	<label
-																		className="mb-1 block text-[11px] text-ink-3 @md:sr-only"
+																		className="mb-1 block text-[12px] text-ink-3 @md:sr-only"
 																		htmlFor={`invoice-line-price-${item.id}`}
 																	>
 																		Price
@@ -2948,15 +2975,17 @@ export function CreateInvoicePanel({
 																		inputMode="decimal"
 																		value={
 																			priceDrafts[item.id] ??
-																			(item.price > 0
-																				? String(item.price)
-																				: "0")
+																			formatPriceInput(item.price)
 																		}
 																		onFocus={() =>
 																			onPriceFocus(item.id, item.price)
 																		}
 																		onChange={(event) =>
-																			onPriceChange(item.id, event.target.value)
+																			onPriceChange(
+																				item.id,
+																				index,
+																				event.target.value,
+																			)
 																		}
 																		onBlur={() =>
 																			commitPriceDraft(
@@ -2974,16 +3003,19 @@ export function CreateInvoicePanel({
 																			}
 																		}}
 																		className={cn(
-																			"h-9 w-full border-rule bg-paper px-3 text-[13px] font-mono text-ink",
+																			"h-9 w-full border-rule bg-paper px-3 text-right text-[13px] font-mono text-ink",
 																		)}
 																	/>
 																</div>
 
 																<div className="col-span-2 flex items-baseline justify-between border-t border-rule pt-2 text-[13px] text-ink @md:col-span-1 @md:block @md:border-0 @md:pt-0 @md:text-right @md:font-mono">
-																	<span className="text-[11px] text-ink-3 @md:hidden">
+																	<span className="text-[12px] text-ink-3 @md:hidden">
 																		Total
 																	</span>
-																	<span className="font-mono">
+																	<span
+																		className="font-mono"
+																		data-testid="invoice-line-total"
+																	>
 																		{formatMoney(lineTotal, currency, {
 																			maximumFractionDigits:
 																				totalsMaximumFractionDigits,
@@ -2994,115 +3026,144 @@ export function CreateInvoicePanel({
 																<button
 																	type="button"
 																	onClick={() => removeLine(index)}
-																	className="absolute right-0 top-0 inline-flex h-7 w-7 items-center justify-center rounded-md border border-rule bg-paper text-ink-3 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink @md:static @md:border-transparent @md:bg-transparent @md:opacity-0 @md:group-hover:opacity-100 @md:group-focus-within:opacity-100"
+																	className="absolute right-0 top-0 inline-flex h-8 w-8 items-center justify-center rounded-md border border-rule bg-paper text-ink-3 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink @md:static @md:border-transparent @md:bg-transparent @md:opacity-0 @md:group-hover:opacity-100 @md:group-focus-within:opacity-100"
 																	aria-label={`Remove line item ${index + 1}`}
 																>
 																	<X className="h-3.5 w-3.5" />
 																</button>
 															</div>
 
-															<div className="mt-2 grid gap-2 @md:grid-cols-3">
-																<div className="min-w-0">
-																	<label
-																		className="mb-1 block text-[11px] text-ink-3"
-																		htmlFor={`invoice-line-unit-${item.id}`}
-																	>
-																		Unit of measure *
-																	</label>
-																	<Select
-																		value={item.unit || undefined}
-																		onValueChange={(unit) =>
-																			updateLine(index, { unit })
-																		}
-																	>
-																		<SelectTrigger
-																			id={`invoice-line-unit-${item.id}`}
-																			className="h-9 px-2 text-[12px]"
+															<button
+																type="button"
+																aria-expanded={taxDetailsOpen}
+																onClick={() => {
+																	if (missingTaxDetails) return;
+																	setExpandedTaxLineIds((current) =>
+																		current.includes(item.id)
+																			? current.filter((id) => id !== item.id)
+																			: [...current, item.id],
+																	);
+																}}
+																className="mt-2 inline-flex h-8 items-center text-[12px] text-ink-2 hover:text-brand"
+															>
+																Tax details {taxDetailsOpen ? "▾" : "▸"}
+															</button>
+															{missingTaxDetails ? (
+																<p
+																	className="text-[12px] text-warn"
+																	role="status"
+																>
+																	Complete the unit and goods/service code for
+																	this line.
+																</p>
+															) : null}
+															{taxDetailsOpen ? (
+																<div className="mt-2 grid gap-2 @md:grid-cols-3">
+																	<div className="min-w-0">
+																		<label
+																			className="mb-1 block text-[12px] text-ink-3"
+																			htmlFor={`invoice-line-unit-${item.id}`}
 																		>
-																			<SelectValue placeholder="Choose unit" />
-																		</SelectTrigger>
-																		<SelectContent>
-																			{UNIT_OPTIONS.map((option) => (
-																				<SelectItem
-																					key={option.value}
-																					value={option.value}
-																				>
-																					{option.label}
-																				</SelectItem>
-																			))}
-																		</SelectContent>
-																	</Select>
-																</div>
-																<div className="min-w-0">
-																	<label
-																		className="mb-1 block text-[11px] text-ink-3"
-																		htmlFor={`invoice-line-vat-${item.id}`}
-																	>
-																		VAT category *
-																	</label>
-																	<Select
-																		value={item.vatCategory || undefined}
-																		onValueChange={(vatCategory) =>
-																			updateLine(index, {
-																				vatCategory:
-																					vatCategory as LineItem["vatCategory"],
-																			})
-																		}
-																	>
-																		<SelectTrigger
-																			id={`invoice-line-vat-${item.id}`}
-																			className="h-9 px-2 text-[12px]"
+																			Unit of measure *
+																		</label>
+																		<Select
+																			value={item.unit || undefined}
+																			onValueChange={(unit) => {
+																				updateLine(index, { unit });
+																				setExpandedTaxLineIds((current) => [
+																					...new Set([...current, item.id]),
+																				]);
+																			}}
 																		>
-																			<SelectValue placeholder="Choose category" />
-																		</SelectTrigger>
-																		<SelectContent>
-																			{VAT_CATEGORY_OPTIONS.map((option) => (
-																				<SelectItem
-																					key={option.value}
-																					value={option.value}
-																				>
-																					{option.label}
-																				</SelectItem>
-																			))}
-																		</SelectContent>
-																	</Select>
+																			<SelectTrigger
+																				id={`invoice-line-unit-${item.id}`}
+																				aria-invalid={!item.unit?.trim()}
+																				className="h-9 px-2 text-[12px]"
+																			>
+																				<SelectValue placeholder="Choose unit" />
+																			</SelectTrigger>
+																			<SelectContent>
+																				{UNIT_OPTIONS.map((option) => (
+																					<SelectItem
+																						key={option.value}
+																						value={option.value}
+																					>
+																						{option.label}
+																					</SelectItem>
+																				))}
+																			</SelectContent>
+																		</Select>
+																	</div>
+																	<div className="min-w-0">
+																		<label
+																			className="mb-1 block text-[12px] text-ink-3"
+																			htmlFor={`invoice-line-vat-${item.id}`}
+																		>
+																			VAT category *
+																		</label>
+																		<Select
+																			value={
+																				item.vatCategory ?? defaultVatCategory
+																			}
+																			onValueChange={(vatCategory) =>
+																				updateLine(index, {
+																					vatCategory:
+																						vatCategory as LineItem["vatCategory"],
+																				})
+																			}
+																		>
+																			<SelectTrigger
+																				id={`invoice-line-vat-${item.id}`}
+																				className="h-9 px-2 text-[12px]"
+																			>
+																				<SelectValue placeholder="Choose category" />
+																			</SelectTrigger>
+																			<SelectContent>
+																				{VAT_CATEGORY_OPTIONS.map((option) => (
+																					<SelectItem
+																						key={option.value}
+																						value={option.value}
+																					>
+																						{option.label}
+																					</SelectItem>
+																				))}
+																			</SelectContent>
+																		</Select>
+																	</div>
+																	<div className="min-w-0">
+																		<label
+																			className="mb-1 block text-[12px] text-ink-3"
+																			htmlFor={`invoice-line-code-${item.id}`}
+																		>
+																			Goods/service code *
+																		</label>
+																		<Input
+																			id={`invoice-line-code-${item.id}`}
+																			aria-invalid={
+																				!item.classificationCode?.trim()
+																			}
+																			value={item.classificationCode ?? ""}
+																			onChange={(event) => {
+																				updateLine(index, {
+																					classificationCode:
+																						event.target.value,
+																				});
+																				setExpandedTaxLineIds((current) => [
+																					...new Set([...current, item.id]),
+																				]);
+																			}}
+																			className="h-9 border-rule bg-paper px-2 text-[12px]"
+																			placeholder="Enter code"
+																		/>
+																	</div>
 																</div>
-																<div className="min-w-0">
-																	<label
-																		className="mb-1 block text-[11px] text-ink-3"
-																		htmlFor={`invoice-line-code-${item.id}`}
-																	>
-																		Goods/service code *
-																	</label>
-																	<Input
-																		id={`invoice-line-code-${item.id}`}
-																		value={item.classificationCode ?? ""}
-																		onChange={(event) =>
-																			updateLine(index, {
-																				classificationCode: event.target.value,
-																			})
-																		}
-																		className="h-9 border-rule bg-paper px-2 text-[12px]"
-																		placeholder="Enter code"
-																	/>
-																</div>
-															</div>
+															) : null}
 														</CreateSortableLineItem>
 													);
 												})}
 											</SortableContext>
 										</DndContext>
 									</div>
-
-									<NotesEditor
-										key={`top-${draftKey}`}
-										initialContent={topBlock}
-										onChange={(content) =>
-											setTopBlock(content as EditorDoc | null)
-										}
-										placeholder="Optional introduction or terms above line items"
-										className="mb-4 min-h-14 border-y border-dashed border-rule bg-paper px-1 py-3"
-									/>
 								</div>
 
 								<div className="mt-4 grid gap-4 md:grid-cols-[1fr_290px] md:items-start">
@@ -3121,6 +3182,7 @@ export function CreateInvoicePanel({
 										<div className="flex items-center justify-between">
 											<span>Subtotal</span>
 											<span
+												data-testid="invoice-subtotal"
 												key={`subtotal-${currency}-${compliance.subtotal}-${totalsMaximumFractionDigits}`}
 												className="font-mono invoice-value-fade"
 											>
@@ -3273,7 +3335,7 @@ export function CreateInvoicePanel({
 													Invoice
 												</DropdownMenuSubTrigger>
 												<DropdownMenuSubContent className="border-rule bg-paper text-ink-2">
-													<DropdownMenuLabel className="px-2 pb-1 pt-1 text-[10px] font-normal uppercase tracking-[0.08em] text-ink-3">
+													<DropdownMenuLabel className="px-2 pb-1 pt-1 text-[12px] font-normal uppercase tracking-[0.08em] text-ink-3">
 														Invoice
 													</DropdownMenuLabel>
 													<DropdownMenuSeparator className="bg-rule" />
@@ -3589,7 +3651,7 @@ export function CreateInvoicePanel({
 											align="start"
 											className="min-w-55 border-rule bg-paper p-1 text-ink-2"
 										>
-											<DropdownMenuLabel className="px-2 pb-1 pt-1 text-[10px] font-normal uppercase tracking-[0.08em] text-ink-3">
+											<DropdownMenuLabel className="px-2 pb-1 pt-1 text-[12px] font-normal uppercase tracking-[0.08em] text-ink-3">
 												Templates
 											</DropdownMenuLabel>
 											<DropdownMenuSeparator className="bg-rule" />
@@ -3609,19 +3671,27 @@ export function CreateInvoicePanel({
 								</div>
 
 								<div className="ml-auto flex flex-wrap items-center justify-end gap-x-2 gap-y-2">
-									{autosaveStatusText ? (
-										<div
-											className={cn(
-												"hidden w-full text-right text-[12px] min-[560px]:w-auto sm:block",
-												autosaveStatus === "error" ? "text-warn" : "text-ink-3",
-											)}
-										>
-											{autosaveStatusText}
-										</div>
-									) : null}
+									<div
+										className={cn(
+											"min-w-28 text-right text-[12px]",
+											autosaveStatus === "error" ? "text-warn" : "text-ink-2",
+										)}
+										aria-live="polite"
+									>
+										{autosaveStatusText || "\u00a0"}
+									</div>
 									{submitBlockerText ? (
-										<div className="hidden w-full text-right text-[12px] text-ink-3 min-[560px]:w-auto sm:block">
+										<div className="flex w-full flex-wrap items-center justify-end gap-2 text-right text-[12px] text-ink-2 min-[560px]:w-auto">
 											{submitBlockerText}
+											{!customerId ? (
+												<button
+													type="button"
+													onClick={() => setCreateClientOpen(true)}
+													className="h-8 rounded-md px-2 font-medium text-brand hover:text-brand-hi"
+												>
+													Add client
+												</button>
+											) : null}
 										</div>
 									) : null}
 									<Button
@@ -3640,77 +3710,97 @@ export function CreateInvoicePanel({
 										<ExternalLink className="h-4 w-4" />
 									</Button>
 
-									<div className="flex overflow-hidden rounded-md border border-brand">
-										<button
-											type="button"
-											disabled={!canSubmit}
-											onClick={() => void createInvoice(deliveryType)}
-											className={cn(
-												"inline-flex h-10 items-center bg-brand px-5 text-[13px] font-medium text-brand-ink transition-[background-color,border-color,color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-brand-hi disabled:cursor-not-allowed disabled:bg-rule disabled:text-ink-3",
-											)}
-										>
-											{submitting
-												? "Working..."
-												: deliveryType === "create_and_send"
-													? "Create & Send"
-													: deliveryType === "scheduled"
-														? "Schedule"
-														: "Create"}
-										</button>
-										<DropdownMenu>
-											<DropdownMenuTrigger asChild>
-												<button
-													type="button"
-													disabled={!canSubmit}
-													aria-label="Choose invoice delivery action"
-													className="inline-flex h-10 w-10 items-center justify-center border-l border-brand-line bg-brand text-brand-ink transition-[background-color,border-color,color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-brand-hi disabled:bg-rule"
+									<TooltipProvider>
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<div
+													className="flex overflow-hidden rounded-md border border-brand"
+													tabIndex={!canSubmit ? 0 : undefined}
+													aria-label={
+														!canSubmit ? submitBlockerText : undefined
+													}
 												>
-													<ChevronDown className="h-4 w-4" />
-												</button>
-											</DropdownMenuTrigger>
-											<DropdownMenuContent
-												side="top"
-												align="end"
-												className="w-64 border-rule bg-paper p-2"
-											>
-												{(
-													[
-														["create", "Create"],
-														["create_and_send", "Create & Send"],
-														["scheduled", "Schedule"],
-													] as const
-												).map(([value, label]) => (
-													<DropdownMenuItem
-														key={value}
-														onClick={() => setDeliveryType(value)}
+													<button
+														type="button"
+														disabled={!canSubmit}
+														onClick={() => void createInvoice(deliveryType)}
+														className={cn(
+															"inline-flex h-10 items-center bg-brand px-5 text-[13px] font-medium text-brand-ink transition-[background-color,border-color,color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-brand-hi disabled:cursor-not-allowed disabled:bg-rule disabled:text-ink-3",
+														)}
 													>
-														{label}
-													</DropdownMenuItem>
-												))}
-												{deliveryType === "scheduled" ? (
-													<div className="space-y-1 border-t border-rule px-2 pt-2">
-														<label
-															htmlFor="invoice-scheduled-at"
-															className="text-xs text-ink-3"
+														{submitting
+															? "Working..."
+															: deliveryType === "create_and_send"
+																? "Create & Send"
+																: deliveryType === "scheduled"
+																	? "Schedule"
+																	: "Create"}
+													</button>
+													<DropdownMenu>
+														<DropdownMenuTrigger asChild>
+															<button
+																type="button"
+																disabled={!canSubmit}
+																aria-label="Choose invoice delivery action"
+																className="inline-flex h-10 w-10 items-center justify-center border-l border-brand-line bg-brand text-brand-ink transition-[background-color,border-color,color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-brand-hi disabled:bg-rule"
+															>
+																<ChevronDown className="h-4 w-4" />
+															</button>
+														</DropdownMenuTrigger>
+														<DropdownMenuContent
+															side="top"
+															align="end"
+															className="w-64 border-rule bg-paper p-2"
 														>
-															Send at
-														</label>
-														<Input
-															id="invoice-scheduled-at"
-															type="datetime-local"
-															min={new Date(Date.now() + 60_000)
-																.toISOString()
-																.slice(0, 16)}
-															value={scheduledAt}
-															onChange={(event) =>
-																setScheduledAt(event.target.value)
-															}
-														/>
-													</div>
-												) : null}
-											</DropdownMenuContent>
-										</DropdownMenu>
-									</div>
+															{(
+																[
+																	["create", "Create"],
+																	["create_and_send", "Create & Send"],
+																	["scheduled", "Schedule"],
+																] as const
+															).map(([value, label]) => (
+																<DropdownMenuItem
+																	key={value}
+																	onClick={() => setDeliveryType(value)}
+																>
+																	{label}
+																</DropdownMenuItem>
+															))}
+															{deliveryType === "scheduled" ? (
+																<div className="space-y-1 border-t border-rule px-2 pt-2">
+																	<label
+																		htmlFor="invoice-scheduled-at"
+																		className="text-xs text-ink-3"
+																	>
+																		Send at
+																	</label>
+																	<Input
+																		id="invoice-scheduled-at"
+																		type="datetime-local"
+																		min={new Date(Date.now() + 60_000)
+																			.toISOString()
+																			.slice(0, 16)}
+																		value={scheduledAt}
+																		onChange={(event) =>
+																			setScheduledAt(event.target.value)
+																		}
+																	/>
+																</div>
+															) : null}
+														</DropdownMenuContent>
+													</DropdownMenu>
+												</div>
+											</TooltipTrigger>
+											{!canSubmit && submitBlockerText ? (
+												<TooltipContent
+													side="top"
+													className="border-rule bg-paper text-ink"
+												>
+													{submitBlockerText}
+												</TooltipContent>
+											) : null}
+										</Tooltip>
+									</TooltipProvider>
 								</div>
 							</div>
 						</div>
@@ -3824,6 +3914,31 @@ export function CreateInvoicePanel({
 										/>
 									</label>
 								) : null}
+								<label
+									className="mt-4 mb-1 block text-[12px] text-ink-2"
+									htmlFor="invoice-default-vat-category"
+								>
+									Default VAT category for new lines
+								</label>
+								<Select
+									value={defaultVatCategory}
+									onValueChange={(value) =>
+										setDefaultVatCategory(
+											value as NonNullable<LineItem["vatCategory"]>,
+										)
+									}
+								>
+									<SelectTrigger id="invoice-default-vat-category">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										{VAT_CATEGORY_OPTIONS.map((option) => (
+											<SelectItem key={option.value} value={option.value}>
+												{option.label}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
 								<Button
 									type="button"
 									className="mt-4"
