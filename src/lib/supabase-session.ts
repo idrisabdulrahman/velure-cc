@@ -68,15 +68,17 @@ function buildUserScopedClient(accessToken: string): SupabaseClient<Database> {
 
 /**
  * Mint (and cache) the Supabase session for the given user. Disabled when no
- * user id is provided; the JWT is cached for its remaining lifetime, so the
- * bridge is hit at most once per sign-in.
+ * user id is provided; the bridge renews the JWT before expiry.
  */
 export function useSupabaseSession(userId: string | null | undefined) {
+	// The server JWT expires after 30 minutes; renew while the tab stays open.
+	const refreshInterval = 25 * 60 * 1000;
 	const { data, error, isPending, isError } = useQuery({
 		queryKey: ["supabase-session", userId ?? "none"],
 		queryFn: mintSession,
 		enabled: Boolean(userId),
-		staleTime: 55 * 60 * 1000,
+		staleTime: refreshInterval,
+		refetchInterval: refreshInterval,
 		retry: 1,
 	});
 
