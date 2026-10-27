@@ -110,6 +110,7 @@ import type {
 	WithholdingRecipientEntityType,
 	WithholdingRecipientResidency,
 } from "#/features/compliance/types";
+import { isCorrectionSource } from "#/features/invoices/correction-sources";
 import { formatMoney } from "#/features/invoices/format";
 import type { ImportedInvoiceDraft } from "#/features/invoices/import-spreadsheet";
 import { lineTotalKobo, priceToKobo } from "#/features/invoices/line-money";
@@ -543,19 +544,7 @@ export function CreateInvoicePanel({
 		),
 	});
 	const correctionSources = (correctionSourcesQuery.data ?? []).filter(
-		(invoice) =>
-			invoice.documentType === "standard" &&
-			invoice.status !== "draft" &&
-			invoice.status !== "canceled" &&
-			Boolean(
-				invoice.deliveredAt ||
-					invoice.paidAt ||
-					invoice.paymentReference ||
-					invoice.paymentAmount > 0 ||
-					invoice.lifecycle?.sentAt ||
-					invoice.lifecycle?.emailDeliveredAt ||
-					invoice.lifecycle?.paymentReceivedAt,
-			),
+		isCorrectionSource,
 	);
 	const workspaceQuery = useQuery({
 		queryKey: ["invoice-workspace", userId],
