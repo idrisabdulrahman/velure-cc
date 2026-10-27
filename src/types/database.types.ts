@@ -220,6 +220,41 @@ export type Database = {
           },
         ]
       }
+      einvoice_provider_credentials: {
+        Row: {
+          created_at: string
+          encrypted_bundle: string
+          id: string
+          provider_key: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          encrypted_bundle: string
+          id?: string
+          provider_key: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          encrypted_bundle?: string
+          id?: string
+          provider_key?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "einvoice_provider_credentials_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_events: {
         Row: {
           created_at: string
@@ -470,24 +505,6 @@ export type Database = {
         }
         Relationships: []
       }
-      invoice_submission_queue: {
-        Row: { id: string; workspace_id: string; invoice_id: string; idempotency_key: string; submission_snapshot: Json; provider: string; status: string; attempt_count: number; max_attempts: number; next_attempt_at: string; lease_expires_at: string | null; provider_reference: string | null; last_outcome: string | null; last_error_code: string | null; created_by: string; created_at: string; updated_at: string }
-        Insert: { id?: string; workspace_id: string; invoice_id: string; idempotency_key?: string; submission_snapshot: Json; provider?: string; status?: string; attempt_count?: number; max_attempts?: number; next_attempt_at?: string; lease_expires_at?: string | null; provider_reference?: string | null; last_outcome?: string | null; last_error_code?: string | null; created_by: string; created_at?: string; updated_at?: string }
-        Update: { id?: string; workspace_id?: string; invoice_id?: string; idempotency_key?: string; submission_snapshot?: Json; provider?: string; status?: string; attempt_count?: number; max_attempts?: number; next_attempt_at?: string; lease_expires_at?: string | null; provider_reference?: string | null; last_outcome?: string | null; last_error_code?: string | null; created_by?: string; created_at?: string; updated_at?: string }
-        Relationships: []
-      }
-      invoice_submission_attempts: {
-        Row: { id: string; workspace_id: string; submission_id: string; attempt_number: number; event_type: string; outcome: string; request_snapshot: Json; response_snapshot: Json | null; error_code: string | null; started_at: string; finished_at: string | null }
-        Insert: { id?: string; workspace_id: string; submission_id: string; attempt_number: number; event_type: string; outcome: string; request_snapshot: Json; response_snapshot?: Json | null; error_code?: string | null; started_at: string; finished_at?: string | null }
-        Update: { id?: string; workspace_id?: string; submission_id?: string; attempt_number?: number; event_type?: string; outcome?: string; request_snapshot?: Json; response_snapshot?: Json | null; error_code?: string | null; started_at?: string; finished_at?: string | null }
-        Relationships: []
-      }
-      einvoice_provider_credentials: {
-        Row: { id: string; workspace_id: string; provider_key: string; encrypted_bundle: string; created_at: string; updated_at: string }
-        Insert: { id?: string; workspace_id: string; provider_key: string; encrypted_bundle: string; created_at?: string; updated_at?: string }
-        Update: { id?: string; workspace_id?: string; provider_key?: string; encrypted_bundle?: string; created_at?: string; updated_at?: string }
-        Relationships: []
-      }
       invoice_audit_log: {
         Row: {
           action: string
@@ -686,6 +703,138 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "invoice_number_sequences_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_submission_attempts: {
+        Row: {
+          attempt_number: number
+          error_code: string | null
+          event_type: string
+          finished_at: string | null
+          id: string
+          outcome: string
+          request_snapshot: Json
+          response_snapshot: Json | null
+          started_at: string
+          submission_id: string
+          workspace_id: string
+        }
+        Insert: {
+          attempt_number: number
+          error_code?: string | null
+          event_type: string
+          finished_at?: string | null
+          id?: string
+          outcome: string
+          request_snapshot: Json
+          response_snapshot?: Json | null
+          started_at: string
+          submission_id: string
+          workspace_id: string
+        }
+        Update: {
+          attempt_number?: number
+          error_code?: string | null
+          event_type?: string
+          finished_at?: string | null
+          id?: string
+          outcome?: string
+          request_snapshot?: Json
+          response_snapshot?: Json | null
+          started_at?: string
+          submission_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_submission_attempts_submission_id_workspace_id_fkey"
+            columns: ["submission_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "invoice_submission_queue"
+            referencedColumns: ["id", "workspace_id"]
+          },
+          {
+            foreignKeyName: "invoice_submission_attempts_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_submission_queue: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          created_by: string
+          id: string
+          idempotency_key: string
+          invoice_id: string
+          last_error_code: string | null
+          last_outcome: string | null
+          lease_expires_at: string | null
+          max_attempts: number
+          next_attempt_at: string
+          provider: string
+          provider_reference: string | null
+          status: string
+          submission_snapshot: Json
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          created_by: string
+          id?: string
+          idempotency_key?: string
+          invoice_id: string
+          last_error_code?: string | null
+          last_outcome?: string | null
+          lease_expires_at?: string | null
+          max_attempts?: number
+          next_attempt_at?: string
+          provider?: string
+          provider_reference?: string | null
+          status?: string
+          submission_snapshot: Json
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          idempotency_key?: string
+          invoice_id?: string
+          last_error_code?: string | null
+          last_outcome?: string | null
+          lease_expires_at?: string | null
+          max_attempts?: number
+          next_attempt_at?: string
+          provider?: string
+          provider_reference?: string | null
+          status?: string
+          submission_snapshot?: Json
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_submission_queue_invoice_id_workspace_id_fkey"
+            columns: ["invoice_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id", "workspace_id"]
+          },
+          {
+            foreignKeyName: "invoice_submission_queue_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -1107,8 +1256,8 @@ export type Database = {
           created_at: string
           default_classification_code: string | null
           default_tax_id: string | null
-          default_vat_category: string | null
           default_unit_price: number
+          default_vat_category: string | null
           deleted_at: string | null
           description: string | null
           id: string
@@ -1124,8 +1273,8 @@ export type Database = {
           created_at?: string
           default_classification_code?: string | null
           default_tax_id?: string | null
-          default_vat_category?: string | null
           default_unit_price: number
+          default_vat_category?: string | null
           deleted_at?: string | null
           description?: string | null
           id?: string
@@ -1141,8 +1290,8 @@ export type Database = {
           created_at?: string
           default_classification_code?: string | null
           default_tax_id?: string | null
-          default_vat_category?: string | null
           default_unit_price?: number
+          default_vat_category?: string | null
           deleted_at?: string | null
           description?: string | null
           id?: string
@@ -1889,7 +2038,6 @@ export type Database = {
         }
         Returns: Json
       }
-      custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       consume_public_rate_limit: {
         Args: {
           input_key_hash: string
@@ -1898,7 +2046,12 @@ export type Database = {
         }
         Returns: boolean
       }
+      custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       has_issued_invoice: { Args: { p_workspace_id: string }; Returns: boolean }
+      invoice_is_issued: {
+        Args: { r: Database["public"]["Tables"]["invoices"]["Row"] }
+        Returns: boolean
+      }
       public_invoice_by_token: { Args: { input_token: string }; Returns: Json }
     }
     Enums: {
@@ -1948,7 +2101,11 @@ export type Database = {
         | "clicked"
         | "failed"
       escalation_status: "idle" | "queued" | "sent" | "manual_review"
-      invoice_document_type: "standard" | "credit_note" | "debit_note" | "proforma"
+      invoice_document_type:
+        | "standard"
+        | "credit_note"
+        | "debit_note"
+        | "proforma"
       invoice_number_mode: "prefix" | "business_name"
       invoice_status:
         | "draft"
@@ -2029,12 +2186,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2058,11 +2215,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2083,11 +2240,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2108,11 +2265,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2125,11 +2282,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2190,7 +2347,12 @@ export const Constants = {
         "failed",
       ],
       escalation_status: ["idle", "queued", "sent", "manual_review"],
-      invoice_document_type: ["standard", "credit_note", "debit_note", "proforma"],
+      invoice_document_type: [
+        "standard",
+        "credit_note",
+        "debit_note",
+        "proforma",
+      ],
       invoice_number_mode: ["prefix", "business_name"],
       invoice_status: [
         "draft",
