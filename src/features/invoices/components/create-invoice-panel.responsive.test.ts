@@ -15,7 +15,7 @@ describe("invoice editor responsive contract", () => {
 		expect(source).toContain("@md:group-hover:opacity-100");
 		expect(source).toContain('className="mt-2 grid gap-2 @md:grid-cols-3"');
 		expect(source).toContain(
-			"absolute left-0 top-full z-50 mt-1 w-full max-w-[calc(100vw-16px)]",
+			"absolute left-0 top-full z-50 mt-1 w-[360px] max-w-[calc(100vw-5rem)]",
 		);
 		expect(source).not.toContain("max-h-[250px] overflow-y-auto");
 		expect(source).toContain('className="min-h-[52px] shrink-0"');

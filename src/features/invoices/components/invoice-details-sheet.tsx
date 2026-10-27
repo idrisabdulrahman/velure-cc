@@ -22,7 +22,6 @@ import {
 	ExternalLink,
 	FileText,
 	GripVertical,
-	Loader2,
 	Plus,
 	Send,
 	Share2,
@@ -40,6 +39,7 @@ import {
 	SheetHeader,
 	SheetTitle,
 } from "#/components/ui/sheet";
+import { Spinner } from "#/components/ui/spinner";
 import { toast } from "#/components/ui/use-toast";
 import { calculateInvoiceCompliance } from "#/features/compliance/calculate";
 import {
@@ -371,94 +371,14 @@ function CompactMetric({ label, value }: { label: string; value: string }) {
 	);
 }
 
-function SkeletonBlock({ className = "" }: { className?: string }) {
+function InvoiceDetailsLoader() {
 	return (
 		<div
-			className={`animate-pulse rounded-md bg-paper-3 shadow-[inset_0_0_0_1px_color-mix(in srgb, var(--color-brand) 3%, transparent)] ${className}`}
-		/>
-	);
-}
-
-function InvoiceDetailsSkeleton() {
-	return (
-		<div className="flex h-full min-h-0 flex-col">
-			<div className="shrink-0 border-b border-rule bg-paper px-6 py-5">
-				<div className="flex items-start justify-between gap-6">
-					<div className="min-w-0 flex-1">
-						<SkeletonBlock className="h-8 w-56" />
-						<SkeletonBlock className="mt-3 h-4 w-80 max-w-full" />
-					</div>
-					<div className="hidden w-44 space-y-2 sm:block">
-						<SkeletonBlock className="h-4 w-full" />
-						<SkeletonBlock className="h-4 w-32 ml-auto" />
-					</div>
-				</div>
-			</div>
-
-			<div className="flex-1 overflow-hidden px-6 py-6">
-				<div className="space-y-6">
-					<section className="ui-panel rounded-lg border border-rule bg-paper-2">
-						<div className="border-b border-rule px-5 py-4">
-							<SkeletonBlock className="h-4 w-32" />
-							<SkeletonBlock className="mt-2 h-3 w-52" />
-						</div>
-						<div className="px-5 py-5">
-							<div className="grid gap-3 md:grid-cols-4">
-								{["issue", "due", "status", "total"].map((item) => (
-									<div
-										key={item}
-										className="rounded-md border border-rule bg-paper px-3 py-3"
-									>
-										<SkeletonBlock className="h-3 w-16" />
-										<SkeletonBlock className="mt-3 h-5 w-24" />
-									</div>
-								))}
-							</div>
-							<div className="mt-5 grid gap-4 md:grid-cols-2">
-								{["number", "customer", "issue-date", "due-date"].map(
-									(item) => (
-										<div key={item}>
-											<SkeletonBlock className="mb-2 h-3 w-20" />
-											<SkeletonBlock className="h-10 w-full" />
-										</div>
-									),
-								)}
-							</div>
-						</div>
-					</section>
-
-					<section className="ui-panel rounded-lg border border-rule bg-paper-2">
-						<div className="border-b border-rule px-5 py-4">
-							<SkeletonBlock className="h-4 w-24" />
-							<SkeletonBlock className="mt-2 h-3 w-64 max-w-full" />
-						</div>
-						<div className="space-y-3 px-5 py-5">
-							{["line-1", "line-2", "line-3"].map((item) => (
-								<div
-									key={item}
-									className="grid gap-3 rounded-md border border-rule bg-paper p-3 md:grid-cols-[1fr_110px_120px_130px_44px]"
-								>
-									<SkeletonBlock className="h-10" />
-									<SkeletonBlock className="h-10" />
-									<SkeletonBlock className="h-10" />
-									<SkeletonBlock className="h-10" />
-									<SkeletonBlock className="h-10" />
-								</div>
-							))}
-						</div>
-					</section>
-				</div>
-			</div>
-
-			<div className="shrink-0 border-t border-rule bg-paper-2 px-6 py-4">
-				<div className="flex items-center justify-between gap-4">
-					<SkeletonBlock className="h-4 w-56" />
-					<div className="flex gap-3">
-						<SkeletonBlock className="h-10 w-20" />
-						<SkeletonBlock className="h-10 w-28 bg-ok-soft" />
-					</div>
-				</div>
-			</div>
+			role="status"
+			aria-label="Loading invoice details"
+			className="flex min-h-[60vh] items-center justify-center"
+		>
+			<Spinner size={28} className="text-brand !stroke-brand" />
 		</div>
 	);
 }
@@ -2020,7 +1940,7 @@ export function InvoiceDetailsSheet({
 															className="h-10 rounded-md border border-rule bg-paper px-3 hover:bg-paper-2"
 														>
 															{isSendingEmail ? (
-																<Loader2 className="h-4 w-4 animate-spin" />
+																<Spinner size={16} />
 															) : (
 																<Send className="h-4 w-4" />
 															)}
@@ -2259,7 +2179,7 @@ export function InvoiceDetailsSheet({
 										>
 											{saving ? (
 												<>
-													<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+													<Spinner size={16} className="mr-2" />
 													Saving
 												</>
 											) : (
@@ -2271,7 +2191,7 @@ export function InvoiceDetailsSheet({
 							</div>
 						</>
 					) : (
-						<InvoiceDetailsSkeleton />
+						<InvoiceDetailsLoader />
 					)}
 				</SheetContent>
 			</Sheet>

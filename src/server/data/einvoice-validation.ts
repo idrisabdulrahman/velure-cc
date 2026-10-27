@@ -30,7 +30,7 @@ const TAX_TREATMENTS = new Set([
 	"zero_rated",
 ]);
 
-function hasStoredComplianceSnapshot(value: unknown): boolean {
+export function hasStoredComplianceSnapshot(value: unknown): boolean {
 	if (!value || typeof value !== "object") return false;
 	const snapshot = value as Record<string, unknown>;
 	const record = (entry: unknown) => !!entry && typeof entry === "object";

@@ -37,7 +37,7 @@ describe("create invoice money and localization contract", () => {
 		}
 	});
 
-	it("guides first-run users to add a client and complete the invoice", () => {
+	it("guides first-run users to choose or create a customer", () => {
 		expect(source).toContain("Create your first invoice in three steps");
 		for (const step of [
 			"Choose a client",
@@ -46,7 +46,9 @@ describe("create invoice money and localization contract", () => {
 		]) {
 			expect(source).toContain(step);
 		}
-		expect(source).toContain("Add your first client");
+		expect(source).toContain("Select customer");
+		expect(source).toContain("Create customer");
+		expect(source).not.toContain("Start with your first client");
 		expect(source).toContain("setCreateClientOpen(true)");
 	});
 });

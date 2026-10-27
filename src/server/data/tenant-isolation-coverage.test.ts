@@ -85,6 +85,8 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	// invoice and customer reads both carry that workspace filter.
 	validateWorkspaceInvoice: "app-scoped",
 	loadWorkspaceInvoiceSubmissionSnapshot: "app-scoped",
+	// Pure shape predicate over an already-loaded snapshot; performs no reads.
+	hasStoredComplianceSnapshot: "pure",
 	// einvoice-provider-credentials.ts — derives active workspace with the
 	// verified user client, then scopes service-role ciphertext access by it.
 	saveEInvoiceProviderCredentials: "server-admin",

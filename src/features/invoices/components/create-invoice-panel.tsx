@@ -26,7 +26,6 @@ import {
 	FileText,
 	GripVertical,
 	ImagePlus,
-	Loader2,
 	Minus,
 	Plus,
 	ReceiptText,
@@ -77,6 +76,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select";
+import { Spinner } from "#/components/ui/spinner";
 import {
 	Tooltip,
 	TooltipContent,
@@ -398,12 +398,12 @@ function formatPriceInput(price: number) {
 	);
 }
 
-function toPersistableCompliance(compliance: InvoiceComplianceSnapshot) {
-	const {
-		netPayable: _netPayable,
-		sellerTaxStatus: _sellerTaxStatus,
-		...persistableCompliance
-	} = compliance;
+export function toPersistableCompliance(compliance: InvoiceComplianceSnapshot) {
+	// WP12: the stored snapshot must stay canonical, so `netPayable` is kept.
+	// Validation rejects a stored snapshot that omits it
+	// (`src/server/data/einvoice-validation.ts`).
+	const { sellerTaxStatus: _sellerTaxStatus, ...persistableCompliance } =
+		compliance;
 	return {
 		...persistableCompliance,
 		warnings: compliance.warnings.filter((warning) =>
@@ -424,10 +424,12 @@ function CreateSortableLineItem({
 	id,
 	className,
 	children,
+	onBlur,
 }: {
 	id: string;
 	className?: string;
 	children: ReactNode;
+	onBlur?: (event: React.FocusEvent<HTMLDivElement>) => void;
 }) {
 	const {
 		attributes,
@@ -448,14 +450,16 @@ function CreateSortableLineItem({
 		<div
 			ref={setNodeRef}
 			style={style}
+			onBlur={onBlur}
+			role="group"
 			className={cn(
-				"group relative flex min-w-0 items-start gap-2 border border-rule bg-paper px-2 py-2 md:gap-3",
+				"group relative flex min-w-0 items-start gap-2 border border-rule bg-paper px-2 py-2 @md:border-x-0 @md:border-t-0 @md:py-3 md:gap-3",
 				className,
 			)}
 		>
 			<button
 				type="button"
-				className="inline-flex h-8 w-8 shrink-0 cursor-grab touch-none items-center justify-center text-ink-3 hover:text-ink active:cursor-grabbing"
+				className="inline-flex h-8 w-8 shrink-0 cursor-grab touch-none items-center justify-center text-ink-3 hover:text-ink active:cursor-grabbing @md:opacity-0 @md:group-hover:opacity-100 @md:group-focus-within:opacity-100"
 				aria-label="Drag to reorder"
 				{...attributes}
 				{...listeners}
@@ -701,6 +705,7 @@ export function CreateInvoicePanel({
 	const [depositValue, setDepositValue] = useState("50");
 	const [depositDueDate, setDepositDueDate] = useState("");
 	const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>("idle");
+	const [blurredTaxLineIds, setBlurredTaxLineIds] = useState<string[]>([]);
 	const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
 	const [lineItems, setLineItems] = useState<LineItem[]>([
 		createEmptyLineItem(),
@@ -1091,11 +1096,20 @@ export function CreateInvoicePanel({
 	const hasPricedLineItem = lineItems.some(
 		(item) => item.name.trim().length > 0 && item.price > 0,
 	);
+	const firstMissingTaxLine = isVatEnabled
+		? lineItems.find(
+				(item) =>
+					item.name.trim() &&
+					item.price > 0 &&
+					(!item.unit?.trim() || !item.classificationCode?.trim()),
+			)
+		: undefined;
 	const dueDateInvalid = Boolean(issueDate && dueDate && dueDate < issueDate);
 	const canSubmit =
 		customerName.trim().length > 1 &&
 		Boolean(customerId) &&
 		hasPricedLineItem &&
+		!firstMissingTaxLine &&
 		!dueDateInvalid &&
 		!submitting;
 	// B2: finalizing requires a saved client record (the server rejects a
@@ -1103,19 +1117,44 @@ export function CreateInvoicePanel({
 	const submitBlockerText = dueDateInvalid
 		? "Due date is before issue date."
 		: !customerId
-			? "Select or create a saved client before creating."
+			? "Choose a customer."
 			: !customerName.trim()
 				? "Select or enter a client before creating."
 				: !hasPricedLineItem
 					? "Add at least one priced line item."
-					: "";
+					: firstMissingTaxLine
+						? "Add a unit and goods/service code to each priced item."
+						: "";
+	const focusSubmitBlocker = () => {
+		if (!canSubmit && !submitting) {
+			if (!customerId) setCustomerPickerOpen(true);
+			if (firstMissingTaxLine) {
+				setExpandedTaxLineIds((ids) => [
+					...new Set([...ids, firstMissingTaxLine.id]),
+				]);
+				setBlurredTaxLineIds((ids) => [
+					...new Set([...ids, firstMissingTaxLine.id]),
+				]);
+			}
+			requestAnimationFrame(() => {
+				const selector = dueDateInvalid
+					? 'button[aria-label="Due date"]'
+					: !customerId
+						? 'input[aria-controls="invoice-customer-options"]'
+						: !hasPricedLineItem
+							? 'input[id^="invoice-line-description-"]'
+							: `#invoice-line-code-${firstMissingTaxLine?.id}`;
+				document.querySelector<HTMLElement>(selector)?.focus();
+			});
+		}
+	};
 	const autosaveStatusText =
 		autosaveStatus === "saving"
-			? "Saving draft..."
+			? "Saving..."
 			: autosaveStatus === "saved"
-				? "Saved"
+				? "Draft saved"
 				: autosaveStatus === "error"
-					? "Draft not saved"
+					? "Not saved"
 					: "";
 	const hasMeaningfulDraft = useMemo(() => {
 		const defaultFromName =
@@ -2258,31 +2297,27 @@ export function CreateInvoicePanel({
 									</div>
 
 									<div className="justify-self-start lg:justify-self-end">
-										<div className="w-[96px] space-y-1.5">
-											<div className="h-[72px] w-[96px] overflow-hidden rounded-md border border-rule bg-paper">
-												{logoUrl.trim() ? (
-													<img
-														src={logoUrl}
-														alt="Company logo preview"
-														className="h-full w-full object-contain"
-													/>
-												) : (
-													<div className="flex h-full w-full items-center justify-center text-[12px] text-ink-3">
-														Logo
-													</div>
-												)}
-											</div>
-											<label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-rule bg-paper px-2.5 text-[12px] text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink">
-												<ImagePlus className="h-3.5 w-3.5" />
-												Upload
-												<input
-													type="file"
-													accept="image/*"
-													onChange={onLogoFileChange}
-													className="hidden"
+										<label className="flex h-[72px] w-[96px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-md border border-dashed border-rule bg-paper text-[12px] text-ink-3 hover:border-brand hover:text-ink focus-within:outline-2 focus-within:outline-brand">
+											{logoUrl.trim() ? (
+												<img
+													src={logoUrl}
+													alt="Company logo preview"
+													className="h-full w-full object-contain"
 												/>
-											</label>
-										</div>
+											) : (
+												<>
+													<ImagePlus className="mb-1 h-4 w-4" />
+													Add logo
+												</>
+											)}
+											<input
+												type="file"
+												aria-label="Upload logo"
+												accept="image/*"
+												onChange={onLogoFileChange}
+												className="sr-only"
+											/>
+										</label>
 									</div>
 								</div>
 
@@ -2337,132 +2372,110 @@ export function CreateInvoicePanel({
 
 									<div className="space-y-2">
 										<div className="text-sm text-ink-3">To</div>
-										{!clientsQuery.isLoading &&
-										clients.length === 0 &&
-										!customerName ? (
-											<div className="mb-3 border-l-2 border-brand bg-paper-2 px-3 py-2.5">
-												<p className="text-[13px] font-medium text-ink">
-													Start with your first client
-												</p>
-												<p className="mt-1 text-[12px] text-ink-3">
-													Add their billing details, then select them here.
-												</p>
+										<div className="mb-1">
+											<div className="relative w-full">
 												<button
 													type="button"
-													onClick={() => setCreateClientOpen(true)}
-													className="mt-2 inline-flex h-8 items-center rounded-md border border-brand bg-brand px-3 text-[12px] font-medium text-brand-ink hover:bg-brand-hi"
+													aria-haspopup="listbox"
+													aria-expanded={customerPickerOpen}
+													onClick={() => {
+														setCustomerActiveIndex(0);
+														setCustomerPickerOpen((prev) => !prev);
+													}}
+													className="flex h-9 w-full items-center justify-between rounded-md border border-rule bg-paper px-3 text-[13px] text-ink-2"
 												>
-													Add your first client
+													{customerName || "Select customer"}
+													<ChevronDown className="h-3.5 w-3.5 text-ink-3" />
 												</button>
-											</div>
-										) : null}
-										{clients.length > 0 ? (
-											<div className="mb-1">
-												<div className="relative w-full">
-													<button
-														type="button"
-														aria-haspopup="listbox"
-														aria-expanded={customerPickerOpen}
-														onClick={() => {
-															setCustomerActiveIndex(0);
-															setCustomerPickerOpen((prev) => !prev);
-														}}
-														className="flex h-9 w-full items-center justify-between rounded-md border border-rule bg-paper px-3 text-[13px] text-ink-2"
-													>
-														{customerName || "Select client"}
-														<ChevronDown className="h-3.5 w-3.5 text-ink-3" />
-													</button>
-													{customerPickerOpen ? (
-														<div className="absolute left-0 top-10 z-20 w-full min-w-[260px] rounded-md border border-rule bg-paper p-2 shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
-															<div className="mb-2 flex h-8 items-center gap-2 rounded-md border border-rule bg-paper px-2">
-																<Search className="h-3.5 w-3.5 text-ink-3" />
-																<input
-																	role="combobox"
-																	aria-autocomplete="list"
-																	aria-controls="invoice-customer-options"
-																	aria-expanded={customerPickerOpen}
-																	value={customerSearch}
-																	onChange={(event) => {
-																		setCustomerSearch(event.target.value);
-																		setCustomerActiveIndex(0);
-																	}}
-																	onKeyDown={(event) => {
-																		if (event.key === "Escape") {
-																			setCustomerPickerOpen(false);
-																			return;
-																		}
-																		if (!filteredClients.length) return;
-																		if (
-																			event.key === "ArrowDown" ||
-																			event.key === "ArrowUp"
-																		) {
-																			event.preventDefault();
-																			setCustomerActiveIndex((current) =>
-																				event.key === "ArrowDown"
-																					? (current + 1) %
-																						filteredClients.length
-																					: (current -
-																							1 +
-																							filteredClients.length) %
-																						filteredClients.length,
-																			);
-																		} else if (event.key === "Enter") {
-																			event.preventDefault();
-																			selectClient(
-																				filteredClients[customerActiveIndex],
-																			);
-																		}
-																	}}
-																	placeholder="Search customer..."
-																	className="h-full w-full bg-transparent text-xs text-ink-2 outline-none placeholder:text-ink-3"
-																/>
-															</div>
-															<div
-																id="invoice-customer-options"
-																role="listbox"
-																className="max-h-48 overflow-y-auto overscroll-contain"
-															>
-																{filteredClients.map((client, clientIndex) => (
-																	<button
-																		key={client.id ?? client.name}
-																		type="button"
-																		role="option"
-																		aria-selected={
-																			clientIndex === customerActiveIndex
-																		}
-																		onMouseEnter={() =>
-																			setCustomerActiveIndex(clientIndex)
-																		}
-																		onClick={() => selectClient(client)}
-																		className={cn(
-																			"flex h-8 w-full items-center rounded-md px-2 text-left text-[13px] text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2",
-																			clientIndex === customerActiveIndex &&
-																				"bg-paper-2 text-ink",
-																		)}
-																	>
-																		{client.name}
-																	</button>
-																))}
-																{filteredClients.length === 0 ? (
-																	<div className="px-2 py-2 text-xs text-ink-3">
-																		No customers found.
-																	</div>
-																) : null}
-															</div>
-															<div className="mt-2 border-t border-rule pt-2">
-																<button
-																	type="button"
-																	onClick={() => setCreateClientOpen(true)}
-																	className="h-8 rounded-md px-2 text-[13px] text-brand transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:text-brand-hi"
-																>
-																	Create customer
-																</button>
-															</div>
+												{customerPickerOpen ? (
+													<div className="absolute left-0 top-10 z-20 w-full min-w-[260px] rounded-md border border-rule bg-paper p-2 shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
+														<div className="mb-2 flex h-8 items-center gap-2 rounded-md border border-rule bg-paper px-2">
+															<Search className="h-3.5 w-3.5 text-ink-3" />
+															<input
+																role="combobox"
+																aria-autocomplete="list"
+																aria-controls="invoice-customer-options"
+																aria-expanded={customerPickerOpen}
+																value={customerSearch}
+																onChange={(event) => {
+																	setCustomerSearch(event.target.value);
+																	setCustomerActiveIndex(0);
+																}}
+																onKeyDown={(event) => {
+																	if (event.key === "Escape") {
+																		setCustomerPickerOpen(false);
+																		return;
+																	}
+																	if (!filteredClients.length) return;
+																	if (
+																		event.key === "ArrowDown" ||
+																		event.key === "ArrowUp"
+																	) {
+																		event.preventDefault();
+																		setCustomerActiveIndex((current) =>
+																			event.key === "ArrowDown"
+																				? (current + 1) % filteredClients.length
+																				: (current -
+																						1 +
+																						filteredClients.length) %
+																					filteredClients.length,
+																		);
+																	} else if (event.key === "Enter") {
+																		event.preventDefault();
+																		selectClient(
+																			filteredClients[customerActiveIndex],
+																		);
+																	}
+																}}
+																placeholder="Search customer..."
+																className="h-full w-full bg-transparent text-xs text-ink-2 outline-none placeholder:text-ink-3"
+															/>
 														</div>
-													) : null}
-												</div>
+														<div
+															id="invoice-customer-options"
+															role="listbox"
+															className="max-h-48 overflow-y-auto overscroll-contain"
+														>
+															{filteredClients.map((client, clientIndex) => (
+																<button
+																	key={client.id ?? client.name}
+																	type="button"
+																	role="option"
+																	aria-selected={
+																		clientIndex === customerActiveIndex
+																	}
+																	onMouseEnter={() =>
+																		setCustomerActiveIndex(clientIndex)
+																	}
+																	onClick={() => selectClient(client)}
+																	className={cn(
+																		"flex h-8 w-full items-center rounded-md px-2 text-left text-[13px] text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2",
+																		clientIndex === customerActiveIndex &&
+																			"bg-paper-2 text-ink",
+																	)}
+																>
+																	{client.name}
+																</button>
+															))}
+															{filteredClients.length === 0 ? (
+																<div className="px-2 py-2 text-xs text-ink-3">
+																	No customers found.
+																</div>
+															) : null}
+														</div>
+														<div className="mt-2 border-t border-rule pt-2">
+															<button
+																type="button"
+																onClick={() => setCreateClientOpen(true)}
+																className="h-8 rounded-md px-2 text-[13px] text-brand transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:text-brand-hi"
+															>
+																Create customer
+															</button>
+														</div>
+													</div>
+												) : null}
 											</div>
-										) : null}
+										</div>
 										{showCustomerEmail && customerId && customerEmail ? (
 											<p className="min-w-0 truncate px-3 text-[12px] text-ink-2">
 												{customerEmail}
@@ -2686,6 +2699,8 @@ export function CreateInvoicePanel({
 											>
 												{lineItems.map((item, index) => {
 													const lineTotal = lineTotalKobo(item) / 100;
+													const isEmptyLine =
+														!item.name.trim() && item.price === 0;
 													const isEntering = enteringLineIds.includes(item.id);
 													const isExiting = exitingLineIds.includes(item.id);
 													const isProductSearchOpen =
@@ -2693,9 +2708,9 @@ export function CreateInvoicePanel({
 													const missingTaxDetails =
 														!item.unit?.trim() ||
 														!item.classificationCode?.trim();
-													const taxDetailsOpen =
-														missingTaxDetails ||
-														expandedTaxLineIds.includes(item.id);
+													const taxDetailsOpen = expandedTaxLineIds.includes(
+														item.id,
+													);
 
 													return (
 														<CreateSortableLineItem
@@ -2706,6 +2721,16 @@ export function CreateInvoicePanel({
 																isEntering && "invoice-line-enter",
 																isExiting && "invoice-line-exit",
 															)}
+															onBlur={(event) => {
+																if (
+																	!event.currentTarget.contains(
+																		event.relatedTarget,
+																	)
+																)
+																	setBlurredTaxLineIds((ids) => [
+																		...new Set([...ids, item.id]),
+																	]);
+															}}
 														>
 															<div
 																className={cn(
@@ -2788,7 +2813,10 @@ export function CreateInvoicePanel({
 																			}, 200);
 																		}}
 																		placeholder="Search product..."
-																		className="h-10 min-w-0 truncate border-rule bg-paper px-3 text-[13px] leading-none text-ink placeholder:text-ink-3"
+																		className={cn(
+																			"h-10 min-w-0 truncate border-rule bg-paper px-3 text-[13px] leading-none text-ink placeholder:text-ink-3",
+																			isEmptyLine && "invoice-empty-cell",
+																		)}
 																	/>
 
 																	{isProductSearchOpen &&
@@ -2796,7 +2824,7 @@ export function CreateInvoicePanel({
 																		<div
 																			id={`invoice-product-options-${index}`}
 																			role="listbox"
-																			className="absolute left-0 top-full z-50 mt-1 w-full max-w-[calc(100vw-16px)] rounded-md border border-rule bg-paper p-0 shadow-lg"
+																			className="absolute left-0 top-full z-50 mt-1 w-[360px] max-w-[calc(100vw-5rem)] rounded-md border border-rule bg-paper p-0 shadow-lg"
 																		>
 																			{productSearchQueryResult.isError &&
 																			debouncedProductSearchQuery ===
@@ -2820,8 +2848,8 @@ export function CreateInvoicePanel({
 																					productSearchQuery.trim() ||
 																				productSearchQueryResult.isFetching ? (
 																				<div className="flex items-center gap-2 px-3 py-2 text-[12px] text-ink-2">
-																					<Loader2 className="h-4 w-4 animate-spin" />{" "}
-																					Searching catalog…
+																					<Spinner size={16} /> Searching
+																					catalog…
 																				</div>
 																			) : visibleProductSearchResults.length >
 																				0 ? (
@@ -2869,7 +2897,7 @@ export function CreateInvoicePanel({
 																										<span className="block truncate">
 																											{product.name}
 																										</span>
-																										<span className="mt-0.5 block text-[12px] capitalize text-ink-3">
+																										<span className="mt-0.5 block truncate text-[12px] capitalize text-ink-3">
 																											{product.type}
 																											{product.unitName
 																												? ` / ${product.unitName}`
@@ -2879,7 +2907,7 @@ export function CreateInvoicePanel({
 																												: ""}
 																										</span>
 																									</span>
-																									<span className="shrink-0 font-mono text-brand">
+																									<span className="shrink-0 whitespace-nowrap font-mono text-brand">
 																										{formatMoney(
 																											product.defaultUnitPrice,
 																											currency,
@@ -2914,7 +2942,12 @@ export function CreateInvoicePanel({
 																	<div className="mb-1 text-[12px] text-ink-3 @md:sr-only">
 																		Qty
 																	</div>
-																	<div className="flex items-center justify-end gap-1 text-ink-3 @md:gap-1.5">
+																	<div
+																		className={cn(
+																			"flex h-9 items-center justify-end gap-1 text-ink-3 @md:gap-1.5",
+																			isEmptyLine && "invoice-empty-cell",
+																		)}
+																	>
 																		<button
 																			type="button"
 																			onClick={() => decrementQuantity(index)}
@@ -3004,6 +3037,7 @@ export function CreateInvoicePanel({
 																		}}
 																		className={cn(
 																			"h-9 w-full border-rule bg-paper px-3 text-right text-[13px] font-mono text-ink",
+																			isEmptyLine && "invoice-empty-cell",
 																		)}
 																	/>
 																</div>
@@ -3013,7 +3047,7 @@ export function CreateInvoicePanel({
 																		Total
 																	</span>
 																	<span
-																		className="font-mono"
+																		className="font-mono break-all tabular-nums"
 																		data-testid="invoice-line-total"
 																	>
 																		{formatMoney(lineTotal, currency, {
@@ -3037,18 +3071,36 @@ export function CreateInvoicePanel({
 																type="button"
 																aria-expanded={taxDetailsOpen}
 																onClick={() => {
-																	if (missingTaxDetails) return;
 																	setExpandedTaxLineIds((current) =>
 																		current.includes(item.id)
 																			? current.filter((id) => id !== item.id)
 																			: [...current, item.id],
 																	);
 																}}
-																className="mt-2 inline-flex h-8 items-center text-[12px] text-ink-2 hover:text-brand"
+																className={cn(
+																	"mt-2 flex max-w-full flex-wrap items-center gap-1.5 text-left text-[11px] text-ink-2 hover:text-brand",
+																	(!isVatEnabled || isEmptyLine) && "hidden",
+																)}
 															>
-																Tax details {taxDetailsOpen ? "▾" : "▸"}
+																<span className="rounded-full bg-paper-2 px-2 py-1">
+																	Unit · {item.unit || "Choose unit"}
+																</span>
+																<span className="rounded-full bg-paper-2 px-2 py-1">
+																	{VAT_CATEGORY_OPTIONS.find(
+																		(option) =>
+																			option.value ===
+																			(item.vatCategory ?? defaultVatCategory),
+																	)?.label ?? "Standard"}
+																</span>
+																<span className="rounded-full bg-paper-2 px-2 py-1">
+																	Code · {item.classificationCode || "Add code"}
+																</span>
+																{taxDetailsOpen ? "▾" : "▸"}
 															</button>
-															{missingTaxDetails ? (
+															{isVatEnabled &&
+															missingTaxDetails &&
+															blurredTaxLineIds.includes(item.id) &&
+															(item.name.trim() || item.price > 0) ? (
 																<p
 																	className="text-[12px] text-warn"
 																	role="status"
@@ -3057,7 +3109,7 @@ export function CreateInvoicePanel({
 																	this line.
 																</p>
 															) : null}
-															{taxDetailsOpen ? (
+															{isVatEnabled && taxDetailsOpen ? (
 																<div className="mt-2 grid gap-2 @md:grid-cols-3">
 																	<div className="min-w-0">
 																		<label
@@ -3191,7 +3243,7 @@ export function CreateInvoicePanel({
 												})}
 											</span>
 										</div>
-										{compliance.totalTax > 0 ? (
+										{isVatEnabled ? (
 											<div className="mt-2 flex items-center justify-between">
 												<span>{selectedTaxSetting?.label}</span>
 												<span
@@ -3232,7 +3284,7 @@ export function CreateInvoicePanel({
 											</span>
 											<span
 												key={`net-${currency}-${netPayable}-${totalsMaximumFractionDigits}`}
-												className="text-[24px] leading-none text-ink invoice-value-fade"
+												className="min-w-0 text-right text-[24px] leading-none text-ink tabular-nums invoice-value-fade"
 											>
 												{formatMoney(netPayable, currency, {
 													maximumFractionDigits: totalsMaximumFractionDigits,
@@ -3680,20 +3732,6 @@ export function CreateInvoicePanel({
 									>
 										{autosaveStatusText || "\u00a0"}
 									</div>
-									{submitBlockerText ? (
-										<div className="flex w-full flex-wrap items-center justify-end gap-2 text-right text-[12px] text-ink-2 min-[560px]:w-auto">
-											{submitBlockerText}
-											{!customerId ? (
-												<button
-													type="button"
-													onClick={() => setCreateClientOpen(true)}
-													className="h-8 rounded-md px-2 font-medium text-brand hover:text-brand-hi"
-												>
-													Add client
-												</button>
-											) : null}
-										</div>
-									) : null}
 									<Button
 										type="button"
 										variant="ghost"
@@ -3722,10 +3760,14 @@ export function CreateInvoicePanel({
 												>
 													<button
 														type="button"
-														disabled={!canSubmit}
-														onClick={() => void createInvoice(deliveryType)}
+														aria-disabled={!canSubmit}
+														onClick={() =>
+															canSubmit
+																? void createInvoice(deliveryType)
+																: focusSubmitBlocker()
+														}
 														className={cn(
-															"inline-flex h-10 items-center bg-brand px-5 text-[13px] font-medium text-brand-ink transition-[background-color,border-color,color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-brand-hi disabled:cursor-not-allowed disabled:bg-rule disabled:text-ink-3",
+															"inline-flex h-10 items-center bg-brand px-5 text-[13px] font-medium text-brand-ink transition-[background-color,border-color,color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-brand-hi aria-disabled:cursor-not-allowed aria-disabled:bg-rule aria-disabled:text-ink-3",
 														)}
 													>
 														{submitting

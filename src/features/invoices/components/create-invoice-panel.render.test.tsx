@@ -52,6 +52,24 @@ afterEach(() => {
 });
 
 describe("invoice editor rows", () => {
+	it("opens with a customer picker and no tax error", async () => {
+		const container = document.createElement("div");
+		document.body.append(container);
+		const root = createRoot(container);
+		await act(async () => {
+			root.render(
+				<QueryClientProvider client={new QueryClient()}>
+					<CreateInvoicePanel />
+				</QueryClientProvider>,
+			);
+		});
+		expect(container.textContent).toContain("Select customer");
+		expect(container.textContent).not.toContain(
+			"Complete the unit and goods/service code",
+		);
+		await act(async () => root.unmount());
+	});
+
 	it("renders all three priced rows and their subtotal", async () => {
 		const container = document.createElement("div");
 		document.body.append(container);

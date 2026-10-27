@@ -50,7 +50,7 @@ describe("invoice workbench UI contract", () => {
 		const pickerStart = panelSource.indexOf("id={`invoice-line-description-");
 		const productPicker = panelSource.slice(pickerStart, pickerStart + 14_000);
 		expect(productPicker).toContain(
-			"absolute left-0 top-full z-50 mt-1 w-full max-w-[calc(100vw-16px)]",
+			"absolute left-0 top-full z-50 mt-1 w-[360px] max-w-[calc(100vw-5rem)]",
 		);
 		expect(productPicker).toContain(
 			'className="max-h-64 overflow-y-auto overscroll-contain"',
