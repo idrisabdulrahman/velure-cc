@@ -514,7 +514,13 @@ function ComplianceSettingsPage() {
 									sub={`${formatInvoiceDate(dashboardWindow.from)} - ${formatInvoiceDate(dashboardWindow.to)}`}
 								>
 									<RowsEmptyGuard show={dashboardMonthly.length === 0}>
-										<div className="overflow-x-auto">
+										<div
+											className="overflow-x-auto"
+											// biome-ignore lint/a11y/noNoninteractiveTabindex: WCAG 2.1.1 — a scrollable table must be keyboard reachable
+											tabIndex={0}
+											role="region"
+											aria-label="Monthly obligations table"
+										>
 											<table className="w-full min-w-[620px] text-left text-sm">
 												<thead className="border-b border-rule text-xs uppercase tracking-[0.08em] text-ink-3">
 													<tr>

@@ -828,9 +828,12 @@ function InvoicesIndex() {
 				<button
 					type="button"
 					onClick={() => setActiveInvoiceId(invoice.id as Id<"invoices">)}
-					aria-label={`Edit invoice ${invoice.invoiceNumber}`}
 					className="block min-w-0 max-w-full text-left"
 				>
+					{/* A visually-hidden prefix keeps "Edit invoice" in the
+					    computed name while every visible span (number, customer,
+					    duplicate badge) stays part of it — WCAG 2.5.3. */}
+					<span className="sr-only">Edit invoice </span>
 					<span className="block truncate font-mono text-[13px] font-medium text-ink">
 						{invoice.invoiceNumber}
 					</span>

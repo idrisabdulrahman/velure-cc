@@ -321,6 +321,8 @@ function formatDate(value: string, format: InvoiceDateFormat) {
 	});
 }
 
+// The trigger's accessible name includes the rendered date: a bare "Issue
+// date" label omits the visible value and fails WCAG 2.5.3 (label in name).
 function InvoiceDateField({
 	value,
 	onChange,
@@ -344,7 +346,7 @@ function InvoiceDateField({
 				<Button
 					type="button"
 					variant="ghost"
-					aria-label={label}
+					aria-label={`${label}: ${formatDate(value, format)}`}
 					className="mt-1 inline-flex h-auto max-w-full items-center gap-2 border-0 bg-transparent p-0 font-mono text-[14px] text-ink hover:bg-transparent hover:text-ink-3"
 				>
 					<span className="truncate">{formatDate(value, format)}</span>
@@ -2316,12 +2318,14 @@ export function CreateInvoicePanel({
 										<Input
 											value={fromName}
 											onChange={(event) => setFromName(event.target.value)}
+											aria-label="From"
 											className="h-9 w-full border-rule bg-paper px-3 text-[14px] font-medium text-ink"
 										/>
 										{showFromEmail ? (
 											<Input
 												value={fromEmail}
 												onChange={(event) => setFromEmail(event.target.value)}
+												aria-label="From email"
 												className="h-9 w-full border-rule bg-paper px-3 text-[13px] text-ink-2"
 											/>
 										) : null}
@@ -2335,6 +2339,7 @@ export function CreateInvoicePanel({
 													onChange={(event) =>
 														setSellerTin(sanitizeTinInput(event.target.value))
 													}
+													aria-label="Seller TIN"
 													placeholder="0123456789"
 													className="h-8 w-full border-rule bg-paper px-3 text-[13px] font-mono text-ink-2"
 												/>
@@ -2352,6 +2357,7 @@ export function CreateInvoicePanel({
 															sanitizeRcInput(event.target.value),
 														)
 													}
+													aria-label="Seller CAC RC number"
 													placeholder="RC-1234567"
 													className="h-8 w-full border-rule bg-paper px-3 text-[13px] font-mono text-ink-2"
 												/>
@@ -2949,6 +2955,7 @@ export function CreateInvoicePanel({
 																			type="number"
 																			min={1}
 																			step={1}
+																			aria-label={`Quantity for line item ${index + 1}`}
 																			value={item.quantity}
 																			onFocus={(e) => e.target.select()}
 																			onChange={(event) =>
