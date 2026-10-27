@@ -76,6 +76,8 @@ const ToastClose = React.forwardRef<
 	React.ElementRef<typeof ToastPrimitives.Close>,
 	React.ComponentPropsWithoutRef<typeof ToastPrimitives.Close>
 >(({ className, ...props }, ref) => (
+	// Icon-only control: without an accessible name axe reports a critical
+	// `button-name` violation whenever a toast is visible.
 	<ToastPrimitives.Close
 		ref={ref}
 		className={cn(
@@ -83,6 +85,7 @@ const ToastClose = React.forwardRef<
 			className,
 		)}
 		toast-close=""
+		aria-label="Dismiss notification"
 		{...props}
 	>
 		<X className="h-4 w-4" />
