@@ -9,12 +9,14 @@
  * server never evaluates the package.
  */
 type GsapModule = typeof import("gsap");
+type ScrollSmootherModule = typeof import("gsap/ScrollSmoother");
 type ScrollTriggerModule = typeof import("gsap/ScrollTrigger");
 type SplitTextModule = typeof import("gsap/SplitText");
 
 let loader:
 	| Promise<{
 			gsap: GsapModule["default"];
+			ScrollSmoother: ScrollSmootherModule["ScrollSmoother"];
 			ScrollTrigger: ScrollTriggerModule["ScrollTrigger"];
 			SplitText: SplitTextModule["SplitText"];
 	  }>
@@ -23,13 +25,19 @@ let loader:
 export function loadGsapClient() {
 	loader ??= Promise.all([
 		import("gsap"),
+		import("gsap/ScrollSmoother"),
 		import("gsap/ScrollTrigger"),
 		import("gsap/SplitText"),
-	]).then(([gsap, trigger, split]) => {
+	]).then(([gsap, smoother, trigger, split]) => {
 		const g = gsap.default;
-		g.registerPlugin(trigger.ScrollTrigger, split.SplitText);
+		g.registerPlugin(
+			smoother.ScrollSmoother,
+			trigger.ScrollTrigger,
+			split.SplitText,
+		);
 		return {
 			gsap: g,
+			ScrollSmoother: smoother.ScrollSmoother,
 			ScrollTrigger: trigger.ScrollTrigger,
 			SplitText: split.SplitText,
 		};

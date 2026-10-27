@@ -146,7 +146,7 @@ function LandingPage() {
 	// The marketing markup (with #smooth-wrapper) only renders once the session
 	// is resolved and there's no user — gate motion init on that.
 	const ready = !sessionPending && !session?.user;
-	useLandingMotion(containerRef, ready);
+	const scrollToHash = useLandingMotion(containerRef, ready);
 
 	useEffect(() => {
 		if (!sessionPending && session?.user) {
@@ -157,12 +157,15 @@ function LandingPage() {
 	useEffect(() => {
 		if (!ready || !hash) return;
 		const frame = requestAnimationFrame(() => {
+			// The smoother transforms the page, so a native jump would land at the
+			// wrong offset. Fall back to `scrollIntoView` only before it is live.
+			if (scrollToHash(hash)) return;
 			document
 				.getElementById(hash.replace(/^#/, ""))
 				?.scrollIntoView({ behavior: "instant" });
 		});
 		return () => cancelAnimationFrame(frame);
-	}, [ready, hash]);
+	}, [ready, hash, scrollToHash]);
 
 	if (sessionPending || session?.user) {
 		return (
