@@ -63,6 +63,7 @@ import {
 	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
+import { PanelLoader } from "#/components/ui/panel-loader";
 import {
 	Select,
 	SelectContent,
@@ -70,7 +71,6 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select";
-import { Skeleton } from "#/components/ui/skeleton";
 import { toast } from "#/components/ui/use-toast";
 import { duplicateInvoiceNumberSet } from "#/features/invoices/cleanup";
 import { CreateInvoiceSheet } from "#/features/invoices/components/create-invoice-sheet";
@@ -1525,24 +1525,7 @@ function InvoicesIndex() {
 			) : null}
 
 			{isInvoicesLoading ? (
-				<section
-					aria-label="Loading invoices"
-					className="min-w-0 overflow-hidden rounded-lg border border-rule bg-paper"
-				>
-					<p className="border-b border-rule px-3.5 py-3 text-xs text-ink-3">
-						Loading invoices…
-					</p>
-					<div>
-						{["row-1", "row-2", "row-3", "row-4", "row-5"].map((rowKey) => (
-							<div
-								key={rowKey}
-								className="border-b border-rule px-3.5 py-3 last:border-b-0"
-							>
-								<Skeleton className="h-4 w-full bg-paper-3" />
-							</div>
-						))}
-					</div>
-				</section>
+				<PanelLoader label="Loading invoices" />
 			) : (
 				<section
 					aria-label="Invoice list"

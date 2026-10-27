@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
+import { Spinner } from "#/components/ui/spinner";
 import { toast } from "#/components/ui/use-toast";
 import { authClient } from "#/lib/auth-client";
 
@@ -111,7 +112,7 @@ function SecuritySettingsPage() {
 	if (sessionPending || loading) {
 		return (
 			<div className="flex min-h-[50vh] items-center justify-center">
-				<Loader2 className="h-6 w-6 animate-spin text-brand" />
+				<Spinner size={24} className="text-brand !stroke-brand" />
 			</div>
 		);
 	}

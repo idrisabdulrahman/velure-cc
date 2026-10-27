@@ -816,7 +816,7 @@ select:focus-visible {
 
 /* ── Lenis smooth scroll (app shell main container) ─────────────────────
  * Lenis adds .lenis classes to the wrapper (main), not <html>, so these stay
- * scoped and never touch marketing's ScrollSmoother world. Native touch
+ * scoped to the app shell; marketing uses native page scrolling. Native touch
  * scrolling is untouched (syncTouch off). */
 .lenis.lenis-smooth {
   scroll-behavior: auto;
@@ -1096,8 +1096,7 @@ body {
   --hm-shadow-lift: 0 40px 120px -32px rgba(0, 0, 0, 0.82);
 }
 
-/* ScrollSmoother transforms this layer out of normal flow; paint it so
- * transparent landing bands never expose the dark document canvas. */
+/* Paint transparent landing bands against the marketing surface. */
 .hm #smooth-content {
   background-color: var(--hm-paper);
 }
@@ -1347,6 +1346,17 @@ body {
 .invoice-paper-controls [class*="border-rule"]:has(input),
 .invoice-paper-controls [class*="border-rule"]:has(textarea) {
 	border-color: transparent;
+}
+
+.invoice-paper-controls .invoice-empty-cell:not(:hover):not(:focus-visible):not(:focus-within) {
+	background-color: var(--hm-paper-2) !important;
+	background-image: repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in oklab, var(--hm-rule) 35%, transparent) 9px 10px);
+	color: transparent !important;
+}
+
+.invoice-paper-controls .invoice-empty-cell:not(:hover):not(:focus-within) > *,
+.invoice-paper-controls .invoice-empty-cell:not(:hover):not(:focus-visible)::placeholder {
+	opacity: 0;
 }
 
 .hm [class*="rounded-full"],

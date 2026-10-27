@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
 	CalendarClock,
-	Loader2,
 	type LucideIcon,
 	PauseCircle,
 	Pencil,
@@ -27,6 +26,7 @@ import {
 	SelectValue,
 } from "#/components/ui/select";
 import { Sheet, SheetContent } from "#/components/ui/sheet";
+import { Spinner } from "#/components/ui/spinner";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
 import { useUnifiedAuth } from "#/lib/auth-hook";
@@ -308,7 +308,7 @@ function RecurringBillingSettingsPage() {
 						onClick={handleRunDueSchedules}
 					>
 						{busyAction === "run" ? (
-							<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+							<Spinner size={16} className="mr-2" />
 						) : (
 							<RefreshCcw className="mr-2 h-4 w-4" />
 						)}
@@ -560,7 +560,7 @@ function RecurringBillingSettingsPage() {
 							onClick={handleSaveSchedule}
 						>
 							{busyAction === "create" || busyAction === "update" ? (
-								<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+								<Spinner size={16} className="mr-2" />
 							) : (
 								<Repeat2 className="mr-2 h-4 w-4" />
 							)}
@@ -756,7 +756,7 @@ function ScheduleButton({
 			variant="outline"
 		>
 			{busy ? (
-				<Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+				<Spinner size={14} className="mr-2" />
 			) : (
 				<Icon className="mr-2 h-3.5 w-3.5" />
 			)}

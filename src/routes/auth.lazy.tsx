@@ -4,7 +4,7 @@ import {
 	useLocation,
 	useNavigate,
 } from "@tanstack/react-router";
-import { Keyboard, Loader2 } from "lucide-react";
+import { Keyboard } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { VelureSymbol } from "#/components/brand/velure-symbol";
 import { ThemeToggle } from "#/components/theme/theme-toggle";
@@ -13,6 +13,7 @@ import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Icons } from "#/components/ui/icons";
 import { Input } from "#/components/ui/input";
+import { Spinner } from "#/components/ui/spinner";
 import { authClient } from "#/lib/auth-client";
 import { useWorkspaceActions } from "#/lib/auth-hook";
 
@@ -603,7 +604,7 @@ function AuthPage() {
 									>
 										{googleSubmitting ? (
 											<>
-												<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+												<Spinner size={16} className="mr-2" />
 												Opening Google
 											</>
 										) : (
@@ -773,7 +774,7 @@ function AuthPage() {
 								>
 									{submitting ? (
 										<>
-											<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+											<Spinner size={16} className="mr-2" />
 											Working
 										</>
 									) : mode === "forgot" ? (

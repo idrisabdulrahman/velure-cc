@@ -5,7 +5,6 @@ import {
 	CircleAlert,
 	History,
 	Inbox,
-	Loader2,
 	MailCheck,
 	SearchCheck,
 	Settings2,
@@ -20,6 +19,7 @@ import { Toggle } from "#/components/redesign/toggle";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Sheet, SheetContent } from "#/components/ui/sheet";
+import { Spinner } from "#/components/ui/spinner";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
@@ -332,7 +332,7 @@ function PaymentRemindersSettingsPage() {
 		return (
 			<div className="flex min-h-80 items-center justify-center">
 				<div className="flex items-center gap-2 text-sm text-ink-3">
-					<Loader2 className="h-5 w-5 animate-spin text-brand" />
+					<Spinner size={20} className="text-brand !stroke-brand" />
 					<span>Loading payment reminder settings</span>
 				</div>
 			</div>
@@ -740,7 +740,7 @@ function PaymentRemindersSettingsPage() {
 				>
 					{overviewPending ? (
 						<div className="flex items-center gap-2 py-6 text-sm text-ink-3">
-							<Loader2 className="h-4 w-4 animate-spin text-brand" />
+							<Spinner size={16} className="text-brand !stroke-brand" />
 							<span>Loading reminder queue</span>
 						</div>
 					) : overviewError ? (

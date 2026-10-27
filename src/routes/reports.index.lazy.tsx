@@ -22,6 +22,7 @@ import {
 	ChartTooltip,
 } from "#/components/ui/chart";
 import { monthYearFmt } from "#/components/ui/chart-format";
+import { PanelLoader } from "#/components/ui/panel-loader";
 import { RowsEmptyGuard } from "#/components/ui/rows-empty-guard";
 import {
 	Select,
@@ -30,7 +31,6 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select";
-import { Skeleton } from "#/components/ui/skeleton";
 import {
 	formatCompactMoney,
 	formatInvoiceDate,
@@ -60,9 +60,6 @@ type CurrencySummary = {
 	averageInvoiceValue: number;
 	collectionRate: number;
 };
-
-const METRIC_SKELETON_KEYS = ["billed", "collected", "outstanding", "overdue"];
-const TABLE_SKELETON_KEYS = ["customers", "late-payers", "products"];
 
 function formatPercent(value: number) {
 	return `${Math.round(value * 100)}%`;
@@ -290,7 +287,7 @@ function ReportsIndex() {
 			</header>
 
 			{isLoading ? (
-				<ReportsSkeleton />
+				<PanelLoader label="Loading reports" />
 			) : (
 				<>
 					<KpiStrip>
@@ -662,22 +659,4 @@ function createEmptySummary(currency: string): CurrencySummary {
 		averageInvoiceValue: 0,
 		collectionRate: 0,
 	};
-}
-
-function ReportsSkeleton() {
-	return (
-		<div className="space-y-4">
-			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-				{METRIC_SKELETON_KEYS.map((key) => (
-					<Skeleton key={key} className="h-32 rounded-md bg-paper-3" />
-				))}
-			</div>
-			<Skeleton className="h-[380px] rounded-md bg-paper-3" />
-			<div className="grid gap-4 xl:grid-cols-3">
-				{TABLE_SKELETON_KEYS.map((key) => (
-					<Skeleton key={key} className="h-72 rounded-md bg-paper-3" />
-				))}
-			</div>
-		</div>
-	);
 }

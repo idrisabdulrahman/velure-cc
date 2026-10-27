@@ -1,15 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useLocation } from "@tanstack/react-router";
-import {
-	Banknote,
-	Check,
-	Copy,
-	Download,
-	Loader2,
-	ReceiptText,
-} from "lucide-react";
+import { Banknote, Check, Copy, Download, ReceiptText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useResizeObserver } from "#/components/hooks/use-resize-observer";
+import { AppLoader } from "#/components/ui/app-loader";
+import { Spinner } from "#/components/ui/spinner";
 import { toast } from "#/components/ui/use-toast";
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import {
@@ -83,21 +78,8 @@ function PublicInvoicePage() {
 
 	if (invoice === undefined) {
 		return (
-			<section className="flex min-h-[100dvh] flex-col bg-paper">
-				<div className="mx-auto flex w-full max-w-[840px] items-center justify-between border-b border-rule px-4 py-5 sm:px-6">
-					<div className="flex items-center gap-3">
-						<div className="h-6 w-6 animate-pulse bg-paper-3" />
-						<div className="h-4 w-32 animate-pulse bg-paper-3" />
-					</div>
-					<div className="h-6 w-16 animate-pulse bg-paper-3" />
-				</div>
-				<div className="flex flex-1 items-center justify-center p-4 sm:p-8">
-					<div className="h-[750px] w-full max-w-[700px] animate-pulse border border-rule bg-paper-2" />
-				</div>
-				<div className="flex justify-center gap-3 p-4">
-					<div className="h-9 w-28 animate-pulse bg-paper-3" />
-					<div className="h-9 w-32 animate-pulse bg-paper-3" />
-				</div>
+			<section className="flex min-h-[100dvh] items-center justify-center bg-paper">
+				<AppLoader label="Loading invoice" />
 			</section>
 		);
 	}
@@ -338,7 +320,7 @@ function PublicInvoicePage() {
 									className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand px-4 text-[13px] font-medium text-brand-ink transition-colors hover:bg-brand-hi disabled:cursor-not-allowed disabled:opacity-60"
 								>
 									{isCreatingCharge ? (
-										<Loader2 className="h-4 w-4 animate-spin" />
+										<Spinner size={16} />
 									) : (
 										<Banknote className="h-4 w-4" />
 									)}
@@ -364,9 +346,12 @@ function PublicInvoicePage() {
 							<ReceiptText className="h-5 w-5 text-ink-2" />
 						</div>
 						{paymentHistory === undefined ? (
-							<div className="mt-4 space-y-2">
-								<div className="h-10 animate-pulse rounded-md bg-paper-3" />
-								<div className="h-10 animate-pulse rounded-md bg-paper-3" />
+							<div
+								role="status"
+								aria-label="Loading payment history"
+								className="mt-4 flex justify-center py-3"
+							>
+								<Spinner className="text-brand !stroke-brand" />
 							</div>
 						) : payments.length > 0 ? (
 							<div className="mt-4 divide-y divide-rule">

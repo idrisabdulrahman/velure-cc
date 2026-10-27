@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Loader2 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
@@ -11,6 +10,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select";
+import { Spinner } from "#/components/ui/spinner";
 import { Switch } from "#/components/ui/switch";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
@@ -70,7 +70,7 @@ function ProductDetailPage() {
 		return (
 			<div className="flex h-full items-center justify-center">
 				<div className="flex items-center gap-2 text-sm text-ink-3">
-					<Loader2 className="h-5 w-5 animate-spin text-brand" />
+					<Spinner size={20} className="text-brand !stroke-brand" />
 					<span>Loading product details</span>
 				</div>
 			</div>

@@ -1,4 +1,3 @@
-import { useReducedMotion } from "framer-motion";
 import { Spinner } from "#/components/ui/spinner";
 import { cn } from "#/lib/utils";
 
@@ -16,12 +15,9 @@ type AppLoaderProps = {
 /**
  * Full-screen honest wait state: an indeterminate spinner, never a simulated
  * progress bar. There is no measurable progress in session/bridge/workspace
- * resolution, so nothing advances, fills, or completes on a timer. Under
- * reduced motion it renders a static track and spins nothing.
+ * resolution, so nothing advances, fills, or completes on a timer.
  */
 export function AppLoader({ label = null, className }: AppLoaderProps) {
-	const reduceMotion = useReducedMotion();
-
 	return (
 		<div
 			role="status"
@@ -31,11 +27,7 @@ export function AppLoader({ label = null, className }: AppLoaderProps) {
 				className,
 			)}
 		>
-			{reduceMotion ? (
-				<div className="h-1.5 w-40 rounded-full bg-rule" />
-			) : (
-				<Spinner size={28} className="text-brand !stroke-brand" />
-			)}
+			<Spinner size={28} className="text-brand !stroke-brand" />
 
 			{label ? (
 				<p

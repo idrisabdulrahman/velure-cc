@@ -1,4 +1,9 @@
-import { createLazyFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import {
+	createLazyFileRoute,
+	Link,
+	useLocation,
+	useNavigate,
+} from "@tanstack/react-router";
 import {
 	ArrowRight,
 	BarChart3,
@@ -7,10 +12,8 @@ import {
 	FileDown,
 	FileText,
 	Hash,
-	KeyRound,
 	Link2,
 	LockKeyhole,
-	Mail,
 	PlayCircle,
 	Receipt,
 	ShieldCheck,
@@ -22,6 +25,7 @@ import {
 	MarketingNav,
 } from "#/components/marketing/MarketingLayout";
 import { useLandingMotion } from "#/components/marketing/useLandingMotion";
+import { AppLoader } from "#/components/ui/app-loader";
 import { authClient } from "#/lib/auth-client";
 
 export const Route = createLazyFileRoute("/")({
@@ -74,36 +78,26 @@ const flowSteps = [
 
 const securityRows = [
 	{
-		icon: Users,
-		title: "Role model",
-		detail:
-			"Owner, member, viewer. Viewer roles cannot write operational records.",
-	},
-	{
-		icon: LockKeyhole,
-		title: "Server-side checks",
-		detail: "Membership is verified before data access.",
-	},
-	{
-		icon: ShieldCheck,
-		title: "No cross-workspace leaks",
-		detail: "Mutations validate workspace ownership before writes.",
-	},
-	{
-		icon: KeyRound,
-		title: "Sign-in",
-		detail: "Password reset and OAuth handled by Better Auth.",
-	},
-	{
 		icon: Hash,
-		title: "Invoice numbering",
+		title: "Invoice numbers",
 		detail:
-			"Sequential numbers with year context, no duplicates, and no reuse of canceled invoice numbers.",
+			"Issued numbers are unique within a workspace and stay assigned after cancellation.",
+	},
+	{
+		icon: Users,
+		title: "Viewer access",
+		detail: "Viewers can read workspace records without changing them.",
 	},
 	{
 		icon: FileText,
-		title: "Your records",
-		detail: "Exportable records support backup and audit workflows.",
+		title: "Invoice activity",
+		detail:
+			"When an invoice is created, edited, sent or canceled, a record shows who did it and when.",
+	},
+	{
+		icon: LockKeyhole,
+		title: "Workspace access",
+		detail: "Private billing records require sign-in and workspace membership.",
 	},
 ] as const;
 
@@ -145,6 +139,7 @@ const whtRows = [
 
 function LandingPage() {
 	const navigate = useNavigate();
+	const hash = useLocation({ select: (location) => location.hash });
 	const { data: session, isPending: sessionPending } = authClient.useSession();
 	const containerRef = useRef<HTMLDivElement>(null);
 
@@ -159,27 +154,27 @@ function LandingPage() {
 		}
 	}, [navigate, session?.user, sessionPending]);
 
+	useEffect(() => {
+		if (!ready || !hash) return;
+		const frame = requestAnimationFrame(() => {
+			document
+				.getElementById(hash.replace(/^#/, ""))
+				?.scrollIntoView({ behavior: "instant" });
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [ready, hash]);
+
 	if (sessionPending || session?.user) {
 		return (
-			<div
-				className="hm flex min-h-screen items-center justify-center"
-				style={{ background: "var(--hm-paper)" }}
-			>
-				<div
-					className="h-9 w-9 animate-pulse"
-					style={{
-						borderRadius: "var(--hm-r-input)",
-						background: "var(--hm-accent-soft)",
-					}}
-				/>
+			<div className="hm flex min-h-screen items-center justify-center bg-paper">
+				<AppLoader label={null} />
 			</div>
 		);
 	}
 
 	return (
 		<div ref={containerRef} className="hm min-h-screen">
-			{/* Nav lives OUTSIDE #smooth-wrapper — ScrollSmoother transforms its
-			    content, so a sticky/fixed header must sit above the wrapper. */}
+			{/* Keep the sticky nav above the landing content. */}
 			<MarketingNav />
 
 			<div id="smooth-wrapper">
@@ -272,7 +267,10 @@ function LandingPage() {
 						</section>
 
 						{/* ── 3 · BENTO ── */}
-						<section id="features" className="px-5 py-[110px] sm:px-7">
+						<section
+							id="features"
+							className="scroll-mt-24 px-5 py-[110px] sm:px-7"
+						>
 							<div className="mx-auto max-w-[1160px]">
 								<div className="mb-[46px] grid items-end gap-10 lg:grid-cols-[1.05fr_1fr]">
 									<div>
@@ -318,7 +316,10 @@ function LandingPage() {
 						</section>
 
 						{/* ── 4 · REMINDERS ── */}
-						<section id="reminders" className="px-5 py-[110px] sm:px-7">
+						<section
+							id="reminders"
+							className="scroll-mt-24 px-5 py-[110px] sm:px-7"
+						>
 							<div className="mx-auto grid max-w-[1160px] items-center gap-10 lg:grid-cols-[1.15fr_1fr] lg:gap-16">
 								<ReminderQueue />
 								<div>
@@ -382,7 +383,7 @@ function LandingPage() {
 						{/* ── 5 · COMPLIANCE DIPTYCH ── */}
 						<section
 							id="compliance"
-							className="grid grid-cols-1 lg:grid-cols-2"
+							className="grid scroll-mt-24 grid-cols-1 lg:grid-cols-2"
 						>
 							<div className="flex flex-col justify-center bg-[var(--hm-paper-2)] px-5 py-[70px] sm:px-7 lg:py-[90px] lg:pl-[max(1.75rem,calc((100vw-1160px)/2+1.75rem))] lg:pr-14">
 								{/* design/landing.html `.big` is display *sans* at 500, not the
@@ -551,7 +552,10 @@ function LandingPage() {
 						</section>
 
 						{/* ── 7 · SECURITY ── */}
-						<section id="security" className="px-5 py-[110px] pt-10 sm:px-7">
+						<section
+							id="security"
+							className="scroll-mt-24 px-5 py-[110px] pt-10 sm:px-7"
+						>
 							<div className="mx-auto grid max-w-[1160px] gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-[72px]">
 								<div>
 									<p className="hm-kicker" data-fade-scroll>
@@ -561,34 +565,31 @@ function LandingPage() {
 										className="hm-display font-medium mt-[14px] text-[clamp(2rem,4.6vw,3.5rem)] leading-[1.04] tracking-[-0.035em]"
 										data-fade-scroll
 									>
-										Built to keep billing data controlled.
+										Know who can access an invoice.
 									</h2>
 									<p
-										className="hm-lede mt-[18px] max-w-[46ch] text-[17px]"
+										className="mt-[18px] max-w-[46ch] text-[17px] leading-[1.55] text-[var(--hm-ink)]"
 										data-fade-scroll
 									>
-										Access is authenticated, workspace-scoped, and designed
-										around plain operational controls finance users can
-										understand.
+										Your team and your customers access invoices in different
+										ways. Here is what each can see.
 									</p>
-									<div className="mt-[34px] flex flex-wrap gap-2.5">
-										{[
-											{ icon: ShieldCheck, label: "Private by workspace" },
-											{ icon: Mail, label: "Email/password first" },
-											{ icon: Link2, label: "Public invoices by token" },
-										].map((chip) => (
-											<span
-												key={chip.label}
-												data-fade-scroll
-												className="inline-flex h-[34px] items-center gap-2.5 rounded-full border border-[var(--hm-rule)] bg-[var(--hm-paper-2)] px-3.5 text-[13px]"
-											>
-												<chip.icon
-													className="h-[15px] w-[15px] text-[var(--hm-accent)]"
-													aria-hidden="true"
-												/>
-												{chip.label}
-											</span>
-										))}
+									<div
+										className="mt-[34px] border-l-2 border-[var(--hm-accent)] pl-4"
+										data-fade-scroll
+									>
+										<h3 className="flex items-center gap-2.5 text-[16px] font-medium">
+											<Link2
+												className="h-4 w-4 text-[var(--hm-accent)]"
+												aria-hidden="true"
+											/>
+											When you share an invoice
+										</h3>
+										<p className="mt-2 max-w-[46ch] text-[16px] leading-[1.55] text-[var(--hm-ink)]">
+											Anyone with its random link can view that invoice without
+											signing in. Links do not expire automatically, and you
+											cannot revoke one from the app yet.
+										</p>
 									</div>
 								</div>
 
@@ -608,7 +609,9 @@ function LandingPage() {
 												/>
 												{row.title}
 											</dt>
-											<dd className="hm-lede m-0 text-[15px]">{row.detail}</dd>
+											<dd className="m-0 text-[16px] leading-[1.55] text-[var(--hm-ink)]">
+												{row.detail}
+											</dd>
 										</div>
 									))}
 								</dl>

@@ -18,6 +18,7 @@ import {
 } from "#/components/ui/alert-dialog";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
+import { PanelLoader } from "#/components/ui/panel-loader";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
 import { NIGERIA_TAX_RULE_SET_VERSION } from "#/features/compliance/nigeria";
@@ -468,11 +469,7 @@ function SettingsPage() {
 				</p>
 			</div>
 
-			{settingsPending ? (
-				<Panel title="Loading settings">
-					<p className="text-sm text-ink-3">Fetching your workspace…</p>
-				</Panel>
-			) : null}
+			{settingsPending ? <PanelLoader label="Loading settings" /> : null}
 			{!settingsPending && settingsError ? (
 				<Panel
 					title="Could not load settings"
