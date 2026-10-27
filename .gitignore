@@ -1,57 +1,75 @@
+# Dependencies
 node_modules/
-certs/
- .agents/
-.agent/
-.DS_Store
+skills-outsource/
+
+# Build output
 dist
 dist-ssr
-tests/
-*.local
-.env
-.env.local
+.output
 .nitro
 .tanstack
-.wrangler
-.output
 .vinxi
-__unconfig*
-todos.json
-test-results/
-skills-lock.json
-review.md
-.vscode/mcp.json
-Architecture.md
-DATAFLOW_TEMPLATE.MD
-ProductStrategy.md
-skills-outsource/
-.mcp.json
-
-# Agent tool state / build output (not project artifacts)
-@/
+.wrangler
 .next/
-firstmate/
+__unconfig*
+
+# Test output
+tests/
+test-results/
+playwright-report/
+coverage/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.local
+certs/
+
+# OS
+.DS_Store
+
+# Local tooling config
+.vscode/mcp.json
+.mcp.json
+skills-lock.json
+
+# Development-only material (kept on disk, never published)
+# Task prompts, design sources/briefs, and demo artifacts are workspace notes.
 prompts/
+design/
+design.md
+artifacts/
+docs/internal/
+todos.json
+review.md
+DATAFLOW_TEMPLATE.MD
+REDESIGN_PROMPT.MD
+Architecture.md
+ProductStrategy.md
+migration-plan.md
+
+# Agent tool state
+@/
+firstmate/
 .agents/
+.agent/
 .claude/
 .opencode/
 .codex/
 .cursor/
 .windsurf/
 .aider*
-AGENTS.md
-CLAUDE.md
-GEMINI.md
-.cursorrules
-.windsurfrules
-REDESIGN_PROMPT.MD
-.github/copilot-instructions.md
-.github/workflows/pr-visual-recap.yml
 .codestudio/
 .commandcode/
 .freebuff/
 .hallmark/
 .zcode/
 .worktrees/
-prompts/
-docs/
-design/
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.cursorrules
+.windsurfrules
+.github/copilot-instructions.md
+.github/workflows/pr-visual-recap.yml

@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="t">
-  <title id="t">Velure concept B - focus frame</title>
-  <path fill="#180F0A" d="M32 32 H88 V56 H56 V88 H32 Z"/>
-  <path fill="#180F0A" d="M224 32 H168 V56 H200 V88 H224 Z"/>
-  <path fill="#180F0A" d="M32 224 H88 V200 H56 V168 H32 Z"/>
-  <path fill="#180F0A" d="M224 224 H168 V200 H200 V168 H224 Z"/>
-  <rect x="104" y="104" width="48" height="48" fill="#EA373E"/>
-</svg>
