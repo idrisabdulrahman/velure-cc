@@ -418,8 +418,13 @@ describe("invoice lifecycle wiring", () => {
 			// allocator RPC does not consume a canned result.
 			invoices: [{ data: [] }, { data: { id: "inv-new" } }],
 			// B2 resolves the buyer before planning and rechecks it at the
-			// draft-exit gate.
-			clients: [{ data: { id: "client-1" } }, { data: { id: "client-1" } }],
+			// draft-exit gate; the server-derived party identity adds one more
+			// read of the same workspace-scoped client row.
+			clients: [
+				{ data: { id: "client-1" } },
+				{ data: { id: "client-1" } },
+				{ data: { id: "client-1" } },
+			],
 		});
 		const admin = installAuditEndpoint(client);
 

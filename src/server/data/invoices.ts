@@ -1,4 +1,10 @@
 import {
+	applyPartyIdentity,
+	buyerIdentityFromClient,
+	type DerivedPartyIdentityMap,
+	supplierIdentityFromProfile,
+} from "#/features/compliance/party-identity";
+import {
 	CUSTOMER_LINK_CLEARED_ON_ISSUED_MESSAGE,
 	CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE,
 	INVOICE_LINE_CLASSIFICATION_REQUIRED_MESSAGE,
@@ -1398,6 +1404,54 @@ async function assertWorkspaceCustomer(
 	if (!data) throw new Error("Customer not found.");
 }
 
+/**
+ * Server-derives the seller identity from the active workspace's supplier
+ * profile and the buyer identity from the workspace-scoped `clients` row so
+ * the persisted compliance snapshot carries the postal addresses and buyer TIN
+ * the WP12 validator requires. The caller must already have rejected a
+ * foreign-workspace customer (`assertWorkspaceCustomer`); this read repeats the
+ * workspace filter so a cross-workspace client row can never be enriched.
+ */
+async function loadDerivedPartyIdentity(
+	client: Supabase,
+	workspaceId: string,
+	customerId?: string,
+): Promise<DerivedPartyIdentityMap> {
+	const { data: workspace, error: workspaceError } = await client
+		.from("workspaces")
+		.select(
+			"address, address_street, address_lga, address_state, country_code, tax_id, rc_number",
+		)
+		.eq("id", workspaceId)
+		.maybeSingle();
+	if (workspaceError) throw workspaceError;
+	const identity: DerivedPartyIdentityMap = {
+		seller: supplierIdentityFromProfile({
+			address: workspace?.address,
+			addressStreet: workspace?.address_street,
+			addressLga: workspace?.address_lga,
+			addressState: workspace?.address_state,
+			countryCode: workspace?.country_code,
+			taxId: workspace?.tax_id,
+			rcNumber: workspace?.rc_number,
+		}),
+	};
+	if (customerId) {
+		const { data: customer, error: customerError } = await client
+			.from("clients")
+			.select("billing_address, tax_id")
+			.eq("id", customerId)
+			.eq("workspace_id", workspaceId)
+			.maybeSingle();
+		if (customerError) throw customerError;
+		identity.buyer = buyerIdentityFromClient({
+			billingAddress: customer?.billing_address,
+			taxId: customer?.tax_id,
+		});
+	}
+	return identity;
+}
+
 async function assertCorrectionSource(
 	client: Supabase,
 	userId: string,
@@ -1660,7 +1714,12 @@ export async function createDraft(
 	const invoiceNumber =
 		numberCandidate?.invoiceNumber ?? existingDraft?.invoiceNumber ?? "";
 	const normalizedCompliance = stripClientFiscalization(
-		normalizeComplianceSnapshot(compliance),
+		normalizeComplianceSnapshot(
+			applyPartyIdentity(
+				compliance,
+				await loadDerivedPartyIdentity(client, workspaceId, args.customerId),
+			),
+		),
 	);
 	assertInvoiceInput({
 		invoiceNumber,
@@ -1813,15 +1872,6 @@ export async function autosaveDraft(
 		args.lineItems.length > 0
 			? args.lineItems
 			: [{ id: "draft-line", name: "", quantity: 1, price: 0 }];
-	const compliance =
-		args.compliance ??
-		defaultCompliance({
-			customerName: args.customerName,
-			lineItems,
-		});
-	const normalizedCompliance = stripClientFiscalization(
-		normalizeComplianceSnapshot(compliance),
-	);
 	const documentType = args.documentType ?? "standard";
 	const current = args.id ? await getById(client, userId, args.id) : null;
 	const correctsInvoiceId = await assertCorrectionSource(
@@ -1832,6 +1882,20 @@ export async function autosaveDraft(
 		args.customerId,
 	);
 	await assertWorkspaceCustomer(client, workspaceId, args.customerId);
+	const compliance =
+		args.compliance ??
+		defaultCompliance({
+			customerName: args.customerName,
+			lineItems,
+		});
+	const normalizedCompliance = stripClientFiscalization(
+		normalizeComplianceSnapshot(
+			applyPartyIdentity(
+				compliance,
+				await loadDerivedPartyIdentity(client, workspaceId, args.customerId),
+			),
+		),
+	);
 	// WP8/C1: plan read-only, validate, commit the allocator's number right
 	// before the write (see createDraft).
 	const keepExistingNumber = Boolean(current) && !args.invoiceNumber.trim();
@@ -2020,7 +2084,12 @@ export async function save(
 
 	const compliance = args.compliance ?? defaultCompliance(args);
 	const normalizedCompliance = stripClientFiscalization(
-		normalizeComplianceSnapshot(compliance),
+		normalizeComplianceSnapshot(
+			applyPartyIdentity(
+				compliance,
+				await loadDerivedPartyIdentity(client, workspaceId, customerId),
+			),
+		),
 	);
 	const documentType = args.documentType ?? "standard";
 	const correctsInvoiceId = await assertCorrectionSource(
