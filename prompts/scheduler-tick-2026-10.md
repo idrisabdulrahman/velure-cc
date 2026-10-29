@@ -170,6 +170,26 @@ of "manual only".
 - `tenant-isolation-coverage.test.ts` updated (new exports/routes classified;
   `getReminderSettings`/`saveReminderSettings` moved from `rls-only` to
   `app-scoped` because the read now carries an owner filter).
-- Not done in this task (needs the user): applying
-  `20261029000000_scheduler_pg_cron.sql` to the live project, creating the
-  Vault secrets, and enabling `SCHEDULER_REMINDER_SEND_ENABLED`.
+- Not done in this task (needs the user): enabling
+  `SCHEDULER_REMINDER_SEND_ENABLED`, and setting the matching app env vars /
+  deploying to production.
+
+## Operator go-live (2026-10-29, after the task was marked done)
+
+The user approved and the following was done via the Supabase MCP against the
+live project `kbexydkmmfabfutgkbxn`:
+
+- Applied `20261029000000_scheduler_pg_cron.sql`: `pg_cron` 1.6.4 + `pg_net`
+  0.20.4 enabled, `public.invoke_scheduler_tick()` created, the
+  `reminder_events` partial unique index created, and the
+  `velure-scheduler-tick` job scheduled (`*/10 * * * *`, active).
+- Created the Vault secrets `velure_scheduler_url`
+  (`https://velure-f2c.pages.dev/api/cron/tick`) and
+  `velure_scheduler_secret` (32-byte random hex generated inside Postgres, so
+  the value is not stored in this repo).
+- User decision: **enable automatic reminder email sending**
+  (`SCHEDULER_REMINDER_SEND_ENABLED=true`) — recorded in `docs/DECISIONS.md`.
+
+Still the operator's (not the MCP's): set `INVOICE_SCHEDULER_SECRET` +
+`SCHEDULER_REMINDER_SEND_ENABLED=true` in the Cloudflare Pages project and
+deploy the T1 code. Production returns 404 for `/api/cron/tick` until then.

@@ -124,12 +124,12 @@ These block work that depends on the answer. Unattended runs must stop here.
 - **Decision:** No global scheduler-health endpoint/UI function; the Settings
   pages read `reminder_runs` / `recurring_invoice_runs` through the user-scoped
   RLS client, which is the real "last run" surface.
-- **Decision:** The `pg_cron`/`pg_net` migration is written but **not applied**
-  to the live project. Applying it and creating the Vault secrets
-  (`velure_scheduler_url`, `velure_scheduler_secret`) are operator actions that
-  need the user's go-ahead. The reminder-events partial unique index was checked
-  against live data first: 0 duplicate `(invoice_id, stage, channel)` keys with
-  `status <> 'failed'` (the table had 0 rows anyway).
+- **Decision (superseded below):** The `pg_cron`/`pg_net` migration was written
+  but not applied at first; applying it and creating the Vault secrets are
+  operator actions that need the user's go-ahead. The reminder-events partial
+  unique index was checked against live data first: 0 duplicate
+  `(invoice_id, stage, channel)` keys with `status <> 'failed'` (the table had 0
+  rows anyway).
 - **Fix found on the way:** `currentRule` in `src/server/data/reminders.ts` read
   `reminder_rules` with no owner filter. That is safe under the user-scoped RLS
   client but wrong for the service-role sweep (it would apply one owner's rule
@@ -138,4 +138,39 @@ These block work that depends on the answer. Unattended runs must stop here.
 - **Checks:** `pnpm test` → 787 passed / 86 skipped (baseline 757; +30 new
   tests); `pnpm typecheck` clean; `pnpm check` exit 0 (359 pre-existing
   warnings).
+
+### 2026-10-29 — Operator answers (T1 go-live, applied via MCP)
+
+- **Q:** Apply the scheduler migration to the live project and create the Vault
+  secrets? **Answer:** yes — "apply the migration and set vault secrets use the
+  supabase MCP." **Applied:** `supabase/migrations/20261029000000_scheduler_pg_cron.sql`
+  applied to project `kbexydkmmfabfutgkbxn` (`apply_migration`). Result:
+  `pg_cron` 1.6.4 and `pg_net` 0.20.4 enabled, `public.invoke_scheduler_tick()`
+  created, `reminder_events_invoice_stage_channel_unique` created, and the
+  `velure-scheduler-tick` job scheduled (`*/10 * * * *`, active).
+- **Vault:** `velure_scheduler_url` =
+  `https://velure-f2c.pages.dev/api/cron/tick`; `velure_scheduler_secret` =
+  a fresh 32-byte random hex generated **inside** Postgres
+  (`extensions.gen_random_bytes`), so its value is not recorded here. Retrieve
+  with `select decrypted_secret from vault.decrypted_secrets where
+  name = 'velure_scheduler_secret';` (service role/postgres only).
+- **Q:** Enable automatic reminder email sending? **Answer:** yes — enable it.
+  This is a customer-facing, irreversible action the user explicitly approved.
+  It only takes effect once the app env var `SCHEDULER_REMINDER_SEND_ENABLED`
+  is `true` **and** the T1 code is deployed; the tick still must reach a running
+  app with a matching `INVOICE_SCHEDULER_SECRET`.
+- **Outstanding operator steps (not in the Supabase MCP):**
+  1. Cloudflare Pages project `velure` (account
+     `699cc6ec07aa29df7034163270b23f87`, production `https://velure-f2c.pages.dev`)
+     needs `INVOICE_SCHEDULER_SECRET` = the Vault secret value, and
+     `SCHEDULER_REMINDER_SEND_ENABLED=true`.
+  2. T1 must be deployed to production. The live site currently returns **404**
+     for `POST /api/cron/tick` (checked 2026-10-29), because `development` is not
+     deployed; until then every cron tick is a harmless 404. A redeploy is also
+     required for any env-var change to take effect.
+- **Decision:** Do **not** write the Pages env vars through the API: the Pages
+  `PATCH /projects/{name}` body cannot be read back for existing `secret_text`
+  values, so a partial write risks clobbering `SUPABASE_SERVICE_ROLE_KEY`,
+  `DATABASE_URL`, etc. The user sets these in the Dashboard (secrets are never
+  printed to the session).
 
