@@ -1,10 +1,15 @@
 # Tenant isolation — WP3 coverage summary (spec fix H1)
 
-Status: landed on `einv/wp3`. No cross-tenant leaks were found in the app
-layer; every probe below passes against a **no-RLS** client, so the
-app-layer filters alone are load-bearing. RLS is proven as
-defense-in-depth (and as the primary gate for `rls-only` functions) by the
-A10_LIVE-gated matrix.
+Status: current on `development` (WP3 merged from `einv/wp3`; reminder-settings
+classification updated by T1, see the change note at the end). No cross-tenant
+leaks were found in the app layer; every probe below passes against a
+**no-RLS** client, so the app-layer filters alone are load-bearing. RLS is
+proven as defense-in-depth (and as the primary gate for `rls-only` functions)
+by the A10_LIVE-gated matrix. The live policy set was additionally inspected
+directly on 2026-10-29 (T4): all 33 `public` tables have RLS enabled, the five
+server-only tables carry no policy (deny-all to browser roles), `job_runs` has
+an explicit deny-all policy, and no `*_pending_verified_identity` placeholder
+policy remains.
 
 ## Enforcement model
 
@@ -45,7 +50,7 @@ Two mechanisms, two proof layers (repo convention):
 | Payments | `recordPayment` (foreign invoice refused), `listInvoicePayments`; public payment context keyed by share token | app-scoped (private), public-token (public context) | `payment_transactions`, `payment_charges` |
 | Paystack | initialize route token-keyed + rate-limited; webhook signature-verified | server-admin / public-token | n/a (no browser-tenant table) |
 | Recurring schedules | list/create/update/end/delete | app-scoped | `recurring_invoice_schedules`, `recurring_invoice_runs` |
-| Reminders & collections | overview, timeline, pause/resume, manual exception, queue event (all gated on the scoped invoice read), batch scan and queue drain scoped to B | app-scoped (invoice-keyed), `rls-only` (settings read/save, `markReminderEventStatus`) | `reminder_rules`, `reminder_runs`, `reminder_events`, `collections_cases` |
+| Reminders & collections | overview, timeline, pause/resume, manual exception, queue event (all gated on the scoped invoice read), batch scan and queue drain scoped to B, `reminder_runs` read scoped to the owner | app-scoped (invoice-keyed, owner-scoped settings reads/writes), `rls-only` (`markReminderEventStatus`) | `reminder_rules`, `reminder_runs`, `reminder_events`, `collections_cases` |
 | Reminder send-queue route | 401 without session; drain receives only the session client + user (body `userId`/`workspaceId` ignored) | session | n/a |
 | Compliance exports | history/retry (foreign id refused), export content contains only B's invoices, dashboard | app-scoped | `invoice_exports` |
 | Tax profiles | list/save (foreign id refused) | app-scoped | `tax_profiles` |
@@ -61,14 +66,16 @@ unknown token and depends on the share token alone.
 
 ## Gaps and limitations
 
-- `rls-only` functions (`getReminderSettings`, `saveReminderSettings`,
-  `markReminderEventStatus`, `listSyncJobs`, `listLogs`, `retrySyncJob`)
-  carry no app-layer tenant filter by design; their isolation cannot be
-  proven in the default no-DB suite and rests on RLS alone. The live matrix
-  covers their tables, but `A10_LIVE=1` requires a linked Supabase
-  project and was **not executed** in this environment — run
+- `rls-only` functions (`markReminderEventStatus`, `listSyncJobs`,
+  `listLogs`, `retrySyncJob`) carry no app-layer tenant filter by design; their
+  isolation cannot be proven in the default no-DB suite and rests on RLS alone.
+  The live matrix covers their tables, but `A10_LIVE=1` requires a linked
+  Supabase project and was **not executed** in this environment — run
   `pnpm test:wp3-tenant-isolation-live`
-  against a linked project (CI) to close this gap.
+  against a linked project (CI) to close this gap. (T1 added an `owner_id`
+  filter to `currentRule`, so `getReminderSettings`/`saveReminderSettings` are
+  no longer `rls-only`; the live policy set was inspected directly instead — see
+  the change note below.)
 - The fake client supports the query shapes the data layer uses today; a
   new unsupported shape throws rather than passing silently. Extend it
   when the data layer grows new shapes.
@@ -77,3 +84,26 @@ unknown token and depends on the share token alone.
   and the live RLS matrix.
 - `prompts/wp3-tenant-isolation-suite.md` holds the task trail (goal,
   inspected code, acceptance criteria).
+
+## Change note — T4 (2026-10-29)
+
+The audit's T4 ("RLS drift / wording") found **no live RLS drift** and one
+documentation drift, fixed here:
+
+- `getReminderSettings` / `saveReminderSettings` were listed as `rls-only`.
+  T1 added `.eq("owner_id", userId)` to `currentRule`
+  (`src/server/data/reminders.ts:256-266`) and the coverage guard reclassified
+  both as `app-scoped` (`tenant-isolation-coverage.test.ts:264-265`). This doc
+  now matches the guard.
+- T1 additions recorded: `sendQueuedEmails`, `listReminderRuns`, and
+  `listRecurringRuns` are `app-scoped` (workspace/owner filtered).
+- Live policy evidence (read-only, 2026-10-29): all 33 `public` tables have RLS
+  enabled; five server-only tables (`einvoice_provider_credentials`,
+  `integration_connections`, `integration_webhooks`,
+  `invoice_number_sequences`, `public_rate_limit_windows`) have RLS enabled with
+  no policy; `job_runs` has an explicit deny-all policy; the recurring tables
+  use `workspace_member` predicates and the reminder/collection tables use
+  `owner_id = app.current_user_id()`; no pending placeholder policy remains.
+- The A10_LIVE minted-JWT matrix was **not** run (it writes fixtures and needs
+  approval); running it against a linked project in CI remains the way to prove
+  the `rls-only` set.

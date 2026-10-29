@@ -177,3 +177,35 @@ These block work that depends on the answer. Unattended runs must stop here.
   `secret_text` values cannot be read back. The throwaway-project probe removed
   that uncertainty, so the API was used.
 
+### 2026-10-29 — Task T4 (tenancy-doc / RLS drift check)
+
+- **Finding — no live RLS drift.** Read-only inspection of project
+  `kbexydkmmfabfutgkbxn`: all 33 `public` tables have RLS enabled; five
+  server-only tables (`einvoice_provider_credentials`,
+  `integration_connections`, `integration_webhooks`,
+  `invoice_number_sequences`, `public_rate_limit_windows`) are RLS-on with no
+  policy (deny-all to browser roles); `job_runs` has an explicit deny-all policy
+  (`job_runs_server_only`); no `*_pending_verified_identity` placeholder policy
+  remains; the recurring tables use `workspace_member` predicates and the
+  reminder/collection tables use `owner_id = app.current_user_id()`.
+- **Finding — documentation drift.** `docs/e-invoicing/tenant-isolation.md`
+  still listed `getReminderSettings`/`saveReminderSettings` as `rls-only`. T1's
+  `currentRule` now filters `.eq("owner_id", userId)`
+  (`src/server/data/reminders.ts:256-266`) and the coverage guard classifies
+  both `app-scoped` (`tenant-isolation-coverage.test.ts:264-265`).
+- **Decision:** Fix the doc only. No schema, policy, or app code change — the
+  enforcement is already correct. Record the T1 additions (`sendQueuedEmails`,
+  `listReminderRuns`, `listRecurringRuns`) as `app-scoped`.
+- **Decision:** Do **not** run the A10_LIVE minted-JWT matrix
+  (`pnpm test:wp3-tenant-isolation-live`) without explicit approval, because it
+  writes fixtures to the linked project. Live policy state was inspected
+  directly instead; running the matrix in CI remains the residual gap.
+- **Files:** `docs/e-invoicing/tenant-isolation.md`,
+  `docs/AUDIT-2026-10.md`, `prompts/t4-rls-drift-2026-10.md`.
+- **Checks:** `pnpm typecheck` clean; `pnpm check` exit 0 (unchanged warnings);
+  `pnpm test` 764 passed / 23 failed / 86 skipped. The 23 failures are the three
+  local-stack Paystack DB integration suites failing with `JWT expired`
+  (the local test stack's service-role JWT expired at 2026-10-29T19:54:25Z);
+  pre-existing and environmental, not a regression — the same suites passed
+  earlier the same day. Fix needs a local stack restart (user-gated).
+
