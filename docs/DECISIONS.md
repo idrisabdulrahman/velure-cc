@@ -159,18 +159,21 @@ These block work that depends on the answer. Unattended runs must stop here.
   It only takes effect once the app env var `SCHEDULER_REMINDER_SEND_ENABLED`
   is `true` **and** the T1 code is deployed; the tick still must reach a running
   app with a matching `INVOICE_SCHEDULER_SECRET`.
-- **Outstanding operator steps (not in the Supabase MCP):**
-  1. Cloudflare Pages project `velure` (account
-     `699cc6ec07aa29df7034163270b23f87`, production `https://velure-f2c.pages.dev`)
-     needs `INVOICE_SCHEDULER_SECRET` = the Vault secret value, and
-     `SCHEDULER_REMINDER_SEND_ENABLED=true`.
-  2. T1 must be deployed to production. The live site currently returns **404**
-     for `POST /api/cron/tick` (checked 2026-10-29), because `development` is not
-     deployed; until then every cron tick is a harmless 404. A redeploy is also
-     required for any env-var change to take effect.
-- **Decision:** Do **not** write the Pages env vars through the API: the Pages
-  `PATCH /projects/{name}` body cannot be read back for existing `secret_text`
-  values, so a partial write risks clobbering `SUPABASE_SERVICE_ROLE_KEY`,
-  `DATABASE_URL`, etc. The user sets these in the Dashboard (secrets are never
-  printed to the session).
+- **Outstanding operator step:** T1 must still be **deployed to production**.
+  The live site returns **404** for `POST /api/cron/tick` (checked 2026-10-29)
+  because `development` is not deployed, so every cron tick is a harmless 404
+  until then. A redeploy is also required for the env-var change to take effect.
+- **Env vars set via the Cloudflare API (safe):** Pages project `velure`
+  (account `699cc6ec07aa29df7034163270b23f87`) now has
+  `INVOICE_SCHEDULER_SECRET` = the Vault secret value (`secret_text`) and
+  `SCHEDULER_REMINDER_SEND_ENABLED=true` (`plain_text`). Before writing, the
+  merge behaviour was proven on a throwaway Pages project: a partial
+  `PATCH /projects/{name}` upserts `env_vars` and leaves unmentioned vars
+  untouched, so the 17 pre-existing secrets (`SUPABASE_SERVICE_ROLE_KEY`,
+  `DATABASE_URL`, `BETTER_AUTH_SECRET`, …) were preserved — re-read after the
+  write to confirm all are still present. The scheduler secret value was read
+  from Vault only to be written and was never printed to the session.
+- **Decision (superseded):** The initial plan was to avoid the Pages API because
+  `secret_text` values cannot be read back. The throwaway-project probe removed
+  that uncertainty, so the API was used.
 

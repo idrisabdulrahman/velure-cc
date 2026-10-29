@@ -189,7 +189,13 @@ live project `kbexydkmmfabfutgkbxn`:
   the value is not stored in this repo).
 - User decision: **enable automatic reminder email sending**
   (`SCHEDULER_REMINDER_SEND_ENABLED=true`) — recorded in `docs/DECISIONS.md`.
+- Set the Cloudflare Pages env vars on project `velure` via the API:
+  `INVOICE_SCHEDULER_SECRET` (secret) and `SCHEDULER_REMINDER_SEND_ENABLED=true`.
+  Merge safety was proven first on a throwaway Pages project; all 17 existing
+  secrets were confirmed present after the write.
+- Verified the trigger path end-to-end: `select public.invoke_scheduler_tick()`
+  returned a request id and `net._http_response` showed status **404** — expected,
+  because the T1 route is not deployed to production yet.
 
-Still the operator's (not the MCP's): set `INVOICE_SCHEDULER_SECRET` +
-`SCHEDULER_REMINDER_SEND_ENABLED=true` in the Cloudflare Pages project and
-deploy the T1 code. Production returns 404 for `/api/cron/tick` until then.
+Remaining: deploy the T1 code (production returns 404 for `/api/cron/tick`
+until then). The deploy was deliberately held by the user.
