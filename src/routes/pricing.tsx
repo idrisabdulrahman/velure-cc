@@ -33,9 +33,9 @@ const plans = [
 		blurb: "For teams chasing payments and exporting finance records.",
 		features: [
 			"Unlimited invoices",
-			"Automatic payment reminders",
+			"Automatic payment reminders (manual runs today)",
 			"Tax summary and customer ledger exports",
-			"QuickBooks and Xero connection points",
+			"QuickBooks and Xero connection points (coming soon)",
 		],
 		featured: true,
 	},
@@ -145,6 +145,10 @@ function PricingPage() {
 						</article>
 					))}
 				</div>
+				<p className="mx-auto mt-6 max-w-7xl px-5 text-sm leading-6 text-ink-3 lg:px-8">
+					No plan is billed inside Velure yet and no limits are enforced.
+					Automated reminders and the accounting connections are not built yet.
+				</p>
 			</section>
 			<SplitSection
 				kicker="Plan fit"
@@ -152,7 +156,7 @@ function PricingPage() {
 				body="Velure pricing maps to actual finance work: invoice volume, reminders, exports, accounting connection points, and team control."
 				points={[
 					"Starter handles professional invoice creation and client records.",
-					"Growth adds reminders, exports, and accounting connection points.",
+					"Growth adds exports, plus reminders and accounting connection points once they ship.",
 					"Enterprise adds roles, onboarding, and custom workflows.",
 					"All plans keep Velure's dark, focused billing workspace.",
 				]}

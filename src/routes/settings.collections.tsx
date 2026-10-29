@@ -362,6 +362,12 @@ function PaymentRemindersSettingsPage() {
 				</Button>
 			</div>
 
+			<Callout tone="info" title="Status: manual runs.">
+				Reminders are queued and sent only when you press Scan invoices and Send
+				queue. No background scheduler is connected yet, so the schedule below
+				does not send on its own.
+			</Callout>
+
 			<KpiStrip>
 				<Kpi
 					label="Ready for scan"

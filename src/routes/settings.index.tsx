@@ -1003,6 +1003,10 @@ function SettingsPage() {
 								<Link to="/pricing">PRO</Link>
 							</Button>
 						</div>
+						<p className="mt-2 text-xs leading-5 text-ink-3">
+							Status: no plan is enforced yet. Every workspace has full access;
+							paid plans are not billed or gated.
+						</p>
 					</div>
 				</div>
 			</Panel>

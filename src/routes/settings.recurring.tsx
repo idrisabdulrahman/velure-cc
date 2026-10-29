@@ -14,6 +14,7 @@ import {
 import type React from "react";
 import { useMemo, useState } from "react";
 import { DatePicker } from "#/components/navigation/DatePicker";
+import { Callout } from "#/components/redesign/callout";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
@@ -304,14 +305,11 @@ function RecurringBillingSettingsPage() {
 					<Button
 						variant="outline"
 						className="border-rule bg-paper"
-						disabled={busyAction === "run"}
+						disabled
+						title="Not available yet: automated generation has not shipped."
 						onClick={handleRunDueSchedules}
 					>
-						{busyAction === "run" ? (
-							<Spinner size={16} className="mr-2" />
-						) : (
-							<RefreshCcw className="mr-2 h-4 w-4" />
-						)}
+						<RefreshCcw className="mr-2 h-4 w-4" />
 						Run due scan
 					</Button>
 					<Button
@@ -326,6 +324,12 @@ function RecurringBillingSettingsPage() {
 					</Button>
 				</div>
 			</div>
+
+			<Callout tone="warn" title="Status: not automated yet.">
+				You can create, edit, pause, and end schedules, but Velure does not
+				generate the invoices on a schedule yet. Create repeat invoices manually
+				until automated generation ships.
+			</Callout>
 
 			<section className="grid gap-3 md:grid-cols-3">
 				<Metric
