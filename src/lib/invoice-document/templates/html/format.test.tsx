@@ -73,15 +73,15 @@ describe("formatEditorContent", () => {
 					content: [
 						{
 							type: "text",
-							text: "midday",
-							marks: [{ type: "link", attrs: { href: "https://midday.ai" } }],
+							text: "example",
+							marks: [{ type: "link", attrs: { href: "https://example.com" } }],
 						},
 					],
 				},
 			],
 		};
 		const html = renderToStaticMarkup(<>{formatEditorContent(doc)}</>);
-		expect(html).toContain('href="https://midday.ai"');
+		expect(html).toContain('href="https://example.com"');
 		expect(html).toContain("underline");
 	});
 

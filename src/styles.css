@@ -1317,7 +1317,7 @@ body {
 	border-radius: var(--hm-r-input) !important;
 }
 
-/* Midday-style invoice paper: values are edited on the document itself. */
+/* Invoice paper: values are edited on the document itself. */
 .invoice-paper-controls input:not([type="checkbox"]):not([type="file"]),
 .invoice-paper-controls textarea,
 .invoice-paper-controls [role="combobox"] {

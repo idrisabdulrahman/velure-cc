@@ -38,7 +38,7 @@ describe("invoice editor responsive contract", () => {
 		);
 	});
 
-	it("scopes Midday-style inline controls to the invoice paper", () => {
+	it("scopes inline invoice controls to the invoice paper", () => {
 		expect(source).toContain(
 			'<div className="invoice-paper-controls @container flex min-h-0 flex-1 flex-col',
 		);

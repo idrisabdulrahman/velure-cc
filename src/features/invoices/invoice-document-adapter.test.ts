@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { FiscalizationSnapshot } from "#/features/compliance/types";
-import { mergeDocBlocks, toEditorDoc, toMiddayInvoice } from "./midday-adapter";
+import {
+	mergeDocBlocks,
+	toEditorDoc,
+	toInvoiceDocument,
+} from "./invoice-document-adapter";
 import type { InvoiceRecord } from "./types";
 
 function buildInvoice(overrides: Partial<InvoiceRecord> = {}): InvoiceRecord {
@@ -70,9 +74,9 @@ function buildInvoice(overrides: Partial<InvoiceRecord> = {}): InvoiceRecord {
 	};
 }
 
-describe("toMiddayInvoice", () => {
+describe("toInvoiceDocument", () => {
 	it("uses persisted template labels, units, discount, and QR preferences", () => {
-		const invoice = toMiddayInvoice(
+		const invoice = toInvoiceDocument(
 			buildInvoice({
 				lineItems: [
 					{
@@ -107,7 +111,7 @@ describe("toMiddayInvoice", () => {
 			["credit_note", "Credit note"],
 			["debit_note", "Debit note"],
 		] as const) {
-			const rendered = toMiddayInvoice(buildInvoice({ documentType }));
+			const rendered = toInvoiceDocument(buildInvoice({ documentType }));
 			expect(rendered.template.title).toBe(title);
 			expect(rendered.template.invoiceNoLabel).toBe(`${title} No`);
 		}
@@ -116,7 +120,7 @@ describe("toMiddayInvoice", () => {
 	it("passes inline top and bottom blocks to both renderers", () => {
 		const topBlock = toEditorDoc("Project overview");
 		const bottomBlock = toEditorDoc("Payment is due as agreed");
-		const invoice = toMiddayInvoice(
+		const invoice = toInvoiceDocument(
 			buildInvoice({
 				topBlock: topBlock ?? undefined,
 				bottomBlock: bottomBlock ?? undefined,
@@ -126,7 +130,9 @@ describe("toMiddayInvoice", () => {
 		expect(invoice.bottomBlock).toEqual(bottomBlock);
 	});
 	it("passes customer PO numbers through to invoice templates", () => {
-		expect(toMiddayInvoice(buildInvoice()).customerPoNumber).toBe("PO-ACME-42");
+		expect(toInvoiceDocument(buildInvoice()).customerPoNumber).toBe(
+			"PO-ACME-42",
+		);
 	});
 
 	it("projects mock IRN and QR payload only from an explicit mock-cleared snapshot", () => {
@@ -139,7 +145,8 @@ describe("toMiddayInvoice", () => {
 			qrCodePayload: "MOCK-SANDBOX|NOT-NRS-CLEARED|IRN=MOCK-IRN-demo-1",
 		} as const;
 		expect(
-			toMiddayInvoice(buildInvoice({ fiscalization: artifacts })).mockClearance,
+			toInvoiceDocument(buildInvoice({ fiscalization: artifacts }))
+				.mockClearance,
 		).toEqual({
 			irn: artifacts.mockIrn,
 			qrPayload: artifacts.qrCodePayload,
@@ -150,14 +157,14 @@ describe("toMiddayInvoice", () => {
 			{ ...artifacts, qrCodePayload: "real-looking-payload" },
 		] as FiscalizationSnapshot[]) {
 			expect(
-				toMiddayInvoice(buildInvoice({ fiscalization })).mockClearance,
+				toInvoiceDocument(buildInvoice({ fiscalization })).mockClearance,
 			).toBeUndefined();
 		}
 	});
 
 	it("uses null when an invoice is not backed by a customer PO", () => {
 		expect(
-			toMiddayInvoice(buildInvoice({ customerPoNumber: undefined }))
+			toInvoiceDocument(buildInvoice({ customerPoNumber: undefined }))
 				.customerPoNumber,
 		).toBeNull();
 	});
@@ -176,7 +183,7 @@ describe("toMiddayInvoice", () => {
 			},
 		});
 
-		expect(toMiddayInvoice(invoice).amount).toBe(0.11);
+		expect(toInvoiceDocument(invoice).amount).toBe(0.11);
 	});
 });
 

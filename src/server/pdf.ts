@@ -1,7 +1,7 @@
 import { Document, Page, renderToBuffer, Text } from "@react-pdf/renderer";
 import { createElement } from "react";
-import { toMiddayInvoice } from "#/features/invoices/midday-adapter";
-import { PdfTemplate } from "#/lib/midday-invoice/templates/pdf";
+import { toInvoiceDocument } from "#/features/invoices/invoice-document-adapter";
+import { PdfTemplate } from "#/lib/invoice-document/templates/pdf";
 import type { Invoice } from "./invoice-repository";
 
 // Eagerly warm up the PDF renderer (yoga-layout + font engine) at module load
@@ -129,7 +129,7 @@ function renderFallbackPdf(invoice: Invoice): Uint8Array {
 
 export async function renderInvoicePdf(invoice: Invoice): Promise<Uint8Array> {
 	try {
-		const document = await PdfTemplate(toMiddayInvoice(invoice));
+		const document = await PdfTemplate(toInvoiceDocument(invoice));
 
 		const buffer = await renderToBuffer(document);
 		return new Uint8Array(buffer);

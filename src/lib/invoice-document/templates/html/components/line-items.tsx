@@ -1,4 +1,4 @@
-import { formatAmount } from "#/shims/midday-utils/format";
+import { formatAmount } from "#/shims/invoice-utils/format";
 import type { LineItem } from "../../../types";
 import { calculateLineItemTotal } from "../../../utils/calculate";
 import { Description } from "./description";

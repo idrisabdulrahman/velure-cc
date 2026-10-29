@@ -9,11 +9,11 @@ import { toast } from "#/components/ui/use-toast";
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import {
 	getInvoiceTemplateSize,
-	toMiddayInvoice,
-} from "#/features/invoices/midday-adapter";
+	toInvoiceDocument,
+} from "#/features/invoices/invoice-document-adapter";
 import type { InvoiceRecord } from "#/features/invoices/types";
 import { INVOICE_DOCUMENT_TYPE_LABELS } from "#/features/invoices/types";
-import { HtmlTemplate } from "#/lib/midday-invoice/templates/html";
+import { HtmlTemplate } from "#/lib/invoice-document/templates/html";
 import type {
 	PaymentSource,
 	PublicPaymentContext,
@@ -97,8 +97,8 @@ function PublicInvoicePage() {
 		);
 	}
 
-	const middayInvoice = toMiddayInvoice(invoice);
-	const { width, height } = getInvoiceTemplateSize(middayInvoice.template);
+	const invoiceDocument = toInvoiceDocument(invoice);
+	const { width, height } = getInvoiceTemplateSize(invoiceDocument.template);
 	const encodedToken = encodeURIComponent(invoice.token);
 	const downloadUrl = `/api/invoice/download/${encodedToken}`;
 	const sellerName =
@@ -210,7 +210,7 @@ function PublicInvoicePage() {
 		return (
 			<section className="flex h-full w-full items-center justify-center overflow-hidden bg-paper p-4">
 				<HtmlTemplate
-					data={middayInvoice}
+					data={invoiceDocument}
 					width={width}
 					height={height}
 					appearance="public"
@@ -263,7 +263,7 @@ function PublicInvoicePage() {
 							}}
 						>
 							<HtmlTemplate
-								data={middayInvoice}
+								data={invoiceDocument}
 								width={width}
 								height={height}
 								appearance="public"

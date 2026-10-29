@@ -1,6 +1,6 @@
 type Id<_Table extends string> = string;
 
-import type { EditorDoc } from "../../lib/midday-invoice/types";
+import type { EditorDoc } from "../../lib/invoice-document/types";
 import type {
 	FiscalizationSnapshot,
 	InvoiceComplianceSnapshot,

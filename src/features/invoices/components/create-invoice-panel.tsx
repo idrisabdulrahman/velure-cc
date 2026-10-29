@@ -113,8 +113,8 @@ import type {
 import { isCorrectionSource } from "#/features/invoices/correction-sources";
 import { formatMoney } from "#/features/invoices/format";
 import type { ImportedInvoiceDraft } from "#/features/invoices/import-spreadsheet";
+import { toEditorDoc } from "#/features/invoices/invoice-document-adapter";
 import { lineTotalKobo, priceToKobo } from "#/features/invoices/line-money";
-import { toEditorDoc } from "#/features/invoices/midday-adapter";
 import type {
 	InvoiceDocumentType,
 	InvoiceLineItem,
@@ -129,7 +129,7 @@ import {
 	VAT_CATEGORY_OPTIONS,
 } from "#/features/products/product-form-utils";
 import { useUnifiedAuth } from "#/lib/auth-hook";
-import type { EditorDoc } from "#/lib/midday-invoice/types";
+import type { EditorDoc } from "#/lib/invoice-document/types";
 import { useSupabaseSession } from "#/lib/supabase-session";
 import { createClient, listClients } from "#/server/data/clients";
 import {

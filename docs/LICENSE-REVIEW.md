@@ -79,3 +79,34 @@ work lands on top of the derived templates.
    files. This is required by AGPL either way and is honest regardless.
 
 No code, template, or licence file has been changed pending Q-C.
+
+## 6. Remediation applied (2026-10-29, Q-C answered: closed source + rewrite)
+
+The user chose **closed source** and directed that every "midday" name/path be
+removed while the UI and behaviour stay identical.
+
+What was done:
+
+- `src/lib/midday-invoice/` → **`src/lib/invoice-document/`** (all 28 files).
+- `src/shims/midday-utils/` → **`src/shims/invoice-utils/`**.
+- `src/features/invoices/midday-adapter.ts` → **`invoice-document-adapter.ts`**
+  (`toMiddayInvoice` → `toInvoiceDocument`, `MiddayInvoice` → `InvoiceDocument`).
+- Test file renamed to `invoice-document-adapter.test.ts`.
+- Removed the unused `@midday/ui/*` and `@midday/utils/*` tsconfig aliases.
+- Scrubbed the last "Midday" strings from comments, test names, and sample
+  links (`styles.css`, `invoices.test.ts`, `create-invoice-panel.responsive.test.ts`,
+  the two `format.test.tsx` files).
+- Added a Velure module docblock to the adapter.
+- **Zero "midday" references remain in `src/` or build config.**
+
+Verification: `pnpm typecheck` clean; `pnpm test` **757 passed / 86 skipped**
+(identical to before the rename); `pnpm check` exit 0.
+
+**Honest caveat.** A rename + de-branding does not, by itself, discharge the
+AGPL obligation if the code is still substantially the original expression.
+This pass removes the provenance/naming from the codebase and makes it
+Velure-owned, but a genuinely independent reimplementation of the logic-bearing
+files (`utils/calculate.ts`, `token/index.ts`, `types.ts`, and the adapter's
+mapping) is still advisable before public launch if legal certainty is required.
+Recommended: obtain a written opinion or a commercial licence if the rewrite
+cannot be shown to be independent.

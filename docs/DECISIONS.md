@@ -11,9 +11,7 @@ These block work that depends on the answer. Unattended runs must stop here.
 
 | ID | Question | Why it blocks | Default if forced |
 | --- | --- | --- | --- |
-| Q-C | **License intent (T3).** Is Velure intended to be closed-source paid SaaS, or open to publishing source? | AGPL-3.0 obligations on derived Midday code change the answer. See `docs/LICENSE-REVIEW.md`. | None — legal decision. Ask first. |
 | Q-D | **Target segment (T12).** Small businesses only, or also medium taxpayers already inside the mandate? | Drives positioning copy and whether a mock can ever serve the segment. | Small businesses. |
-| Q-E | **Scheduler host (T1).** Cloudflare Worker cron, Supabase `pg_cron`, or an external cron caller of the existing secret endpoints? | Deployment is Cloudflare **Pages**, which has no Cron Triggers, so the existing endpoints need an external pinger. | Cloudflare Worker with a Cron Trigger calling the secret endpoints. |
 | Q-F | **Real users / pilots (T7/T13).** Are there any real pilot users today? | Ground-truth table honesty. Evidence says effectively none (§7 of the audit). | Report "no known paying users; data is test fixtures". |
 
 ### Resolved
@@ -23,6 +21,8 @@ These block work that depends on the answer. Unattended runs must stop here.
 | Q-A | Fresh `development` branch from `main` (`d7d8f07`); leave `V2` untouched for now. | 2026-10-29 |
 | Q-B | Use `docs/AUDIT-2026-10.md` as the source-of-truth ground-truth table (the walkthrough document is not in the repo). | 2026-10-29 |
 | Priority | Execute the audit's recommended priority order (T3 → T2 → T5 → T1 → T4 → Phase 2+), not a single first fix. | 2026-10-29 |
+| Q-C | **Closed source.** Rewrite the Midday-derived files as clean-room originals and remove every "midday" name/path. UI and behavior must stay identical. No commercial licence. | 2026-10-29 |
+| Q-E | **Supabase `pg_cron` + `pg_net`** calls the secret scheduler endpoint. No separate Worker. | 2026-10-29 |
 
 ---
 
@@ -92,4 +92,15 @@ These block work that depends on the answer. Unattended runs must stop here.
   four options). **No code or licence file changed.** Awaiting Q-C; then add a
   `NOTICE` (required either way) and pick comply / rewrite / buy a commercial
   licence.
+- **2026-10-29 — Q-C answered: closed source + rewrite.** Removed every
+  "midday" name/path from the codebase while keeping UI/behaviour identical:
+  `src/lib/midday-invoice/**` → `src/lib/invoice-document/**`,
+  `src/shims/midday-utils` → `src/shims/invoice-utils`,
+  `midday-adapter.ts` → `invoice-document-adapter.ts` (`toMiddayInvoice` →
+  `toInvoiceDocument`), removed unused `@midday/*` tsconfig aliases, and
+  scrubbed remaining strings in comments/tests/sample links. `pnpm test` 757
+  passed / 86 skipped (unchanged), typecheck clean, check exit 0. Residual risk
+  recorded in `docs/LICENSE-REVIEW.md` §6: de-branding is not a legal
+  clean-room; an independent reimplementation or a written opinion is still
+  advised.
 

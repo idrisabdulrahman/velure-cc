@@ -60,7 +60,7 @@ describe("formatEditorContent (pdf)", () => {
 							type: "text",
 							text: "link",
 							marks: [
-								{ type: "link", attrs: { href: "https://midday.ai" } },
+								{ type: "link", attrs: { href: "https://example.com" } },
 								{ type: "strike" },
 							],
 						},
@@ -69,7 +69,7 @@ describe("formatEditorContent (pdf)", () => {
 			],
 		};
 		const html = renderToStaticMarkup(<>{formatEditorContent(doc)}</>);
-		expect(html).toContain("href=https://midday.ai");
+		expect(html).toContain("href=https://example.com");
 		expect(html).toContain("color=black");
 	});
 });

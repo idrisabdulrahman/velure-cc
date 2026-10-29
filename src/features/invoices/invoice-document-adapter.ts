@@ -3,13 +3,23 @@ import { NIGERIA_AUTHORITY_LABEL } from "#/features/compliance/nigeria";
 import type {
 	EditorDoc,
 	EditorNode,
-	Invoice as MiddayInvoice,
+	Invoice as InvoiceDocument,
 	Template,
-} from "#/lib/midday-invoice/types";
+} from "#/lib/invoice-document/types";
 import { normalizeCurrencyCode, resolveCurrencyLocale } from "./format";
 import type { InvoiceRecord } from "./types";
 import { INVOICE_DOCUMENT_TYPE_LABELS } from "./types";
 
+/**
+ * Velure invoice-document mapper.
+ *
+ * Translates a stored `InvoiceRecord` into the flat, presentation-only shape
+ * that the HTML and PDF document renderers consume. It owns the mapping
+ * between Velure's domain model (compliance totals, fiscalization snapshot,
+ * document type, template settings) and the renderer's fields, so the
+ * renderers stay free of domain logic. All money values are handled as major
+ * units for display only; stored values remain integer minor units.
+ */
 export function toEditorDoc(
 	text: string | EditorDoc | null | undefined,
 ): EditorDoc | null {
@@ -155,7 +165,7 @@ export function getInvoiceTemplateSize(template: Template) {
 	return { width: 595, height: 842 };
 }
 
-export function toMiddayInvoice(invoice: InvoiceRecord): MiddayInvoice {
+export function toInvoiceDocument(invoice: InvoiceRecord): InvoiceDocument {
 	const template = buildTemplate(invoice);
 	const compliance =
 		invoice.compliance ??

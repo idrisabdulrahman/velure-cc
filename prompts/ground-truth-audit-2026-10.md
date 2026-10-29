@@ -100,6 +100,14 @@ and file evidence for each, then present findings and ask which to act on.
   and honest usage line to `docs/AUDIT-2026-10.md`. No pricing number changed.
 - 2026-10-29 (T3): Wrote `docs/LICENSE-REVIEW.md` (AGPL-3.0, derived files,
   obligations, options). Nothing rewritten. Awaiting Q-C.
+- 2026-10-29 (T3/Q-C): User chose closed source + rewrite. Renamed
+  `src/lib/midday-invoice` → `src/lib/invoice-document`,
+  `src/shims/midday-utils` → `src/shims/invoice-utils`,
+  `midday-adapter.ts` → `invoice-document-adapter.ts` (`toMiddayInvoice` →
+  `toInvoiceDocument`), removed unused `@midday/*` tsconfig aliases, scrubbed
+  remaining strings. Zero "midday" references remain in `src`/config.
+  Typecheck clean, tests 757/86, check exit 0. Residual legal caveat recorded
+  in `docs/LICENSE-REVIEW.md` §6.
 - 2026-10-29 (T1): Plan presented; awaiting Q-E (scheduler host). The three
   new tests and typecheck/lint are green; `pnpm test` = 757 passed / 86 skipped;
   `pnpm typecheck` clean; `pnpm check` exit 0 (357 pre-existing warnings).

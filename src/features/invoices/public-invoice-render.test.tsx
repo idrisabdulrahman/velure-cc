@@ -1,7 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { HtmlTemplate } from "#/lib/midday-invoice/templates/html";
-import { getInvoiceTemplateSize, toMiddayInvoice } from "./midday-adapter";
+import { HtmlTemplate } from "#/lib/invoice-document/templates/html";
+import {
+	getInvoiceTemplateSize,
+	toInvoiceDocument,
+} from "./invoice-document-adapter";
 import type { InvoiceRecord } from "./types";
 
 /* Critique T2: the public customer page must never render a mock sandbox IRN
@@ -42,11 +45,11 @@ const mockClearedInvoice = {
 
 describe("public invoice HTML page hides mock clearance artifacts", () => {
 	it("renders no mock IRN or QR payload even when the invoice is mock-cleared", () => {
-		const midday = toMiddayInvoice(mockClearedInvoice);
-		const { width, height } = getInvoiceTemplateSize(midday.template);
+		const invoiceDocument = toInvoiceDocument(mockClearedInvoice);
+		const { width, height } = getInvoiceTemplateSize(invoiceDocument.template);
 		const html = renderToStaticMarkup(
 			<HtmlTemplate
-				data={midday}
+				data={invoiceDocument}
 				width={width}
 				height={height}
 				appearance="public"
