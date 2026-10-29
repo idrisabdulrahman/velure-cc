@@ -254,14 +254,15 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	updateSchedule: "app-scoped",
 	deleteSchedule: "app-scoped",
 	setScheduleStatus: "app-scoped",
+	// resolves the caller's active workspace, then filters runs by it
+	listRecurringRuns: "app-scoped",
 	// reminders.ts
 	defaultRule: "pure",
-	// currentRule() reads reminder_rules with no WHERE clause: the ONLY gate
-	// is RLS on the caller's own JWT client (owner-scoped table). Not safe
-	// against a no-RLS client, which is why they are deliberately not
-	// exercised by the no-RLS fake in tenant-isolation.test.ts.
-	getReminderSettings: "rls-only",
-	saveReminderSettings: "rls-only",
+	// currentRule() filters reminder_rules by owner_id. With the user-scoped
+	// client that matches RLS; with the service-role scheduler client the
+	// app-layer filter is the only gate, so these are app-scoped.
+	getReminderSettings: "app-scoped",
+	saveReminderSettings: "app-scoped",
 	getCollectionOverview: "app-scoped",
 	getInvoiceTimeline: "app-scoped",
 	pauseInvoiceReminders: "app-scoped",
@@ -273,6 +274,8 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	runReminderBatch: "app-scoped",
 	// resolves the caller's active workspace and filters events by owner_id
 	sendQueuedEmails: "app-scoped",
+	// filters reminder_runs by owner_id (the scheduler writes owner_id too)
+	listReminderRuns: "app-scoped",
 	// reports.ts
 	getRevenueCashFlow: "app-scoped",
 	// revenue-reporting.ts
@@ -474,6 +477,9 @@ const ROUTE_CLASSIFICATIONS: Record<string, Classification> = {
 	"auth/$first/$second.ts": "session",
 	"auth/supabase-session.ts": "session",
 	"email/resend/webhook.ts": "server-admin",
+	// Scheduler entry point: shared secret (INVOICE_SCHEDULER_SECRET), no
+	// session or tenant id in the request.
+	"cron/tick.ts": "server-admin",
 	"integrations/quickbooks/callback.ts": "session",
 	"integrations/quickbooks/connect.ts": "session",
 	"integrations/xero/callback.ts": "session",

@@ -6,7 +6,6 @@ import {
 	PauseCircle,
 	Pencil,
 	PlayCircle,
-	RefreshCcw,
 	Repeat2,
 	StopCircle,
 	Trash2,
@@ -35,6 +34,7 @@ import { useSupabaseSession } from "#/lib/supabase-session";
 import {
 	createSchedule,
 	deleteSchedule,
+	listRecurringRuns,
 	listSchedules,
 	setScheduleStatus,
 	updateSchedule,
@@ -47,7 +47,6 @@ type Frequency = "monthly" | "quarterly";
 type BusyAction =
 	| "create"
 	| "update"
-	| "run"
 	| `delete:${string}`
 	| `status:${string}`
 	| null;
@@ -102,19 +101,14 @@ function RecurringBillingSettingsPage() {
 		queryFn: () => listSchedules(supabaseClient!, userId!, "all"),
 		enabled: canRead,
 	});
+	const { data: recentRuns } = useQuery({
+		queryKey: ["supabase-recurring-runs", userId ?? "none"],
+		queryFn: () => listRecurringRuns(supabaseClient!, userId!, 5),
+		enabled: canRead,
+	});
 	const workspace = undefined;
 	const schedules = schedulesRaw ?? [];
-	const runRecurringGeneration = async (
-		_args?: object,
-	): Promise<{
-		createdCount: number;
-		skippedCount: number;
-		failedCount: number;
-	}> => {
-		throw new Error(
-			"Recurring generation remains a server job and is not available in the Supabase UI yet.",
-		);
-	};
+	const latestRun = recentRuns?.[0];
 	const [form, setForm] = useState<ScheduleForm>(() => initialForm());
 	const [editingScheduleId, setEditingScheduleId] = useState<string | null>(
 		null,
@@ -241,32 +235,6 @@ function RecurringBillingSettingsPage() {
 		}
 	}
 
-	async function handleRunDueSchedules() {
-		setBusyAction("run");
-		try {
-			const result = await (
-				runRecurringGeneration as () => Promise<{
-					createdCount: number;
-					skippedCount: number;
-					failedCount: number;
-				}>
-			)();
-			toast({
-				title: "Recurring invoice scan complete",
-				description: `${result.createdCount} created, ${result.skippedCount} skipped, ${result.failedCount} failed.`,
-			});
-		} catch (error) {
-			toast({
-				title: "Could not run recurring scan",
-				description:
-					error instanceof Error ? error.message : "Please try again later.",
-				variant: "error",
-			});
-		} finally {
-			setBusyAction(null);
-		}
-	}
-
 	async function handleStatusChange(
 		scheduleId: string,
 		status: "active" | "paused" | "ended",
@@ -303,16 +271,6 @@ function RecurringBillingSettingsPage() {
 				</div>
 				<div className="flex flex-wrap gap-2">
 					<Button
-						variant="outline"
-						className="border-rule bg-paper"
-						disabled
-						title="Not available yet: automated generation has not shipped."
-						onClick={handleRunDueSchedules}
-					>
-						<RefreshCcw className="mr-2 h-4 w-4" />
-						Run due scan
-					</Button>
-					<Button
 						className="bg-brand text-brand-ink hover:bg-brand-hi"
 						onClick={() => {
 							setEditingScheduleId(null);
@@ -325,11 +283,45 @@ function RecurringBillingSettingsPage() {
 				</div>
 			</div>
 
-			<Callout tone="warn" title="Status: not automated yet.">
-				You can create, edit, pause, and end schedules, but Velure does not
-				generate the invoices on a schedule yet. Create repeat invoices manually
-				until automated generation ships.
+			<Callout tone="info" title="Status: automatic drafts.">
+				Velure's background scheduler creates a draft invoice for each due
+				schedule (run records appear below). Drafts are never issued or emailed
+				automatically: a schedule does not store a customer record, so you
+				complete the customer and send the draft from the normal invoice flow.
+				If no run appears below, the scheduler is not running yet — create the
+				repeat invoice manually meanwhile.
 			</Callout>
+
+			<section className="border border-rule bg-paper-2 p-4">
+				<div className="flex flex-wrap items-baseline justify-between gap-2">
+					<h2 className="text-sm font-semibold text-ink">Last automatic run</h2>
+					<span className="text-xs text-ink-3">
+						{recentRuns === undefined
+							? "Loading…"
+							: latestRun
+								? new Date(latestRun.createdAt).toLocaleString()
+								: "No run recorded yet"}
+					</span>
+				</div>
+				{latestRun ? (
+					<ul className="mt-3 space-y-1 text-sm text-ink-2">
+						<li>
+							Period <span className="text-ink">{latestRun.periodKey}</span> —{" "}
+							{latestRun.status === "created"
+								? "draft created"
+								: latestRun.status === "skipped"
+									? "skipped"
+									: "failed"}
+							{latestRun.error ? `: ${latestRun.error}` : ""}
+						</li>
+					</ul>
+				) : (
+					<p className="mt-3 text-sm text-ink-3">
+						No automatic run has been recorded for this workspace yet. Until the
+						scheduler is active, create repeat invoices manually.
+					</p>
+				)}
+			</section>
 
 			<section className="grid gap-3 md:grid-cols-3">
 				<Metric

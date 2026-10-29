@@ -246,10 +246,18 @@ function isInReminderWindow(
 	return daysUntilDue <= daysBeforeDue;
 }
 
-async function currentRule(client: Supabase) {
+/**
+ * The caller's reminder rule. `reminder_rules` is owner-scoped, so the read
+ * filters by `owner_id`. Under the user-scoped RLS client the filter is
+ * redundant (RLS already restricts to the owner); it is required under the
+ * service-role client used by the scheduler sweep, where RLS is bypassed and
+ * this app-layer filter is the only tenancy control.
+ */
+async function currentRule(client: Supabase, userId: string) {
 	const { data, error } = await client
 		.from("reminder_rules")
 		.select("*")
+		.eq("owner_id", userId)
 		.limit(1)
 		.maybeSingle();
 	if (error) throw error;
@@ -261,7 +269,7 @@ export async function getReminderSettings(
 	client: Supabase,
 	userId: string,
 ): Promise<ReminderRule> {
-	const rule = await currentRule(client);
+	const rule = await currentRule(client, userId);
 	if (rule) return rule;
 	return { ...defaultRule(userId), _id: "" };
 }
@@ -280,7 +288,7 @@ export async function saveReminderSettings(
 ): Promise<string> {
 	assertValidReminderRule(args);
 	const now = Date.now();
-	const existing = await currentRule(client);
+	const existing = await currentRule(client, userId);
 
 	if (existing) {
 		const { error } = await client
@@ -677,7 +685,17 @@ export async function queueReminderEvent(
 		})
 		.select("id")
 		.single();
-	if (insertError) throw insertError;
+	if (insertError) {
+		// Lock-in hardening: the partial unique index on
+		// (invoice_id, stage, channel) WHERE status <> 'failed' can still
+		// fire under a race with a concurrent sweep or a double click. That
+		// is the same "already queued" outcome as the pre-check above, so it
+		// is returned as a skip rather than surfaced as a job failure.
+		if ((insertError as { code?: string }).code === "23505") {
+			return { skipped: true, reason: "Already queued." };
+		}
+		throw insertError;
+	}
 
 	const baseReminder = (invoice.reminder as Record<string, unknown> | null) ?? {
 		enabled: true,
@@ -738,7 +756,7 @@ export async function runReminderBatch(
 	const today = args.date ?? new Date().toISOString().slice(0, 10);
 	if (!workspaceId)
 		return { date: today, scannedCount: 0, queuedCount: 0, escalatedCount: 0 };
-	const rule = (await currentRule(client)) ?? defaultRule(userId);
+	const rule = (await currentRule(client, userId)) ?? defaultRule(userId);
 	const { data, error } = await client
 		.from("invoices")
 		.select("id, status, due_date, reminder, lifecycle, compliance")
@@ -862,4 +880,64 @@ export async function sendQueuedEmails(client: Supabase, userId: string) {
 		else sent++;
 	}
 	return { sent, skipped };
+}
+
+export type ReminderRun = {
+	_id: string;
+	runDate: string;
+	status: "queued" | "completed" | "failed";
+	scannedCount: number;
+	queuedCount: number;
+	sentCount: number;
+	escalatedCount: number;
+	notes?: string;
+	createdAt: number;
+};
+
+type ReminderRunRow = {
+	id: string;
+	run_date: string;
+	status: "queued" | "completed" | "failed";
+	scanned_count: number;
+	queued_count: number;
+	sent_count: number;
+	escalated_count: number;
+	notes: string | null;
+	created_at: string;
+};
+
+function toReminderRun(row: ReminderRunRow): ReminderRun {
+	return {
+		_id: row.id,
+		runDate: row.run_date,
+		status: row.status,
+		scannedCount: row.scanned_count,
+		queuedCount: row.queued_count,
+		sentCount: row.sent_count,
+		escalatedCount: row.escalated_count,
+		notes: row.notes ?? undefined,
+		createdAt: epoch(row.created_at) ?? 0,
+	};
+}
+
+/**
+ * The owner's most recent reminder runs, newest first. `reminder_runs` is the
+ * bookkeeping table the scheduler writes (scan counts per day); the owner RLS
+ * policy lets the settings page read its own rows with the user-scoped client.
+ */
+export async function listReminderRuns(
+	client: Supabase,
+	userId: string,
+	limit = 5,
+): Promise<ReminderRun[]> {
+	const { data, error } = await client
+		.from("reminder_runs")
+		.select("*")
+		.eq("owner_id", userId)
+		.order("created_at", { ascending: false })
+		.limit(Math.min(Math.max(Math.floor(limit), 1), 50));
+	if (error) throw error;
+	return (data ?? []).map((row) =>
+		toReminderRun(row as unknown as ReminderRunRow),
+	);
 }

@@ -38,6 +38,7 @@ import { Route as SolutionsEnterpriseRouteImport } from './routes/solutions.ente
 import { Route as SolutionsSmallBusinessRouteImport } from './routes/solutions.small-business'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiAuthSupabaseSessionRouteImport } from './routes/api/auth/supabase-session'
+import { Route as ApiCronTickRouteImport } from './routes/api/cron/tick'
 import { Route as ApiInvoiceAuditRouteImport } from './routes/api/invoice/audit'
 import { Route as ApiInvoiceScheduledRouteImport } from './routes/api/invoice/scheduled'
 import { Route as ApiRemindersSendQueueRouteImport } from './routes/api/reminders/send-queue'
@@ -209,6 +210,11 @@ const ApiAuthSupabaseSessionRoute = ApiAuthSupabaseSessionRouteImport.update({
   path: '/api/auth/supabase-session',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCronTickRoute = ApiCronTickRouteImport.update({
+  id: '/api/cron/tick',
+  path: '/api/cron/tick',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiInvoiceAuditRoute = ApiInvoiceAuditRouteImport.update({
   id: '/api/invoice/audit',
   path: '/api/invoice/audit',
@@ -366,6 +372,7 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/auth/supabase-session': typeof ApiAuthSupabaseSessionRoute
+  '/api/cron/tick': typeof ApiCronTickRoute
   '/api/invoice/audit': typeof ApiInvoiceAuditRoute
   '/api/invoice/scheduled': typeof ApiInvoiceScheduledRoute
   '/api/reminders/send-queue': typeof ApiRemindersSendQueueRoute
@@ -416,6 +423,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/auth/supabase-session': typeof ApiAuthSupabaseSessionRoute
+  '/api/cron/tick': typeof ApiCronTickRoute
   '/api/invoice/audit': typeof ApiInvoiceAuditRoute
   '/api/invoice/scheduled': typeof ApiInvoiceScheduledRoute
   '/api/reminders/send-queue': typeof ApiRemindersSendQueueRoute
@@ -471,6 +479,7 @@ export interface FileRoutesById {
   '/settings/': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/auth/supabase-session': typeof ApiAuthSupabaseSessionRoute
+  '/api/cron/tick': typeof ApiCronTickRoute
   '/api/invoice/audit': typeof ApiInvoiceAuditRoute
   '/api/invoice/scheduled': typeof ApiInvoiceScheduledRoute
   '/api/reminders/send-queue': typeof ApiRemindersSendQueueRoute
@@ -527,6 +536,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/api/auth/$'
     | '/api/auth/supabase-session'
+    | '/api/cron/tick'
     | '/api/invoice/audit'
     | '/api/invoice/scheduled'
     | '/api/reminders/send-queue'
@@ -577,6 +587,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/api/auth/$'
     | '/api/auth/supabase-session'
+    | '/api/cron/tick'
     | '/api/invoice/audit'
     | '/api/invoice/scheduled'
     | '/api/reminders/send-queue'
@@ -631,6 +642,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/api/auth/$'
     | '/api/auth/supabase-session'
+    | '/api/cron/tick'
     | '/api/invoice/audit'
     | '/api/invoice/scheduled'
     | '/api/reminders/send-queue'
@@ -674,6 +686,7 @@ export interface RootRouteChildren {
   SolutionsSmallBusinessRoute: typeof SolutionsSmallBusinessRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiAuthSupabaseSessionRoute: typeof ApiAuthSupabaseSessionRoute
+  ApiCronTickRoute: typeof ApiCronTickRoute
   ApiInvoiceAuditRoute: typeof ApiInvoiceAuditRoute
   ApiInvoiceScheduledRoute: typeof ApiInvoiceScheduledRoute
   ApiRemindersSendQueueRoute: typeof ApiRemindersSendQueueRoute
@@ -900,6 +913,13 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/supabase-session'
       fullPath: '/api/auth/supabase-session'
       preLoaderRoute: typeof ApiAuthSupabaseSessionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/cron/tick': {
+      id: '/api/cron/tick'
+      path: '/api/cron/tick'
+      fullPath: '/api/cron/tick'
+      preLoaderRoute: typeof ApiCronTickRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/invoice/audit': {
@@ -1159,6 +1179,7 @@ const rootRouteChildren: RootRouteChildren = {
   SolutionsSmallBusinessRoute: SolutionsSmallBusinessRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiAuthSupabaseSessionRoute: ApiAuthSupabaseSessionRoute,
+  ApiCronTickRoute: ApiCronTickRoute,
   ApiInvoiceAuditRoute: ApiInvoiceAuditRoute,
   ApiInvoiceScheduledRoute: ApiInvoiceScheduledRoute,
   ApiRemindersSendQueueRoute: ApiRemindersSendQueueRoute,

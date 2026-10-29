@@ -30,6 +30,7 @@ import {
 	getCollectionOverview,
 	getInvoiceTimeline,
 	getReminderSettings,
+	listReminderRuns,
 	markManualException as markManualExceptionSupabase,
 	pauseInvoiceReminders,
 	queueReminderEvent as queueReminderEventSupabase,
@@ -138,6 +139,15 @@ function PaymentRemindersSettingsPage() {
 		},
 		enabled: canRead,
 	});
+	const { data: recentRuns } = useQuery({
+		queryKey: ["supabase-reminder-runs", userId ?? "none"],
+		queryFn: () => {
+			const context = requireSupabase();
+			return listReminderRuns(context.client, context.userId, 5);
+		},
+		enabled: canRead,
+	});
+	const latestRun = recentRuns?.[0];
 	const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(
 		null,
 	);
@@ -362,11 +372,38 @@ function PaymentRemindersSettingsPage() {
 				</Button>
 			</div>
 
-			<Callout tone="info" title="Status: manual runs.">
-				Reminders are queued and sent only when you press Scan invoices and Send
-				queue. No background scheduler is connected yet, so the schedule below
-				does not send on its own.
+			<Callout tone="info" title="Status: scheduled scan.">
+				Velure scans sent, unpaid invoices on a schedule and queues the
+				reminders due under the schedule below. Automatic customer email sending
+				is an explicit opt-in, so queued reminders are delivered once background
+				sending is enabled or when you press Send queue. You can also run the
+				scan manually at any time.
 			</Callout>
+
+			<Panel
+				title="Last automatic run"
+				sub={
+					recentRuns === undefined
+						? "Loading…"
+						: latestRun
+							? new Date(latestRun.createdAt).toLocaleString()
+							: "No run recorded yet"
+				}
+			>
+				{latestRun ? (
+					<p className="text-sm text-ink-2">
+						{latestRun.scannedCount} invoices scanned · {latestRun.queuedCount}{" "}
+						queued · {latestRun.sentCount} sent
+						{latestRun.notes ? ` · ${latestRun.notes}` : ""}
+					</p>
+				) : (
+					<p className="text-sm text-ink-2">
+						No automatic run has been recorded for this workspace yet. Until the
+						scheduler is active, use Scan invoices below — the schedule does not
+						send on its own.
+					</p>
+				)}
+			</Panel>
 
 			<KpiStrip>
 				<Kpi

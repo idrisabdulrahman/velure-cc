@@ -1859,12 +1859,24 @@ export async function createDraft(
 	return invoice;
 }
 
+/**
+ * Create or update a draft invoice.
+ *
+ * `options.workspaceId` / `options.writer` are the SERVER-ONLY system-job
+ * escape hatches, mirroring `recordInvoiceAudit`'s `workspaceId` option: the
+ * recurring generator writes into the schedule row's real workspace (which may
+ * not be the owner's current active workspace) and must not use the browser
+ * audit transport (a relative fetch does not exist on the server). Browser
+ * callers pass neither and keep the original behaviour.
+ */
 export async function autosaveDraft(
 	client: Supabase,
 	userId: string,
 	args: InvoiceInput,
+	options: { workspaceId?: string; writer?: InvoiceAuditWriter } = {},
 ): Promise<Invoice> {
-	const workspaceId = await resolveActiveWorkspaceId(client, userId);
+	const workspaceId =
+		options.workspaceId ?? (await resolveActiveWorkspaceId(client, userId));
 	if (!workspaceId) throw new Error("No active workspace.");
 
 	const now = Date.now();
@@ -2030,7 +2042,7 @@ export async function autosaveDraft(
 		...doc,
 		createdAt: current?.createdAt ?? now,
 	});
-	await recordInvoiceAudit(client, userId, {
+	await (options.writer ?? recordInvoiceAudit)(client, userId, {
 		action: args.id ? "invoice.edit" : "invoice.create",
 		resourceId: id,
 		before: current,

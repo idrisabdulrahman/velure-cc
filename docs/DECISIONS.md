@@ -104,3 +104,38 @@ These block work that depends on the answer. Unattended runs must stop here.
   clean-room; an independent reimplementation or a written opinion is still
   advised.
 
+### 2026-10-29 — Task T1 (scheduler tick, reminder sweep, recurring drafts)
+
+- **Decision (design, pending user enablement):** Automatic reminder **email
+  sending** is off by default. The scheduled sweep always scans and queues, but
+  `sendQueuedEmails` only runs inside the tick when
+  `SCHEDULER_REMINDER_SEND_ENABLED === "true"`. Sending customer email is
+  irreversible; enabling it needs the user's explicit approval (recorded here
+  when given).
+- **Decision:** Recurring generation creates **drafts only**. A
+  `recurring_invoice_schedules` row stores a customer *name* but no customer
+  id/email, and leaving Draft requires a linked customer (B2 gate), so
+  `auto_send` cannot be honoured. The UI says a draft is created and the
+  operator completes/ sends it in the normal flow. Honouring `auto_send` needs a
+  schema + UI product decision.
+- **Decision:** One scheduler entry point (`POST /api/cron/tick`) with a job
+  registry and per-job `job_runs` bookkeeping, instead of five separate cron
+  entries. Each job is individually idempotent, so a retried tick is safe.
+- **Decision:** No global scheduler-health endpoint/UI function; the Settings
+  pages read `reminder_runs` / `recurring_invoice_runs` through the user-scoped
+  RLS client, which is the real "last run" surface.
+- **Decision:** The `pg_cron`/`pg_net` migration is written but **not applied**
+  to the live project. Applying it and creating the Vault secrets
+  (`velure_scheduler_url`, `velure_scheduler_secret`) are operator actions that
+  need the user's go-ahead. The reminder-events partial unique index was checked
+  against live data first: 0 duplicate `(invoice_id, stage, channel)` keys with
+  `status <> 'failed'` (the table had 0 rows anyway).
+- **Fix found on the way:** `currentRule` in `src/server/data/reminders.ts` read
+  `reminder_rules` with no owner filter. That is safe under the user-scoped RLS
+  client but wrong for the service-role sweep (it would apply one owner's rule
+  to every workspace). It now filters by `owner_id`, and the coverage guard
+  reclassifies `getReminderSettings`/`saveReminderSettings` as `app-scoped`.
+- **Checks:** `pnpm test` → 787 passed / 86 skipped (baseline 757; +30 new
+  tests); `pnpm typecheck` clean; `pnpm check` exit 0 (359 pre-existing
+  warnings).
+

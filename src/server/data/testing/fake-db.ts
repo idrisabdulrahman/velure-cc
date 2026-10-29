@@ -34,6 +34,14 @@ type Filter = SimpleFilter | InFilter;
 
 type Result = { data: unknown; error: unknown; count?: number | null };
 
+/**
+ * Process-wide id sequence for inserted rows. A per-builder counter restarted at
+ * 0 for every `from(...).insert(...)`, so two separate inserts produced the SAME
+ * id and an `update().eq("id", ...)` then hit both rows. Ids only need to be
+ * unique inside one fake store, and a module counter guarantees that.
+ */
+let fakeIdSequence = 0;
+
 function matches(row: Row, filter: Filter): boolean {
 	const actual = row[filter.column];
 	switch (filter.kind) {
@@ -184,6 +192,71 @@ function uniqueNumberViolation(
 	return null;
 }
 
+function duplicateKeyResult(constraint: string, key: string): Result {
+	return {
+		data: null,
+		error: {
+			code: "23505",
+			message: `duplicate key value violates unique constraint "${constraint}"`,
+			details: `Key (${key.replace(/:/g, ", ")}) already exists.`,
+			hint: null,
+		},
+	};
+}
+
+/**
+ * Emulation of the two scheduler indexes the T1 jobs depend on:
+ *
+ *   * `reminder_events_invoice_stage_channel_unique` (migration
+ *     20261029000000) — partial unique on (invoice_id, stage, channel) WHERE
+ *     status <> 'failed', so one *live* reminder event exists per tuple and a
+ *     `failed` row does not block a retry;
+ *   * `recurring_invoice_runs` unique (schedule_id, period_key) (migration
+ *     20260814234545) — one generation ledger row per schedule and period.
+ *
+ * Both return the same 23505 shape the app handles (`queueReminderEvent`
+ * converts it to a skip; `generateOne` lets the unique constraint be the
+ * race backstop).
+ */
+function schedulerUniqueViolation(
+	table: string,
+	existing: Row[],
+	incoming: Row[],
+): Result | null {
+	if (table === "reminder_events") {
+		const key = (row: Row) => `${row.invoice_id}:${row.stage}:${row.channel}`;
+		const live = new Set(
+			existing.filter((row) => row.status !== "failed").map(key),
+		);
+		for (const row of incoming) {
+			if (row.status === "failed") continue;
+			if (live.has(key(row))) {
+				return duplicateKeyResult(
+					"reminder_events_invoice_stage_channel_unique",
+					key(row),
+				);
+			}
+			live.add(key(row));
+		}
+		return null;
+	}
+	if (table === "recurring_invoice_runs") {
+		const key = (row: Row) => `${row.schedule_id}:${row.period_key}`;
+		const seen = new Set(existing.map(key));
+		for (const row of incoming) {
+			if (seen.has(key(row))) {
+				return duplicateKeyResult(
+					"recurring_invoice_runs_schedule_id_period_key_key",
+					key(row),
+				);
+			}
+			seen.add(key(row));
+		}
+		return null;
+	}
+	return null;
+}
+
 function submissionUniqueViolation(
 	table: string,
 	existing: Row[],
@@ -224,7 +297,6 @@ class FakeBuilder implements PromiseLike<Result> {
 	private rangeValue: { from: number; to: number } | null = null;
 	private orderValue: { column: string; ascending: boolean } | null = null;
 	private terminal: "none" | "single" | "maybeSingle" = "none";
-	private counter = 0;
 
 	constructor(
 		private readonly tables: FakeTables,
@@ -378,6 +450,12 @@ class FakeBuilder implements PromiseLike<Result> {
 				this.values ?? [],
 			);
 			if (submissionViolation) return submissionViolation;
+			const schedulerViolation = schedulerUniqueViolation(
+				this.table,
+				rows,
+				this.values ?? [],
+			);
+			if (schedulerViolation) return schedulerViolation;
 			const inserted = (this.values ?? []).map((raw) => {
 				const value = { ...raw };
 				if (this.table === "invoice_submission_queue") {
@@ -390,7 +468,7 @@ class FakeBuilder implements PromiseLike<Result> {
 					value.provider ??= "mock";
 				}
 				if (value.id === undefined) {
-					value.id = `${this.table}-row-${++this.counter}`;
+					value.id = `${this.table}-row-${++fakeIdSequence}`;
 				}
 				rows.push(value);
 				return value;
