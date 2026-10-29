@@ -66,3 +66,86 @@ describe("compliance export content", () => {
 		expect(parsed.invoices).toEqual([ROW]);
 	});
 });
+
+/**
+ * The `total` column used to be written from `payment_amount`, which is the
+ * amount PAID — 0 for every draft, unpaid, overdue or canceled invoice — so the
+ * compliance CSV reported 0 for most rows. It now uses the same precedence the
+ * app uses for an invoice total (netPayable, else grandTotal less withholding,
+ * else the summed line items).
+ */
+describe("compliance export totals", () => {
+	function totalCell(row: ComplianceExportInvoiceRow) {
+		return buildInvoiceExportContent("invoices_csv", [row], 0).split("\n")[2];
+	}
+
+	it("uses the stored netPayable instead of the paid amount", () => {
+		expect(
+			totalCell({
+				...ROW,
+				payment_amount: 0,
+				compliance: { netPayable: "161250" },
+			}),
+		).toBe(
+			'"INV-2026-0001","Adaeze Foods Ltd","NGN",161250,"sent","2026-10-01","2026-10-15"',
+		);
+	});
+
+	it("falls back to grandTotal less withholding tax", () => {
+		expect(
+			totalCell({
+				...ROW,
+				payment_amount: 0,
+				compliance: { grandTotal: 100000, withholdingTaxAmount: 5000 },
+			}),
+		).toContain('"NGN",95000,');
+	});
+
+	it("falls back to the summed line items", () => {
+		expect(
+			totalCell({
+				...ROW,
+				payment_amount: 0,
+				compliance: {},
+				line_items: [
+					{ quantity: 2, price: 500 },
+					{ quantity: 1, price: 250.25 },
+				],
+			}),
+		).toContain('"NGN",1250.25,');
+	});
+
+	it("still exports the paid amount when nothing else is available", () => {
+		expect(totalCell({ ...ROW, compliance: undefined })).toContain(
+			'"NGN",666500,',
+		);
+	});
+});
+
+/**
+ * The export is a file the user downloads and opens in Excel / Sheets, so a
+ * cell starting with `= + - @` (or a tab / CR) must not be evaluated.
+ */
+describe("compliance export spreadsheet safety", () => {
+	it("neutralises a formula in a free-text column", () => {
+		const csv = buildInvoiceExportContent(
+			"invoices_csv",
+			[{ ...ROW, customer_name: '=HYPERLINK("https://evil","click")' }],
+			0,
+		);
+		const row = csv.split("\n")[2];
+		expect(row).toContain("'=HYPERLINK");
+		expect(row).not.toContain('"=HYPERLINK');
+	});
+
+	it("leaves the numeric total column free of the guard", () => {
+		// A leading apostrophe would turn the total into text and break
+		// spreadsheet arithmetic on the very column the export exists for.
+		const csv = buildInvoiceExportContent(
+			"invoices_csv",
+			[{ ...ROW, compliance: { netPayable: 161250 } }],
+			0,
+		);
+		expect(csv.split("\n")[2]).toContain('"NGN",161250,');
+	});
+});

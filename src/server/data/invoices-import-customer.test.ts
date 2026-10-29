@@ -25,8 +25,48 @@ vi.mock("#/server/data/audit-client", () => ({
 }));
 
 import { CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE } from "#/features/invoices/customer-gate";
+import { recordInvoiceAudit } from "#/server/data/audit-client";
 import { type InvoiceImportRow, importCsv, updateStatus } from "./invoices";
 import { createFakeSupabase, type FakeTables } from "./testing/fake-db";
+
+type FakeClient = ReturnType<typeof createFakeSupabase>["client"];
+
+/**
+ * Forces every insert into `table` for which `shouldFail` returns true to
+ * resolve a Supabase-shaped error, so the partial-import paths can be
+ * exercised. The real builder is a `PromiseLike`, so the stub is awaitable AND
+ * exposes `.select()` (the invoice insert chains `.insert(...).select("id")`).
+ */
+function makeInsertsFail(
+	client: FakeClient,
+	table: string,
+	shouldFail: (values: Record<string, unknown>) => boolean,
+	message: string,
+) {
+	const loose = client as unknown as {
+		from: (name: string) => Record<string, unknown>;
+	};
+	const originalFrom = loose.from.bind(loose);
+	loose.from = (name: string) => {
+		const builder = originalFrom(name);
+		if (name !== table) return builder;
+		const originalInsert = builder.insert as (values: unknown) => unknown;
+		builder.insert = (values: unknown) => {
+			const first = Array.isArray(values) ? values[0] : values;
+			if (!shouldFail((first ?? {}) as Record<string, unknown>)) {
+				return originalInsert.call(builder, values);
+			}
+			const result = { data: null, error: { message } };
+			return {
+				select: () => Promise.resolve(result),
+				// biome-ignore lint/suspicious/noThenProperty: supabase query builders are thenables; the fake must be awaitable the same way.
+				then: (onFulfilled: (value: unknown) => unknown) =>
+					Promise.resolve(result).then(onFulfilled),
+			};
+		};
+		return builder;
+	};
+}
 
 const USER_A = "user-a";
 const USER_B = "user-b";
@@ -339,5 +379,68 @@ describe("CSV import → workspace client linkage by email", () => {
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.customer_id).toBe("zzz-deep-client");
 		expect(rows[0]?.status).toBe("unpaid");
+	});
+});
+
+/**
+ * The importer used to consume an allocator value BEFORE validating the row, so
+ * a rejected row left a permanent gap in the monotonic invoice sequence, and it
+ * threw on a failed insert chunk, leaving an unattributed partial import that a
+ * retry would duplicate.
+ */
+describe("CSV import allocator and partial-failure safety", () => {
+	it("does not consume an invoice number for a row that fails validation", async () => {
+		// One group, 51 line items: `assertInvoiceInput` caps an invoice at 50.
+		const rows: InvoiceImportRow[] = Array.from({ length: 51 }, () => ({
+			...rowInput("Plain customer", "draft"),
+			invoiceNumber: "INV-2026-0001",
+		}));
+
+		const result = await importCsv(client, USER_A, rows);
+
+		expect(result.created).toBe(0);
+		expect(result.skipped).toBe(51);
+		expect(result.errors[0]?.message).toMatch(/50 line items/);
+		// No allocator call: the sequence bucket was never created and the
+		// workspace floor never advanced.
+		expect(tables.invoice_number_sequences ?? []).toHaveLength(0);
+		expect(
+			(tables.workspaces[0] as Record<string, unknown>).next_invoice_sequence,
+		).toBe(5);
+	});
+
+	it("reports a failed insert chunk, keeps the committed count, and audits it", async () => {
+		// 51 distinct custom numbers → one full chunk of 50 plus a second chunk
+		// of 1. Failing the second chunk proves the committed rows survive, are
+		// counted truthfully, and are still audited.
+		const rows: InvoiceImportRow[] = Array.from({ length: 51 }, (_, index) => ({
+			...rowInput("Plain customer", "draft"),
+			invoiceNumber: `INV-2026-${String(100 + index).padStart(4, "0")}`,
+		}));
+		makeInsertsFail(
+			client,
+			"invoices",
+			(values) => values.invoice_number === "INV-2026-0150",
+			'duplicate key value violates unique constraint "invoices_workspace_number_unique"',
+		);
+
+		const result = await importCsv(client, USER_A, rows);
+
+		expect(result.created).toBe(50);
+		expect(result.skipped).toBe(1);
+		expect(result.errors).toHaveLength(1);
+		expect(result.errors[0]?.row).toBe(52);
+		expect(result.errors[0]?.message).toMatch(
+			/Could not save 1 imported invoice row/,
+		);
+		// The committed rows are real and the partial import is on the record.
+		expect(importedRows(WS_A)).toHaveLength(50);
+		expect(vi.mocked(recordInvoiceAudit)).toHaveBeenCalledWith(
+			client,
+			USER_A,
+			expect.objectContaining({
+				after: expect.objectContaining({ created: 50, skipped: 1 }),
+			}),
+		);
 	});
 });

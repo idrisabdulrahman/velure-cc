@@ -79,6 +79,8 @@ const normalize = (value?: string) => {
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_CLIENT_IMPORT_ROWS = 2_000;
 const CLIENT_IMPORT_INSERT_CHUNK_SIZE = 50;
+/** PostgREST caps an unbounded read; page the existing-email scan instead. */
+const CLIENT_IMPORT_EXISTING_PAGE_SIZE = 1000;
 
 const CLIENT_COLUMNS =
 	"id, workspace_id, owner_id, name, company, email, phone, website, billing_address, tax_id, buyer_type, buyer_profile_status, buyer_profile_issues, currency, payment_terms, internal_notes, contact, favorite, status, created_at, updated_at";
@@ -676,18 +678,50 @@ export async function importClientsCsv(
 
 	const { data: existing, error: existingError } = await client
 		.from("clients")
-		.select("email")
-		.eq("workspace_id", workspaceId);
+		.select("id, email")
+		.eq("workspace_id", workspaceId)
+		.order("id", { ascending: true })
+		.range(0, CLIENT_IMPORT_EXISTING_PAGE_SIZE - 1);
 	if (existingError) throw existingError;
-	const usedEmails = new Set(
-		(existing ?? []).map((c) => c.email.trim().toLowerCase()),
-	);
+	const usedEmails = new Set<string>();
+	const foldEmails = (page: Array<{ email?: unknown }> | null) => {
+		for (const row of page ?? []) {
+			const email = String(row.email ?? "")
+				.trim()
+				.toLowerCase();
+			if (email) usedEmails.add(email);
+		}
+	};
+	foldEmails(existing);
+	// An unbounded read would be capped by PostgREST (1000 rows by default), so
+	// for a workspace with more clients than one page the set missed every later
+	// email and the same address was imported again as a new client.
+	// `clients_workspace_email_idx` is NOT unique, so the database does not
+	// backstop that either. Page until a short page ends the loop.
+	for (
+		let offset = CLIENT_IMPORT_EXISTING_PAGE_SIZE;
+		existing && existing.length === CLIENT_IMPORT_EXISTING_PAGE_SIZE;
+		offset += CLIENT_IMPORT_EXISTING_PAGE_SIZE
+	) {
+		const { data: page, error } = await client
+			.from("clients")
+			.select("id, email")
+			.eq("workspace_id", workspaceId)
+			.order("id", { ascending: true })
+			.range(offset, offset + CLIENT_IMPORT_EXISTING_PAGE_SIZE - 1);
+		if (error) throw error;
+		foldEmails(page);
+		if (!page || page.length < CLIENT_IMPORT_EXISTING_PAGE_SIZE) break;
+	}
 
 	const docs: Array<ClientInput & { buyer: ClientBuyerColumns }> = [];
+	const docRowNumbers: number[] = [];
 	for (const [index, row] of rows.entries()) {
-		const email = row.email.trim().toLowerCase();
+		const email = String(row.email ?? "")
+			.trim()
+			.toLowerCase();
 		const clientRow = {
-			name: row.name.trim(),
+			name: String(row.name ?? "").trim(),
 			email,
 			paymentTerms: row.paymentTerms?.trim() || "Net 14",
 			currency: row.currency?.trim().toUpperCase() || "NGN",
@@ -723,6 +757,7 @@ export async function importClientsCsv(
 		}
 		usedEmails.add(email);
 
+		docRowNumbers.push(index + 2);
 		docs.push({
 			name: clientRow.name,
 			company: normalize(row.company),
@@ -747,32 +782,44 @@ export async function importClientsCsv(
 		index += CLIENT_IMPORT_INSERT_CHUNK_SIZE
 	) {
 		const chunk = docs.slice(index, index + CLIENT_IMPORT_INSERT_CHUNK_SIZE);
-		await Promise.all(
-			chunk.map(async (doc) => {
-				const { error } = await client.from("clients").insert({
-					workspace_id: workspaceId,
-					owner_id: userId,
-					name: doc.name,
-					company: doc.company,
-					email: doc.email,
-					phone: doc.phone,
-					website: doc.website,
-					billing_address: doc.buyer.billing_address,
-					tax_id: doc.buyer.tax_id,
-					buyer_type: doc.buyer.buyer_type,
-					buyer_profile_status: doc.buyer.buyer_profile_status,
-					buyer_profile_issues: doc.buyer.buyer_profile_issues,
-					currency: doc.currency,
-					payment_terms: doc.paymentTerms,
-					internal_notes: doc.internalNotes,
-					contact: doc.contact,
-					favorite: doc.favorite,
-					status: doc.status,
-				});
-				if (error) throw error;
-			}),
-		);
-		created += chunk.length;
+		// Sequential, individually counted inserts. The previous `Promise.all`
+		// fanned 50 inserts out at once and threw on the first rejection: any
+		// sibling that had already committed stayed in the database, `created`
+		// was not incremented for the chunk, and the thrown error made the UI
+		// report a total failure — so the user's retry duplicated every row that
+		// did commit. A failed row is now reported by its CSV row number and the
+		// count stays truthful.
+		for (const [chunkIndex, doc] of chunk.entries()) {
+			const { error } = await client.from("clients").insert({
+				workspace_id: workspaceId,
+				owner_id: userId,
+				name: doc.name,
+				company: doc.company,
+				email: doc.email,
+				phone: doc.phone,
+				website: doc.website,
+				billing_address: doc.buyer.billing_address,
+				tax_id: doc.buyer.tax_id,
+				buyer_type: doc.buyer.buyer_type,
+				buyer_profile_status: doc.buyer.buyer_profile_status,
+				buyer_profile_issues: doc.buyer.buyer_profile_issues,
+				currency: doc.currency,
+				payment_terms: doc.paymentTerms,
+				internal_notes: doc.internalNotes,
+				contact: doc.contact,
+				favorite: doc.favorite,
+				status: doc.status,
+			});
+			if (error) {
+				skipped += 1;
+				addImportError(
+					docRowNumbers[index + chunkIndex] ?? index + chunkIndex + 2,
+					`Could not save this client: ${error.message}`,
+				);
+				continue;
+			}
+			created += 1;
+		}
 	}
 
 	return { created, skipped, errors };

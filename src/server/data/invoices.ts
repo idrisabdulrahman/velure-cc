@@ -3292,6 +3292,8 @@ export async function importCsv(
 		}
 	>();
 	const docs: Array<Record<string, unknown>> = [];
+	/** CSV-visible bookkeeping for `docs`, so an insert failure can name its rows. */
+	const docMeta: Array<{ row: number; rows: number }> = [];
 
 	for (const [index, row] of rows.entries()) {
 		const customerName = row.customerName.trim();
@@ -3396,6 +3398,41 @@ export async function importCsv(
 	}
 
 	for (const group of groups.values()) {
+		const compliance = defaultCompliance({
+			customerName: group.customerName,
+			lineItems: group.lineItems,
+		});
+		const normalizedCompliance = {
+			...compliance,
+			regulatoryNotice:
+				group.currency !== "NGN"
+					? NIGERIA_FOREIGN_CURRENCY_WARNING
+					: (compliance.regulatoryNotice as string | undefined),
+		};
+
+		// Validate BEFORE consuming a number. The allocator advances
+		// `workspaces.next_invoice_sequence` monotonically and the sequence is
+		// an audit artefact, so a row rejected for its own data previously left
+		// a permanent gap in the numbering. The number is checked against
+		// `assertInvoiceInput`'s pattern using a format-correct candidate: the
+		// branch below already guarantees every number that reaches the insert
+		// is PREFIX-YYYY-NNNN, so the placeholder cannot change the verdict.
+		try {
+			assertInvoiceInput({
+				invoiceNumber: candidateInvoiceNumber(numberPlan).invoiceNumber,
+				currency: group.currency,
+				lineItems: group.lineItems,
+				compliance: normalizedCompliance,
+			});
+		} catch (error) {
+			skipped += group.rowNumbers.length;
+			addImportError(
+				group.rowNumbers[0] ?? 0,
+				error instanceof Error ? error.message : "Invalid invoice row.",
+			);
+			continue;
+		}
+
 		let invoiceNumber = group.invoiceNumber;
 		if (
 			!invoiceNumber ||
@@ -3419,33 +3456,6 @@ export async function importCsv(
 			});
 		}
 		usedNumbers.add(invoiceNumber);
-		const compliance = defaultCompliance({
-			customerName: group.customerName,
-			lineItems: group.lineItems,
-		});
-		const normalizedCompliance = {
-			...compliance,
-			regulatoryNotice:
-				group.currency !== "NGN"
-					? NIGERIA_FOREIGN_CURRENCY_WARNING
-					: (compliance.regulatoryNotice as string | undefined),
-		};
-
-		try {
-			assertInvoiceInput({
-				invoiceNumber,
-				currency: group.currency,
-				lineItems: group.lineItems,
-				compliance: normalizedCompliance,
-			});
-		} catch (error) {
-			skipped += group.rowNumbers.length;
-			addImportError(
-				group.rowNumbers[0] ?? 0,
-				error instanceof Error ? error.message : "Invalid invoice row.",
-			);
-			continue;
-		}
 
 		const matchEmail = importRowCustomerEmail(group.customerName);
 		const matchedCustomerId = matchEmail
@@ -3577,6 +3587,10 @@ export async function importCsv(
 		};
 
 		docs.push(invoiceDoc);
+		docMeta.push({
+			row: group.rowNumbers[0] ?? 0,
+			rows: group.rowNumbers.length,
+		});
 	}
 
 	for (
@@ -3591,7 +3605,25 @@ export async function importCsv(
 				chunk as unknown as Database["public"]["Tables"]["invoices"]["Insert"][],
 			)
 			.select("id");
-		if (error) throw error;
+		if (error) {
+			// Report instead of throwing. Every chunk before this one is already
+			// committed, so a thrown error left an unattributed partial import
+			// (the audit write below never ran) and the UI read as a total
+			// failure — inviting a retry that, because a row whose CSV number
+			// was missing or colliding gets a FRESH allocator number, inserted a
+			// second copy of everything that had committed. The rows that did
+			// land are still counted, reported and audited.
+			let remainingRows = 0;
+			for (let rest = index; rest < docs.length; rest += 1) {
+				remainingRows += docMeta[rest]?.rows ?? 1;
+			}
+			skipped += remainingRows;
+			addImportError(
+				docMeta[index]?.row ?? 0,
+				`Could not save ${remainingRows} imported invoice row(s): ${error.message}`,
+			);
+			break;
+		}
 		created.push(...(data ?? []).map((row) => row.id));
 	}
 

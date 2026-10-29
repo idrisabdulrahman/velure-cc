@@ -98,6 +98,7 @@ import type {
 } from "#/features/invoices/types";
 import { INVOICE_DOCUMENT_TYPE_LABELS } from "#/features/invoices/types";
 import { useUnifiedAuth } from "#/lib/auth-hook";
+import { assertImportFileSize } from "#/lib/import-limits";
 import { useSupabaseSession } from "#/lib/supabase-session";
 import {
 	bulkDeleteOrArchive,
@@ -1266,6 +1267,10 @@ function InvoicesIndex() {
 		if (!file) return;
 
 		try {
+			// Applied before the file is read: a larger file is refused while it
+			// is still on disk instead of building the whole text plus a full
+			// 2-D grid in memory first.
+			assertImportFileSize(file.size);
 			const isXlsx = file.name.toLowerCase().endsWith(".xlsx");
 			const xlsxData = isXlsx ? await readXlsxInvoiceData(file) : null;
 			const csvText = xlsxData ? xlsxData.csv : await file.text();

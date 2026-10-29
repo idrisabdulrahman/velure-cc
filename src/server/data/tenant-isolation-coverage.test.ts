@@ -81,6 +81,8 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	buildComplianceDashboardReport: "pure",
 	// compliance-export.ts
 	buildInvoiceExportContent: "pure",
+	// Pure per-row total derivation over an already-loaded export row; no reads.
+	invoiceTotalForExportRow: "pure",
 	// einvoice-validation.ts — caller session selects active workspace, then
 	// invoice and customer reads both carry that workspace filter.
 	validateWorkspaceInvoice: "app-scoped",

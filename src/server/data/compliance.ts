@@ -4,7 +4,10 @@ import {
 } from "#/features/compliance/supplier-profile";
 import { recordInvoiceAudit } from "./audit-client";
 import { buildComplianceDashboardReport } from "./compliance-dashboard";
-import type { ComplianceExportKind } from "./compliance-export";
+import type {
+	ComplianceExportInvoiceRow,
+	ComplianceExportKind,
+} from "./compliance-export";
 import { buildInvoiceExportContent } from "./compliance-export";
 import {
 	assertSequenceCounterChangeAllowed,
@@ -372,6 +375,40 @@ export async function getComplianceDashboard(
 	};
 }
 
+/**
+ * Every invoice row of a workspace, in `id` order, page by page.
+ *
+ * An unbounded `.select()` is capped by PostgREST (1000 rows by default), which
+ * silently TRUNCATED a compliance/tax export for any workspace with more
+ * invoices than one page — the artifact omitted invoices while the audit entry
+ * recorded the shortened count as if it were complete. Paging until a short
+ * page ends the loop removes that ceiling; the same pattern is used by the CSV
+ * importer for its workspace-client read.
+ */
+const EXPORT_INVOICE_PAGE_SIZE = 1000;
+
+async function loadAllExportInvoices(
+	client: Supabase,
+	workspaceId: string,
+): Promise<ComplianceExportInvoiceRow[]> {
+	const rows: ComplianceExportInvoiceRow[] = [];
+	for (let offset = 0; ; offset += EXPORT_INVOICE_PAGE_SIZE) {
+		const { data, error } = await client
+			.from("invoices")
+			.select(
+				"invoice_number, customer_name, currency, payment_amount, status, issue_date, due_date, compliance, line_items",
+			)
+			.eq("workspace_id", workspaceId)
+			.order("id", { ascending: true })
+			.range(offset, offset + EXPORT_INVOICE_PAGE_SIZE - 1);
+		if (error) throw error;
+		const page = (data ?? []) as unknown as ComplianceExportInvoiceRow[];
+		rows.push(...page);
+		if (page.length < EXPORT_INVOICE_PAGE_SIZE) break;
+	}
+	return rows;
+}
+
 export async function createInvoiceExport(
 	client: Supabase,
 	userId: string,
@@ -379,21 +416,11 @@ export async function createInvoiceExport(
 ) {
 	const workspaceId = await resolveActiveWorkspaceId(client, userId);
 	if (!workspaceId) throw new Error("Workspace not found.");
-	const [{ data: workspace }, { data: invoices, error: invoiceError }] =
-		await Promise.all([
-			client
-				.from("workspaces")
-				.select("id, name, legal_name")
-				.eq("id", workspaceId)
-				.single(),
-			client
-				.from("invoices")
-				.select(
-					"invoice_number, customer_name, currency, payment_amount, status, issue_date, due_date, compliance",
-				)
-				.eq("workspace_id", workspaceId),
-		]);
-	if (invoiceError) throw invoiceError;
+	const { data: workspace } = await client
+		.from("workspaces")
+		.select("id, name, legal_name")
+		.eq("id", workspaceId)
+		.single();
 	const source = workspace?.legal_name || workspace?.name || "VELURE";
 	const prefix =
 		(source.match(/[A-Za-z0-9]+/g) ?? [])
@@ -401,7 +428,7 @@ export async function createInvoiceExport(
 			.join("")
 			.slice(0, 12)
 			.toUpperCase() || "VELURE";
-	const rows = invoices ?? [];
+	const rows = await loadAllExportInvoices(client, workspaceId);
 	const now = Date.now();
 	const content = buildInvoiceExportContent(kind, rows, now);
 	const fileName = `${prefix}-${kind}-${now}.${kind === "normalized_accounting" ? "json" : "csv"}`;

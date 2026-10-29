@@ -59,6 +59,7 @@ function createFakeUserClient(
 			"neq",
 			"is",
 			"limit",
+			"range",
 			"order",
 			"gte",
 			"lte",

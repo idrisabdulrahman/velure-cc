@@ -50,6 +50,7 @@ import { Spinner } from "#/components/ui/spinner";
 import { toast } from "#/components/ui/use-toast";
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import { useUnifiedAuth } from "#/lib/auth-hook";
+import { assertImportFileSize } from "#/lib/import-limits";
 import { useSupabaseSession } from "#/lib/supabase-session";
 import {
 	archiveClient,
@@ -587,6 +588,9 @@ export function ClientsIndex() {
 	const onCsvImport = async (file: File | undefined) => {
 		if (!file) return;
 		try {
+			// Refuse an oversized file while it is still on disk, before
+			// `file.text()` loads it fully into memory.
+			assertImportFileSize(file.size);
 			const rows = parseClientCsv(await file.text());
 			if (rows.length === 0) {
 				toast({
