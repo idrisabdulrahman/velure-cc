@@ -229,6 +229,13 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	// paystack-server.ts
 	ensurePaystackTransferCharge: "server-admin",
 	confirmPaystackWebhookPayment: "server-admin",
+	// Server-only webhook/reconcile machinery: identity is the webhook
+	// signature or the scheduler secret, never a tenant-supplied id.
+	logPaymentAnomaly: "server-admin",
+	reconcilePendingPaystackCharges: "server-admin",
+	// money.ts — pure integer minor-unit conversion, no query surface
+	nairaToKobo: "pure",
+	koboToNaira: "pure",
 	// product-intelligence.ts
 	buildProductIntelligence: "pure",
 	buildProductSuggestions: "pure",
@@ -484,6 +491,10 @@ const ROUTE_CLASSIFICATIONS: Record<string, Classification> = {
 	"invoice/submissions/scheduled.ts": "server-admin",
 	"payments/paystack/initialize.ts": "public-token",
 	"payments/paystack/webhook.ts": "server-admin",
+	// Scheduler-secret trigger for missed-webhook recovery; no session/tenant id.
+	"payments/paystack/reconcile.ts": "server-admin",
+	// Test-only harness: fixtures + signing helpers for the webhook suite.
+	"payments/paystack/-test-helpers.ts": "test-only",
 	"reminders/send-queue.ts": "session",
 	"security/link-stepup/request.ts": "session",
 	"security/link-stepup/status.ts": "session",

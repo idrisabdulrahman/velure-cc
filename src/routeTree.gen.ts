@@ -56,6 +56,7 @@ import { Route as ApiInvoiceSendIdRouteImport } from './routes/api/invoice/send/
 import { Route as ApiInvoiceSubmissionIdRouteImport } from './routes/api/invoice/submission/$id'
 import { Route as ApiInvoiceSubmissionsScheduledRouteImport } from './routes/api/invoice/submissions/scheduled'
 import { Route as ApiPaymentsPaystackInitializeRouteImport } from './routes/api/payments/paystack/initialize'
+import { Route as ApiPaymentsPaystackReconcileRouteImport } from './routes/api/payments/paystack/reconcile'
 import { Route as ApiPaymentsPaystackWebhookRouteImport } from './routes/api/payments/paystack/webhook'
 import { Route as ApiSecurityLinkStepupRequestRouteImport } from './routes/api/security/link-stepup/request'
 import { Route as ApiSecurityLinkStepupStatusRouteImport } from './routes/api/security/link-stepup/status'
@@ -304,6 +305,12 @@ const ApiPaymentsPaystackInitializeRoute =
     path: '/api/payments/paystack/initialize',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPaymentsPaystackReconcileRoute =
+  ApiPaymentsPaystackReconcileRouteImport.update({
+    id: '/api/payments/paystack/reconcile',
+    path: '/api/payments/paystack/reconcile',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPaymentsPaystackWebhookRoute =
   ApiPaymentsPaystackWebhookRouteImport.update({
     id: '/api/payments/paystack/webhook',
@@ -377,6 +384,7 @@ export interface FileRoutesByFullPath {
   '/api/invoice/submission/$id': typeof ApiInvoiceSubmissionIdRoute
   '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
   '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
+  '/api/payments/paystack/reconcile': typeof ApiPaymentsPaystackReconcileRoute
   '/api/payments/paystack/webhook': typeof ApiPaymentsPaystackWebhookRoute
   '/api/security/link-stepup/request': typeof ApiSecurityLinkStepupRequestRoute
   '/api/security/link-stepup/status': typeof ApiSecurityLinkStepupStatusRoute
@@ -426,6 +434,7 @@ export interface FileRoutesByTo {
   '/api/invoice/submission/$id': typeof ApiInvoiceSubmissionIdRoute
   '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
   '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
+  '/api/payments/paystack/reconcile': typeof ApiPaymentsPaystackReconcileRoute
   '/api/payments/paystack/webhook': typeof ApiPaymentsPaystackWebhookRoute
   '/api/security/link-stepup/request': typeof ApiSecurityLinkStepupRequestRoute
   '/api/security/link-stepup/status': typeof ApiSecurityLinkStepupStatusRoute
@@ -480,6 +489,7 @@ export interface FileRoutesById {
   '/api/invoice/submission/$id': typeof ApiInvoiceSubmissionIdRoute
   '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
   '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
+  '/api/payments/paystack/reconcile': typeof ApiPaymentsPaystackReconcileRoute
   '/api/payments/paystack/webhook': typeof ApiPaymentsPaystackWebhookRoute
   '/api/security/link-stepup/request': typeof ApiSecurityLinkStepupRequestRoute
   '/api/security/link-stepup/status': typeof ApiSecurityLinkStepupStatusRoute
@@ -535,6 +545,7 @@ export interface FileRouteTypes {
     | '/api/invoice/submission/$id'
     | '/api/invoice/submissions/scheduled'
     | '/api/payments/paystack/initialize'
+    | '/api/payments/paystack/reconcile'
     | '/api/payments/paystack/webhook'
     | '/api/security/link-stepup/request'
     | '/api/security/link-stepup/status'
@@ -584,6 +595,7 @@ export interface FileRouteTypes {
     | '/api/invoice/submission/$id'
     | '/api/invoice/submissions/scheduled'
     | '/api/payments/paystack/initialize'
+    | '/api/payments/paystack/reconcile'
     | '/api/payments/paystack/webhook'
     | '/api/security/link-stepup/request'
     | '/api/security/link-stepup/status'
@@ -637,6 +649,7 @@ export interface FileRouteTypes {
     | '/api/invoice/submission/$id'
     | '/api/invoice/submissions/scheduled'
     | '/api/payments/paystack/initialize'
+    | '/api/payments/paystack/reconcile'
     | '/api/payments/paystack/webhook'
     | '/api/security/link-stepup/request'
     | '/api/security/link-stepup/status'
@@ -677,6 +690,7 @@ export interface RootRouteChildren {
   ApiInvoiceSubmissionIdRoute: typeof ApiInvoiceSubmissionIdRoute
   ApiInvoiceSubmissionsScheduledRoute: typeof ApiInvoiceSubmissionsScheduledRoute
   ApiPaymentsPaystackInitializeRoute: typeof ApiPaymentsPaystackInitializeRoute
+  ApiPaymentsPaystackReconcileRoute: typeof ApiPaymentsPaystackReconcileRoute
   ApiPaymentsPaystackWebhookRoute: typeof ApiPaymentsPaystackWebhookRoute
   ApiSecurityLinkStepupRequestRoute: typeof ApiSecurityLinkStepupRequestRoute
   ApiSecurityLinkStepupStatusRoute: typeof ApiSecurityLinkStepupStatusRoute
@@ -1014,6 +1028,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPaymentsPaystackInitializeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/payments/paystack/reconcile': {
+      id: '/api/payments/paystack/reconcile'
+      path: '/api/payments/paystack/reconcile'
+      fullPath: '/api/payments/paystack/reconcile'
+      preLoaderRoute: typeof ApiPaymentsPaystackReconcileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/payments/paystack/webhook': {
       id: '/api/payments/paystack/webhook'
       path: '/api/payments/paystack/webhook'
@@ -1155,6 +1176,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInvoiceSubmissionIdRoute: ApiInvoiceSubmissionIdRoute,
   ApiInvoiceSubmissionsScheduledRoute: ApiInvoiceSubmissionsScheduledRoute,
   ApiPaymentsPaystackInitializeRoute: ApiPaymentsPaystackInitializeRoute,
+  ApiPaymentsPaystackReconcileRoute: ApiPaymentsPaystackReconcileRoute,
   ApiPaymentsPaystackWebhookRoute: ApiPaymentsPaystackWebhookRoute,
   ApiSecurityLinkStepupRequestRoute: ApiSecurityLinkStepupRequestRoute,
   ApiSecurityLinkStepupStatusRoute: ApiSecurityLinkStepupStatusRoute,

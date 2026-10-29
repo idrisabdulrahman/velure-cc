@@ -300,12 +300,17 @@ async function sendInvoiceEmail({
 		);
 	});
 
-	ensurePaystackTransferCharge(invoice.token).catch((error: unknown) => {
-		console.error(
-			"Failed to prepare Paystack transfer charge",
-			safeErrorDetails(error),
-		);
-	});
+	// F9: only NGN invoices can use Paystack transfer, so do not pre-warm a
+	// charge for a currency the initialize path will refuse (this avoids a
+	// false "failed to prepare" error on every non-NGN send).
+	if (invoice.currency?.trim().toUpperCase() === "NGN") {
+		ensurePaystackTransferCharge(invoice.token).catch((error: unknown) => {
+			console.error(
+				"Failed to prepare Paystack transfer charge",
+				safeErrorDetails(error),
+			);
+		});
+	}
 
 	return Response.json({ ok: true, id: result.data?.id ?? null });
 }
