@@ -14,7 +14,6 @@ These block work that depends on the answer. Unattended runs must stop here.
 | Q-D | **Target segment (T12).** Small businesses only, or also medium taxpayers already inside the mandate? | Drives positioning copy and whether a mock can ever serve the segment. | Small businesses. |
 | Q-F | **Real users / pilots (T7/T13).** Are there any real pilot users today? | Ground-truth table honesty. Evidence says effectively none (§7 of the audit). | Report "no known paying users; data is test fixtures". |
 | Q-H | **WHT / payable (T6/review).** Does the NRS e-invoice carry a gross amount plus a separate withholding amount, or a single net payable? | The app stores `withholdingTotal` and a net payable; whether that maps to the NRS/UBL document is UNKNOWN. Needs a provider/NRS confirmation. | Ask the provider question list (§9 of the gap analysis); do not guess. |
-| Q-J | **Own-account reconciliation (T9/D).** When customers pay into the workspace's **own** bank account, do they put the invoice number in the narration? Would the user rather upload a statement or connect the bank (aggregator read access + consent + secret custody)? Is one familiar account number a customer requirement? | Decides whether Velure builds statement import, a Nigerian aggregator connection, or neither. Bank connection is a new product domain: `AGENTS.md` §3 requires product-strategy approval first. | Payment-reference discipline only (cheapest), then statement import; **no** bank connection. See `docs/BANK-RECONCILIATION-OPTIONS.md` §9. |
 
 ### Resolved
 
@@ -27,6 +26,7 @@ These block work that depends on the answer. Unattended runs must stop here.
 | Q-E | **Supabase `pg_cron` + `pg_net`** calls the secret scheduler endpoint. No separate Worker. | 2026-10-29 |
 | Q-G | **Discounts:** support invoice-level *before tax*, invoice-level *after tax*, and line-level, **mutually exclusive per invoice**. Before-tax reduces the taxable base proportionally (VAT on the discounted amount). A legacy discount with no stored mode defaults to **after tax**, preserving the totals the renderer already displayed. | 2026-10-30 |
 | Q-I | **Reconciliation (T9):** keep manual + per-invoice Paystack virtual accounts as they are — **no new code now** — and separately investigate the "customers pay into the workspace's own bank account" case. Payment mix in practice: **mixed**. Follow-up raised as Q-J. | 2026-10-30 |
+| Q-J | **Own-account reconciliation (T9/D):** ship the **payment reference = invoice number** (done), then **stop** — no statement import and no bank connection now. Customers do **not** currently put the invoice number in the narration, but the user is **willing to ask them to**. Statement import and any Nigerian aggregator remain deferred; a bank connection still needs product-strategy approval (`AGENTS.md` §3). | 2026-10-30 |
 
 ---
 
@@ -465,4 +465,11 @@ These block work that depends on the answer. Unattended runs must stop here.
 - **Checks (2026-10-30):** `pnpm test` → **835 passed / 86 skipped** (12 new
   tests: 6 helper, 3 public-HTML render, 3 PDF render); `pnpm typecheck` clean;
   `pnpm check` exit 0 with 359 pre-existing warnings.
+- **User follow-up answer (Q-J resolved 2026-10-30):** stop after the payment
+  reference — do **not** build statement import or a bank connection now; deploy
+  `development` and move to the next task. Customers do **not** currently put the
+  invoice number in the narration, but the user is **willing to ask them to**,
+  which is exactly what the printed reference enables. Deploying `development`
+  now takes effect for the discount slice (`f98b165`), the T1 sweep fix
+  (`0081444`), and this slice.
 
