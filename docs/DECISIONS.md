@@ -238,3 +238,30 @@ These block work that depends on the answer. Unattended runs must stop here.
   ports 54321/54322) and point `.env.test` at it, rather than reviving the lost
   `velure-einv-qa` identity.
 
+### 2026-10-30 — Tasks T6/T7 (e-invoicing gap analysis + provider questions)
+
+- **T6 question:** Which sources should the gap analysis use?
+  **Answer:** Public official sources only — the official NRS developer portal
+  (`community.nrsmbs.com`) plus a certified provider's public docs (Etranzact).
+  No private NITDA/NRS documents supplied; anything not publicly covered is
+  marked UNKNOWN in `docs/EINVOICE-GAP-ANALYSIS.md`, never inferred.
+- **T7 question:** Has anyone already spoken to an NRS-accredited provider or
+  NRS/NITDA? **Answer:** No contact yet.
+- **T7 question:** Any constraints to reflect (cost ceiling, preferred provider,
+  existing relationships, timeline)? **Answer:** None known yet.
+- **Result:** `docs/EINVOICE-GAP-ANALYSIS.md` written (read-only research; no
+  code/schema/copy change). Key findings: canonical model derives from the
+  app's own snapshot, not the NRS schema (`prompts/einv-wp10.md`); official
+  format is UBL 2.1 with SI/APP two-layer roles, OAuth 2.0 + TLS, CSID signing,
+  and encrypted IRN QR; the "55 mandatory fields" figure is absent from the repo
+  and unconfirmed; the 10-digit TIN is a UI hint with an explicit
+  `TODO(tin-checksum)`, and a provider sample shows a **dashed** TIN; the only
+  publicly known rejection codes are HTTP statuses (the app's rejection codes
+  are invented mock codes). Largest concrete gap: structured postal address
+  (street/city/postal_zone/LGA/state/country codes).
+- **Not done / next:** obtained no official NITDA guideline, no NRS schema PDF,
+  no rejection-code catalogue; nobody contacted a provider. 15 provider/NRS
+  questions are handed to the user in §9 of the gap analysis.
+- **Q-F status:** unchanged (T7 contact question is separate from whether real
+  pilot users exist; Q-F stays open).
+
