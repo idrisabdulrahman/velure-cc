@@ -233,4 +233,98 @@ describe("runReminderSweep", () => {
 		expect(String(failed?.notes)).toContain("Invoice not found");
 		expect(completed).toMatchObject({ status: "completed", queued_count: 1 });
 	});
+
+	describe("bounded per tick (2026-10-30 fix)", () => {
+		it("sweeps a bounded batch and returns the resume cursor", async () => {
+			const tables = seed([
+				invoiceRow("inv-a", WS_A),
+				invoiceRow("inv-b", WS_B),
+			]);
+			const { client } = createFakeSupabase(tables);
+
+			const first = await runReminderSweep({
+				admin: client,
+				now: NOW,
+				cursor: null,
+				batchSize: 1,
+			});
+			// One workspace this tick; the cursor is that workspace.
+			expect(first.workspaceCount).toBe(1);
+			expect(first.nextCursor).toBe(USER_A);
+			expect(first.truncated).toBe(false);
+
+			const second = await runReminderSweep({
+				admin: client,
+				now: NOW,
+				cursor: first.nextCursor,
+				batchSize: 1,
+			});
+			expect(second.workspaceCount).toBe(1);
+			expect(second.nextCursor).toBe(USER_B);
+
+			// Next tick sees an empty/short page and wraps to the front.
+			const third = await runReminderSweep({
+				admin: client,
+				now: NOW,
+				cursor: second.nextCursor,
+				batchSize: 1,
+			});
+			expect(third.workspaceCount).toBe(0);
+			expect(third.nextCursor).toBeNull();
+
+			// The whole list was covered across the ticks, exactly once each.
+			expect(
+				rows(tables, "reminder_runs")
+					.map((run) => run.owner_id)
+					.sort(),
+			).toEqual([USER_A, USER_B]);
+		});
+
+		it("resumes from the cursor persisted in job_runs", async () => {
+			const tables = seed(
+				[invoiceRow("inv-a", WS_A), invoiceRow("inv-b", WS_B)],
+				{
+					job_runs: [
+						{
+							id: "jr-1",
+							workspace_id: null,
+							job_name: "reminder_sweep",
+							status: "success",
+							started_at: "2026-10-29T08:50:00.000Z",
+							result_json: { nextCursor: USER_A },
+						},
+					],
+				},
+			);
+			const { client } = createFakeSupabase(tables);
+
+			const summary = await runReminderSweep({ admin: client, now: NOW });
+
+			// Resumed after USER_A, so only USER_B is swept.
+			expect(summary.workspaceCount).toBe(1);
+			expect(rows(tables, "reminder_runs").map((run) => run.owner_id)).toEqual([
+				USER_B,
+			]);
+		});
+
+		it("stops early on the time budget but always makes progress", async () => {
+			const tables = seed([
+				invoiceRow("inv-a", WS_A),
+				invoiceRow("inv-b", WS_B),
+			]);
+			const { client } = createFakeSupabase(tables);
+
+			const summary = await runReminderSweep({
+				admin: client,
+				now: NOW,
+				cursor: null,
+				budgetMs: 0,
+			});
+
+			// Exactly one workspace is always swept, then the budget trips.
+			expect(summary.workspaceCount).toBe(1);
+			expect(summary.truncated).toBe(true);
+			expect(summary.nextCursor).toBe(USER_A);
+		});
+	});
 });

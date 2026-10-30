@@ -86,14 +86,17 @@ export const SCHEDULER_JOBS: SchedulerJob[] = [
 			),
 	},
 	{
-		name: "reminder_sweep",
-		run: async ({ admin, now }) =>
-			toJobResult(await runReminderSweep({ admin, now })),
-	},
-	{
 		name: "recurring_generation",
 		run: async ({ admin, now }) =>
 			toJobResult(await runRecurringGeneration({ admin, now })),
+	},
+	{
+		// Last on purpose: the bounded reminder sweep is the heaviest job, so
+		// running it last means a slow sweep can never starve the jobs above.
+		// See `src/server/reminder-sweep.ts` for the cursor/budget design.
+		name: "reminder_sweep",
+		run: async ({ admin, now }) =>
+			toJobResult(await runReminderSweep({ admin, now })),
 	},
 ];
 

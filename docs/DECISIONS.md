@@ -13,7 +13,7 @@ These block work that depends on the answer. Unattended runs must stop here.
 | --- | --- | --- | --- |
 | Q-D | **Target segment (T12).** Small businesses only, or also medium taxpayers already inside the mandate? | Drives positioning copy and whether a mock can ever serve the segment. | Small businesses. |
 | Q-F | **Real users / pilots (T7/T13).** Are there any real pilot users today? | Ground-truth table honesty. Evidence says effectively none (§7 of the audit). | Report "no known paying users; data is test fixtures". |
-| Q-G | **Discount semantics (T6/review).** Is a non-zero invoice discount supported, and how is it treated in the submitted totals (line-level vs invoice-level, before/after tax)? | `validateCanonicalInvoice` blocks any non-zero discount (`discount_semantics_unsupported`), so discounted invoices cannot be submitted. Product decision, not a bug. | Keep the block until the tax treatment is defined. |
+| Q-G | **Discount semantics (T6/review).** Is a non-zero invoice discount supported, and how is it treated in the submitted totals (line-level vs invoice-level, before/after tax)? | `validateCanonicalInvoice` blocks any non-zero discount (`discount_semantics_unsupported`), so discounted invoices cannot be submitted. Product decision, not a bug. | **Answered in part 2026-10-30:** support invoice-level *before tax*, invoice-level *after tax*, and line-level. Combination/precedence still to pin before code. |
 | Q-H | **WHT / payable (T6/review).** Does the NRS e-invoice carry a gross amount plus a separate withholding amount, or a single net payable? | The app stores `withholdingTotal` and a net payable; whether that maps to the NRS/UBL document is UNKNOWN. Needs a provider/NRS confirmation. | Ask the provider question list (§9 of the gap analysis); do not guess. |
 
 ### Resolved
@@ -326,4 +326,28 @@ These block work that depends on the answer. Unattended runs must stop here.
   recorded as open question **Q-G**; the current validator block is unchanged.
 - **Q (WHT/payable):** put the concern to a provider. **Action:** recorded as
   open question **Q-H** and added to the provider question list.
+
+### 2026-10-30 — Post-review decisions (T1 sweep, TIN placeholder, discount)
+
+- **T1 tick timeout (user decision).** The reminder sweep becomes
+  **cursor-bounded**: each tick processes a bounded batch and resumes from a
+  persisted cursor on the next tick, and the sweep runs **after** the cheap jobs
+  so it can never starve them. Chosen over raising the pg_net timeout or fanning
+  the sweep out. Implementation follows in
+  `prompts/scheduler-sweep-cursor-2026-10.md`.
+- **Placeholder TIN (user decision).** `tin_placeholder` stays **blocking
+  everywhere**, including the invoice-save `assertValidTin` boundary. A legacy
+  stored placeholder (e.g. `1234567890`) therefore blocks an invoice save until
+  the client/workspace profile is corrected. This is the intended behaviour, not
+  a regression to work around.
+- **Discount (user decision, partial).** The product wants **all three**:
+  invoice-level discount *before tax*, invoice-level discount *after tax*, and
+  line-level discounts. The repo spec (`docs/e-invoicing/SPEC.md` B3) currently
+  documents **line-level only**, and the tax engine
+  (`src/features/tax/calculate.ts`) already models a line-level `discountMinor`
+  that reduces that line's VAT base — but `calculateInvoiceCompliance` ignores
+  discounts entirely, so the stored totals do not reflect the discount the
+  renderer can display. **Combination/precedence (whether the modes are
+  mutually exclusive or can stack) must be pinned before any money-path code
+  changes.** The `discount_semantics_unsupported` block stays until then.
 
