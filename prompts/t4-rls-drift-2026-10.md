@@ -92,6 +92,10 @@ change is in scope unless real drift is found.
 
 - 2026-10-29: Prompt created after verification. Confirmed T4 is docs-only: no
   live RLS drift exists, only `tenant-isolation.md` wording is stale.
+- 2026-10-30: The 23 environmental `JWT expired` failures noted below were fixed
+  separately (re-minted the local `service_role` token in `.env.test`; see
+  `docs/DECISIONS.md` 2026-10-30). Full `pnpm test` is green again at
+  787 passed / 86 skipped. No T4 doc change needed.
 
 ## Verification (2026-10-29)
 

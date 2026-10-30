@@ -202,10 +202,39 @@ These block work that depends on the answer. Unattended runs must stop here.
   directly instead; running the matrix in CI remains the residual gap.
 - **Files:** `docs/e-invoicing/tenant-isolation.md`,
   `docs/AUDIT-2026-10.md`, `prompts/t4-rls-drift-2026-10.md`.
-- **Checks:** `pnpm typecheck` clean; `pnpm check` exit 0 (unchanged warnings);
-  `pnpm test` 764 passed / 23 failed / 86 skipped. The 23 failures are the three
-  local-stack Paystack DB integration suites failing with `JWT expired`
-  (the local test stack's service-role JWT expired at 2026-10-29T19:54:25Z);
-  pre-existing and environmental, not a regression — the same suites passed
-  earlier the same day. Fix needs a local stack restart (user-gated).
+- **Checks (as run at commit time):** `pnpm typecheck` clean; `pnpm check`
+  exit 0 (unchanged warnings); `pnpm test` 764 passed / 23 failed / 86 skipped.
+  The 23 failures are the three local-stack Paystack DB integration suites
+  failing with `JWT expired` (the local test stack's service-role JWT expired at
+  2026-10-29T19:54:25Z); pre-existing and environmental, not a regression — they
+  were fixed immediately after; see the 2026-10-30 entry below.
+
+### 2026-10-30 — Local test-stack JWT expiry (environmental, fixed)
+
+- **Finding.** `.env.test`'s `PAYSTACK_TEST_SERVICE_ROLE_KEY` was a `service_role`
+  HS256 JWT minted with a **10-hour** lifetime (`iat` 2026-10-29T10:14:25Z,
+  `exp` 2026-10-29T19:54:25Z) against the running local stack
+  (`velure-einv-qa`, ports 55421/55422). After `exp`, PostgREST rejects it and
+  the three DB-backed Paystack suites fail with `JWT expired` (23 tests).
+- **Decision — re-mint the token instead of restarting the stack.** The stack
+  was started from a project directory that no longer exists anywhere on disk
+  (no `config.toml` with `project_id = "velure-einv-qa"`), so a faithful
+  `supabase stop && supabase start` for that identity/ports is not safely
+  reproducible; `supabase stop` would risk taking the stack down with no
+  matching config to bring it back. The stack's signing secret is unchanged
+  (the CLI default `GOTRUE_JWT_SECRET` observed in the running `auth` container,
+  and PostgREST's JWKS is the matching `oct` key), so a fresh token signed with
+  that secret is exactly the credential a restart would mint — without risking
+  the running stack or its data. Re-minted a `service_role` HS256 token with a
+  **10-year** `exp` (iss `supabase`) and wrote it into `.env.test`; the value was
+  never printed or committed (`.env.test` is gitignored).
+- **Evidence.** PostgREST root (`http://127.0.0.1:55421/rest/v1/`) returns **200**
+  with the new key; the three suites pass (**30 tests**); full `pnpm test` is
+  **787 passed / 86 skipped**. This also resolves the earlier "known
+  environmental failure" note.
+- **Follow-up risk.** A future `supabase start` regenerates local keys and will
+  break `.env.test` again by design. If the local stack is ever recreated, prefer
+  `supabase start` from this repo's own `supabase/config.toml` (`velure-cc`,
+  ports 54321/54322) and point `.env.test` at it, rather than reviving the lost
+  `velure-einv-qa` identity.
 
