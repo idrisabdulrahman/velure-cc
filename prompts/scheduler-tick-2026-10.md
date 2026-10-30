@@ -1,6 +1,6 @@
 # Scheduler tick, reminder sweep, and recurring generation (T1)
 
-Status: done
+Status: in-progress (code complete and unit-tested; live sweep defect open — see post-go-live note)
 
 Task source: critique item **#1** — "No scheduler runs the reminder / recurring /
 reconciliation / scheduled-send jobs in production" — verdict **Confirmed** in
@@ -199,3 +199,32 @@ live project `kbexydkmmfabfutgkbxn`:
 
 Remaining: deploy the T1 code (production returns 404 for `/api/cron/tick`
 until then). The deploy was deliberately held by the user.
+
+## Deployed 2026-10-30 — live defect found (acceptance criterion 4 not met)
+
+The user approved the deploy. Method is **direct upload** (no git push):
+`pnpm deploy:pages` = `build:pages` + `wrangler pages deploy dist
+--project-name velure --branch main --env-file .env`. Deployed revision
+**`709411ca`**. Live checks: `POST /api/cron/tick` → **401** (route now exists),
+`GET /` → **200**, `GET /auth` → **200**.
+
+**Defect.** The first post-deploy tick (06:30 UTC) hit pg_net's
+`timeout_milliseconds := 10000`: `net._http_response.id=87` recorded
+`timed_out=true` (`Total time: 10001 ms`). Only **3 of 5** jobs were recorded in
+`job_runs` (`scheduled_invoice_emails` 1308 ms, `einvoice_submissions` 91 ms,
+`paystack_reconcile` 46 ms — all success). `reminder_sweep` covered only
+**10 of 111** active workspaces (`reminder_runs` +10, all at the tick-start
+timestamp) before the process was killed; `recurring_generation` never ran
+(`recurring_today=0`). So **acceptance criterion 4 is not satisfied in
+production**: the sweep does not scan every active workspace in one tick.
+
+**Cause.** `reminder_sweep` (`src/server/reminder-sweep.ts` →
+`runReminderBatch` in `src/server/data/reminders.ts`) runs sequentially, one
+workspace at a time, ~0.75–0.9 s each (several Supabase round trips per
+workspace, and `defaultRule.enabled = true` scans every invoice). At 111
+workspaces that is ~O(111 × 0.9 s) ≫ 10 s. The tick runs jobs sequentially, so
+a killed process also skips every later job.
+
+**Status:** open — needs an architecture decision before any fix (bound the
+sweep per tick with a persisted cursor and resume next tick / raise the pg_net
+timeout / fan the sweep out). No fix applied. Recorded in `docs/DECISIONS.md`.

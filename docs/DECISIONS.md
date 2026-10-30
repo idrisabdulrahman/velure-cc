@@ -13,6 +13,8 @@ These block work that depends on the answer. Unattended runs must stop here.
 | --- | --- | --- | --- |
 | Q-D | **Target segment (T12).** Small businesses only, or also medium taxpayers already inside the mandate? | Drives positioning copy and whether a mock can ever serve the segment. | Small businesses. |
 | Q-F | **Real users / pilots (T7/T13).** Are there any real pilot users today? | Ground-truth table honesty. Evidence says effectively none (§7 of the audit). | Report "no known paying users; data is test fixtures". |
+| Q-G | **Discount semantics (T6/review).** Is a non-zero invoice discount supported, and how is it treated in the submitted totals (line-level vs invoice-level, before/after tax)? | `validateCanonicalInvoice` blocks any non-zero discount (`discount_semantics_unsupported`), so discounted invoices cannot be submitted. Product decision, not a bug. | Keep the block until the tax treatment is defined. |
+| Q-H | **WHT / payable (T6/review).** Does the NRS e-invoice carry a gross amount plus a separate withholding amount, or a single net payable? | The app stores `withholdingTotal` and a net payable; whether that maps to the NRS/UBL document is UNKNOWN. Needs a provider/NRS confirmation. | Ask the provider question list (§9 of the gap analysis); do not guess. |
 
 ### Resolved
 
@@ -264,4 +266,64 @@ These block work that depends on the answer. Unattended runs must stop here.
   questions are handed to the user in §9 of the gap analysis.
 - **Q-F status:** unchanged (T7 contact question is separate from whether real
   pilot users exist; Q-F stays open).
+
+### 2026-10-30 — T1 deployed to production (go-live verified)
+
+- **Q:** Deploy T1 to production so the cron ticks stop 404ing?
+  **Answer:** yes (the user reviewed and approved deploying T1).
+- **Deployment method:** direct upload —
+  `pnpm deploy:pages` = `build:pages` + `wrangler pages deploy dist
+  --project-name velure --branch main --env-file .env`. No git push is
+  involved; `development` remains local-only.
+- **Result:** deployed revision `709411ca`
+  (`https://709411ca.velure-f2c.pages.dev`). Live checks (read-only):
+  `POST /api/cron/tick` → **401** (route now exists; the old build 404'd),
+  `GET /` → **200**, `GET /auth` → **200**.
+- **First live tick (06:30 UTC) — partial.** `net._http_response` row
+  `id=87` recorded `timed_out=true` at pg_net's `timeout_milliseconds := 10000`
+  (`Total time: 10001 ms`). `job_runs` recorded only **3 of the 5** jobs
+  (`scheduled_invoice_emails` 1308 ms, `einvoice_submissions` 91 ms,
+  `paystack_reconcile` 46 ms — all success). `reminder_sweep` covered only
+  **10 of 111** active workspaces (`reminder_runs` +10, all at the tick-start
+  timestamp) before the worker was killed at the 10 s timeout;
+  `recurring_generation` never ran (`recurring_today=0`).
+- **Cause (confirmed).** `reminder_sweep` runs sequentially, one
+  `runReminderBatch` per active workspace (~0.75–0.9 s each: several Supabase
+  round trips per workspace, and `defaultRule.enabled = true` scans every
+  invoice). At 111 workspaces that is ~O(111 × 0.9 s) ≫ 10 s.
+- **Status:** **open — needs an architecture decision, no fix applied.** The
+  tick runs jobs sequentially with a per-job try/catch, so a timed-out process
+  simply dies mid-sweep; the remaining workspaces and all later jobs are
+  skipped. Options to decide between (pending user): bound the sweep per tick
+  with a persisted cursor (resume next tick), raise the pg_net timeout, or fan
+  the sweep out. Recorded as the T1 residual defect.
+- **Docs:** review corrections and this deploy are mirrored in the Obsidian
+  handoff note.
+
+### 2026-10-30 — Review actions on the T6/T7 deliverable (user review)
+
+- **Q (count):** The gap-analyses envelope claim was wrong. **Action:** fixed
+  the count to "3 of 17" and the table headers to "Provider-published field"
+  (only that which a provider actually publishes), with a source caveat.
+- **Q (rejection codes):** Invented codes read like real NRS/provider codes.
+  **Action:** every code Velure invents is now prefixed `MOCK_`
+  (`rejection-guidance.ts`, `provider-adapter.ts`, `einvoice-submissions.ts`);
+  the real catalogue is UNKNOWN.
+- **Q (accreditation):** Do not build a real adapter until the accreditation
+  question (Q4) is answered in writing. **Action:** Q4 moved to the top of §9
+  and gates any real adapter.
+- **Q (TIN):** Change the 10-digit TIN check from block to warn until NRS
+  confirms. **Action:** `tin_format` is now a **warning** in the supplier
+  profile, buyer profile, the invoice-save `assertValidTin` boundary, and the
+  canonical pre-submission validator; `tin_required` and `tin_placeholder`
+  stay blocking. Commit `22c3619`.
+- **Q (structured address):** Confirm and fix the flattening first.
+  **Action:** the snapshot party and `CanonicalParty` now carry the structured
+  components (street/LGA/state + country via jurisdiction) instead of a single
+  flattened string; `city`/`postalZone` are still not collected and stay
+  absent, and no buyer postal address is invented. Commit `2d2e917`.
+- **Q (discount):** blocked submission needs a product decision. **Action:**
+  recorded as open question **Q-G**; the current validator block is unchanged.
+- **Q (WHT/payable):** put the concern to a provider. **Action:** recorded as
+  open question **Q-H** and added to the provider question list.
 
