@@ -123,6 +123,10 @@ digits is what the UI hints at; **confirm the current format and any checksum**"
 > raise with a provider/NRS; see §9. It may be provider formatting, not the NRS
 > rule — do not assume either way.
 
+> **Decision (2026-10-30):** because the required format is unconfirmed and a
+> strict block risks turning away valid customers, the TIN check is being changed
+> from **block** to **warn** until NRS confirms the rule. See §10 item 3.
+
 ## 5. Field-by-field gap
 
 Legend for **Canonical?**: ✅ present / ◐ partial / ❌ absent.
@@ -130,9 +134,13 @@ Legend for **Canonical?**: ✅ present / ◐ partial / ❌ absent.
 LGA / HS / tax-category codes are values, so "present" means the model carries a
 slot for the value.
 
+Rows are keyed by the **provider's published field names** (Etranzact), which is
+the closest public proxy for the NRS UBL fields — it is **not** the NRS schema.
+The NRS schema itself was not retrievable (see §3).
+
 ### 5.1 Envelope
 
-| Real NRS field [Provider doc] | Canonical? | Canonical field | Validator? | Known rejection code |
+| Provider-published field | Canonical? | Canonical field | Validator? | Known rejection code |
 | --- | --- | --- | --- | --- |
 | `business_id` | ❌ | — (provider/workspace registration identity, not invoice data) | No | UNKNOWN |
 | `irn` | ❌ | — (assigned after clearance; `C4` says store immutably, not in this model) | No | UNKNOWN |
@@ -154,7 +162,7 @@ slot for the value.
 
 ### 5.2 Supplier party (`accounting_supplier_party`)
 
-| Real NRS field | Canonical? | Canonical field | Validator? | Known rejection code |
+| Provider-published field | Canonical? | Canonical field | Validator? | Known rejection code |
 | --- | --- | --- | --- | --- |
 | `party_name` | ✅ | `seller.legalName` (or `tradingName`) | Yes — `party_name_required` | UNKNOWN |
 | `tin` | ✅ | `seller.identifiers[]` scheme `tax-id` | Yes — `tin_required` / `tin_format` / `tin_placeholder` (NG only) | UNKNOWN |
@@ -170,7 +178,7 @@ slot for the value.
 
 ### 5.3 Customer party (`accounting_customer_party`) and other parties
 
-| Real NRS field | Canonical? | Canonical field | Validator? | Known rejection code |
+| Provider-published field | Canonical? | Canonical field | Validator? | Known rejection code |
 | --- | --- | --- | --- | --- |
 | `accounting_customer_party` (whole object) | ✅ | `buyer` | Yes — name/address/jurisdiction always; TIN only when trusted `buyerType === "b2b"` | UNKNOWN |
 | `accounting_customer_party` optional for B2C | ◐ | Model always expects a buyer; validator needs `buyerType` context to relax buyer TIN | Yes — `buyer_type_unverified` | UNKNOWN |
@@ -182,7 +190,7 @@ slot for the value.
 
 ### 5.4 Invoice lines
 
-| Real NRS field | Canonical? | Canonical field | Validator? | Known rejection code |
+| Provider-published field | Canonical? | Canonical field | Validator? | Known rejection code |
 | --- | --- | --- | --- | --- |
 | `item.name` | ◐ | `lines[].description` (one field serves name *and* description) | Yes — `line_description_required` | UNKNOWN |
 | `item.description` | ◐ | shares `lines[].description` | same as above | UNKNOWN |
@@ -199,7 +207,7 @@ slot for the value.
 
 ### 5.5 Payment terms
 
-| Real NRS field | Canonical? | Canonical field | Validator? | Known rejection code |
+| Provider-published field | Canonical? | Canonical field | Validator? | Known rejection code |
 | --- | --- | --- | --- | --- |
 | `payment_means[]` (`payment_means_code` + `payment_due_date`) | ❌ | — (payment details are free text in the app; `SPEC.md B4`) | No | UNKNOWN |
 | `payment_terms_note` | ❌ | — | No | UNKNOWN |
@@ -207,7 +215,7 @@ slot for the value.
 
 ### 5.6 Tax
 
-| Real NRS field | Canonical? | Canonical field | Validator? | Known rejection code |
+| Provider-published field | Canonical? | Canonical field | Validator? | Known rejection code |
 | --- | --- | --- | --- | --- |
 | `tax_total[].tax_amount` | ✅ | `totals.taxTotal` + `taxes[].amount` | Yes — `tax_total_mismatch`, `tax_amount_invalid` | UNKNOWN |
 | `tax_subtotal[].taxable_amount` | ❌ | — (no stored taxable base; computed internally) | ◐ via arithmetic, no field | UNKNOWN |
@@ -217,7 +225,7 @@ slot for the value.
 
 ### 5.7 Totals (`legal_monetary_total`)
 
-| Real NRS field | Canonical? | Canonical field | Validator? | Known rejection code |
+| Provider-published field | Canonical? | Canonical field | Validator? | Known rejection code |
 | --- | --- | --- | --- | --- |
 | `line_extension_amount` | ◐ | `totals.subtotal` | Yes — `subtotal_mismatch` | UNKNOWN |
 | `tax_exclusive_amount` | ◐ | `totals.subtotal` (+ implied) | Yes — `gross_total_mismatch` | UNKNOWN |
@@ -227,11 +235,17 @@ slot for the value.
 
 ### 5.8 Aggregate
 
-- **Envelope:** 2 of ~18 fields present; the rest absent or partial.
+- **Envelope:** 3 of 17 fields present (`issue_date`, `due_date`,
+  `document_currency_code`); the rest absent or partial.
 - **Parties:** core identity present; **structured postal address
   (street/city/postal_zone/LGA/state/country codes) largely absent** — this is
   the single largest concrete gap, and it is a *hard* requirement on the
-  provider sample (all six postal fields marked "Yes").
+  provider sample (all six postal fields marked "Yes"). The structured
+  components **already exist upstream** — supplier and buyer profiles store
+  `{ street, lga, state, countryCode }` and `composeSupplierAddress` flattens
+  them to one string before the canonical map (`party-identity.ts`,
+  `supplier-profile.ts`) — so this is a **mapper/model gap, not missing
+  collection**.
 - **Lines:** basic fields present; **name vs description, product category,
   allowance/charge, and HS/quantity codes are absent or generic**.
 - **Tax:** totals and rates present; **NRS tax-category *codes* and the taxable
@@ -258,6 +272,11 @@ Velure's own pre-submission checks.
 **Consequence:** the real code catalogue is **UNKNOWN** and must come from the
 NITDA guideline, the NRS API docs, or a provider contract before D5
 ("provider rejection codes mapped to plain-language fixes") can be truthful.
+
+**Action (2026-10-30):** the guidance map and the mock adapter are being changed
+so every Velure-invented code carries a `MOCK_` prefix (e.g.
+`MOCK_BUYER_TIN_INVALID`), so no invented code can be mistaken for a real NRS or
+provider code. See §10 item 4.
 
 ## 7. What is UNKNOWN and blocks a truthful D5/D8
 
@@ -301,18 +320,39 @@ NITDA guideline, the NRS API docs, or a provider contract before D5
 Hand this to the user; **no one has been contacted**, and there are no known
 cost/provider/timeline constraints yet.
 
+> **★ Ask first, and get it in writing: Q4 (accreditation) and Q2 (TIN format).**
+> **Do not build a real adapter until Q4 is answered in writing** — the risk is
+> building an adapter Velure is not permitted to operate. The SI role (map to
+> UBL, apply the CSID, register devices) is exactly what a Velure→provider
+> integration would rely on someone doing, so "can we be a plain client?"
+> is load-bearing, not a later detail.
+
+**Working answers from the user [Likely, 2026-10-30] where they can be given:**
+
+- **Q9 (auth):** both are true at different layers — OAuth 2.0 is the NRS-facing
+  side, the provider's API key + HMAC is the provider-facing side. Velure would
+  use the provider's scheme, not NRS's.
+- **Q10 (party of record):** the **taxpayer**. The process flow starts with
+  enabling each taxpayer and registering their device, which implies
+  per-customer onboarding that hurts self-serve — ask providers how they handle
+  onboarding at volume.
+- **Q15 (data protection):** the NRS standards list names the NDPA, so expect a
+  provider DPA.
+
 **To the NRS / NITDA:**
 
 1. Where is the official **Invoice Schema Reference** (UBL 2.1) for MBS, and is
    it available without sign-in? Can we get the NITDA guideline PDF directly?
-2. What is the **TIN format** required in `accounting_supplier_party.tin` /
+2. ★ What is the **TIN format** required in `accounting_supplier_party.tin` /
    `accounting_customer_party.tin` — plain 10 digits or a dashed/alphanumeric
-   form? Is there a checksum? (Velure currently assumes `^\d{10}$`.)
+   form (the provider sample shows a dashed form)? Is there a checksum? (Velure
+   currently assumes `^\d{10}$` and is relaxing it to a warning.)
 3. Is the published **field-level rejection code** list available, or only HTTP
    statuses? How are errors returned per field?
-4. Does a **software vendor** that only calls a certified provider's API need
+4. ★ Does a **software vendor** that only calls a certified provider's API need
    its own NITDA/NRS accreditation, or is calling an accredited provider's API
-   sufficient? (SI vs APP vs "just a customer of a provider".)
+   sufficient? (SI vs APP vs "just a customer of a provider".) **Get this in
+   writing before building an adapter.**
 5. Is a **sandbox/test environment** mandatory before production, and does it
    require registration of the taxpayer device / a test certificate?
 6. Are B2G invoices different, and are there **simplified-invoice** rules for
@@ -337,19 +377,33 @@ cost/provider/timeline constraints yet.
     duplicates and timeouts are handled.
 13. **Rejection model**: full code list, per-field errors, and whether a
     pre-submission `validate` call exists (Etranzact offers one).
-14. **Multi-currency and WHT**: do you accept foreign-currency invoices and
-    withholding that reduces the payable amount?
+14. **Multi-currency and withholding (WHT)**: do you accept foreign-currency
+    invoices, and **does your `payable_amount` subtract WHT?** The provider
+    sample has no WHT field, so if NRS's payable ignores WHT, Velure's
+    withholding-adjusted `payableTotal` will disagree with theirs — confirm
+    which figure is submitted as `payable_amount`.
 15. **Data protection**: where is invoice data stored/processed, and what NDPA
     terms and DPA do you require?
 
-## 10. Recommended next actions (not done by this task)
+## 10. Recommended next actions
 
-1. Obtain the official NRS/NITDA schema + rejection-code catalogue (blocks §7).
-2. Decide whether to add the missing hard fields to the model —
-   **structured postal address (street/city/postal_zone/LGA/state/country
-   codes)** first, then `invoice_kind`, HS/product codes, and allowance/charge.
-3. Confirm the TIN format before tightening `validateSupplierTin`.
-4. Only after (1)–(3): build a real adapter against one provider's sandbox, still
+Priority order after the 2026-10-30 review:
+
+1. ★ **Answer Q4 (accreditation) in writing before building any real adapter.**
+   Do not build an adapter Velure may not be permitted to operate.
+2. **Fix the structured-address mapper** — the data already exists upstream
+   (street/LGA/state/country) and is flattened to one string; confirm and fix
+   this **first** among the model gaps, then `invoice_kind`, HS/product codes,
+   allowance/charge, and NRS tax-category codes.
+3. **Relax the TIN check from block to warn** until NRS confirms the format
+   (decision above; a strict block risks rejecting valid customers).
+4. **Prefix invented rejection codes with `MOCK_`** so none can be mistaken for a
+   real NRS/provider code.
+5. Obtain the official NRS/NITDA schema + rejection-code catalogue (blocks §7).
+6. **Product decision needed (not made here):** the validator blocks any non-zero
+   discount (`discount_semantics_unsupported`), so a real discounted invoice
+   could never be submitted. Decide the intended allowance/charge tax treatment.
+7. Only after 1–6: build a real adapter against one provider's sandbox, still
    claiming **no** NRS compliance until a real invoice clears.
 
 ## 11. Checks
