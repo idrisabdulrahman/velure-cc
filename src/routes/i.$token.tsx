@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useLocation } from "@tanstack/react-router";
 import { Banknote, Check, Copy, Download, ReceiptText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { FaWhatsapp } from "react-icons/fa6";
 import { useResizeObserver } from "#/components/hooks/use-resize-observer";
 import { AppLoader } from "#/components/ui/app-loader";
 import { Spinner } from "#/components/ui/spinner";
@@ -11,6 +12,7 @@ import {
 	getInvoiceTemplateSize,
 	toInvoiceDocument,
 } from "#/features/invoices/invoice-document-adapter";
+import { buildInvoiceShareLinks } from "#/features/invoices/share-links";
 import type { InvoiceRecord } from "#/features/invoices/types";
 import { INVOICE_DOCUMENT_TYPE_LABELS } from "#/features/invoices/types";
 import { HtmlTemplate } from "#/lib/invoice-document/templates/html";
@@ -107,6 +109,16 @@ function PublicInvoicePage() {
 		"Invoice";
 	const documentLabel =
 		INVOICE_DOCUMENT_TYPE_LABELS[invoice.documentType ?? "standard"];
+	const shareLinks =
+		typeof window === "undefined"
+			? null
+			: buildInvoiceShareLinks({
+					token: invoice.token,
+					origin: window.location.origin,
+					invoiceNumber: invoice.invoiceNumber,
+					customerName: invoice.customerName,
+					documentType: invoice.documentType,
+				});
 	const statusLabel =
 		invoice.status === "unpaid"
 			? "Sent"
@@ -410,6 +422,16 @@ function PublicInvoicePage() {
 							<Copy className="h-4 w-4 shrink-0" />
 						)}
 					</button>
+					<a
+						href={shareLinks?.whatsappHref}
+						target="_blank"
+						rel="noreferrer"
+						className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#d7d3cc] transition-colors hover:bg-white/10 hover:text-white"
+						aria-label="Share invoice on WhatsApp"
+						title="Share invoice on WhatsApp"
+					>
+						<FaWhatsapp className="h-4 w-4 shrink-0" />
+					</a>
 				</div>
 			</div>
 
