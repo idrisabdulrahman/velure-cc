@@ -508,4 +508,13 @@ These block work that depends on the answer. Unattended runs must stop here.
 - **Checks (2026-10-30):** `pnpm test` → **844 passed / 86 skipped** (9 new
   tests); `pnpm typecheck` clean; `pnpm check` exit 0 with 359 pre-existing
   warnings.
+- **Follow-up decision (2026-10-30):** automatic reminder sending stays **OFF**.
+  The `reminder_events` queue is **empty** and nothing is eligible to send (0 of
+  62 invoices have `lifecycle.sentAt`; 47 are still drafts, 0 custom rules).
+  Enabling `SCHEDULER_REMINDER_SEND_ENABLED` today would email zero people, but
+  the data contains real-looking buyer addresses
+  (`idrisabdulrahman114@gmail.com`, `noicepikachu@gmail.com`,
+  `roxxam01@gmail.com`, …), so turning it on would **arm** outbound email for the
+  next delivered invoice. User chose to keep it off and enable it deliberately
+  when real invoices are being issued.
 
