@@ -72,6 +72,7 @@ import { invoiceTotal } from "#/features/invoices/calculate";
 import { NotesEditor } from "#/features/invoices/components/editor/notes-editor";
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import { toEditorDoc } from "#/features/invoices/invoice-document-adapter";
+import { buildInvoiceShareLinks } from "#/features/invoices/share-links";
 import type { InvoiceLineItem, InvoiceRecord } from "#/features/invoices/types";
 import { INVOICE_DOCUMENT_TYPE_LABELS } from "#/features/invoices/types";
 import { useUnifiedAuth } from "#/lib/auth-hook";
@@ -132,19 +133,17 @@ function formatDate(value: string) {
 	return formatInvoiceDate(value, "ng");
 }
 
-function shareLinks(invoice: InvoiceRecord) {
+// Thin adapter: maps an invoice record onto the shared, pure link builder.
+// Link formatting/encoding lives only in `buildInvoiceShareLinks`.
+function invoiceShareLinks(invoice: InvoiceRecord) {
 	const origin = typeof window !== "undefined" ? window.location.origin : "";
-	const publicUrl = `${origin}/i/${invoice.token}`;
-	const downloadUrl = `${publicUrl}?download=1`;
-	const label =
-		INVOICE_DOCUMENT_TYPE_LABELS[invoice.documentType ?? "standard"];
-	const text = `${label} ${invoice.invoiceNumber} for ${invoice.customerName}`;
-	const body = `${text}\n\nView & download: ${downloadUrl}`;
-
-	const telegramHref = `https://t.me/share/url?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(body)}`;
-	const whatsappHref = `https://wa.me/?text=${encodeURIComponent(body)}`;
-
-	return { publicUrl, telegramHref, whatsappHref };
+	return buildInvoiceShareLinks({
+		token: invoice.token,
+		origin,
+		invoiceNumber: invoice.invoiceNumber,
+		customerName: invoice.customerName,
+		documentType: invoice.documentType,
+	});
 }
 
 async function readSendEmailPayload(response: Response) {
@@ -1955,7 +1954,7 @@ export function InvoiceDetailsSheet({
 
 												<div className="flex flex-wrap gap-2">
 													<a
-														href={shareLinks(draft).telegramHref}
+														href={invoiceShareLinks(draft).telegramHref}
 														target="_blank"
 														rel="noreferrer"
 														aria-label="Share on Telegram"
@@ -1964,7 +1963,7 @@ export function InvoiceDetailsSheet({
 														<FaTelegram className="h-4 w-4" />
 													</a>
 													<a
-														href={shareLinks(draft).whatsappHref}
+														href={invoiceShareLinks(draft).whatsappHref}
 														target="_blank"
 														rel="noreferrer"
 														aria-label="Share on WhatsApp"
@@ -1975,7 +1974,7 @@ export function InvoiceDetailsSheet({
 													<button
 														type="button"
 														onClick={async () => {
-															const links = shareLinks(draft);
+															const links = invoiceShareLinks(draft);
 															if (navigator.share) {
 																const label =
 																	INVOICE_DOCUMENT_TYPE_LABELS[
@@ -2015,7 +2014,7 @@ export function InvoiceDetailsSheet({
 														type="button"
 														onClick={() =>
 															void navigator.clipboard.writeText(
-																shareLinks(draft).publicUrl,
+																invoiceShareLinks(draft).publicUrl,
 															)
 														}
 														aria-label="Copy link"
@@ -2024,7 +2023,7 @@ export function InvoiceDetailsSheet({
 														<Copy className="h-4 w-4" />
 													</button>
 													<a
-														href={shareLinks(draft).publicUrl}
+														href={invoiceShareLinks(draft).publicUrl}
 														target="_blank"
 														rel="noreferrer"
 														aria-label="Preview before download"

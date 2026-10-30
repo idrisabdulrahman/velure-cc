@@ -31,6 +31,7 @@ import {
 	ReceiptText,
 	Search,
 	Settings2,
+	Share2,
 	X,
 } from "lucide-react";
 import {
@@ -41,6 +42,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { FaTelegram, FaWhatsapp } from "react-icons/fa6";
 import { DatePicker } from "#/components/navigation/DatePicker";
 import { Button } from "#/components/ui/button";
 import { Calendar } from "#/components/ui/calendar";
@@ -121,6 +123,7 @@ import {
 	priceToKobo,
 	subtotalKobo,
 } from "#/features/invoices/line-money";
+import { buildInvoiceShareLinks } from "#/features/invoices/share-links";
 import type {
 	InvoiceDocumentType,
 	InvoiceLineItem,
@@ -1076,9 +1079,6 @@ export function CreateInvoicePanel({
 	const footerIconButtonClass =
 		"inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-[opacity,background-color,border-color,color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-paper-2 hover:text-ink";
 
-	const createdInvoicePublicUrl = createdInvoice
-		? `${typeof window !== "undefined" ? window.location.origin : ""}/i/${createdInvoice.token}`
-		: "";
 	const tinDigits = sellerTinForSubmission.length;
 	const tinIsValid =
 		sellerTinForSubmission.length === 0 || sellerTinForSubmission.length === 10;
@@ -2001,6 +2001,14 @@ export function CreateInvoicePanel({
 	};
 
 	if (composerStage === "success" && createdInvoice) {
+		const shareLinks = buildInvoiceShareLinks({
+			token: createdInvoice.token,
+			origin: typeof window !== "undefined" ? window.location.origin : "",
+			invoiceNumber: createdInvoice.invoiceNumber,
+			customerName: createdInvoice.customerName,
+			documentType: createdInvoice.documentType,
+		});
+
 		return (
 			<div
 				className={`flex h-full min-h-0 w-full flex-col ${isSheetMode ? "" : "pb-6"}`}
@@ -2073,12 +2081,51 @@ export function CreateInvoicePanel({
 										<div className="mb-2 text-[12px] text-ink-3">
 											Share link
 										</div>
-										<div className="flex items-center gap-2">
-											<div className="flex h-10 flex-1 items-center border border-rule bg-paper px-3 text-[13px] text-ink-3">
-												<span className="truncate">
-													{createdInvoicePublicUrl}
-												</span>
+										<div className="flex flex-wrap items-center gap-2">
+											<div className="flex h-10 min-w-0 flex-1 items-center border border-rule bg-paper px-3 text-[13px] text-ink-3">
+												<span className="truncate">{shareLinks.publicUrl}</span>
 											</div>
+											<a
+												href={shareLinks.telegramHref}
+												target="_blank"
+												rel="noreferrer"
+												className={footerIconButtonClass}
+												aria-label="Share on Telegram"
+												title="Share on Telegram"
+											>
+												<FaTelegram className="h-4 w-4" />
+											</a>
+											<a
+												href={shareLinks.whatsappHref}
+												target="_blank"
+												rel="noreferrer"
+												className={footerIconButtonClass}
+												aria-label="Share on WhatsApp"
+												title="Share on WhatsApp"
+											>
+												<FaWhatsapp className="h-4 w-4" />
+											</a>
+											<button
+												type="button"
+												onClick={async () => {
+													if (navigator.share) {
+														await navigator.share({
+															title: `${INVOICE_DOCUMENT_TYPE_LABELS[createdInvoice.documentType]} ${createdInvoice.invoiceNumber}`,
+															text: shareLinks.text,
+															url: shareLinks.publicUrl,
+														});
+														return;
+													}
+													await navigator.clipboard.writeText(
+														shareLinks.publicUrl,
+													);
+												}}
+												className={footerIconButtonClass}
+												aria-label="Share link"
+												title="Share link"
+											>
+												<Share2 className="h-4 w-4" />
+											</button>
 											<button
 												type="button"
 												onClick={() =>
@@ -2090,7 +2137,7 @@ export function CreateInvoicePanel({
 												<Copy className="h-4 w-4" />
 											</button>
 											<a
-												href={createdInvoicePublicUrl}
+												href={shareLinks.publicUrl}
 												target="_blank"
 												rel="noreferrer"
 												className={footerIconButtonClass}
