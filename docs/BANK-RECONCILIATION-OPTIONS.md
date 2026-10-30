@@ -19,6 +19,7 @@ The three options:
 | A | Manual payment recording | **Built** |
 | B | Virtual account per invoice (Paystack) | **Partly built** — Pay-with-Transfer already creates a per-invoice account |
 | C | Bank-statement CSV import with auto-matching | **Not built** |
+| D | Customer pays into the workspace's **own** bank account (See **§9**, added 2026-10-30) | **Not built** — and it is a new product domain, gated on product-strategy approval |
 
 ## 2. The question we cannot answer from the repo
 
@@ -222,3 +223,117 @@ any code.
 - Docs-only change; no code, schema, route, or migration touched.
 - `pnpm test`, `pnpm typecheck`, `pnpm check` run once; see the task prompt for
   results. Expected: unchanged from baseline.
+
+---
+
+## 9. Addendum (2026-10-30) — Option D: the workspace's own bank account
+
+Raised by the user after reading §1–§8: *"what if the user wants to use their
+own bank account … and if it's going to their own account and not the generated
+invoice virtual account, how do we verify it — or do we take inspiration from
+Midday, where they connect their bank and automatically check it?"*
+
+**This is a new product domain.** `AGENTS.md` §3 requires explicit
+product-strategy approval before implementing banking (and Magic Inbox). The
+user asking whether it is worth considering is **not** that approval, so nothing
+below is built. This section is research and a recommendation only.
+
+### 9.1 The end destination barely changes; the *friction* does
+
+A Paystack virtual account is not a Velure account. Collected money settles
+**T+1 into the workspace's own settlement bank account**. So "customer pays into
+our own account" changes **how the credit arrives and who can see it**, not
+where the money finally lands. What actually differs:
+
+| | Paystack per-invoice virtual account (B) | Workspace's own account (D) |
+| --- | --- | --- |
+| Who sees the credit | Velure (webhook) + the workspace | Only the workspace's bank |
+| Matched automatically | Yes — reference is generated per invoice | **No** — something must read the bank |
+| Dead-account risk | 8-hour expiry | None — the account always works |
+| Extra data needed | None | A bank feed or a statement file |
+| Customer friction | New account number per invoice | One familiar account number |
+
+### 9.2 How verification can work — three data sources, in order of trust
+
+1. **Aggregator feed (a real bank connection).** The workspace connects its bank
+   once; the provider returns transactions. Provider-attested, near-real-time,
+   and no file handling. This is what Midday does (§9.3).
+2. **Statement file (Option C, bank = the workspace's own account).** Same
+   matcher, but the credit comes from a user upload. Trust is at the *member*
+   level: a workspace member could upload anything, so this is evidence for the
+   workspace's own records, not an independent attestation.
+3. **Payer-supplied reference only.** The app instructs the payer to put the
+   invoice number in the transfer narration, and the member confirms. Cheapest,
+   weakest, and needs no new data at all.
+
+In every case the **matching signals are the same three**: exact reference
+(invoice number in the narration), amount (integer kobo, exact or tolerance),
+and date proximity. The source changes only how much you trust them.
+
+### 9.3 What Midday actually does (local checkout, inspected 2026-10-30)
+
+Absolute source: `/home/asys/JS-TS/apps/projects/midday-main`.
+
+| Behaviour | Midday source (absolute) | Classification for Velure |
+| --- | --- | --- |
+| Provider-agnostic bank adapter (plaid, teller, gocardless, enablebanking) | `apps/engine/src/providers/index.ts`, `apps/engine/src/providers/types.ts` | **adapt** the *shape* (one interface, swappable provider); **reject** the provider *set* — none of the four operates in Nigeria |
+| Connection + account + transaction tables, team-scoped | `packages/db/src/schema.ts:1056` (`bank_connections`), `:603` (`bank_accounts`), `:290` (`transactions`) | **adapt** (tenant-scoped, one row per connection). **reject** storing the provider `accessToken` in the row (`schema.ts:1068`) — use a secret store; a SELECT-scoped RLS policy is not a secret boundary |
+| Cursor/paged sync jobs, reconnect, scheduler | `packages/jobs/src/tasks/bank/sync/account.ts`, `sync/connection.ts`, `setup/initial.ts`, `scheduler/bank-scheduler.ts`, `tasks/reconnect/connection.ts` | **adapt** (idempotent upsert keyed by provider transaction id; retry/backoff; `errorRetries` in `schema.ts`) |
+| Matching engine (embedding thresholds, amount tolerance tiers, calibration from user confirm/decline) | `packages/db/src/utils/transaction-matching.ts` (388 lines), `packages/db/src/queries/transaction-matching.ts` (2,180 lines) | **reject for v1** — far too heavy for one bank/one currency. **adapt one idea**: keep an explicit `auto_matched | high_confidence | suggested` distinction and never auto-commit a low-confidence match |
+| Match types + suggestions surfaced for human confirmation | `queries/transaction-matching.ts:52,67,81,95` | **adapt** — matches are proposals the user confirms |
+| RLS policies scoped to team membership | `schema.ts:1102` (`pgPolicy("Bank Connections can be selected by a member of the team")`, `private.get_teams_for_authenticated_user()`) | **adapt** — the right tenancy shape; Velure's Phase-A equivalent is workspace membership |
+
+Key finding: **Midday's "connect your bank" is real, but it is US/EU only.**
+Plaid, Teller, GoCardless and EnableBanking do not cover Nigerian banks, so the
+Midday approach cannot be ported as-is. A Nigerian equivalent needs a local
+aggregator (for example Mono, Okra, OnePipe or Stitch — named as market options,
+**not** evaluated or endorsed here) or the statement-import path.
+
+Also note Midday's connection flow needs a **per-team onboarding + OAuth-like
+consent** step, and its provider tokens must be treated as high-value secrets.
+
+### 9.4 Honest risks of Option D
+
+- **A bank feed is a new, high-value secret and a new tenancy surface.** One
+  connection = read access to the workspace's whole bank history, not just
+  invoices. That is a much bigger blast radius than reading its invoices, and it
+  makes token storage, revocation, and audit the hard part.
+- **Consent and liability.** The workspace would be granting Velure (or an
+  aggregator) ongoing read access to its account. That needs real terms, not a
+  checkbox.
+- **Aggregator cost is unknown here.** Nigerian aggregator pricing is not
+  published in a form this memo could verify → **UNKNOWN**; confirm per provider.
+- **Wrong match = money error** (same as Option C).
+- **Cross-border and FX**: an own-account credit can arrive in another currency
+  at a different amount than invoiced. Matching must then be explicit, never
+  guessed.
+
+### 9.5 Recommendation for Option D
+
+**Do not build the bank connection now.** The honest sequencing is:
+
+1. **Cheapest real improvement:** generate a **payment reference** (the invoice
+   number) into every invoice's payment instructions and the public payer page,
+   so own-account payers *can* be matched exactly. This needs no new provider,
+   no new data, and helps Options A, C and D equally. It is the single highest
+   value-per-effort item in this whole memo.
+2. Decide Option C (statement import) for the workspace's **own** account before
+   any bank-connection work — it delivers most of the reconciliation value with
+   none of the secret/consent/aggregator risk.
+3. Only if statement import proves too manual, evaluate **one** Nigerian
+   aggregator against §9.4, as its own prompt with product-strategy approval.
+
+What would change this: if most customers pay into one account *and* the user
+will not upload statements, then an aggregator connection is the only path that
+removes the human step, and the secret/consent cost becomes justified.
+
+### 9.6 Decision questions (added)
+
+1. When customers pay into your own account, do they **put the invoice number in
+   the narration** today? If not, would you be willing to ask them to?
+2. Would you rather **upload a statement**, or **connect the bank** and accept
+   the consent/secret implications in §9.4?
+3. Is "customer pays into one familiar account number" a **requirement** from
+   your customers, or a description of what they do because there is no
+   alternative?
+

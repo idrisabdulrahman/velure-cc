@@ -14,7 +14,7 @@ These block work that depends on the answer. Unattended runs must stop here.
 | Q-D | **Target segment (T12).** Small businesses only, or also medium taxpayers already inside the mandate? | Drives positioning copy and whether a mock can ever serve the segment. | Small businesses. |
 | Q-F | **Real users / pilots (T7/T13).** Are there any real pilot users today? | Ground-truth table honesty. Evidence says effectively none (§7 of the audit). | Report "no known paying users; data is test fixtures". |
 | Q-H | **WHT / payable (T6/review).** Does the NRS e-invoice carry a gross amount plus a separate withholding amount, or a single net payable? | The app stores `withholdingTotal` and a net payable; whether that maps to the NRS/UBL document is UNKNOWN. Needs a provider/NRS confirmation. | Ask the provider question list (§9 of the gap analysis); do not guess. |
-| Q-I | **Reconciliation (T9).** Keep manual + per-invoice Paystack virtual accounts as they are, harden the virtual-account path (confirmed fee class + late-payer handling), or build bank-statement CSV import for one named bank? Also: how do customers actually pay, and which bank/format is the statement? | Every option after "keep as-is" is its own work package; building the wrong one wastes a slice. Statement import is the only option whose failure mode is a wrong financial match. | Keep A+B; write no code. See `docs/BANK-RECONCILIATION-OPTIONS.md`. |
+| Q-J | **Own-account reconciliation (T9/D).** When customers pay into the workspace's **own** bank account, do they put the invoice number in the narration? Would the user rather upload a statement or connect the bank (aggregator read access + consent + secret custody)? Is one familiar account number a customer requirement? | Decides whether Velure builds statement import, a Nigerian aggregator connection, or neither. Bank connection is a new product domain: `AGENTS.md` §3 requires product-strategy approval first. | Payment-reference discipline only (cheapest), then statement import; **no** bank connection. See `docs/BANK-RECONCILIATION-OPTIONS.md` §9. |
 
 ### Resolved
 
@@ -26,6 +26,7 @@ These block work that depends on the answer. Unattended runs must stop here.
 | Q-C | **Closed source.** Rewrite the Midday-derived files as clean-room originals and remove every "midday" name/path. UI and behavior must stay identical. No commercial licence. | 2026-10-29 |
 | Q-E | **Supabase `pg_cron` + `pg_net`** calls the secret scheduler endpoint. No separate Worker. | 2026-10-29 |
 | Q-G | **Discounts:** support invoice-level *before tax*, invoice-level *after tax*, and line-level, **mutually exclusive per invoice**. Before-tax reduces the taxable base proportionally (VAT on the discounted amount). A legacy discount with no stored mode defaults to **after tax**, preserving the totals the renderer already displayed. | 2026-10-30 |
+| Q-I | **Reconciliation (T9):** keep manual + per-invoice Paystack virtual accounts as they are — **no new code now** — and separately investigate the "customers pay into the workspace's own bank account" case. Payment mix in practice: **mixed**. Follow-up raised as Q-J. | 2026-10-30 |
 
 ---
 
@@ -398,6 +399,39 @@ These block work that depends on the answer. Unattended runs must stop here.
   `bank_transfer` falls under is **UNKNOWN** — confirm with Paystack.
 - **Open question Q-I** (added above): the user's choice and their real payment
   mix / statement format.
+- **No code, schema, route, or migration touched.**
+- **Checks:** `pnpm test` → 823 passed / 86 skipped (unchanged);
+  `pnpm typecheck` clean; `pnpm check` exit 0 with 359 pre-existing warnings.
+
+### 2026-10-30 — T9 answer + own-bank-account addendum (Q-I resolved, Q-J opened)
+
+- **User answer (Q-I):** keep manual recording + per-invoice Paystack virtual
+  accounts as they are; **no new reconciliation code now** (option 1 of the
+  memo). Payment mix in practice: **mixed**.
+- **User follow-up (new Q-J):** what if the workspace wants customers to pay
+  into its **own** bank account rather than the generated virtual account — how
+  would Velure verify that, or should it copy Midday and connect the bank to
+  check automatically?
+- **Research (no code):** `docs/BANK-RECONCILIATION-OPTIONS.md` §9. Midday's
+  bank connection is real but **US/EU only** — its providers are plaid, teller,
+  gocardless, enablebanking (`midday-main/apps/engine/src/providers/index.ts`),
+  none of which covers Nigerian banks. Its matching engine is ~2,600 lines
+  (`packages/db/src/utils/transaction-matching.ts`,
+  `packages/db/src/queries/transaction-matching.ts`) and is **rejected for v1**;
+  only the explicit `auto_matched | high_confidence | suggested` tier idea is
+  adapted. Its `bank_connections` **stores the provider access token in the row**
+  (`packages/db/src/schema.ts:1068`) — flagged as a defect Velure must **not**
+  copy. `AGENTS.md` §3 requires product-strategy approval before any banking
+  domain work, so nothing is built.
+- **Recommended sequencing:** (1) put the **invoice number as a payment
+  reference** into every invoice's instructions and the public payer page — no
+  new provider needed and it helps A/C/D equally; (2) decide statement import for
+  the workspace's own account; (3) only then evaluate **one** Nigerian
+  aggregator, with approval.
+- **Skill gap recorded (required by `AGENTS.md` §7):** `plaid-fintech` and
+  `bank-sync` are **not installed** anywhere under `/home/asys` (only
+  `plaid-fintech` is listed in `CATALOG.md:798`); no substitute was loaded.
+- **Prompt:** `prompts/t9d-own-bank-account-reconciliation-2026-10.md`.
 - **No code, schema, route, or migration touched.**
 - **Checks:** `pnpm test` → 823 passed / 86 skipped (unchanged);
   `pnpm typecheck` clean; `pnpm check` exit 0 with 359 pre-existing warnings.
