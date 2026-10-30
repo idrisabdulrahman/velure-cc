@@ -518,3 +518,67 @@ These block work that depends on the answer. Unattended runs must stop here.
   next delivered invoice. User chose to keep it off and enable it deliberately
   when real invoices are being issued.
 
+### 2026-10-30 — T8 WhatsApp share (premise refuted, extended to all surfaces)
+
+- **Question the decision:** T8 asks why delivery was "limited to email plus a
+  copyable public link" and whether WhatsApp was considered, rejected, or just
+  not reached.
+- **Answer from the code/history:** the premise is **refuted**. A WhatsApp
+  click-to-chat share (`https://wa.me/?text=...`), Telegram share and the native
+  share sheet **already existed** in
+  `src/features/invoices/components/invoice-details-sheet.tsx:135-148` /
+  `:1956-2035`, added in `9ca64b0`. No rejection is recorded in git, the
+  decision ledger or the handoff — WhatsApp was simply built before the
+  critique.
+- **User answer 2026-10-30:** "1 & 2" — extend the **post-create success card**
+  and add a share action to the **public invoice page** as well.
+- **What shipped:** new pure `src/features/invoices/share-links.ts`
+  (`buildInvoiceShareLinks`) is now the only place the public URL, prefilled
+  body, WhatsApp and Telegram hrefs are built. The details sheet delegates to
+  it (hrefs byte-identical); the post-create card gains Telegram/WhatsApp/native
+  share; the `/i/:token` floating bar gains a WhatsApp share.
+- **Not changed:** no API, no WhatsApp Business account, and no
+  server/schema/money/numbering/issued-invoice change; `react-icons/fa6` was
+  already installed.
+- **Prompt:** `prompts/whatsapp-share-2026-10.md`.
+- **Commit:** `8789a82` (merged as `9b7ed61`).
+- **Checks (2026-10-30):** `pnpm test` → **854 passed / 86 skipped** (5 new
+  tests); `pnpm typecheck` clean; `pnpm check` exit 0 with 359 pre-existing
+  warnings.
+
+### 2026-10-30 — T10 accountant export quality (tax split + signed credit notes)
+
+- **Question the decision:** which accounting tools do the accountants actually
+  use, and why were QuickBooks/Xero connector targets chosen? A real
+  (anonymized) accountant export request is still needed to match column names
+  exactly.
+- **Premise check:** the 1000-row truncation and formula injection were already
+  fixed in `ca53467` (`prompts/csv-import-export-hardening.md`). What remained:
+  the CSV had only `invoiceNumber,customerName,currency,total,status,issueDate,
+  dueDate` — no VAT/WHT split, no `documentType`, and `document_type` was not
+  even selected, so credit notes exported as positive revenue.
+- **User answer 2026-10-30:** proceed with the **standard audit now**; match a
+  real accountant request later. Column names/order are therefore **provisional**.
+- **What shipped:** `loadAllExportInvoices` selects `document_type`; the CSV
+  header is now
+  `invoiceNumber,customerName,documentType,currency,subtotal,vat,withholdingTax,total,status,issueDate,dueDate`.
+  `subtotal` ← `compliance.subtotal`, `vat` ← `compliance.totalTax`,
+  `withholdingTax` ← `compliance.withholdingTaxAmount`, and `total` keeps the
+  existing payable precedence. Credit notes negate all four money columns;
+  standard/debit/proforma stay positive. Money columns stay numeric and
+  unguarded; the formula guard stays on free-text columns; the NRS
+  informational disclaimer stays line 1.
+- **Verified against live data:** the stored snapshot is populated (e.g.
+  `subtotal 150000 / totalTax 11250 / netPayable 161250`) and all 62 live
+  invoices are `standard` (60) or `proforma` (2). No credit/debit notes exist
+  yet, so that branch is covered by unit + paging tests rather than live data.
+- **Not changed:** no schema/migration/RLS/numbering/issued-invoice change, and
+  no NRS-clearance language.
+- **Open input:** one real (anonymized) accountant export request plus the
+  accounting tools used, so columns/order can be matched exactly.
+- **Prompt:** `prompts/accountant-export-quality-2026-10.md`.
+- **Commit:** `a1c32d5`.
+- **Checks (2026-10-30):** `pnpm test` → **854 passed / 86 skipped** (5 new
+  tests); `pnpm typecheck` clean; `pnpm check` exit 0 with 359 pre-existing
+  warnings.
+
