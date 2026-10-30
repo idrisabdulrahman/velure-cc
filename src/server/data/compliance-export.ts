@@ -9,6 +9,8 @@ export type ComplianceExportKind =
 export type ComplianceExportInvoiceRow = {
 	invoice_number: string | null;
 	customer_name: string | null;
+	/** Stored `invoices.document_type`; absent rows export as `standard`. */
+	document_type?: string | null;
 	currency: string | null;
 	payment_amount: number | string | null;
 	status: string | null;
@@ -18,10 +20,20 @@ export type ComplianceExportInvoiceRow = {
 	line_items?: unknown;
 };
 
+/**
+ * Provisional accountant columns (see
+ * `prompts/accountant-export-quality-2026-10.md`): the tax split and the
+ * document type sit next to `total` so a spreadsheet can group and sum a
+ * workspace's VAT and withholding without re-deriving them.
+ */
 const CSV_HEADERS = [
 	"invoiceNumber",
 	"customerName",
+	"documentType",
 	"currency",
+	"subtotal",
+	"vat",
+	"withholdingTax",
 	"total",
 	"status",
 	"issueDate",
@@ -86,8 +98,8 @@ export function invoiceTotalForExportRow(
  * cell that starts with `=`, `+`, `-`, `@`, a tab or a CR — and this export is
  * a file the user downloads and opens. A leading apostrophe forces text.
  *
- * Applied only to the free-text columns so the numeric `total` column keeps its
- * type and still sums in a spreadsheet.
+ * Applied only to the free-text columns so the numeric money columns keep
+ * their type and still sum in a spreadsheet.
  */
 const FORMULA_LEAD = /^[=+\-@\t\r]/;
 
@@ -98,6 +110,39 @@ function csvTextCell(value: unknown): string {
 
 function csvValueCell(value: unknown): string {
 	return JSON.stringify(value ?? "");
+}
+
+/** The raw stored document type, defaulting to a standard invoice. */
+function documentTypeForExportRow(row: ComplianceExportInvoiceRow): string {
+	const value = row.document_type;
+	return typeof value === "string" && value.length > 0 ? value : "standard";
+}
+
+/**
+ * The money columns of one export row. `subtotal`/`vat`/`withholdingTax` come
+ * straight from the stored compliance snapshot (`totalTax` is VAT);
+ * `total` keeps the existing payable precedence.
+ *
+ * A credit note reduces revenue, so every money column is negated for it.
+ * Debit notes, standard invoices and pro-formas stay positive. Missing
+ * snapshot values fall back to `0` so a spreadsheet never sees `undefined` or
+ * `NaN`, and no new float arithmetic is introduced (the values are the stored
+ * decimals, negated exactly).
+ */
+function invoiceMoneyForExportRow(row: ComplianceExportInvoiceRow): {
+	subtotal: number;
+	vat: number;
+	withholdingTax: number;
+	total: number;
+} {
+	const compliance = (row.compliance ?? {}) as Record<string, unknown>;
+	const sign = row.document_type === "credit_note" ? -1 : 1;
+	return {
+		subtotal: sign * (numeric(compliance.subtotal) ?? 0),
+		vat: sign * (numeric(compliance.totalTax) ?? 0),
+		withholdingTax: sign * (numeric(compliance.withholdingTaxAmount) ?? 0),
+		total: sign * invoiceTotalForExportRow(row),
+	};
 }
 
 /**
@@ -127,16 +172,21 @@ export function buildInvoiceExportContent(
 	return [
 		JSON.stringify(NRS_INFORMATIONAL_DISCLAIMER),
 		CSV_HEADERS.join(","),
-		...rows.map((row) =>
-			[
+		...rows.map((row) => {
+			const money = invoiceMoneyForExportRow(row);
+			return [
 				csvTextCell(row.invoice_number),
 				csvTextCell(row.customer_name),
+				csvTextCell(documentTypeForExportRow(row)),
 				csvTextCell(row.currency),
-				csvValueCell(invoiceTotalForExportRow(row)),
+				csvValueCell(money.subtotal),
+				csvValueCell(money.vat),
+				csvValueCell(money.withholdingTax),
+				csvValueCell(money.total),
 				csvValueCell(row.status),
 				csvValueCell(row.issue_date),
 				csvValueCell(row.due_date),
-			].join(","),
-		),
+			].join(",");
+		}),
 	].join("\n");
 }

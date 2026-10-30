@@ -396,7 +396,7 @@ async function loadAllExportInvoices(
 		const { data, error } = await client
 			.from("invoices")
 			.select(
-				"invoice_number, customer_name, currency, payment_amount, status, issue_date, due_date, compliance, line_items",
+				"invoice_number, customer_name, document_type, currency, payment_amount, status, issue_date, due_date, compliance, line_items",
 			)
 			.eq("workspace_id", workspaceId)
 			.order("id", { ascending: true })

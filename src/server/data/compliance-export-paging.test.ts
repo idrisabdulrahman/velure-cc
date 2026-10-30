@@ -25,6 +25,7 @@ function invoiceRow(index: number) {
 		workspace_id: WS,
 		invoice_number: `INV-2026-${String(index + 1).padStart(4, "0")}`,
 		customer_name: `Customer ${index}`,
+		document_type: "standard",
 		currency: "NGN",
 		payment_amount: 0,
 		status: "draft",
@@ -90,6 +91,28 @@ describe("compliance export read", () => {
 
 		const result = await createInvoiceExport(client, USER, "invoices_csv");
 
-		expect(result.content.split("\n")[2]).toContain('"NGN",161250,');
+		expect(result.content.split("\n")[2]).toContain('"NGN",0,0,0,161250,');
+	});
+
+	it("reads document_type so credit notes export signed", async () => {
+		// `document_type` was absent from the export select, so every row looked
+		// like a standard invoice and a credit note exported as positive revenue.
+		const tables = seedTables(1);
+		Object.assign(tables.invoices[0] as Record<string, unknown>, {
+			document_type: "credit_note",
+			compliance: {
+				subtotal: 100000,
+				totalTax: 7500,
+				withholdingTaxAmount: 5000,
+				netPayable: 102500,
+			},
+		});
+		const { client } = createFakeSupabase(tables);
+
+		const result = await createInvoiceExport(client, USER, "invoices_csv");
+
+		expect(result.content.split("\n")[2]).toContain(
+			'"credit_note","NGN",-100000,-7500,-5000,-102500,',
+		);
 	});
 });
