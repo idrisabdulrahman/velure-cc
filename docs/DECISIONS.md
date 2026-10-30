@@ -14,6 +14,7 @@ These block work that depends on the answer. Unattended runs must stop here.
 | Q-D | **Target segment (T12).** Small businesses only, or also medium taxpayers already inside the mandate? | Drives positioning copy and whether a mock can ever serve the segment. | Small businesses. |
 | Q-F | **Real users / pilots (T7/T13).** Are there any real pilot users today? | Ground-truth table honesty. Evidence says effectively none (§7 of the audit). | Report "no known paying users; data is test fixtures". |
 | Q-H | **WHT / payable (T6/review).** Does the NRS e-invoice carry a gross amount plus a separate withholding amount, or a single net payable? | The app stores `withholdingTotal` and a net payable; whether that maps to the NRS/UBL document is UNKNOWN. Needs a provider/NRS confirmation. | Ask the provider question list (§9 of the gap analysis); do not guess. |
+| Q-I | **Reconciliation (T9).** Keep manual + per-invoice Paystack virtual accounts as they are, harden the virtual-account path (confirmed fee class + late-payer handling), or build bank-statement CSV import for one named bank? Also: how do customers actually pay, and which bank/format is the statement? | Every option after "keep as-is" is its own work package; building the wrong one wastes a slice. Statement import is the only option whose failure mode is a wrong financial match. | Keep A+B; write no code. See `docs/BANK-RECONCILIATION-OPTIONS.md`. |
 
 ### Resolved
 
@@ -378,5 +379,26 @@ These block work that depends on the answer. Unattended runs must stop here.
   follow-up slice**; the engine and validator already accept line mode.
 - **Prompt:** `prompts/discount-money-path-2026-10.md`.
 - **Checks:** `pnpm test` → 823 passed / 86 skipped (30 new tests);
+  `pnpm typecheck` clean; `pnpm check` exit 0 with 359 pre-existing warnings.
+
+### 2026-10-30 — Task T9 (bank-transfer reconciliation memo)
+
+- **Decision:** Produce the options memo only; write **no code** until the user
+  picks an option (T9's own instruction). Output:
+  `docs/BANK-RECONCILIATION-OPTIONS.md`.
+- **Correction recorded:** T9's premise ("manual plus Paystack only") is only
+  half right. Paystack **Pay-with-Transfer already creates a per-invoice
+  dedicated virtual account** (`ensurePaystackTransferCharge`,
+  `src/server/data/paystack-server.ts:113`) with an 8-hour expiry, a
+  deterministic `velure-<invoiceId>-<ts>` reference, and webhook + reconcile
+  confirmation. Option B is therefore an **extension**, not a new build.
+- **Pricing:** taken from `https://paystack.com/pricing` (fetched 2026-10-30).
+  Virtual Accounts **1% capped at ₦300**; local transactions 1.5% + ₦100 capped
+  at ₦2,000; transfers ₦10/₦25/₦50 by tier. Which class `/charge` with
+  `bank_transfer` falls under is **UNKNOWN** — confirm with Paystack.
+- **Open question Q-I** (added above): the user's choice and their real payment
+  mix / statement format.
+- **No code, schema, route, or migration touched.**
+- **Checks:** `pnpm test` → 823 passed / 86 skipped (unchanged);
   `pnpm typecheck` clean; `pnpm check` exit 0 with 359 pre-existing warnings.
 
