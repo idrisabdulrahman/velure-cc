@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFakeSupabase, type FakeTables } from "./data/testing/fake-db";
+import type { Supabase } from "./data/workspaces";
 import {
 	runSchedulerTick,
 	SCHEDULER_JOB_NAMES,
@@ -172,6 +173,39 @@ describe("runSchedulerTick", () => {
 		expect(String(errorSpy.mock.calls[0]?.[0])).toContain(
 			"Scheduler job bookkeeping failed",
 		);
+	});
+
+	it("serializes a plain-object bookkeeping error instead of [object Object]", async () => {
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+		// The real production failure: supabase-js returns a PostgREST error as a
+		// PLAIN OBJECT, and `String(error)` hid it as "[object Object]" behind
+		// "Scheduler job bookkeeping failed", so the cause was invisible.
+		const admin = {
+			from() {
+				return {
+					insert: () =>
+						Promise.resolve({
+							error: {
+								message: "Too many subrequests",
+								code: "CF-50",
+								details: "exceeded 50 subrequests",
+								hint: "upgrade the plan",
+							},
+						}),
+				};
+			},
+		} as unknown as Supabase;
+		const jobs: SchedulerJob[] = [
+			{ name: "solo", run: async () => ({ ok: true }) },
+		];
+
+		await runSchedulerTick({ admin, now: NOW, jobs });
+
+		expect(errorSpy).toHaveBeenCalled();
+		const logged = errorSpy.mock.calls.map((call) => call.join(" ")).join("\n");
+		expect(logged).not.toContain("[object Object]");
+		expect(logged).toContain("Too many subrequests");
+		expect(logged).toContain("CF-50");
 	});
 
 	it("does not leak a non-JSON job result into the tick summary", async () => {

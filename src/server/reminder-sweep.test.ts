@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeSupabase, type FakeTables } from "./data/testing/fake-db";
-import { runReminderSweep } from "./reminder-sweep";
+import {
+	REMINDER_SWEEP_DEFAULT_BATCH_SIZE,
+	REMINDER_SWEEP_DEFAULT_BUDGET_MS,
+	runReminderSweep,
+} from "./reminder-sweep";
 
 /**
  * T1 — server-side reminder sweep.
@@ -325,6 +329,61 @@ describe("runReminderSweep", () => {
 			expect(summary.workspaceCount).toBe(1);
 			expect(summary.truncated).toBe(true);
 			expect(summary.nextCursor).toBe(USER_A);
+		});
+	});
+
+	describe("stays inside the production tick ceilings (2026-10-30 fix)", () => {
+		// A live tick that swept 11 workspaces made 49 subrequests and ran ~8.5 s.
+		// The Cloudflare Pages Function allows 50 subrequests (free plan) and the
+		// pg_net timeout is 10 s, so the sweep's own `job_runs` cursor row — the
+		// very last request — was dropped. These constants must keep the whole
+		// tick under BOTH ceilings with headroom for the other four jobs.
+		const FIXED_SUBREQUESTS_PER_TICK = 10; // cursor read + page + 4 jobs + bookkeeping
+		const SUBREQUESTS_PER_WORKSPACE = 4; // active_workspaces, reminder_rules, invoices, reminder_runs
+
+		it("keeps the worst-case subrequest count well under the free-plan cap of 50", () => {
+			expect(REMINDER_SWEEP_DEFAULT_BATCH_SIZE).toBe(8);
+			expect(
+				FIXED_SUBREQUESTS_PER_TICK +
+					REMINDER_SWEEP_DEFAULT_BATCH_SIZE * SUBREQUESTS_PER_WORKSPACE,
+			).toBeLessThan(50);
+		});
+
+		it("keeps the sweep budget well inside the 10 s pg_net timeout", () => {
+			expect(REMINDER_SWEEP_DEFAULT_BUDGET_MS).toBeLessThanOrEqual(5000);
+		});
+
+		it("sweeps only the default batch and still returns a cursor to resume from", async () => {
+			const owners = Array.from({ length: 10 }, (_, i) => `user-${i}`);
+			const tables = seed([], {
+				active_workspaces: owners.map((ownerId, i) => ({
+					user_id: ownerId,
+					workspace_id: `ws-${i}`,
+				})),
+				workspaces: owners.map((ownerId, i) =>
+					workspaceRow(`ws-${i}`, ownerId),
+				),
+				workspace_members: owners.map((ownerId, i) => ({
+					workspace_id: `ws-${i}`,
+					user_id: ownerId,
+					role: "owner",
+				})),
+			});
+			const { client } = createFakeSupabase(tables);
+
+			const summary = await runReminderSweep({
+				admin: client,
+				now: NOW,
+				cursor: null,
+			});
+
+			// Ten workspaces exist, but one tick must not try to sweep them all:
+			// it stops at the default batch and hands back a resume cursor.
+			expect(summary.workspaceCount).toBe(REMINDER_SWEEP_DEFAULT_BATCH_SIZE);
+			expect(summary.nextCursor).toBe(
+				owners[REMINDER_SWEEP_DEFAULT_BATCH_SIZE - 1],
+			);
+			expect(summary.truncated).toBe(false);
 		});
 	});
 });

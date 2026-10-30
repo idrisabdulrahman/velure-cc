@@ -473,3 +473,39 @@ These block work that depends on the answer. Unattended runs must stop here.
   now takes effect for the discount slice (`f98b165`), the T1 sweep fix
   (`0081444`), and this slice.
 
+### 2026-10-30 — Reminder sweep bounded under the free-tier tick ceilings
+
+- **Live defect found after the T1 deploy:** `job_runs` had **zero**
+  `reminder_sweep` rows, so the sweep's resume cursor never persisted and it
+  re-swept the *same* first ~9–11 of **111** active workspaces every tick; the
+  rest were never swept. The `reminder_runs` ledger showed identical owner ids
+  across the 08:45 and 08:50 ticks.
+- **Root cause (verified):** **Cloudflare Pages Functions' free-plan cap of 50
+  external subrequests per invocation** (paid is 10,000). A captured tick made
+  **49** Supabase requests; the 50th — the `reminder_sweep` bookkeeping insert
+  that carries `nextCursor` — was dropped. A direct probe with the identical
+  payload + service-role key inserted fine, ruling out permissions/schema/data.
+  Secondary: the 08:50 tick also **timed out** (`net._http_response` id 104);
+  the pg_net timeout is exactly `10000` ms and the tick ran ~8.5–10 s.
+- **User answer 2026-10-30:** fix by **bounding the sweep to fit** both ceilings
+  (over giving the sweep its own cron invocation or upgrading Cloudflare to
+  Paid).
+- **What shipped:** `REMINDER_SWEEP_DEFAULT_BATCH_SIZE` 50 → **8** and
+  `REMINDER_SWEEP_DEFAULT_BUDGET_MS` 7000 → **5000** (`src/server/reminder-sweep.ts`),
+  with the arithmetic documented in-code (8 × 4 + ~10 ≈ 42 subrequests; 5 s + ~2 s
+  ≈ 7 s). Added `src/server/error-message.ts` (`formatErrorMessage`) so a
+  supabase-js plain-object PostgREST error is serialized instead of logging
+  `[object Object]`; the three private copies (`scheduler.ts`,
+  `reminder-sweep.ts`, `recurring-generation.ts`) now share it.
+- **Consequence accepted:** ~8 workspaces/tick → a full 111-workspace pass takes
+  ~2–3 h at a 10-minute cadence (fine for daily-cadence reminders). A future
+  slice could cut the ~4 subrequests/workspace (pass `workspace_id` from the
+  `active_workspaces` page instead of re-resolving it; bulk-insert
+  `reminder_runs`) to raise coverage, or move to Paid.
+- **Not changed:** no schema/migration/route; outbound email stays behind
+  `SCHEDULER_REMINDER_SEND_ENABLED`.
+- **Prompt:** `prompts/reminder-sweep-subrequest-cap-2026-10.md`.
+- **Checks (2026-10-30):** `pnpm test` → **844 passed / 86 skipped** (9 new
+  tests); `pnpm typecheck` clean; `pnpm check` exit 0 with 359 pre-existing
+  warnings.
+

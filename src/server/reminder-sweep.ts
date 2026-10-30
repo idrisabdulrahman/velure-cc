@@ -1,5 +1,6 @@
 import { runReminderBatch, sendQueuedEmails } from "./data/reminders";
 import type { Supabase } from "./data/workspaces";
+import { formatErrorMessage } from "./error-message";
 import { getSupabaseAdminClient } from "./supabase";
 
 /**
@@ -81,17 +82,30 @@ const BATCH_SWITCH = "SCHEDULER_REMINDER_SWEEP_BATCH";
 const BUDGET_SWITCH = "SCHEDULER_REMINDER_SWEEP_BUDGET_MS";
 const SWEEP_JOB_NAME = "reminder_sweep";
 /**
- * 7000 ms of sweep leaves ~1.5 s of the tick's 10 s pg_net budget for the four
- * cheaper jobs, and ~1 workspace is ~0.8 s, so a tick covers roughly 8–9
- * workspaces. The batch cap bounds database work if a workspace is unusually
- * cheap.
+ * The tick faces TWO ceilings in production, both imposed on the Cloudflare
+ * Pages Function behind `/api/cron/tick`:
+ *
+ *   * **50 external subrequests per invocation** (free plan; paid is 10,000 —
+ *     documented by Cloudflare), and
+ *   * **10 s** — the `pg_net` timeout set by the cron migration.
+ *
+ * A live tick that swept ~11 workspaces made **49** requests (≈4 per workspace:
+ * `active_workspaces`, `reminder_rules`, `invoices`, `reminder_runs`) and ran
+ * ~8.5 s. The sweep's own `job_runs` row — the only writer of the resume cursor
+ * — was therefore the 50th request and was **dropped**: `nextCursor` never
+ * persisted, the sweep restarted from the front every tick, and ~100 of 111
+ * workspaces were never swept. These caps keep the whole tick under BOTH
+ * ceilings with headroom for the four cheaper jobs and their bookkeeping:
+ *
+ *   8 workspaces × 4 + ~10 fixed ≈ 42 subrequests, and
+ *   5 s sweep budget + ~2 s other jobs ≈ 7 s wall clock.
+ *
+ * The per-workspace cost is an ESTIMATE: a workspace with many due invoices adds
+ * one `queueReminderEvent` request per queued invoice, and the time budget — not
+ * the batch cap — is what stops a pathological workspace from eating the tick.
  */
-const DEFAULT_BUDGET_MS = 7000;
-const DEFAULT_BATCH_SIZE = 50;
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
+export const REMINDER_SWEEP_DEFAULT_BUDGET_MS = 5000;
+export const REMINDER_SWEEP_DEFAULT_BATCH_SIZE = 8;
 
 function positiveInt(value: string | undefined, fallback: number): number {
 	const parsed = Number(value);
@@ -132,10 +146,10 @@ export async function runReminderSweep(
 	const sendEnabled = options.send ?? process.env[SEND_SWITCH] === "true";
 	const batchSize =
 		options.batchSize ??
-		positiveInt(process.env[BATCH_SWITCH], DEFAULT_BATCH_SIZE);
+		positiveInt(process.env[BATCH_SWITCH], REMINDER_SWEEP_DEFAULT_BATCH_SIZE);
 	const budgetMs =
 		options.budgetMs ??
-		positiveInt(process.env[BUDGET_SWITCH], DEFAULT_BUDGET_MS);
+		positiveInt(process.env[BUDGET_SWITCH], REMINDER_SWEEP_DEFAULT_BUDGET_MS);
 	const cursor =
 		options.cursor === undefined
 			? await readPreviousCursor(admin)
@@ -219,7 +233,7 @@ export async function runReminderSweep(
 			summary.skippedCount += skippedCount;
 		} catch (error) {
 			summary.failedCount += 1;
-			summary.errors.push(`${userId}: ${errorMessage(error)}`);
+			summary.errors.push(`${userId}: ${formatErrorMessage(error)}`);
 			// Best-effort failure bookkeeping; never mask the original error.
 			try {
 				await admin.from("reminder_runs").insert({
@@ -230,7 +244,7 @@ export async function runReminderSweep(
 					queued_count: queuedCount,
 					sent_count: 0,
 					escalated_count: escalatedCount,
-					notes: errorMessage(error).slice(0, 500),
+					notes: formatErrorMessage(error).slice(0, 500),
 					created_at: timestamp,
 					updated_at: timestamp,
 				});

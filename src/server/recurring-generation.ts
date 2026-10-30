@@ -2,6 +2,7 @@ import { recordInvoiceAudit } from "./data/audit";
 import type { InvoiceAuditWriter } from "./data/audit-client";
 import { autosaveDraft, type InvoiceInput } from "./data/invoices";
 import type { Supabase } from "./data/workspaces";
+import { formatErrorMessage } from "./error-message";
 import { getSupabaseAdminClient } from "./supabase";
 
 /**
@@ -131,10 +132,6 @@ export function advanceRecurringDate(
 ): string {
 	const months = frequency === "quarterly" ? interval * 3 : interval;
 	return addCalendarMonths(isoDate, months);
-}
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
 }
 
 function iso(now: Date): string {
@@ -294,7 +291,7 @@ async function generateOne(
 			.from("recurring_invoice_runs")
 			.update({
 				status: "failed",
-				error: errorMessage(error).slice(0, 500),
+				error: formatErrorMessage(error).slice(0, 500),
 				updated_at: iso(new Date()),
 			})
 			.eq("id", claimId);
@@ -351,7 +348,7 @@ export async function runRecurringGeneration(
 			else summary.skippedCount += 1;
 		} catch (error) {
 			summary.failedCount += 1;
-			summary.errors.push(`${schedule.id}: ${errorMessage(error)}`);
+			summary.errors.push(`${schedule.id}: ${formatErrorMessage(error)}`);
 		}
 	}
 

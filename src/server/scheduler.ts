@@ -2,6 +2,7 @@ import type { Json } from "#/types/database.types";
 import { dispatchDueInvoiceSubmissions } from "./data/einvoice-submissions";
 import { reconcilePendingPaystackCharges } from "./data/paystack-server";
 import type { Supabase } from "./data/workspaces";
+import { formatErrorMessage } from "./error-message";
 import { dispatchScheduledInvoiceEmails } from "./invoice-mailer";
 import { runRecurringGeneration } from "./recurring-generation";
 import { runReminderSweep } from "./reminder-sweep";
@@ -48,10 +49,6 @@ export type SchedulerTickSummary = {
 	completedAt: string;
 	jobs: SchedulerJobOutcome[];
 };
-
-function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
 
 /** Coerce a job's return value to something `jsonb` accepts. */
 function toJobResult(value: unknown): SchedulerJobResult {
@@ -168,7 +165,7 @@ export async function runSchedulerTick(
 			});
 		} catch (error) {
 			const completed = Date.now();
-			const message = errorMessage(error).slice(0, 1000);
+			const message = formatErrorMessage(error).slice(0, 1000);
 			outcomes.push({
 				name: job.name,
 				status: "failure",
@@ -206,6 +203,9 @@ async function safeRecordJobRun(
 	try {
 		await recordJobRun(admin, args);
 	} catch (error) {
-		console.error("Scheduler job bookkeeping failed", errorMessage(error));
+		console.error(
+			"Scheduler job bookkeeping failed",
+			formatErrorMessage(error),
+		);
 	}
 }
