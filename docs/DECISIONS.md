@@ -436,3 +436,33 @@ These block work that depends on the answer. Unattended runs must stop here.
 - **Checks:** `pnpm test` → 823 passed / 86 skipped (unchanged);
   `pnpm typecheck` clean; `pnpm check` exit 0 with 359 pre-existing warnings.
 
+### 2026-10-30 — Payment reference = invoice number (T9/D step 1, first code)
+
+- **User answer:** "proceed with recommendation" — implement step 1 of
+  `docs/BANK-RECONCILIATION-OPTIONS.md` §9.5.
+- **What shipped:** the invoice number is printed as a **payment reference** in
+  the invoice payment instructions, so it reaches the payer on the public payer
+  page and in the emailed/PDF invoice. One shared pure helper
+  (`src/lib/invoice-document/payment-reference.ts`,
+  `getInvoicePaymentReference`) decides whether and what to show, and **both**
+  renderers call it: `templates/html/index.tsx` and `templates/pdf/index.tsx`
+  (new `PaymentReference` component). No schema, migration, stored field,
+  numbering, or issued-invoice behaviour changed; existing invoices inherit the
+  reference because the invoice number is already stored.
+- **Hidden once settled:** no reference is printed for `paid` or `canceled`
+  invoices, matching the states the payer flow already treats as closed. Shown
+  for `draft`, `unpaid`, `partially-paid`, `overdue`, and for an invoice with
+  no invoice number it is simply omitted.
+- **Deliberate wording reuse:** the app already has a recorded-payment
+  `paymentReference` field (`src/features/invoices/types.ts:140`; the "Payment
+  reference" input in `invoice-details-sheet.tsx:2053`). Printing the same words
+  is intentional — the payer quotes the invoice number and the user records that
+  same reference when reconciling.
+- **Deliberately not done (minimal change, AGENTS.md §9):** the label is the
+  constant `"Payment reference"`, not a new `Template`/settings field. There is
+  no UI to change it, so a configurable field would be dead configuration.
+- **Prompt:** `prompts/payment-reference-2026-10.md`.
+- **Checks (2026-10-30):** `pnpm test` → **835 passed / 86 skipped** (12 new
+  tests: 6 helper, 3 public-HTML render, 3 PDF render); `pnpm typecheck` clean;
+  `pnpm check` exit 0 with 359 pre-existing warnings.
+

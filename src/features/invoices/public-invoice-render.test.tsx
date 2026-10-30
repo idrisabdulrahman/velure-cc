@@ -64,3 +64,45 @@ describe("public invoice HTML page hides mock clearance artifacts", () => {
 		expect(html).toContain("Buyer Ltd");
 	});
 });
+
+describe("public invoice HTML prints the payment reference", () => {
+	function renderInvoice(
+		status: InvoiceRecord["status"],
+		invoiceNumber: string | null,
+	) {
+		const record = {
+			...mockClearedInvoice,
+			status,
+			invoiceNumber,
+		} as InvoiceRecord;
+		const invoiceDocument = toInvoiceDocument(record);
+		const { width, height } = getInvoiceTemplateSize(invoiceDocument.template);
+		return renderToStaticMarkup(
+			<HtmlTemplate
+				data={invoiceDocument}
+				width={width}
+				height={height}
+				appearance="public"
+			/>,
+		);
+	}
+
+	it("shows the invoice number as a payment reference on a payable invoice", () => {
+		const html = renderInvoice("unpaid", "INV-2026-1");
+
+		expect(html).toContain("Payment reference");
+		expect(html).toContain("INV-2026-1");
+	});
+
+	it("hides the reference once the invoice is paid", () => {
+		const html = renderInvoice("paid", "INV-2026-1");
+
+		expect(html).not.toContain("Payment reference");
+	});
+
+	it("omits the reference when the invoice has no number", () => {
+		const html = renderInvoice("unpaid", null);
+
+		expect(html).not.toContain("Payment reference");
+	});
+});

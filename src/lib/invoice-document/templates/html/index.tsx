@@ -1,5 +1,6 @@
 import type React from "react";
 import { ScrollArea } from "#/components/ui/scroll-area";
+import { getInvoicePaymentReference } from "../../payment-reference";
 import type { Invoice } from "../../types";
 import { EditorContent } from "./components/editor-content";
 import { LineItems } from "./components/line-items";
@@ -47,6 +48,7 @@ export function HtmlTemplate({
 
 	const isAppAppearance = appearance === "app";
 	const isPublicAppearance = appearance === "public";
+	const paymentReference = getInvoicePaymentReference(data);
 	const paperVars = isPublicAppearance
 		? ({
 				["--invoice-bg" as string]: "#101011",
@@ -168,6 +170,14 @@ export function HtmlTemplate({
 					<div>
 						<p className={sectionLabelClass}>{template.paymentLabel}</p>
 						<EditorContent content={paymentDetails} />
+						{paymentReference && (
+							<p className="mt-1 text-[11px] leading-4 text-[var(--invoice-muted)]">
+								{paymentReference.label}:{" "}
+								<span className="font-medium text-[var(--invoice-text)]">
+									{paymentReference.value}
+								</span>
+							</p>
+						)}
 					</div>
 					{noteDetails && (
 						<div>

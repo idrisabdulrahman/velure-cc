@@ -317,6 +317,10 @@ consent** step, and its provider tokens must be treated as high-value secrets.
    so own-account payers *can* be matched exactly. This needs no new provider,
    no new data, and helps Options A, C and D equally. It is the single highest
    value-per-effort item in this whole memo.
+   **✅ Implemented 2026-10-30** (`prompts/payment-reference-2026-10.md`): the
+   invoice number is now printed as "Payment reference" by a shared helper used
+   by both the HTML and PDF renderers; it is hidden on `paid`/`canceled`
+   invoices. No schema or numbering change.
 2. Decide Option C (statement import) for the workspace's **own** account before
    any bank-connection work — it delivers most of the reconciliation value with
    none of the secret/consent/aggregator risk.

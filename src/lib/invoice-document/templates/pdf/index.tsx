@@ -1,11 +1,13 @@
 import { Document, Image, Page, Text, View } from "@react-pdf/renderer";
 import QRCodeUtil from "qrcode";
+import { getInvoicePaymentReference } from "../../payment-reference";
 import type { Invoice } from "../../types";
 import { EditorContent } from "./components/editor-content";
 import { LineItems } from "./components/line-items";
 import { Meta } from "./components/meta";
 import { Note } from "./components/note";
 import { PaymentDetails } from "./components/payment-details";
+import { PaymentReference } from "./components/payment-reference";
 import { QRCode } from "./components/qr-code";
 import { Summary } from "./components/summary";
 
@@ -14,6 +16,7 @@ export async function PdfTemplate({
 	customerPoNumber,
 	issueDate,
 	dueDate,
+	status,
 	template,
 	lineItems,
 	customerDetails,
@@ -34,6 +37,10 @@ export async function PdfTemplate({
 }: Invoice) {
 	let qrCode = null;
 	let clearanceQrCode = null;
+	const paymentReference = getInvoicePaymentReference({
+		invoiceNumber,
+		status,
+	});
 
 	if (template.includeQr) {
 		const origin =
@@ -171,6 +178,13 @@ export async function PdfTemplate({
 								content={paymentDetails}
 								paymentLabel={template.paymentLabel}
 							/>
+
+							{paymentReference ? (
+								<PaymentReference
+									label={paymentReference.label}
+									value={paymentReference.value}
+								/>
+							) : null}
 
 							{qrCode && <QRCode data={qrCode} />}
 							{mockClearance && clearanceQrCode ? (
