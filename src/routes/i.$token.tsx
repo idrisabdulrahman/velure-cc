@@ -68,6 +68,7 @@ function PublicInvoicePage() {
 	const isEmbedded = searchStringValue(location.search, "embed") === "1";
 	const stageEntry = useResizeObserver(stageRef);
 	const [isLinkCopied, setIsLinkCopied] = useState(false);
+	const [isAccountCopied, setIsAccountCopied] = useState(false);
 	const [isCreatingCharge, setIsCreatingCharge] = useState(false);
 
 	useEffect(() => {
@@ -169,6 +170,25 @@ function PublicInvoicePage() {
 	};
 
 	const charge = paymentContext?.charge;
+	const copyAccountNumber = async (accountNumber: string) => {
+		try {
+			await navigator.clipboard.writeText(accountNumber);
+			setIsAccountCopied(true);
+			toast({
+				title: "Account number copied",
+				description: "Paste it into your bank transfer screen.",
+				variant: "success",
+			});
+			window.setTimeout(() => setIsAccountCopied(false), 1800);
+		} catch {
+			toast({
+				title: "Could not copy account number",
+				description: "Select the number and copy it manually.",
+				variant: "error",
+			});
+		}
+	};
+
 	const payments = paymentHistory ?? [];
 	const canUsePaystackTransfer =
 		paymentContext?.capabilities.automaticBankTransfer &&
@@ -310,8 +330,25 @@ function PublicInvoicePage() {
 									</div>
 									<div className="rounded-md border border-rule bg-paper p-3">
 										<div className="text-[11px] text-ink-3">Account number</div>
-										<div className="mt-1 font-mono text-sm font-medium text-ink">
-											{charge.accountNumber}
+										<div className="mt-1 flex items-center justify-between gap-2">
+											<div className="select-all font-mono text-sm font-medium text-ink">
+												{charge.accountNumber}
+											</div>
+											<button
+												type="button"
+												onClick={() =>
+													void copyAccountNumber(charge.accountNumber ?? "")
+												}
+												className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-white/10 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+												aria-label="Copy account number"
+												title="Copy account number"
+											>
+												{isAccountCopied ? (
+													<Check className="h-4 w-4 shrink-0" />
+												) : (
+													<Copy className="h-4 w-4 shrink-0" />
+												)}
+											</button>
 										</div>
 									</div>
 									<div className="rounded-md border border-rule bg-paper p-3">
@@ -400,37 +437,37 @@ function PublicInvoicePage() {
 			</div>
 
 			<div className="fixed inset-x-0 bottom-5 z-20 flex justify-center">
-				<div className="flex h-10 items-center rounded-full border border-[#303033] bg-[#1a1a1a]/80 px-2 backdrop-blur-lg">
+				<div className="flex h-12 items-center gap-1 rounded-full border border-[#303033] bg-[#1a1a1a]/80 px-2 backdrop-blur-lg">
 					<a
 						href={downloadUrl}
-						className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#d7d3cc] transition-colors hover:bg-white/10 hover:text-white"
+						className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[#d7d3cc] transition-colors hover:bg-white/10 hover:text-white"
 						aria-label="Download invoice PDF"
 						title="Download invoice PDF"
 					>
-						<Download className="h-4 w-4 shrink-0" />
+						<Download className="h-5 w-5 shrink-0" />
 					</a>
 					<button
 						type="button"
 						onClick={() => void copyPublicLink()}
-						className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#d7d3cc] transition-colors hover:bg-white/10 hover:text-white"
+						className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[#d7d3cc] transition-colors hover:bg-white/10 hover:text-white"
 						aria-label="Copy public invoice link"
 						title="Copy public invoice link"
 					>
 						{isLinkCopied ? (
-							<Check className="h-4 w-4 shrink-0" />
+							<Check className="h-5 w-5 shrink-0" />
 						) : (
-							<Copy className="h-4 w-4 shrink-0" />
+							<Copy className="h-5 w-5 shrink-0" />
 						)}
 					</button>
 					<a
 						href={shareLinks?.whatsappHref}
 						target="_blank"
 						rel="noreferrer"
-						className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#d7d3cc] transition-colors hover:bg-white/10 hover:text-white"
+						className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[#d7d3cc] transition-colors hover:bg-white/10 hover:text-white"
 						aria-label="Share invoice on WhatsApp"
 						title="Share invoice on WhatsApp"
 					>
-						<FaWhatsapp className="h-4 w-4 shrink-0" />
+						<FaWhatsapp className="h-5 w-5 shrink-0" />
 					</a>
 				</div>
 			</div>

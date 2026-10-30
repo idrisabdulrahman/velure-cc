@@ -43,7 +43,8 @@ const config = defineConfig({
 		exclude: [
 			"**/node_modules/**",
 			"**/dist/**",
-			"**/tests/e2e/**",
+			"**/tests/**",
+			"**/e2e/**",
 			"**/.worktrees/**",
 		],
 	},

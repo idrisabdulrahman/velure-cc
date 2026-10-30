@@ -189,6 +189,70 @@ dependency (`react-icons/fa6` was already installed).
   `src/components/brand/velure-symbol.test.tsx` fail with ENOENT before any
   change. A gitignored local copy of `design/` was placed in the worktree purely
   to run the suite; it is not committed and is unrelated to this task.
-- Manual responsive check at 320/375/414/768 px was not run in a browser in this
-  environment; the card row was hardened with `flex-wrap`/`min-w-0` and all new
-  controls are keyboard-focusable anchors/buttons with accessible names.
+- The first pass claimed the responsive requirement from `flex-wrap`/`min-w-0`
+  alone. That claim was withdrawn by the user as intent, not evidence, and was
+  replaced by the real browser pass recorded below — which found a defect.
+
+### Responsive verification — real browser, 2026-10-30 (second pass)
+
+Run with Playwright/Chromium against the dev server at 320/375/414/768 px on the
+real public invoice token, with every POST to `/api/invoice/public/**` blocked so
+the pass stayed read-only.
+
+**Defect found (fixed):** the public invoice page clipped the invoice on every
+width below 768 px. `paperScale` in `src/routes/i.$token.tsx:140-149` depends on
+`stageEntry`, but `useResizeObserver` attached its observer only in the
+mount-time effect. The page returns `AppLoader` before the invoice loads, so
+`stageRef.current` was `null` at that moment and the effect never re-ran when
+`<main>` mounted. `stageEntry` therefore stayed `undefined` and the scale fell
+back to `(595-8)/595 = 0.986555`, keeping the paper at its natural 595 px.
+
+Measured before the fix — the paper ran from `x:-133` to `x:454` in a 320 px
+viewport:
+
+| width | paper width | overflow |
+| --- | --- | --- |
+| 320 | 587 px | 134 px |
+| 375 | 587 px | 106 px |
+| 414 | 587 px | 87 px |
+| 768 | 587 px | 0 |
+
+`document.documentElement.scrollWidth` equalled the viewport while
+`body.scrollWidth` was 454/481/501, so the content could not even be scrolled
+into view: the invoice number rendered as `026-000003`, the address as
+`reet, Ikeja, Lagos`, and the total as `NGN 16…`.
+
+**Fix:** `src/components/hooks/use-resize-observer.ts` now re-reads the ref on
+every commit and attaches when the element appears, clearing the entry when the
+node goes away. It uses a layout effect on the client so the first measurement
+lands before paint.
+
+**Measured after the fix:**
+
+| width | paper width | overflow |
+| --- | --- | --- |
+| 320 | 280 px | 0 |
+| 375 | 335 px | 0 |
+| 414 | 374 px | 0 |
+| 768 | 587 px | 0 |
+
+**Also fixed on the public page** (the surface customers open from WhatsApp):
+
+- Floating share actions were 32×32 px — now 44×44 px (`h-11 w-11` in an `h-12`
+  bar), meeting the touch-target minimum.
+- The Pay-by-transfer account number was selectable but had no one-tap copy.
+  It now carries `select-all` and a "Copy account number" button (verified by
+  injecting a charge into the read-only GET response in the browser; no real
+  charge was created).
+
+**Durable check added:** `e2e/public-invoice-responsive.spec.ts` (12 tests,
+`pnpm test:e2e` with `E2E_PUBLIC_TOKEN=…`). It asserts zero overflow, 44 px share
+targets, the `wa.me` href, and the account-number copy affordance at all four
+widths, and blocks every write. Verified non-vacuous: with the old hook the
+320/375/414 cases fail and 768 passes.
+
+**Still unverified — authenticated surfaces.** The builder (drag-and-drop line
+items), the invoices ledger at 375 px, and the sidebar/⌘K palette need a signed-in
+session. The five `better_auth.user` rows have no known test password, so these
+remained unchecked rather than assumed. `create-invoice-panel.responsive.test.ts`
+asserts source strings only; it is not evidence that those layouts work.

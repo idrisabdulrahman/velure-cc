@@ -35,7 +35,8 @@
     "lint": "biome lint",
     "check": "biome check",
     "prepare": "git config core.hooksPath .githooks || true",
-    "migrate:better-auth": "node scripts/migrate-convex-better-auth-to-postgres.mjs"
+    "migrate:better-auth": "node scripts/migrate-convex-better-auth-to-postgres.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

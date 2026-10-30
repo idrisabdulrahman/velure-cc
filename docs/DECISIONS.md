@@ -582,3 +582,36 @@ These block work that depends on the answer. Unattended runs must stop here.
   tests); `pnpm typecheck` clean; `pnpm check` exit 0 with 359 pre-existing
   warnings.
 
+
+### 2026-10-30 — T8 responsive verification (real browser) and the clipped public invoice
+
+- **Question the decision:** is T8 "responsive" actually verified? The earlier
+  pass asserted `flex-wrap`/`min-w-0` and source strings. The user rejected that
+  as intent, not evidence: "Treat T8 as unverified until you've looked at it."
+- **User answer 2026-10-30:** verify by looking at rendered layouts, in priority
+  order: public invoice page, builder drag-and-drop line items, invoices ledger
+  at 375 px, sidebar/⌘K (which needs a visible search button on a phone).
+- **What the look found:** a real, severe defect. On the public invoice page the
+  invoice paper stayed at its natural 595 px because `useResizeObserver` only
+  attached on mount — the page returns a loader first, so the ref was `null` and
+  the observer never attached. `paperScale` fell back to `0.986555`, and the
+  invoice was clipped by 134/106/87 px at 320/375/414 while
+  `documentElement.scrollWidth` still equalled the viewport, so the content could
+  not even be scrolled to. The total read `NGN 16…`.
+- **Fix:** the hook now attaches when the element mounts and clears when it
+  unmounts (client layout effect so the measurement lands before paint).
+  Measured after: paper 280/335/374/587 px, zero overflow at 320/375/414/768.
+- **Also fixed:** the three floating share actions were 32×32 px (now 44×44), and
+  the Pay-by-transfer account number had no one-tap copy (now `select-all` plus a
+  "Copy account number" button). The account-number state was verified by
+  injecting a charge into the read-only GET response in the browser; **no real
+  charge was created**.
+- **Durable check:** `e2e/public-invoice-responsive.spec.ts` +
+  `pnpm test:e2e` (needs `E2E_PUBLIC_TOKEN`). Proven non-vacuous: the old hook
+  fails 320/375/414 and passes 768.
+- **Still unverified:** the builder drag-and-drop, the ledger at 375 px, and the
+  sidebar/⌘K, because none of the five `better_auth.user` rows has a known test
+  password. They stay unverified rather than assumed working; a test login is
+  needed. `create-invoice-panel.responsive.test.ts` asserts source strings and is
+  **not** layout evidence.
+- **Prompt:** `prompts/whatsapp-share-2026-10.md`.
