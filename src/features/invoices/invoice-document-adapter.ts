@@ -1,5 +1,6 @@
 import { calculateInvoiceCompliance } from "#/features/compliance/calculate";
 import { NIGERIA_AUTHORITY_LABEL } from "#/features/compliance/nigeria";
+import type { DiscountMode } from "#/features/compliance/types";
 import type {
 	EditorDoc,
 	EditorNode,
@@ -69,6 +70,63 @@ function buildIdentityDoc(lines: Array<string | null | undefined>) {
 	);
 }
 
+/**
+ * Resolves how this invoice's discount applies. `line` mode uses the sum of the
+ * per-line discounts; invoice-level modes use the stored invoice discount. A
+ * legacy discounted invoice with no stored mode resolves to `invoice_after_tax`
+ * (what the renderer has always displayed). Mirrors `resolveInvoiceDiscount`.
+ */
+function resolveDocumentDiscount(invoice: InvoiceRecord): {
+	mode: DiscountMode;
+	discount: number;
+	includeDiscount: boolean;
+} {
+	const settings = invoice.templateSettings ?? {};
+	const lineDiscountTotal = invoice.lineItems.reduce(
+		(sum, line) => sum + (line.discount ?? 0),
+		0,
+	);
+	const invoiceDiscount = settings.includeDiscount
+		? (settings.discount ?? 0)
+		: 0;
+	const mode: DiscountMode =
+		settings.discountMode ??
+		(lineDiscountTotal > 0
+			? "line"
+			: invoiceDiscount > 0
+				? "invoice_after_tax"
+				: "none");
+	const discount =
+		mode === "line"
+			? lineDiscountTotal
+			: mode === "invoice_before_tax" || mode === "invoice_after_tax"
+				? invoiceDiscount
+				: 0;
+	return {
+		mode,
+		discount,
+		includeDiscount:
+			settings.includeDiscount ?? (mode === "line" && lineDiscountTotal > 0),
+	};
+}
+
+/** Compliance snapshot, recomputed only when the invoice has none stored. */
+function resolveCompliance(invoice: InvoiceRecord) {
+	if (invoice.compliance) return invoice.compliance;
+	const settings = invoice.templateSettings ?? {};
+	return calculateInvoiceCompliance({
+		seller: { legalName: "Velure", countryCode: "NG" },
+		buyer: {
+			legalName: invoice.customerName,
+			countryCode: "NG",
+		},
+		currency: invoice.currency,
+		lineItems: invoice.lineItems,
+		discount: settings.includeDiscount ? settings.discount : undefined,
+		discountMode: settings.discountMode,
+	});
+}
+
 function buildTemplate(invoice: InvoiceRecord): Template {
 	const isProforma = invoice.documentType === "proforma";
 	const documentLabel =
@@ -81,17 +139,8 @@ function buildTemplate(invoice: InvoiceRecord): Template {
 				? "dd/MM/yyyy"
 				: "yyyy-MM-dd";
 	const currency = normalizeCurrencyCode(invoice.currency);
-	const compliance =
-		invoice.compliance ??
-		calculateInvoiceCompliance({
-			seller: { legalName: "Velure", countryCode: "NG" },
-			buyer: {
-				legalName: invoice.customerName,
-				countryCode: "NG",
-			},
-			currency: invoice.currency,
-			lineItems: invoice.lineItems,
-		});
+	const compliance = resolveCompliance(invoice);
+	const discount = resolveDocumentDiscount(invoice);
 
 	const settings = invoice.templateSettings ?? {};
 	return {
@@ -142,7 +191,9 @@ function buildTemplate(invoice: InvoiceRecord): Template {
 		includeTax:
 			compliance.taxLabel.toUpperCase() !== "VAT" &&
 			compliance.taxLines.length > 0,
-		includeDiscount: settings.includeDiscount ?? false,
+		includeDiscount: discount.includeDiscount,
+		/** How the discount applies; drives before- vs after-tax VAT. */
+		discountMode: discount.mode,
 		includeDecimals: settings.includeDecimals ?? true,
 		includeUnits: settings.includeUnits ?? false,
 		includeQr: settings.includeQr ?? false,
@@ -167,17 +218,8 @@ export function getInvoiceTemplateSize(template: Template) {
 
 export function toInvoiceDocument(invoice: InvoiceRecord): InvoiceDocument {
 	const template = buildTemplate(invoice);
-	const compliance =
-		invoice.compliance ??
-		calculateInvoiceCompliance({
-			seller: { legalName: "Velure", countryCode: "NG" },
-			buyer: {
-				legalName: invoice.customerName,
-				countryCode: "NG",
-			},
-			currency: invoice.currency,
-			lineItems: invoice.lineItems,
-		});
+	const compliance = resolveCompliance(invoice);
+	const documentDiscount = resolveDocumentDiscount(invoice);
 	const amount = compliance.grandTotal || amountFromLineItems(invoice);
 	const netPayable = amount - (compliance.withholdingTaxAmount || 0);
 	const customerName = invoice.customerName || null;
@@ -285,7 +327,7 @@ export function toInvoiceDocument(invoice: InvoiceRecord): InvoiceDocument {
 		customerName,
 		token: invoice.token,
 		sentTo: null,
-		discount: invoice.templateSettings?.discount ?? null,
+		discount: documentDiscount.discount,
 		topBlock: invoice.topBlock ?? null,
 		bottomBlock: invoice.bottomBlock ?? null,
 		customer: {

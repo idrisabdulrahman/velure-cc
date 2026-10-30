@@ -1,17 +1,20 @@
 import { roundCurrency } from "#/features/compliance/calculate";
+import type { DiscountMode } from "#/features/compliance/types";
 
 export function calculateTotal({
 	lineItems,
 	taxRate = 0,
 	vatRate = 0,
 	discount = 0,
+	discountMode = "invoice_after_tax",
 	includeVat = true,
 	includeTax = true,
 }: {
-	lineItems: Array<{ price?: number; quantity?: number }>;
+	lineItems: Array<{ price?: number; quantity?: number; discount?: number }>;
 	taxRate?: number;
 	vatRate?: number;
 	discount?: number;
+	discountMode?: DiscountMode;
 	includeVat?: boolean;
 	includeTax?: boolean;
 }) {
@@ -35,23 +38,35 @@ export function calculateTotal({
 	const safeTaxRate = taxRate ?? 0;
 	const safeVatRate = vatRate ?? 0;
 	const safeDiscount = discount ?? 0;
-
-	// Calculate VAT (Total): Calculate VAT on the Subtotal
-	const totalVAT = includeVat
-		? roundCurrency((subTotal * safeVatRate) / 100)
-		: 0;
-
-	// Calculate Total: Subtotal + VAT - Discount
-	const total = roundCurrency(
-		subTotal + (includeVat ? totalVAT : 0) - safeDiscount,
+	const mode: DiscountMode = discountMode ?? "invoice_after_tax";
+	const lineDiscountTotal = roundCurrency(
+		safeLineItems.reduce((acc, item) => acc + (item?.discount ?? 0), 0),
 	);
 
-	// Calculate tax (if included) - tax should be calculated on subtotal, not total
-	const tax = includeTax ? roundCurrency((subTotal * safeTaxRate) / 100) : 0;
+	// Before-tax and per-line discounts reduce the base tax is charged on; an
+	// after-tax discount is subtracted from the total instead.
+	const baseReduction =
+		mode === "invoice_before_tax"
+			? safeDiscount
+			: mode === "line"
+				? lineDiscountTotal
+				: 0;
+	const taxableBase = roundCurrency(subTotal - baseReduction);
+
+	// Calculate VAT (Total) and tax on the (possibly discounted) taxable base.
+	const totalVAT = includeVat
+		? roundCurrency((taxableBase * safeVatRate) / 100)
+		: 0;
+	const tax = includeTax ? roundCurrency((taxableBase * safeTaxRate) / 100) : 0;
+
+	const afterTaxDiscount = mode === "invoice_after_tax" ? safeDiscount : 0;
+	const total = roundCurrency(
+		taxableBase + (includeVat ? totalVAT : 0) + tax - afterTaxDiscount,
+	);
 
 	return {
 		subTotal,
-		total: roundCurrency(total + tax),
+		total,
 		vat: totalVAT,
 		tax,
 	};

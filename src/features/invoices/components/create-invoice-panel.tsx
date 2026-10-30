@@ -100,21 +100,27 @@ import {
 	netPayableFromCompliance,
 	PERSISTABLE_WARNING_CODES,
 } from "#/features/compliance/persist";
-import type {
-	InvoiceComplianceSnapshot,
-	JurisdictionCode,
-	SellerTaxStatus,
-	TaxTreatment,
-	TemplateVariant,
-	WithholdingCategory,
-	WithholdingRecipientEntityType,
-	WithholdingRecipientResidency,
+import {
+	DISCOUNT_MODE_OPTIONS,
+	type DiscountMode,
+	type InvoiceComplianceSnapshot,
+	type JurisdictionCode,
+	type SellerTaxStatus,
+	type TaxTreatment,
+	type TemplateVariant,
+	type WithholdingCategory,
+	type WithholdingRecipientEntityType,
+	type WithholdingRecipientResidency,
 } from "#/features/compliance/types";
 import { isCorrectionSource } from "#/features/invoices/correction-sources";
 import { formatMoney } from "#/features/invoices/format";
 import type { ImportedInvoiceDraft } from "#/features/invoices/import-spreadsheet";
 import { toEditorDoc } from "#/features/invoices/invoice-document-adapter";
-import { lineTotalKobo, priceToKobo } from "#/features/invoices/line-money";
+import {
+	lineTotalKobo,
+	priceToKobo,
+	subtotalKobo,
+} from "#/features/invoices/line-money";
 import type {
 	InvoiceDocumentType,
 	InvoiceLineItem,
@@ -597,6 +603,8 @@ export function CreateInvoicePanel({
 	const [includeQr, setIncludeQr] = useState(false);
 	const [includeDiscount, setIncludeDiscount] = useState(false);
 	const [discount, setDiscount] = useState(0);
+	const [discountMode, setDiscountMode] =
+		useState<DiscountMode>("invoice_after_tax");
 	const [templateLabels, setTemplateLabels] = useState({
 		title: "Invoice",
 		customerLabel: "To",
@@ -836,6 +844,7 @@ export function CreateInvoicePanel({
 		setIncludeQr(savedTemplateSettings.includeQr ?? false);
 		setIncludeDiscount(savedTemplateSettings.includeDiscount ?? false);
 		setDiscount(savedTemplateSettings.discount ?? 0);
+		setDiscountMode(savedTemplateSettings.discountMode ?? "invoice_after_tax");
 		setTemplateLabels((current) => ({
 			...current,
 			...Object.fromEntries(
@@ -854,6 +863,7 @@ export function CreateInvoicePanel({
 		includeQr,
 		includeDiscount,
 		discount: includeDiscount ? discount : 0,
+		discountMode: includeDiscount ? discountMode : "none",
 	};
 
 	useEffect(() => {
@@ -929,68 +939,78 @@ export function CreateInvoicePanel({
 	const sellerRcForSubmission =
 		showSellerRc && sellerRcNumber.trim() ? sellerRcNumber.trim() : "";
 
-	const compliance = useMemo(
-		() =>
-			calculateInvoiceCompliance({
-				seller: {
-					legalName: fromName.trim() || undefined,
-					email: fromEmail.trim() || undefined,
-					countryCode: getCountryCodeFromCurrency(
-						workspace?.baseCurrency ?? "NGN",
-					),
-					taxId: sellerTinForSubmission || undefined,
-					rcNumber: sellerRcForSubmission || undefined,
-				},
-				buyer: {
-					legalName: customerName.trim() || undefined,
-					email: customerEmail.trim() || undefined,
-					countryCode: getCountryCodeFromCurrency(currency),
-				},
-				sellerTaxStatus,
-				placeOfSupply: getCountryCodeFromCurrency(
+	const compliance = useMemo(() => {
+		// The engine rejects a discount larger than the subtotal. Clamp the
+		// preview so typing a large number cannot crash the panel; the save path
+		// still rejects the out-of-bounds value with a clear error.
+		const engineSubtotal = subtotalKobo(lineItems) / 100;
+		const engineDiscount = includeDiscount
+			? Math.min(Math.max(discount, 0), engineSubtotal)
+			: 0;
+		return calculateInvoiceCompliance({
+			seller: {
+				legalName: fromName.trim() || undefined,
+				email: fromEmail.trim() || undefined,
+				countryCode: getCountryCodeFromCurrency(
 					workspace?.baseCurrency ?? "NGN",
 				),
-				currency,
-				taxRuleSetVersion:
-					workspace?.taxRuleSetVersion ?? NIGERIA_TAX_RULE_SET_VERSION,
-				taxTreatment,
-				taxRate:
-					taxTreatment === "exclusive_rate"
-						? NIGERIA_VAT_RATE
-						: taxTreatment === "inclusive_rate"
-							? NIGERIA_VAT_RATE
-							: 0,
-				taxLabel: taxTreatment === "exempt" ? "Exempt" : "VAT",
-				withholding: {
-					...defaultWithholdingSelection(),
-					category: withholdingCategory,
-					recipientEntityType: withholdingRecipientEntityType,
-					recipientResidency: withholdingRecipientResidency,
-				},
-				lineItems,
-			}),
-		[
-			currency,
-			customerEmail,
-			customerName,
-			fromEmail,
-			fromName,
-			lineItems,
-			showSellerTin,
-			showSellerRc,
-			sellerRcForSubmission,
-			sellerRcNumber,
+				taxId: sellerTinForSubmission || undefined,
+				rcNumber: sellerRcForSubmission || undefined,
+			},
+			buyer: {
+				legalName: customerName.trim() || undefined,
+				email: customerEmail.trim() || undefined,
+				countryCode: getCountryCodeFromCurrency(currency),
+			},
 			sellerTaxStatus,
-			sellerTinForSubmission,
-			sellerTin,
+			placeOfSupply: getCountryCodeFromCurrency(
+				workspace?.baseCurrency ?? "NGN",
+			),
+			currency,
+			taxRuleSetVersion:
+				workspace?.taxRuleSetVersion ?? NIGERIA_TAX_RULE_SET_VERSION,
 			taxTreatment,
-			withholdingCategory,
-			withholdingRecipientEntityType,
-			withholdingRecipientResidency,
-			workspace?.baseCurrency,
-			workspace?.taxRuleSetVersion,
-		],
-	);
+			taxRate:
+				taxTreatment === "exclusive_rate"
+					? NIGERIA_VAT_RATE
+					: taxTreatment === "inclusive_rate"
+						? NIGERIA_VAT_RATE
+						: 0,
+			taxLabel: taxTreatment === "exempt" ? "Exempt" : "VAT",
+			withholding: {
+				...defaultWithholdingSelection(),
+				category: withholdingCategory,
+				recipientEntityType: withholdingRecipientEntityType,
+				recipientResidency: withholdingRecipientResidency,
+			},
+			lineItems,
+			discount: includeDiscount && discountMode !== "line" ? engineDiscount : 0,
+			discountMode: includeDiscount ? discountMode : "none",
+		});
+	}, [
+		currency,
+		customerEmail,
+		customerName,
+		discount,
+		discountMode,
+		fromEmail,
+		fromName,
+		includeDiscount,
+		lineItems,
+		showSellerTin,
+		showSellerRc,
+		sellerRcForSubmission,
+		sellerRcNumber,
+		sellerTaxStatus,
+		sellerTinForSubmission,
+		sellerTin,
+		taxTreatment,
+		withholdingCategory,
+		withholdingRecipientEntityType,
+		withholdingRecipientResidency,
+		workspace?.baseCurrency,
+		workspace?.taxRuleSetVersion,
+	]);
 
 	const filteredClients = useMemo(() => {
 		const q = customerSearch.trim().toLowerCase();
@@ -1083,6 +1103,11 @@ export function CreateInvoicePanel({
 		isVatEnabled || sellerTaxStatus === "vat_registered";
 	const sellerTinWillNotPrint = showSellerTin && !sellerTinForSubmission;
 	const netPayable = netPayableFromCompliance(compliance);
+	const displayDiscount = includeDiscount
+		? discountMode === "line"
+			? lineItems.reduce((sum, item) => sum + (item.discount ?? 0), 0)
+			: Math.min(Math.max(discount, 0), subtotalKobo(lineItems) / 100)
+		: 0;
 	const totalsMaximumFractionDigits = includeDecimals ? 2 : 0;
 	const hasPricedLineItem = lineItems.some(
 		(item) => item.name.trim().length > 0 && item.price > 0,
@@ -3239,6 +3264,20 @@ export function CreateInvoicePanel({
 												})}
 											</span>
 										</div>
+										{includeDiscount && displayDiscount > 0 ? (
+											<div className="mt-2 flex items-center justify-between">
+												<span>{templateLabels.discountLabel}</span>
+												<span
+													key={`discount-${currency}-${displayDiscount}-${totalsMaximumFractionDigits}`}
+													className="font-mono invoice-value-fade"
+												>
+													-{" "}
+													{formatMoney(displayDiscount, currency, {
+														maximumFractionDigits: totalsMaximumFractionDigits,
+													})}
+												</span>
+											</div>
+										) : null}
 										{isVatEnabled ? (
 											<div className="mt-2 flex items-center justify-between">
 												<span>{selectedTaxSetting?.label}</span>
@@ -3950,6 +3989,36 @@ export function CreateInvoicePanel({
 											}
 											className="h-9 border-rule bg-paper text-ink"
 										/>
+									</label>
+								) : null}
+								{includeDiscount ? (
+									<label
+										htmlFor="invoice-discount-mode"
+										className="mt-3 block text-[12px] text-ink-3"
+									>
+										<span className="mb-1 block">Discount applies</span>
+										<Select
+											value={discountMode}
+											onValueChange={(value) =>
+												setDiscountMode(value as DiscountMode)
+											}
+										>
+											<SelectTrigger
+												id="invoice-discount-mode"
+												className="h-9 border-rule bg-paper text-ink"
+											>
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												{DISCOUNT_MODE_OPTIONS.filter(
+													(option) => option.value !== "none",
+												).map((option) => (
+													<SelectItem key={option.value} value={option.value}>
+														{option.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
 									</label>
 								) : null}
 								<label

@@ -319,6 +319,7 @@ describe("toCanonicalInvoice", () => {
 		expect(canonical.lines[0]?.unitPrice).toBe("1.005");
 		expect(canonical.totals).toEqual({
 			invoiceTotal: "1.005",
+			discountMode: "invoice_after_tax",
 			discount: "0.005",
 		});
 	});
@@ -332,5 +333,44 @@ describe("toCanonicalInvoice", () => {
 		expect(() => toCanonicalInvoice(source)).toThrow(
 			"Line line-invalid unit price must be a finite decimal amount.",
 		);
+	});
+
+	it("round-trips the stored discount mode and per-line discounts", () => {
+		const lineMode = toCanonicalInvoice(
+			invoice({
+				lineItems: [{ ...invoice().lineItems[0], discount: 10 }],
+				templateSettings: {
+					includeDiscount: true,
+					discountMode: "line",
+				},
+			}),
+		);
+		expect(lineMode.lines[0]?.discount).toBe("10");
+		expect(lineMode.totals.discountMode).toBe("line");
+		expect(lineMode.totals.discount).toBe("10");
+
+		const subCent = toCanonicalInvoice(
+			invoice({
+				lineItems: [{ ...invoice().lineItems[0], discount: 10.005 }],
+				templateSettings: { includeDiscount: true, discountMode: "line" },
+			}),
+		);
+		// Money is integer kobo; a sub-cent source value is rounded to the
+		// nearest kobo, never carried through as three decimal places.
+		expect(subCent.lines[0]?.discount).toBe("10.01");
+		expect(subCent.totals.discount).toBe("10.01");
+
+		const afterTax = toCanonicalInvoice(
+			invoice({
+				templateSettings: {
+					includeDiscount: true,
+					discount: 10,
+					discountMode: "invoice_after_tax",
+				},
+			}),
+		);
+		expect(afterTax.totals.discountMode).toBe("invoice_after_tax");
+		expect(afterTax.totals.discount).toBe("10");
+		expect(afterTax.lines[0]).not.toHaveProperty("discount");
 	});
 });

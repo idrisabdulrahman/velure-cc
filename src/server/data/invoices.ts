@@ -4,6 +4,8 @@ import {
 	type DerivedPartyIdentityMap,
 	supplierIdentityFromProfile,
 } from "#/features/compliance/party-identity";
+import type { DiscountMode } from "#/features/compliance/types";
+import { isDiscountMode } from "#/features/compliance/types";
 import {
 	CUSTOMER_LINK_CLEARED_ON_ISSUED_MESSAGE,
 	CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE,
@@ -88,6 +90,8 @@ export type LineItem = {
 	unit?: string;
 	vatCategory?: "standard" | "zero_rated" | "exempt";
 	classificationCode?: string;
+	/** Line-level discount in major units; only used by the `line` mode. */
+	discount?: number;
 };
 
 const VAT_CATEGORIES = new Set(["standard", "zero_rated", "exempt"]);
@@ -129,6 +133,8 @@ export type InvoiceTemplateSettings = {
 	includeUnits?: boolean;
 	includeQr?: boolean;
 	discount?: number;
+	/** How `discount` is applied; mutually exclusive per invoice. */
+	discountMode?: DiscountMode;
 };
 
 /**
@@ -562,8 +568,13 @@ export function assertInvoiceInput(args: {
 		name: string;
 		quantity: number;
 		price: number;
+		discount?: number;
 	}>;
-	templateSettings?: { includeDiscount?: boolean; discount?: number };
+	templateSettings?: {
+		includeDiscount?: boolean;
+		discount?: number;
+		discountMode?: DiscountMode;
+	};
 	compliance?: {
 		seller?: { taxId?: string; rcNumber?: string; phone?: string };
 		buyer?: { taxId?: string; phone?: string };
@@ -584,6 +595,10 @@ export function assertInvoiceInput(args: {
 		);
 	}
 
+	const discountMode = args.templateSettings?.discountMode ?? "none";
+	if (!isDiscountMode(discountMode)) {
+		throw new Error("Unknown discount mode.");
+	}
 	const discount = args.templateSettings?.includeDiscount
 		? (args.templateSettings.discount ?? 0)
 		: 0;
@@ -591,6 +606,34 @@ export function assertInvoiceInput(args: {
 	if (discount < 0 || discount > subtotal) {
 		throw new Error("Discount must be between zero and the invoice subtotal.");
 	}
+	const lineDiscountTotal = args.lineItems.reduce(
+		(sum, line) => sum + (line.discount ?? 0),
+		0,
+	);
+	if (lineDiscountTotal < 0) {
+		throw new Error("A line discount cannot be negative.");
+	}
+	const invoiceLevelMode =
+		discountMode === "invoice_before_tax" ||
+		discountMode === "invoice_after_tax";
+	if (invoiceLevelMode && lineDiscountTotal > 0) {
+		throw new Error(
+			"Line-level and invoice-level discounts cannot be combined on one invoice.",
+		);
+	}
+	if (discountMode === "line" && discount > 0) {
+		throw new Error(
+			"Line-level and invoice-level discounts cannot be combined on one invoice.",
+		);
+	}
+	args.lineItems.forEach((line, index) => {
+		const lineNet = line.quantity * line.price;
+		if ((line.discount ?? 0) > Math.max(lineNet, 0)) {
+			throw new Error(
+				`Line ${index + 1} discount cannot exceed the line amount.`,
+			);
+		}
+	});
 
 	assertValidTin(args.compliance?.seller?.taxId);
 	assertValidTin(args.compliance?.buyer?.taxId);

@@ -37,6 +37,7 @@ export function HtmlTemplate({
 		noteDetails,
 		currency,
 		discount,
+		amount,
 		withholdingTax,
 		netPayable,
 		customerName,
@@ -142,8 +143,10 @@ export function HtmlTemplate({
 					totalLabel={template.totalSummaryLabel}
 					lineItems={lineItems}
 					includeDiscount={template.includeDiscount}
+					discountMode={template.discountMode}
 					discountLabel={template.discountLabel}
 					discount={discount}
+					amount={amount}
 					withholdingTaxAmount={withholdingTax}
 					withholdingTaxLabel={template.withholdingTaxLabel}
 					withholdingTaxRate={template.withholdingTaxRate}

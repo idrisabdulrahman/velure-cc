@@ -197,7 +197,7 @@ The NRS schema itself was not retrievable (see §3).
 | `item.sellers_item_identification` | ❌ | — (no product SKU on the line) | No | UNKNOWN |
 | `hsn_code` (WCO HS) | ◐ | `lines[].classification` (`source.classificationCode`) — a generic code slot, provenance unverified | Yes — `classification_required` (non-empty) | UNKNOWN |
 | `product_category` | ❌ | — | No | UNKNOWN |
-| `discount_rate` / `discount_amount` | ❌ | only `totals.discount`; **validator blocks any non-zero discount** | Yes — `discount_semantics_unsupported` | UNKNOWN |
+| `discount_rate` / `discount_amount` | ◐ | line `discount` + totals `discount` / `discountMode` | Yes — per-mode `discount_*` checks; **updated 2026-10-30**, see §10 item 6 | UNKNOWN |
 | `fee_rate` / `fee_amount` | ❌ | — | No | UNKNOWN |
 | `invoiced_quantity` | ✅ | `lines[].quantity` | Yes — `quantity_invalid` (must be > 0) | UNKNOWN |
 | `line_extension_amount` | ◐ | derived from price×qty; no stored field | Yes — via `subtotal_mismatch` | UNKNOWN |
@@ -400,9 +400,13 @@ Priority order after the 2026-10-30 review:
 4. **Prefix invented rejection codes with `MOCK_`** so none can be mistaken for a
    real NRS/provider code.
 5. Obtain the official NRS/NITDA schema + rejection-code catalogue (blocks §7).
-6. **Product decision needed (not made here):** the validator blocks any non-zero
-   discount (`discount_semantics_unsupported`), so a real discounted invoice
-   could never be submitted. Decide the intended allowance/charge tax treatment.
+6. **Discount (resolved 2026-10-30):** the validator no longer blocks every
+   non-zero discount. It supports three **mutually exclusive** modes —
+   invoice-level before tax, invoice-level after tax, and line-level — with
+   mode-aware arithmetic and specific `discount_*` / `gross_total_mismatch`
+   codes. See `docs/DECISIONS.md` (Q-G) and
+   `prompts/discount-money-path-2026-10.md`. The real NRS/UBL allowance/charge
+   mapping is still **UNKNOWN** and must be confirmed with a provider.
 7. Only after 1–6: build a real adapter against one provider's sandbox, still
    claiming **no** NRS compliance until a real invoice clears.
 

@@ -1,3 +1,4 @@
+import type { DiscountMode } from "#/features/compliance/types";
 import { formatAmount } from "#/shims/invoice-utils/format";
 import type { LineItem } from "../../../types";
 import { calculateTotal } from "../../../utils/calculate";
@@ -6,8 +7,11 @@ type Props = {
 	includeVat: boolean;
 	includeTax: boolean;
 	includeDiscount: boolean;
+	discountMode?: DiscountMode;
 	discount?: number | null;
 	discountLabel: string;
+	/** Stored grand total, when available; preferred over recomputing so the HTML, PDF, and editor panel agree. */
+	amount?: number | null;
 	withholdingTaxAmount?: number | null;
 	withholdingTaxLabel: string;
 	withholdingTaxRate?: number;
@@ -30,9 +34,11 @@ export function Summary({
 	includeVat,
 	includeTax,
 	includeDiscount,
+	discountMode,
 	discountLabel,
 	locale,
 	discount,
+	amount,
 	withholdingTaxAmount,
 	withholdingTaxLabel,
 	withholdingTaxRate,
@@ -70,9 +76,11 @@ export function Summary({
 		taxRate,
 		vatRate,
 		discount: discount ?? 0,
+		discountMode,
 		includeVat,
 		includeTax,
 	});
+	const displayTotal = amount ?? total;
 
 	return (
 		<div className="flex w-[320px] flex-col">
@@ -170,7 +178,7 @@ export function Summary({
 				>
 					{currency &&
 						formatAmount({
-							amount: total,
+							amount: displayTotal,
 							currency,
 							locale,
 							maximumFractionDigits:
@@ -180,7 +188,7 @@ export function Summary({
 				</span>
 			</div>
 
-			{(netPayable ?? total) !== total && (
+			{(netPayable ?? displayTotal) !== displayTotal && (
 				<div className="flex justify-between items-center pb-1">
 					<span className={labelClassName}>{netAmountLabel}</span>
 					<span
@@ -188,7 +196,7 @@ export function Summary({
 					>
 						{currency &&
 							formatAmount({
-								amount: netPayable ?? total,
+								amount: netPayable ?? displayTotal,
 								currency,
 								locale,
 								maximumFractionDigits: 2,

@@ -1,3 +1,5 @@
+import type { DiscountMode } from "#/features/compliance/types";
+
 export type LineItem = {
 	name: string;
 	quantity?: number;
@@ -5,6 +7,8 @@ export type LineItem = {
 	unit?: string;
 	// Optional product reference for smart autocomplete
 	productId?: string;
+	/** Line-level discount in major units; only used by the `line` mode. */
+	discount?: number;
 };
 
 export type InvoiceProduct = {
@@ -106,6 +110,8 @@ export type Template = {
 	includeVat: boolean;
 	includeTax: boolean;
 	includeDiscount: boolean;
+	/** How the discount applies; drives whether VAT is charged pre- or post-discount. */
+	discountMode?: DiscountMode;
 	includeDecimals: boolean;
 	includeUnits: boolean;
 	includeQr: boolean;

@@ -1,4 +1,5 @@
 import { Text, View } from "@react-pdf/renderer";
+import type { DiscountMode } from "#/features/compliance/types";
 import { calculateTotal } from "../../../utils/calculate";
 import { formatCurrencyForPDF } from "../../../utils/pdf-format";
 
@@ -15,6 +16,7 @@ interface SummaryProps {
 	locale: string;
 	discount?: number | null;
 	discountLabel: string;
+	discountMode?: DiscountMode;
 	withholdingTaxAmount?: number | null;
 	withholdingTaxLabel: string;
 	withholdingTaxRate?: number;
@@ -41,6 +43,7 @@ export function Summary({
 	locale,
 	discount,
 	discountLabel,
+	discountMode,
 	withholdingTaxAmount,
 	withholdingTaxLabel,
 	withholdingTaxRate,
@@ -62,6 +65,7 @@ export function Summary({
 		taxRate: taxRate ?? 0,
 		vatRate: vatRate ?? 0,
 		discount: discount ?? 0,
+		discountMode,
 		includeVat,
 		includeTax,
 	});

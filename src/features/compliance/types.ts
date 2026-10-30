@@ -60,6 +60,46 @@ export type ComplianceWarningCode =
 export type TemplateVariant = "default_ng" | "cross_border" | "vat_ready";
 
 /**
+ * How a discount is applied to an invoice. The modes are **mutually
+ * exclusive** per invoice (2026-10-30 decision):
+ *
+ *   * `invoice_before_tax` — one invoice-level amount reduces the taxable
+ *     base before VAT, so VAT is charged on the discounted amount.
+ *   * `invoice_after_tax` — one invoice-level amount is subtracted from the
+ *     total after VAT.
+ *   * `line` — each line carries its own discount, reducing that line's base
+ *     before VAT.
+ *
+ * `none` means no discount. The default for a legacy stored discount that has
+ * no mode is `invoice_after_tax`, which is what the document renderer already
+ * displayed.
+ */
+export type DiscountMode =
+	| "none"
+	| "invoice_before_tax"
+	| "invoice_after_tax"
+	| "line";
+
+export const DISCOUNT_MODE_OPTIONS: ReadonlyArray<{
+	value: DiscountMode;
+	label: string;
+}> = [
+	{ value: "none", label: "No discount" },
+	{ value: "invoice_before_tax", label: "Before tax (reduces VAT base)" },
+	{ value: "invoice_after_tax", label: "After tax (reduces total)" },
+	{ value: "line", label: "Per line item" },
+];
+
+export function isDiscountMode(value: unknown): value is DiscountMode {
+	return (
+		value === "none" ||
+		value === "invoice_before_tax" ||
+		value === "invoice_after_tax" ||
+		value === "line"
+	);
+}
+
+/**
  * Structured postal address carried alongside the printable `address` string.
  *
  * The workspace supplier profile already collects street, LGA/area and

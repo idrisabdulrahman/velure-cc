@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FiscalizationSnapshot } from "#/features/compliance/types";
+import { calculateTotal } from "#/lib/invoice-document/utils/calculate";
 import {
 	mergeDocBlocks,
 	toEditorDoc,
@@ -184,6 +185,78 @@ describe("toInvoiceDocument", () => {
 		});
 
 		expect(toInvoiceDocument(invoice).amount).toBe(0.11);
+	});
+
+	it("keeps the rendered total aligned with the stored grand total for each invoice discount mode", () => {
+		const baseCompliance = buildInvoice().compliance;
+		if (!baseCompliance) throw new Error("Expected compliance fixture.");
+
+		const cases = [
+			{ mode: "invoice_before_tax", discount: 20, tax: 6, grand: 86 },
+			{ mode: "invoice_after_tax", discount: 20, tax: 7.5, grand: 87.5 },
+		] as const;
+
+		for (const { mode, discount, tax, grand } of cases) {
+			const invoice = toInvoiceDocument(
+				buildInvoice({
+					lineItems: [
+						{ id: "line-1", name: "Service", quantity: 1, price: 100 },
+					],
+					compliance: {
+						...baseCompliance,
+						subtotal: 100,
+						totalTax: tax,
+						grandTotal: grand,
+						netPayable: grand,
+					},
+					templateSettings: {
+						includeDiscount: true,
+						discount,
+						discountMode: mode,
+					},
+				}),
+			);
+
+			expect(invoice.template.discountMode).toBe(mode);
+			expect(invoice.amount).toBe(grand);
+
+			// What the HTML summary computes must equal the stored grand total,
+			// which the PDF prints from `amount` and the panel shows as net payable.
+			const rendered = calculateTotal({
+				lineItems: invoice.lineItems,
+				taxRate: invoice.template.taxRate,
+				vatRate: invoice.template.vatRate,
+				discount: invoice.discount ?? 0,
+				discountMode: invoice.template.discountMode,
+				includeVat: invoice.template.includeVat,
+				includeTax: invoice.template.includeTax,
+			});
+			expect(rendered.total).toBe(grand);
+		}
+	});
+
+	it("maps line-level discounts to line mode and sums them for display", () => {
+		const baseCompliance = buildInvoice().compliance;
+		if (!baseCompliance) throw new Error("Expected compliance fixture.");
+		const invoice = toInvoiceDocument(
+			buildInvoice({
+				lineItems: [
+					{ id: "line-1", name: "A", quantity: 1, price: 100, discount: 20 },
+				],
+				compliance: {
+					...baseCompliance,
+					subtotal: 100,
+					totalTax: 6,
+					grandTotal: 86,
+					netPayable: 86,
+				},
+				templateSettings: { includeDiscount: true, discountMode: "line" },
+			}),
+		);
+
+		expect(invoice.template.discountMode).toBe("line");
+		expect(invoice.discount).toBe(20);
+		expect(invoice.amount).toBe(86);
 	});
 });
 

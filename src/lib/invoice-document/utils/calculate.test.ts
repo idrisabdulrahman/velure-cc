@@ -72,6 +72,42 @@ describe("calculateTotal", () => {
 			}),
 		).toEqual({ subTotal: 0.3, vat: 0.02, tax: 0, total: 0.32 });
 	});
+
+	it("charges VAT on the reduced base for a before-tax discount", () => {
+		const result = calculateTotal({
+			lineItems: [{ price: 100, quantity: 1 }],
+			includeVat: true,
+			vatRate: 10,
+			discount: 20,
+			discountMode: "invoice_before_tax",
+		});
+		expect(result.subTotal).toBe(100);
+		expect(result.vat).toBe(8);
+		expect(result.total).toBe(88);
+	});
+
+	it("subtracts an after-tax discount from the total, leaving VAT intact", () => {
+		const result = calculateTotal({
+			lineItems: [{ price: 100, quantity: 1 }],
+			includeVat: true,
+			vatRate: 10,
+			discount: 20,
+			discountMode: "invoice_after_tax",
+		});
+		expect(result.vat).toBe(10);
+		expect(result.total).toBe(90);
+	});
+
+	it("reduces the base per line for line-level discounts", () => {
+		const result = calculateTotal({
+			lineItems: [{ price: 100, quantity: 1, discount: 20 }],
+			includeVat: true,
+			vatRate: 10,
+			discountMode: "line",
+		});
+		expect(result.vat).toBe(8);
+		expect(result.total).toBe(88);
+	});
 });
 
 describe("calculateLineItemTotal", () => {

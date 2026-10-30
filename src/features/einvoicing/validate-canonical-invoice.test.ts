@@ -84,6 +84,14 @@ function treatmentContext(
 	};
 }
 
+function baseTax(
+	base: CanonicalInvoice,
+): NonNullable<CanonicalInvoice["taxes"]>[number] {
+	const tax = base.taxes?.[0];
+	if (!tax) throw new Error("Test invoice needs a tax line.");
+	return tax;
+}
+
 describe("validateCanonicalInvoice", () => {
 	it("accepts trusted B2B and B2C profiles, requiring buyer TIN only for B2B", () => {
 		expect(
@@ -194,7 +202,7 @@ describe("validateCanonicalInvoice", () => {
 		expect(result.valid).toBe(true);
 	});
 
-	it("rejects arithmetic mismatches and blocks undefined nonzero discount semantics", () => {
+	it("rejects arithmetic mismatches for a discounted invoice", () => {
 		const base = invoice();
 		const result = validateCanonicalInvoice(
 			invoice({ totals: { ...base.totals, subtotal: "99", discount: "1" } }),
@@ -203,8 +211,138 @@ describe("validateCanonicalInvoice", () => {
 		expect(result.issues.map(({ code }) => code)).toEqual(
 			expect.arrayContaining([
 				"subtotal_mismatch",
-				"discount_semantics_unsupported",
+				"gross_total_mismatch",
+				"payable_total_mismatch",
 			]),
+		);
+	});
+
+	it("accepts a before-tax discount that reduces the VAT base", () => {
+		const base = invoice();
+		const result = validateCanonicalInvoice(
+			invoice({
+				taxes: [{ ...baseTax(base), amount: "6" }],
+				totals: {
+					invoiceTotal: "86",
+					subtotal: "100",
+					discount: "20",
+					discountMode: "invoice_before_tax",
+					taxTotal: "6",
+					withholdingTotal: "0",
+					grossTotal: "86",
+					payableTotal: "86",
+				},
+			}),
+			{ buyerType: "b2b" },
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("accepts an after-tax discount that leaves the VAT base intact", () => {
+		const result = validateCanonicalInvoice(
+			invoice({
+				totals: {
+					invoiceTotal: "87.5",
+					subtotal: "100",
+					discount: "20",
+					discountMode: "invoice_after_tax",
+					taxTotal: "7.5",
+					withholdingTotal: "0",
+					grossTotal: "87.5",
+					payableTotal: "87.5",
+				},
+			}),
+			{ buyerType: "b2b" },
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("accepts line discounts whose total matches the declared discount", () => {
+		const base = invoice();
+		const result = validateCanonicalInvoice(
+			invoice({
+				lines: [{ ...base.lines[0], discount: "20" }],
+				taxes: [{ ...baseTax(base), amount: "6" }],
+				totals: {
+					invoiceTotal: "86",
+					subtotal: "100",
+					discount: "20",
+					discountMode: "line",
+					taxTotal: "6",
+					withholdingTotal: "0",
+					grossTotal: "86",
+					payableTotal: "86",
+				},
+			}),
+			{ buyerType: "b2b" },
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("accepts a line-mode invoice with no discounts at all", () => {
+		const result = validateCanonicalInvoice(
+			invoice({
+				totals: {
+					invoiceTotal: "107.5",
+					subtotal: "100",
+					discountMode: "line",
+					taxTotal: "7.5",
+					withholdingTotal: "0",
+					grossTotal: "107.5",
+					payableTotal: "107.5",
+				},
+			}),
+			{ buyerType: "b2b" },
+		);
+		expect(result.valid).toBe(true);
+	});
+
+	it("rejects a line-mode discount total that does not match the line discounts", () => {
+		const base = invoice();
+		const result = validateCanonicalInvoice(
+			invoice({
+				lines: [{ ...base.lines[0], discount: "20" }],
+				totals: { ...base.totals, discount: "10", discountMode: "line" },
+			}),
+			{ buyerType: "b2b" },
+		);
+		expect(result.issues.map(({ code }) => code)).toContain(
+			"discount_total_mismatch",
+		);
+	});
+
+	it("rejects an invoice-level discount combined with line discounts", () => {
+		const base = invoice();
+		const result = validateCanonicalInvoice(
+			invoice({
+				lines: [{ ...base.lines[0], discount: "5" }],
+				totals: {
+					...base.totals,
+					discount: "20",
+					discountMode: "invoice_before_tax",
+				},
+			}),
+			{ buyerType: "b2b" },
+		);
+		expect(result.issues.map(({ code }) => code)).toContain(
+			"discount_mode_mismatch",
+		);
+	});
+
+	it("rejects a discount larger than the subtotal", () => {
+		const base = invoice();
+		const result = validateCanonicalInvoice(
+			invoice({
+				totals: {
+					...base.totals,
+					discount: "120",
+					discountMode: "invoice_before_tax",
+				},
+			}),
+			{ buyerType: "b2b" },
+		);
+		expect(result.issues.map(({ code }) => code)).toContain(
+			"discount_exceeds_subtotal",
 		);
 	});
 

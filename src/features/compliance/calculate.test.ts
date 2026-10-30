@@ -85,6 +85,114 @@ describe("calculateInvoiceCompliance", () => {
 	});
 });
 
+describe("calculateInvoiceCompliance discounts", () => {
+	const base = {
+		seller: {
+			legalName: "Acme",
+			countryCode: "NG" as const,
+			taxId: "1234567890",
+		},
+		buyer: { legalName: "Client", countryCode: "NG" as const },
+		sellerTaxStatus: "vat_registered" as const,
+		taxTreatment: "exclusive_rate" as const,
+		taxRate: 10,
+	};
+
+	it("reduces the VAT base for an invoice-level before-tax discount", () => {
+		const result = calculateInvoiceCompliance({
+			...base,
+			lineItems: [{ quantity: 1, price: 100 }],
+			discountMode: "invoice_before_tax",
+			discount: 20,
+		});
+
+		expect(result.subtotal).toBe(100);
+		expect(result.totalTax).toBe(8);
+		expect(result.grandTotal).toBe(88);
+	});
+
+	it("subtracts an invoice-level after-tax discount from the total", () => {
+		const result = calculateInvoiceCompliance({
+			...base,
+			lineItems: [{ quantity: 1, price: 100 }],
+			discountMode: "invoice_after_tax",
+			discount: 20,
+		});
+
+		expect(result.subtotal).toBe(100);
+		expect(result.totalTax).toBe(10);
+		expect(result.grandTotal).toBe(90);
+	});
+
+	it("reduces each line's base for line-level discounts", () => {
+		const result = calculateInvoiceCompliance({
+			...base,
+			lineItems: [{ quantity: 1, price: 100, discount: 20 }],
+			discountMode: "line",
+		});
+
+		expect(result.totalTax).toBe(8);
+		expect(result.grandTotal).toBe(88);
+	});
+
+	it("defaults a stored discount with no mode to after-tax", () => {
+		const result = calculateInvoiceCompliance({
+			...base,
+			lineItems: [{ quantity: 1, price: 100 }],
+			discount: 20,
+		});
+
+		expect(result.totalTax).toBe(10);
+		expect(result.grandTotal).toBe(90);
+	});
+
+	it("refuses to combine invoice-level and line-level discounts", () => {
+		expect(() =>
+			calculateInvoiceCompliance({
+				...base,
+				lineItems: [{ quantity: 1, price: 100, discount: 10 }],
+				discountMode: "invoice_before_tax",
+				discount: 20,
+			}),
+		).toThrow(/cannot be combined/i);
+	});
+
+	it("refuses a line discount larger than the line amount", () => {
+		expect(() =>
+			calculateInvoiceCompliance({
+				...base,
+				lineItems: [{ quantity: 1, price: 50, discount: 60 }],
+				discountMode: "line",
+			}),
+		).toThrow(/cannot exceed/i);
+	});
+
+	it("refuses an invoice discount larger than the subtotal", () => {
+		expect(() =>
+			calculateInvoiceCompliance({
+				...base,
+				lineItems: [{ quantity: 1, price: 50 }],
+				discountMode: "invoice_after_tax",
+				discount: 60,
+			}),
+		).toThrow(/cannot exceed/i);
+	});
+
+	it("computes included VAT on the discounted base for inclusive prices", () => {
+		const result = calculateInvoiceCompliance({
+			...base,
+			taxTreatment: "inclusive_rate",
+			lineItems: [{ quantity: 1, price: 100 }],
+			discountMode: "invoice_before_tax",
+			discount: 20,
+		});
+
+		// 80 = base incl. tax; included tax = round(80 * 10 / 110) = 7.27.
+		expect(result.totalTax).toBe(7.27);
+		expect(result.grandTotal).toBe(80);
+	});
+});
+
 describe("roundCurrency", () => {
 	it("rounds positive and negative half-cent values", () => {
 		expect(roundCurrency(1.005)).toBe(1.01);

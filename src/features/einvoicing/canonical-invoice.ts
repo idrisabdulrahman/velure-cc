@@ -1,3 +1,5 @@
+import type { DiscountMode } from "../compliance/types";
+import { priceToKobo } from "../invoices/line-money";
 import type { InvoiceRecord } from "../invoices/types";
 
 /** A base-10 decimal string; money is never recalculated as a JS number. */
@@ -39,6 +41,8 @@ export type CanonicalInvoiceLine = Readonly<{
 	quantity: number;
 	unit?: string;
 	unitPrice: CanonicalDecimal;
+	/** Line-level discount amount (major units, decimal string). */
+	discount?: CanonicalDecimal;
 	classification?: Readonly<{
 		scheme: "source.classificationCode";
 		value: string;
@@ -103,6 +107,8 @@ export type CanonicalInvoice = Readonly<{
 		invoiceTotal: CanonicalDecimal;
 		subtotal?: CanonicalDecimal;
 		discount?: CanonicalDecimal;
+		/** How `discount` is applied; absent on legacy snapshots. */
+		discountMode?: DiscountMode;
 		taxTotal?: CanonicalDecimal;
 		withholdingTotal?: CanonicalDecimal;
 		grossTotal?: CanonicalDecimal;
@@ -196,10 +202,38 @@ function partyFromSnapshot(
 	};
 }
 
+function resolveDiscountMode(invoice: InvoiceRecord): DiscountMode {
+	const explicit = invoice.templateSettings?.discountMode;
+	if (explicit) return explicit;
+	const hasLineDiscount = invoice.lineItems.some(
+		(line) => (line.discount ?? 0) > 0,
+	);
+	if (hasLineDiscount) return "line";
+	const hasInvoiceDiscount = Boolean(
+		invoice.templateSettings?.includeDiscount &&
+			(invoice.templateSettings.discount ?? 0) > 0,
+	);
+	// Legacy discounted snapshots had no mode; the document renderer has always
+	// displayed them as a post-tax subtraction.
+	return hasInvoiceDiscount ? "invoice_after_tax" : "none";
+}
+
 /** Purely maps the existing invoice snapshot; it performs no reads or calculations. */
 export function toCanonicalInvoice(invoice: InvoiceRecord): CanonicalInvoice {
 	const compliance = invoice.compliance;
 	const templateSettings = invoice.templateSettings;
+	const discountMode = resolveDiscountMode(invoice);
+	const lineDiscountTotal =
+		invoice.lineItems.reduce(
+			(sum, line) => sum + priceToKobo(line.discount ?? 0),
+			0,
+		) / 100;
+	const invoiceDiscount =
+		templateSettings?.includeDiscount && templateSettings.discount
+			? templateSettings.discount
+			: 0;
+	const totalDiscount =
+		discountMode === "line" ? lineDiscountTotal : invoiceDiscount;
 	const model: CanonicalInvoice = {
 		id: invoice.id,
 		number: invoice.invoiceNumber,
@@ -226,6 +260,16 @@ export function toCanonicalInvoice(invoice: InvoiceRecord): CanonicalInvoice {
 			quantity: line.quantity,
 			...(line.unit ? { unit: line.unit } : {}),
 			unitPrice: canonicalDecimal(line.price, `Line ${line.id} unit price`),
+			...(line.discount !== undefined && line.discount > 0
+				? {
+						// Normalize through kobo so a sub-cent source value cannot leak
+						// more decimal places than the money model allows.
+						discount: canonicalDecimal(
+							priceToKobo(line.discount) / 100,
+							`Line ${line.id} discount`,
+						),
+					}
+				: {}),
 			...(line.classificationCode
 				? {
 						classification: {
@@ -320,9 +364,9 @@ export function toCanonicalInvoice(invoice: InvoiceRecord): CanonicalInvoice {
 						),
 					}
 				: {}),
-			...(templateSettings?.includeDiscount &&
-			templateSettings.discount !== undefined
-				? { discount: canonicalDecimal(templateSettings.discount, "Discount") }
+			...(discountMode !== "none" ? { discountMode } : {}),
+			...(totalDiscount > 0
+				? { discount: canonicalDecimal(totalDiscount, "Discount") }
 				: {}),
 		},
 	};

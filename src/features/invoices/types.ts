@@ -2,6 +2,7 @@ type Id<_Table extends string> = string;
 
 import type { EditorDoc } from "../../lib/invoice-document/types";
 import type {
+	DiscountMode,
 	FiscalizationSnapshot,
 	InvoiceComplianceSnapshot,
 } from "../compliance/types";
@@ -26,6 +27,8 @@ export type InvoiceLineItem = {
 	unit?: string;
 	vatCategory?: VatCategory;
 	classificationCode?: string;
+	/** Line-level discount in major units; only used by the `line` mode. */
+	discount?: number;
 };
 
 export type VatCategory = "standard" | "zero_rated" | "exempt";
@@ -52,6 +55,8 @@ export type InvoiceTemplateSettings = {
 	includeUnits?: boolean;
 	includeQr?: boolean;
 	discount?: number;
+	/** How `discount` is applied; mutually exclusive per invoice. */
+	discountMode?: DiscountMode;
 };
 
 export type InvoiceType = "one-time" | "recurring";

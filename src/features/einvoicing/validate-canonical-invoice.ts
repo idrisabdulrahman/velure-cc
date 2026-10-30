@@ -1,5 +1,6 @@
 import type { BuyerType } from "../clients/buyer-profile";
 import { validateSupplierTin } from "../compliance/supplier-profile";
+import type { DiscountMode } from "../compliance/types";
 import type { CanonicalDecimal, CanonicalInvoice } from "./canonical-invoice";
 
 export type CanonicalInvoiceIssue = Readonly<{
@@ -34,6 +35,12 @@ const NO_TAX_TREATMENTS = new Set([
 	"exempt",
 	"zero_rated",
 	"reverse_charge",
+]);
+const DISCOUNT_MODES = new Set<DiscountMode>([
+	"none",
+	"invoice_before_tax",
+	"invoice_after_tax",
+	"line",
 ]);
 
 type Decimal = { coefficient: bigint; scale: number };
@@ -73,6 +80,9 @@ function roundCurrency(value: Decimal): Decimal {
 	let rounded = abs / divisor;
 	if ((abs % divisor) * 2n >= divisor) rounded += 1n;
 	return { coefficient: value.coefficient < 0n ? -rounded : rounded, scale: 2 };
+}
+function negative(value: Decimal): Decimal {
+	return { coefficient: -value.coefficient, scale: value.scale };
 }
 function text(value: Decimal): string {
 	const negative = value.coefficient < 0n;
@@ -311,23 +321,87 @@ export function validateCanonicalInvoice(
 				"A goods or service classification code is required.",
 			);
 	});
-	const discount = invoice.totals.discount
+	const parsedDiscount = invoice.totals.discount
 		? decimal(invoice.totals.discount)
-		: { coefficient: 0n, scale: 0 };
-	if (!discount || discount.coefficient < 0n)
+		: null;
+	const discount: Decimal = parsedDiscount ?? { coefficient: 0n, scale: 0 };
+	if (
+		(Boolean(invoice.totals.discount) && !parsedDiscount) ||
+		discount.coefficient < 0n
+	)
 		issue(
 			issues,
 			"discount_invalid",
 			"totals.discount",
 			"Discount must be a nonnegative decimal.",
 		);
-	else if (discount.coefficient !== 0n)
+
+	// Sum per-line discounts. They are only valid in `line` mode.
+	let lineDiscountSum: Decimal = { coefficient: 0n, scale: 0 };
+	let validLineDiscounts = true;
+	invoice.lines.forEach((line, index) => {
+		if (line.discount === undefined) return;
+		const parsed = decimal(line.discount);
+		if (!parsed || parsed.coefficient < 0n) {
+			validLineDiscounts = false;
+			issue(
+				issues,
+				"line_discount_invalid",
+				`lines[${index}].discount`,
+				"Line discount must be a nonnegative decimal.",
+			);
+			return;
+		}
+		lineDiscountSum = add(lineDiscountSum, parsed);
+	});
+
+	const declaredMode = invoice.totals.discountMode;
+	if (declaredMode !== undefined && !DISCOUNT_MODES.has(declaredMode))
 		issue(
 			issues,
-			"discount_semantics_unsupported",
-			"totals.discount",
-			"Nonzero discounts are blocked until their tax treatment is defined.",
+			"discount_mode_invalid",
+			"totals.discountMode",
+			"Choose a supported discount mode.",
 		);
+	const hasAnyDiscount =
+		discount.coefficient !== 0n || lineDiscountSum.coefficient !== 0n;
+	const discountMode: DiscountMode =
+		declaredMode !== undefined && DISCOUNT_MODES.has(declaredMode)
+			? declaredMode
+			: hasAnyDiscount
+				? "invoice_after_tax"
+				: "none";
+
+	if (discountMode === "none") {
+		if (hasAnyDiscount)
+			issue(
+				issues,
+				"discount_mode_mismatch",
+				"totals.discountMode",
+				"A discount requires an explicit discount mode.",
+			);
+	} else if (discountMode === "line") {
+		// With no discounts at all, `totals.discount` may simply be absent.
+		const hasDiscount = lineDiscountSum.coefficient !== 0n;
+		if (
+			validLineDiscounts &&
+			(hasDiscount || invoice.totals.discount !== undefined) &&
+			!equalsCurrency(invoice.totals.discount, roundCurrency(lineDiscountSum))
+		)
+			issue(
+				issues,
+				"discount_total_mismatch",
+				"totals.discount",
+				"Discount total must equal the sum of line discounts.",
+			);
+	} else if (lineDiscountSum.coefficient !== 0n) {
+		issue(
+			issues,
+			"discount_mode_mismatch",
+			"totals.discountMode",
+			"An invoice-level discount cannot be combined with line discounts.",
+		);
+	}
 	if (
 		validLineMath &&
 		!equalsCurrency(invoice.totals.subtotal, roundCurrency(lineSubtotal))
@@ -409,16 +483,40 @@ export function validateCanonicalInvoice(
 	if (taxSum && validLineMath && treatment && TREATMENTS.has(treatment)) {
 		const subtotal = roundCurrency(lineSubtotal);
 		const tax = roundCurrency(taxSum);
-		const gross =
+		const preDiscountGross =
 			treatment === "exclusive_rate"
 				? roundCurrency(add(subtotal, tax))
 				: subtotal;
+		const discountAmount = roundCurrency(discount);
+		const lineDiscountAmount = roundCurrency(lineDiscountSum);
+		// Before-tax and per-line discounts reduce the taxable base; an
+		// after-tax discount is subtracted from the gross instead.
+		const baseReduction =
+			discountMode === "invoice_before_tax"
+				? discountAmount
+				: discountMode === "line"
+					? lineDiscountAmount
+					: { coefficient: 0n, scale: 2 };
+		const reducedBase = roundCurrency(add(subtotal, negative(baseReduction)));
+		if (reducedBase.coefficient < 0n)
+			issue(
+				issues,
+				"discount_exceeds_subtotal",
+				"totals.discount",
+				"Discount cannot exceed the invoice subtotal.",
+			);
+		const gross =
+			discountMode === "invoice_after_tax"
+				? roundCurrency(add(preDiscountGross, negative(discountAmount)))
+				: treatment === "exclusive_rate"
+					? roundCurrency(add(reducedBase, tax))
+					: reducedBase;
 		if (!equalsCurrency(invoice.totals.grossTotal, gross))
 			issue(
 				issues,
 				"gross_total_mismatch",
 				"totals.grossTotal",
-				"Gross total does not match the stored tax treatment.",
+				"Gross total does not match the stored tax treatment and discount mode.",
 			);
 		const withholding = invoice.withholding
 			? decimal(invoice.withholding.amount)

@@ -151,6 +151,7 @@ export async function PdfTemplate({
 						locale={template.locale}
 						discount={discount}
 						discountLabel={template.discountLabel}
+						discountMode={template.discountMode}
 						withholdingTaxAmount={withholdingTax}
 						withholdingTaxLabel={template.withholdingTaxLabel}
 						withholdingTaxRate={template.withholdingTaxRate}

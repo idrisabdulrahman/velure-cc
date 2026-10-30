@@ -13,7 +13,6 @@ These block work that depends on the answer. Unattended runs must stop here.
 | --- | --- | --- | --- |
 | Q-D | **Target segment (T12).** Small businesses only, or also medium taxpayers already inside the mandate? | Drives positioning copy and whether a mock can ever serve the segment. | Small businesses. |
 | Q-F | **Real users / pilots (T7/T13).** Are there any real pilot users today? | Ground-truth table honesty. Evidence says effectively none (§7 of the audit). | Report "no known paying users; data is test fixtures". |
-| Q-G | **Discount semantics (T6/review).** Is a non-zero invoice discount supported, and how is it treated in the submitted totals (line-level vs invoice-level, before/after tax)? | `validateCanonicalInvoice` blocks any non-zero discount (`discount_semantics_unsupported`), so discounted invoices cannot be submitted. Product decision, not a bug. | **Answered in part 2026-10-30:** support invoice-level *before tax*, invoice-level *after tax*, and line-level. Combination/precedence still to pin before code. |
 | Q-H | **WHT / payable (T6/review).** Does the NRS e-invoice carry a gross amount plus a separate withholding amount, or a single net payable? | The app stores `withholdingTotal` and a net payable; whether that maps to the NRS/UBL document is UNKNOWN. Needs a provider/NRS confirmation. | Ask the provider question list (§9 of the gap analysis); do not guess. |
 
 ### Resolved
@@ -25,6 +24,7 @@ These block work that depends on the answer. Unattended runs must stop here.
 | Priority | Execute the audit's recommended priority order (T3 → T2 → T5 → T1 → T4 → Phase 2+), not a single first fix. | 2026-10-29 |
 | Q-C | **Closed source.** Rewrite the Midday-derived files as clean-room originals and remove every "midday" name/path. UI and behavior must stay identical. No commercial licence. | 2026-10-29 |
 | Q-E | **Supabase `pg_cron` + `pg_net`** calls the secret scheduler endpoint. No separate Worker. | 2026-10-29 |
+| Q-G | **Discounts:** support invoice-level *before tax*, invoice-level *after tax*, and line-level, **mutually exclusive per invoice**. Before-tax reduces the taxable base proportionally (VAT on the discounted amount). A legacy discount with no stored mode defaults to **after tax**, preserving the totals the renderer already displayed. | 2026-10-30 |
 
 ---
 
@@ -350,4 +350,33 @@ These block work that depends on the answer. Unattended runs must stop here.
   renderer can display. **Combination/precedence (whether the modes are
   mutually exclusive or can stack) must be pinned before any money-path code
   changes.** The `discount_semantics_unsupported` block stays until then.
+
+### 2026-10-30 — Discount money path (Q-G resolved)
+
+- **Decision (user).** All three modes exist and are **mutually exclusive per
+  invoice**: invoice-level *before tax*, invoice-level *after tax*, and
+  line-level. A before-tax discount reduces the taxable base proportionally, so
+  VAT is charged on the discounted amount; an after-tax discount leaves VAT
+  intact and is subtracted from the total; a line discount reduces that line's
+  base before VAT.
+- **Default mode (implementation).** A stored discount with no mode resolves to
+  `invoice_after_tax`, because that is what the HTML/PDF renderer has always
+  displayed (`subtotal + VAT - discount`). Changing the default would silently
+  change what a customer is charged, so this is deliberately conservative.
+- **Where it lives.** Invoice-level discount + mode stay in `templateSettings`
+  (`discount`, `discountMode`); line discounts live on `lineItem.discount`. No
+  new required snapshot fields — the compliance snapshot stores the resulting
+  gross `subtotal`, mode-adjusted `totalTax`, `grandTotal`, and `netPayable`, so
+  stored legacy snapshots stay valid.
+- **Validator.** The blanket `discount_semantics_unsupported` block is replaced
+  by per-mode arithmetic: `discount_invalid`, `line_discount_invalid`,
+  `discount_mode_invalid`, `discount_mode_mismatch`, `discount_total_mismatch`,
+  and `discount_exceeds_subtotal`; `gross_total_mismatch` is now mode-aware.
+- **Scope (this slice).** Engine, canonical model, pre-submission validator,
+  save-path guards, HTML/PDF renderer, and the panel's invoice-level
+  before/after selector + discount row. **Per-line discount inputs remain a
+  follow-up slice**; the engine and validator already accept line mode.
+- **Prompt:** `prompts/discount-money-path-2026-10.md`.
+- **Checks:** `pnpm test` → 823 passed / 86 skipped (30 new tests);
+  `pnpm typecheck` clean; `pnpm check` exit 0 with 359 pre-existing warnings.
 

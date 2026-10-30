@@ -1,4 +1,8 @@
-import { priceToKobo, subtotalKobo } from "#/features/invoices/line-money";
+import {
+	lineTotalKobo,
+	priceToKobo,
+	subtotalKobo,
+} from "#/features/invoices/line-money";
 import {
 	defaultTaxTreatmentForSellerTaxStatus,
 	defaultWithholdingSelection,
@@ -13,6 +17,7 @@ import {
 import type {
 	BusinessIdentity,
 	ComplianceWarningCode,
+	DiscountMode,
 	InvoiceComplianceSnapshot,
 	InvoiceWithholdingSnapshot,
 	SellerTaxStatus,
@@ -23,6 +28,8 @@ import type {
 type InvoiceLineLike = {
 	quantity: number;
 	price: number;
+	/** Line-level discount in major units; only used by the `line` mode. */
+	discount?: number;
 };
 
 type ComplianceInput = {
@@ -37,6 +44,9 @@ type ComplianceInput = {
 	taxRuleSetVersion?: string;
 	withholding?: Partial<InvoiceWithholdingSnapshot>;
 	withholdingTaxPreset?: InvoiceComplianceSnapshot["withholdingTaxPreset"];
+	/** Invoice-level discount in major units (before- or after-tax per mode). */
+	discount?: number;
+	discountMode?: DiscountMode;
 	lineItems: InvoiceLineLike[];
 };
 
@@ -164,6 +174,56 @@ function resolveDomesticTaxDefaults(
 	};
 }
 
+/**
+ * Resolves the discount mode and the amounts in kobo. The three modes are
+ * mutually exclusive: an invoice may carry either one invoice-level discount
+ * (before or after tax) or per-line discounts, never both. An explicit mode is
+ * trusted; a stored discount with no mode falls back to `invoice_after_tax`,
+ * matching what the document renderer has always displayed.
+ */
+export function resolveInvoiceDiscount(input: {
+	lineItems: InvoiceLineLike[];
+	discount?: number;
+	discountMode?: DiscountMode;
+}): {
+	mode: DiscountMode;
+	invoiceDiscountMinor: number;
+	lineDiscountMinor: number;
+} {
+	const lineDiscountMinor = input.lineItems.reduce((sum, line) => {
+		const value = priceToKobo(line.discount ?? 0);
+		if (value < 0) {
+			throw new RangeError("A line discount cannot be negative.");
+		}
+		return sum + value;
+	}, 0);
+	const invoiceDiscountMinor = priceToKobo(input.discount ?? 0);
+	if (invoiceDiscountMinor < 0) {
+		throw new RangeError("An invoice discount cannot be negative.");
+	}
+
+	let mode = input.discountMode ?? "none";
+	if (mode === "none") {
+		if (invoiceDiscountMinor > 0) mode = "invoice_after_tax";
+		else if (lineDiscountMinor > 0) mode = "line";
+	}
+
+	const hasInvoiceDiscount =
+		mode === "invoice_before_tax" || mode === "invoice_after_tax";
+	if (mode === "line" && invoiceDiscountMinor > 0) {
+		throw new Error(
+			"Line-level and invoice-level discounts cannot be combined on one invoice.",
+		);
+	}
+	if (hasInvoiceDiscount && lineDiscountMinor > 0) {
+		throw new Error(
+			"Line-level and invoice-level discounts cannot be combined on one invoice.",
+		);
+	}
+
+	return { mode, invoiceDiscountMinor, lineDiscountMinor };
+}
+
 export function calculateInvoiceCompliance(
 	input: ComplianceInput,
 ): InvoiceComplianceSnapshot {
@@ -186,15 +246,62 @@ export function calculateInvoiceCompliance(
 	const taxRuleSetVersion =
 		input.taxRuleSetVersion ?? NIGERIA_TAX_RULE_SET_VERSION;
 
+	const {
+		mode: discountMode,
+		invoiceDiscountMinor,
+		lineDiscountMinor,
+	} = resolveInvoiceDiscount({
+		lineItems: input.lineItems,
+		discount: input.discount,
+		discountMode: input.discountMode,
+	});
+
+	// A line discount must never exceed that line's own net.
+	if (discountMode === "line") {
+		input.lineItems.forEach((line, index) => {
+			const netMinor = lineTotalKobo(line);
+			const lineDiscount = priceToKobo(line.discount ?? 0);
+			if (lineDiscount > Math.max(netMinor, 0)) {
+				throw new RangeError(
+					`Line ${index + 1} discount cannot exceed the line amount.`,
+				);
+			}
+		});
+	}
+	if (
+		(discountMode === "invoice_before_tax" ||
+			discountMode === "invoice_after_tax") &&
+		invoiceDiscountMinor > subtotalMinor
+	) {
+		throw new RangeError("Discount cannot exceed the invoice subtotal.");
+	}
+
+	// Before-tax and per-line discounts reduce the taxable base; an after-tax
+	// discount leaves the base alone and is subtracted from the total instead.
+	const beforeTaxDiscountMinor =
+		discountMode === "invoice_before_tax"
+			? invoiceDiscountMinor
+			: discountMode === "line"
+				? lineDiscountMinor
+				: 0;
+	const taxableBaseMinor = subtotalMinor - beforeTaxDiscountMinor;
+
 	let totalTaxMinor = 0;
-	let grandTotalMinor = subtotalMinor;
+	let grandTotalMinor = taxableBaseMinor;
 
 	if (taxTreatment === "exclusive_rate") {
-		totalTaxMinor = percentageKobo(subtotalMinor, taxRate);
-		grandTotalMinor += totalTaxMinor;
+		totalTaxMinor = percentageKobo(taxableBaseMinor, taxRate);
+		grandTotalMinor = taxableBaseMinor + totalTaxMinor;
 	} else if (taxTreatment === "inclusive_rate" && taxRate > 0) {
-		totalTaxMinor = percentageKobo(subtotalMinor, taxRate, true);
+		// Inclusive prices already contain tax; the discount reduces the
+		// inclusive amount, and the included tax is derived from that base.
+		totalTaxMinor = percentageKobo(taxableBaseMinor, taxRate, true);
+		grandTotalMinor = taxableBaseMinor;
 	}
+	if (discountMode === "invoice_after_tax") {
+		grandTotalMinor -= invoiceDiscountMinor;
+	}
+
 	const totalTax = totalTaxMinor / 100;
 	const grandTotal = grandTotalMinor / 100;
 
