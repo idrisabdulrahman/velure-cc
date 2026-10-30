@@ -14,6 +14,18 @@ export type CanonicalParty = Readonly<{
 	email?: string;
 	phone?: string;
 	address?: string;
+	/**
+	 * Structured postal address, carried through unchanged from the snapshot so
+	 * a provider/UBL adapter never has to parse the printable `address` string.
+	 * `countryCode` is the party jurisdiction. `city` and `postalZone` are not
+	 * collected by Velure yet and stay absent (docs/EINVOICE-GAP-ANALYSIS.md §5.2).
+	 */
+	postalAddress?: Readonly<{
+		street?: string;
+		lga?: string;
+		state?: string;
+		countryCode?: string;
+	}>;
 	website?: string;
 	jurisdiction?: Readonly<{
 		scheme: "source.jurisdictionCode";
@@ -161,6 +173,16 @@ function partyFromSnapshot(
 		email: identity.email,
 		phone: identity.phone,
 		address: identity.address,
+		...(identity.postalAddress
+			? {
+					postalAddress: {
+						...identity.postalAddress,
+						...(identity.countryCode
+							? { countryCode: identity.countryCode }
+							: {}),
+					},
+				}
+			: {}),
 		website: identity.website,
 		...(identity.countryCode
 			? {

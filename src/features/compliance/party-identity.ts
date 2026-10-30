@@ -1,4 +1,5 @@
 import { composeSupplierAddress } from "./supplier-profile";
+import type { StructuredPostalAddress } from "./types";
 
 /**
  * Server-derived party identity for the persisted invoice compliance snapshot.
@@ -17,6 +18,7 @@ import { composeSupplierAddress } from "./supplier-profile";
 
 export type DerivedPartyIdentity = {
 	address?: string;
+	postalAddress?: StructuredPostalAddress;
 	taxId?: string;
 	rcNumber?: string;
 	countryCode?: string;
@@ -30,6 +32,27 @@ export type DerivedPartyIdentityMap = {
 function text(value: string | null | undefined): string | undefined {
 	const trimmed = value?.trim();
 	return trimmed ? trimmed : undefined;
+}
+
+/**
+ * Builds the structured postal address from the parts Velure actually stores.
+ * Returns `undefined` when every part is empty, so a profile with no structured
+ * address never emits an empty object into the snapshot.
+ */
+function structuredPostalAddress(input: {
+	street?: string | null;
+	lga?: string | null;
+	state?: string | null;
+}): StructuredPostalAddress | undefined {
+	const street = text(input.street);
+	const lga = text(input.lga);
+	const state = text(input.state);
+	if (!street && !lga && !state) return undefined;
+	return {
+		...(street ? { street } : {}),
+		...(lga ? { lga } : {}),
+		...(state ? { state } : {}),
+	};
 }
 
 /**
@@ -53,6 +76,11 @@ export function supplierIdentityFromProfile(input: {
 				lga: input.addressLga,
 				state: input.addressState,
 			}) || text(input.address),
+		postalAddress: structuredPostalAddress({
+			street: input.addressStreet,
+			lga: input.addressLga,
+			state: input.addressState,
+		}),
 		taxId: text(input.taxId),
 		rcNumber: text(input.rcNumber),
 		countryCode: text(input.countryCode),
@@ -80,9 +108,9 @@ function asParty(value: unknown): Record<string, unknown> {
  * Overwrites the derived keys on a party, keeping every other field the
  * snapshot producer wrote. A derived `undefined` deletes the field so a
  * client-supplied value can never stand in for an authority that has none
- * (address, taxId, rcNumber). `countryCode` is only replaced when the authority
- * supplies one, so a snapshot default (e.g. the workspace's `countryCode`)
- * survives an unset legacy column.
+ * (address, postalAddress, taxId, rcNumber). `countryCode` is only replaced
+ * when the authority supplies one, so a snapshot default (e.g. the workspace's
+ * `countryCode`) survives an unset legacy column.
  */
 function overrideParty(
 	current: unknown,
@@ -109,8 +137,14 @@ export function applyPartyIdentity(
 	compliance: Record<string, unknown>,
 	identity: DerivedPartyIdentityMap,
 ): Record<string, unknown> {
-	const sellerKeys = ["address", "taxId", "rcNumber", "countryCode"] as const;
-	const buyerKeys = ["address", "taxId"] as const;
+	const sellerKeys = [
+		"address",
+		"postalAddress",
+		"taxId",
+		"rcNumber",
+		"countryCode",
+	] as const;
+	const buyerKeys = ["address", "postalAddress", "taxId"] as const;
 	return {
 		...compliance,
 		...(identity.seller
@@ -119,7 +153,7 @@ export function applyPartyIdentity(
 						compliance.seller,
 						identity.seller,
 						sellerKeys,
-						["address", "taxId", "rcNumber"],
+						["address", "postalAddress", "taxId", "rcNumber"],
 					),
 				}
 			: {}),

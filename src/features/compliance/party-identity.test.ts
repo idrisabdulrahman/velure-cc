@@ -17,6 +17,11 @@ describe("supplierIdentityFromProfile", () => {
 		});
 		expect(identity).toEqual({
 			address: "1 Workspace Way, Ikeja, Lagos",
+			postalAddress: {
+				street: "1 Workspace Way",
+				lga: "Ikeja",
+				state: "Lagos",
+			},
 			taxId: "8129473650",
 			rcNumber: "RC-1234567",
 			countryCode: "NG",
@@ -51,9 +56,19 @@ describe("supplierIdentityFromProfile", () => {
 			countryCode: null,
 		});
 		expect(identity.address).toBeUndefined();
+		expect(identity.postalAddress).toBeUndefined();
 		expect(identity.taxId).toBeUndefined();
 		expect(identity.rcNumber).toBeUndefined();
 		expect(identity.countryCode).toBeUndefined();
+	});
+
+	it("carries only the structured parts that exist (no city/postalZone invented)", () => {
+		expect(
+			supplierIdentityFromProfile({
+				addressStreet: "2 New Way",
+				addressState: "Abuja",
+			}).postalAddress,
+		).toEqual({ street: "2 New Way", state: "Abuja" });
 	});
 });
 
@@ -94,6 +109,11 @@ describe("applyPartyIdentity", () => {
 		const applied = applyPartyIdentity(base, {
 			seller: {
 				address: "1 Workspace Way, Ikeja, Lagos",
+				postalAddress: {
+					street: "1 Workspace Way",
+					lga: "Ikeja",
+					state: "Lagos",
+				},
 				taxId: "8129473650",
 				rcNumber: "RC-1234567",
 				countryCode: "NG",
@@ -104,6 +124,11 @@ describe("applyPartyIdentity", () => {
 			legalName: "Client Claimed Seller",
 			email: "seller@example.test",
 			address: "1 Workspace Way, Ikeja, Lagos",
+			postalAddress: {
+				street: "1 Workspace Way",
+				lga: "Ikeja",
+				state: "Lagos",
+			},
 			taxId: "8129473650",
 			rcNumber: "RC-1234567",
 			countryCode: "NG",
@@ -115,6 +140,21 @@ describe("applyPartyIdentity", () => {
 		});
 		// Non-party snapshot fields are untouched.
 		expect(applied.subtotal).toBe(100);
+	});
+
+	it("clears a client-supplied postal address when the authority has none", () => {
+		const applied = applyPartyIdentity(
+			{
+				seller: { postalAddress: { street: "forged" } },
+				buyer: { postalAddress: { street: "forged" } },
+			},
+			{
+				seller: supplierIdentityFromProfile({}),
+				buyer: buyerIdentityFromClient({}),
+			},
+		);
+		expect(applied.seller).not.toHaveProperty("postalAddress");
+		expect(applied.buyer).not.toHaveProperty("postalAddress");
 	});
 
 	it("clears a client-supplied seller identity when the workspace has none", () => {

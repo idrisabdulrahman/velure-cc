@@ -59,12 +59,31 @@ export type ComplianceWarningCode =
 
 export type TemplateVariant = "default_ng" | "cross_border" | "vat_ready";
 
+/**
+ * Structured postal address carried alongside the printable `address` string.
+ *
+ * The workspace supplier profile already collects street, LGA/area and
+ * state/region structurally, so flattening them into one free-text string
+ * (and forcing a future provider/UBL adapter to parse it back) was a needless
+ * lossy step. The components are now carried through the snapshot and the
+ * canonical model unchanged. `city` and `postalZone` are **not** collected by
+ * Velure yet and stay absent — do not invent them
+ * (docs/EINVOICE-GAP-ANALYSIS.md §5.2). Buyer records only store a single
+ * free-text billing address, so a buyer postal address is normally absent too.
+ */
+export type StructuredPostalAddress = {
+	street?: string;
+	lga?: string;
+	state?: string;
+};
+
 export type BusinessIdentity = {
 	legalName?: string;
 	tradingName?: string;
 	email?: string;
 	phone?: string;
 	address?: string;
+	postalAddress?: StructuredPostalAddress;
 	website?: string;
 	countryCode?: JurisdictionCode;
 	taxId?: string;

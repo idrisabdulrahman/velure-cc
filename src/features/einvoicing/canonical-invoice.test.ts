@@ -185,6 +185,34 @@ describe("toCanonicalInvoice", () => {
 		expect(Object.isFrozen(canonical.lines[0])).toBe(true);
 	});
 
+	it("carries the structured postal address through to the canonical party", () => {
+		const source = invoice();
+		if (!source.compliance) throw new Error("Expected compliance fixture.");
+		const canonical = toCanonicalInvoice(
+			invoice({
+				compliance: {
+					...source.compliance,
+					seller: {
+						...source.compliance.seller,
+						postalAddress: {
+							street: "1 Seller Road",
+							lga: "Ikeja",
+							state: "Lagos",
+						},
+					},
+				},
+			}),
+		);
+		expect(canonical.seller.postalAddress).toEqual({
+			street: "1 Seller Road",
+			lga: "Ikeja",
+			state: "Lagos",
+			countryCode: "NG",
+		});
+		// Buyer has no structured data (free-text billing address only).
+		expect(canonical.buyer).not.toHaveProperty("postalAddress");
+	});
+
 	it("preserves cross-border metadata and correction/pro-forma document types", () => {
 		const source = invoice();
 		if (!source.compliance) throw new Error("Expected compliance fixture.");
