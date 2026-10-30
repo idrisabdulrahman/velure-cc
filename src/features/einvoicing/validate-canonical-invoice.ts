@@ -6,6 +6,12 @@ export type CanonicalInvoiceIssue = Readonly<{
 	code: string;
 	path: string;
 	message: string;
+	/**
+	 * `blocking` fails the readiness check; `warning` is reported but does not
+	 * fail it. Omitted means `blocking`. Only the unconfirmed 10-digit TIN
+	 * shape is a warning today (2026-10-30 review).
+	 */
+	severity?: "blocking" | "warning";
 }>;
 
 export type CanonicalInvoiceValidation = Readonly<{
@@ -125,7 +131,12 @@ function tin(
 	if (!ngParty(party)) return;
 	const result = validateSupplierTin(supplied);
 	if (!result.ok)
-		issues.push({ code: result.code, path, message: result.message });
+		issues.push({
+			code: result.code,
+			path,
+			message: result.message,
+			severity: result.severity,
+		});
 }
 function issue(
 	issues: CanonicalInvoiceIssue[],
@@ -443,5 +454,8 @@ export function validateCanonicalInvoice(
 				);
 		}
 	}
-	return { valid: issues.length === 0, issues };
+	const blocking = issues.filter(
+		(entry) => (entry.severity ?? "blocking") === "blocking",
+	);
+	return { valid: blocking.length === 0, issues };
 }

@@ -1,10 +1,11 @@
+import { validateSupplierTin } from "#/features/compliance/supplier-profile";
+
 export const NIGERIA_AUTHORITY_LABEL = "Nigeria Revenue Service (NRS)";
 export const NIGERIA_TAX_RULE_SET_VERSION = "ng-2026-q1";
 export const NIGERIA_FOREIGN_CURRENCY_WARNING =
 	"Foreign currency invoices must be settled through a CBN-licensed financial institution. Confirm with your accountant before issuing.";
 export const RESEND_FREE_TIER_DAILY_LIMIT = 100;
 
-const TIN_REGEX = /^\d{10}$/;
 const RC_REGEX = /^RC-\d{7}$/i;
 const LOCAL_PHONE_REGEX = /^0\d{10}$/;
 const E164_PHONE_REGEX = /^\+234\d{10}$/;
@@ -328,10 +329,19 @@ export function legacyPresetFromWithholding(
 	return "none";
 }
 
+/**
+ * TIN format is UNCONFIRMED (SPEC 6.2 item 4; a provider sample even shows a
+ * dashed TIN). Since the 2026-10-30 review the 10-digit shape is a WARNING, not
+ * a block, so an invoice is never refused over an unconfirmed rule — the
+ * warning surfaces through the supplier/buyer `needs_review` profile flags
+ * instead. Only clearly invalid placeholder TINs still throw here. Reuses the
+ * one shared validator so the severity policy cannot drift.
+ */
 export function assertValidTin(value?: string) {
 	if (!value) return;
-	if (!TIN_REGEX.test(value.trim())) {
-		throw new Error("TIN must be exactly 10 numeric digits.");
+	const result = validateSupplierTin(value);
+	if (!result.ok && result.severity === "blocking") {
+		throw new Error(result.message);
 	}
 }
 

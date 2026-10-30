@@ -58,10 +58,13 @@ describe("validateBuyerProfile", () => {
 		expect(result.valid).toBe(true);
 	});
 
-	it("validates a TIN that IS provided by a B2C buyer", () => {
+	it("flags — does not reject — a malformed TIN shape", () => {
 		const bad = validateBuyerProfile({ ...validB2c, taxId: "12345" });
 		expect(codes(bad)).toContain("tin_format");
-		expect(bad.valid).toBe(false);
+		// The required TIN shape is unconfirmed, so a wrong shape is a warning
+		// (stored + flagged), never a save-blocking error.
+		expect(bad.valid).toBe(true);
+		expect(bad.status).toBe("needs_review");
 	});
 
 	it.each([

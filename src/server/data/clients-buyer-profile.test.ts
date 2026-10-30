@@ -62,10 +62,14 @@ describe("buildClientBuyerColumns (B2 server boundary)", () => {
 		).toThrow(/placeholder/i);
 	});
 
-	it("rejects a malformed TIN and a malformed email", () => {
-		expect(() =>
-			buildClientBuyerColumns(storedRow, { ...input, taxId: "12345" }),
-		).toThrow(/exactly 10 digits/);
+	it("flags a malformed TIN but still rejects a malformed email", () => {
+		const columns = buildClientBuyerColumns(storedRow, {
+			...input,
+			taxId: "12345",
+		});
+		expect(columns.tax_id).toBe("12345");
+		expect(columns.buyer_profile_status).toBe("needs_review");
+		expect(columns.buyer_profile_issues).toContain("tin_format");
 		expect(() =>
 			buildClientBuyerColumns(storedRow, {
 				...input,
@@ -77,7 +81,7 @@ describe("buildClientBuyerColumns (B2 server boundary)", () => {
 	it("throws with the exported rejection prefix so the UI toast stays actionable", () => {
 		let message = "";
 		try {
-			buildClientBuyerColumns(storedRow, { ...input, taxId: "12345" });
+			buildClientBuyerColumns(storedRow, { ...input, taxId: "1234567890" });
 		} catch (error) {
 			message = error instanceof Error ? error.message : "";
 		}
@@ -316,17 +320,17 @@ describe("client write paths store buyer flags", () => {
 		expect(tables.clients?.length).toBe(before);
 	});
 
-	it("updateClient rejects a format-invalid TIN and leaves the row untouched", async () => {
-		const snapshot = { ...row("client-b") };
-		await expect(
-			updateClient(client, USER_B, "client-b", {
-				...clientInput,
-				name: "Client B",
-				email: "client-b@example.test",
-				taxId: "12345",
-			}),
-		).rejects.toThrow(/exactly 10 digits/);
-		expect(row("client-b")).toEqual(snapshot);
+	it("updateClient flags a format-invalid TIN instead of blocking the edit", async () => {
+		await updateClient(client, USER_B, "client-b", {
+			...clientInput,
+			name: "Client B",
+			email: "client-b@example.test",
+			taxId: "12345",
+		});
+		const updated = row("client-b");
+		expect(updated?.tax_id).toBe("12345");
+		expect(updated?.buyer_profile_status).toBe("needs_review");
+		expect(updated?.buyer_profile_issues).toContain("tin_format");
 	});
 
 	it("updateClient hard-fails on a legacy placeholder TIN the edit leaves in place", async () => {
@@ -388,14 +392,19 @@ describe("client write paths store buyer flags", () => {
 		expect(row("client-legacy")).toEqual(snapshot);
 	});
 
-	it("importClientsCsv skips format-invalid rows and imports flagged ones", async () => {
+	it("importClientsCsv imports a format-invalid TIN flagged and a plain row", async () => {
 		const result = await importClientsCsv(client, USER_B, [
 			{ name: "Bad TIN Co", email: "bad-tin@example.test", taxId: "12345" },
 			{ name: "Plain Co", email: "plain@example.test" },
 		]);
-		expect(result.created).toBe(1);
-		expect(result.skipped).toBe(1);
-		expect(result.errors[0]).toMatchObject({ row: 2 });
+		// A wrong TIN shape is a warning, so the row imports flagged rather
+		// than being skipped; placeholder TINs are still rejected.
+		expect(result.created).toBe(2);
+		expect(result.skipped).toBe(0);
+		const bad = tables.clients?.find(
+			(entry) => entry.email === "bad-tin@example.test",
+		);
+		expect(bad?.buyer_profile_issues).toContain("tin_format");
 		const imported = tables.clients?.find(
 			(entry) => entry.email === "plain@example.test",
 		);

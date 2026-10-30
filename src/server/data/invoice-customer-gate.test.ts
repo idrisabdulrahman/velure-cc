@@ -154,7 +154,10 @@ function seedTables(): FakeTables {
 				phone: null,
 				website: null,
 				billing_address: "1 Buyer Way",
-				tax_id: "1234567890",
+				// A real-shaped TIN. The walkthrough placeholder (1234567890) is
+				// deliberately rejected at the invoice-save boundary too, so it
+				// cannot stand in here.
+				tax_id: "8129473650",
 				currency: "NGN",
 				payment_terms: "Net 14",
 				internal_notes: null,

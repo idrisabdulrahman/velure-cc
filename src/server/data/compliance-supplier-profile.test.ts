@@ -47,10 +47,13 @@ describe("buildSupplierProfileUpdate (B1 server boundary)", () => {
 		);
 	});
 
-	it("rejects a malformed TIN", () => {
-		expect(() =>
-			buildSupplierProfileUpdate(validRow, { taxId: "12345" }),
-		).toThrow(/exactly 10 digits/);
+	it("flags — does not reject — a malformed TIN shape", () => {
+		// The 10-digit shape is UNCONFIRMED (2026-10-30 review): a wrong shape
+		// is stored and flagged, never a save-blocking error.
+		const columns = buildSupplierProfileUpdate(validRow, { taxId: "12345" });
+		expect(columns.tax_id).toBe("12345");
+		expect(columns.supplier_profile_status).toBe("needs_review");
+		expect(columns.supplier_profile_issues).toContain("tin_format");
 	});
 
 	it("rejects a malformed CAC RC number", () => {
@@ -111,12 +114,12 @@ describe("buildSupplierProfileUpdate (B1 server boundary)", () => {
 	it("throws with the exported rejection prefix so the UI toast stays actionable", () => {
 		let message = "";
 		try {
-			buildSupplierProfileUpdate(validRow, { taxId: "12345" });
+			buildSupplierProfileUpdate(validRow, { taxId: "1234567890" });
 		} catch (error) {
 			message = error instanceof Error ? error.message : "";
 		}
 		expect(message.startsWith(SUPPLIER_PROFILE_REJECTION_PREFIX)).toBe(true);
-		expect(message).toMatch(/exactly 10 digits/);
+		expect(message).toMatch(/placeholder/i);
 	});
 
 	it("keeps stored registration details when an edit omits them", () => {

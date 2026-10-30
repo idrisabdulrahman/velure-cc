@@ -176,8 +176,12 @@ function validate(form: BusinessForm): FormErrors {
 	// B1 supplier profile: validated TIN, required CAC RC, structured address.
 	// Same rules the server enforces — the client check is UX, the server is
 	// the boundary.
+	// Only blocking profile issues become inline field errors. Warnings (e.g.
+	// the unconfirmed TIN shape) must not look save-blocking; the "flagged for
+	// review" banner surfaces them after a successful save.
 	const profile = profileValidationFor(form);
 	for (const issue of profile.issues) {
+		if ((issue.severity ?? "blocking") !== "blocking") continue;
 		const field = PROFILE_ISSUE_FIELDS[issue.code];
 		if (field && !errors[field]) errors[field] = issue.message;
 	}

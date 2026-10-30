@@ -59,13 +59,18 @@ export type BuyerProfileIssue = {
 /**
  * Issue codes that block persistence (format problems). Everything else is a
  * completeness gap that is flagged, not rejected.
+ *
+ * Note: `tin_format` is deliberately NOT here. The required TIN shape is
+ * UNCONFIRMED (SPEC 6.2 item 4; a provider sample shows a dashed TIN), so a
+ * wrong-shaped TIN is stored and flagged `needs_review` rather than refusing
+ * the buyer — a strict block would turn away valid customers (2026-10-30
+ * review). Placeholder TINs are still rejected.
  */
 const BLOCKING_ISSUE_CODES = new Set<BuyerProfileIssueCode>([
 	"buyer_type_invalid",
 	"email_required",
 	"email_format",
 	"address_too_long",
-	"tin_format",
 	"tin_placeholder",
 	"name_required",
 ]);

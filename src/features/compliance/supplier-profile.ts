@@ -70,6 +70,15 @@ export type TinValidation =
 			ok: false;
 			code: "tin_required" | "tin_format" | "tin_placeholder";
 			message: string;
+			/**
+			 * `blocking` refuses the save; `warning` records a `needs_review`
+			 * flag but lets the value persist. The 10-digit shape is UNCONFIRMED
+			 * (SPEC 6.2 item 4; a provider sample even shows a dashed TIN), so
+			 * `tin_format` is a warning until NRS confirms the rule — a strict
+			 * block risks turning away valid customers (2026-10-30 review).
+			 * `tin_required` and `tin_placeholder` stay blocking.
+			 */
+			severity: "blocking" | "warning";
 	  };
 
 export function validateSupplierTin(value?: string | null): TinValidation {
@@ -79,6 +88,7 @@ export function validateSupplierTin(value?: string | null): TinValidation {
 			ok: false,
 			code: "tin_required",
 			message: "TIN is required (10 digits).",
+			severity: "blocking",
 		};
 	}
 	if (!NIGERIA_TIN_PATTERN.test(tin)) {
@@ -86,6 +96,7 @@ export function validateSupplierTin(value?: string | null): TinValidation {
 			ok: false,
 			code: "tin_format",
 			message: `TIN must be exactly ${NIGERIA_TIN_DIGITS} digits.`,
+			severity: "warning",
 		};
 	}
 	if (isAllSameDigit(tin) || PLACEHOLDER_TINS.has(tin)) {
@@ -93,6 +104,7 @@ export function validateSupplierTin(value?: string | null): TinValidation {
 			ok: false,
 			code: "tin_placeholder",
 			message: "That looks like a placeholder TIN. Enter your real TIN.",
+			severity: "blocking",
 		};
 	}
 	if (!tinPassesChecksum(tin)) {
@@ -100,6 +112,7 @@ export function validateSupplierTin(value?: string | null): TinValidation {
 			ok: false,
 			code: "tin_format",
 			message: "TIN failed its checksum rule.",
+			severity: "warning",
 		};
 	}
 	return { ok: true, tin };
@@ -192,6 +205,11 @@ export type SupplierProfileIssueCode =
 export type SupplierProfileIssue = {
 	code: SupplierProfileIssueCode;
 	message: string;
+	/**
+	 * `blocking` refuses the save; `warning` persists the value and records a
+	 * `needs_review` flag. Omitted means `blocking`.
+	 */
+	severity?: "blocking" | "warning";
 };
 
 export type SupplierProfileStatus = "complete" | "needs_review";
@@ -280,8 +298,11 @@ export function validateSupplierProfile(
 		rcNumber = compact(input.rcNumber);
 	}
 
+	const blocking = issues.filter(
+		(issue) => (issue.severity ?? "blocking") === "blocking",
+	);
 	return {
-		valid: issues.length === 0,
+		valid: blocking.length === 0,
 		status: issues.length === 0 ? "complete" : "needs_review",
 		issues,
 		normalized: {
