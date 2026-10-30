@@ -3,12 +3,12 @@ import { mapRejectionCodeToGuidance } from "./rejection-guidance";
 
 describe("provider rejection guidance", () => {
 	it("maps known codes to actionable invoice fixes", () => {
-		expect(mapRejectionCodeToGuidance("BUYER_TIN_INVALID")).toEqual({
-			code: "BUYER_TIN_INVALID",
+		expect(mapRejectionCodeToGuidance("MOCK_BUYER_TIN_INVALID")).toEqual({
+			code: "MOCK_BUYER_TIN_INVALID",
 			fix: "Check the buyer TIN and update the buyer record before retrying.",
 		});
 		expect(
-			mapRejectionCodeToGuidance("LINE_CLASSIFICATION_MISSING")?.fix,
+			mapRejectionCodeToGuidance("MOCK_LINE_CLASSIFICATION_MISSING")?.fix,
 		).toContain("VAT category");
 	});
 

@@ -330,7 +330,7 @@ describe("WP14 submission queue controls", () => {
 			}),
 		);
 		expect(rejected.rejectionGuidance).toEqual({
-			code: "BUYER_TIN_INVALID",
+			code: "MOCK_BUYER_TIN_INVALID",
 			fix: "Check the buyer TIN and update the buyer record before retrying.",
 		});
 		const stored = await getInvoiceSubmissionGuidance(
@@ -533,7 +533,7 @@ describe("WP14 submission queue controls", () => {
 		expect(result.status).toBe("rejected");
 		expect(tables.invoice_submission_attempts[1].outcome).toBe("rejected");
 		expect(tables.invoice_submission_queue[0].last_error_code).toBe(
-			"BUYER_TIN_INVALID",
+			"MOCK_BUYER_TIN_INVALID",
 		);
 		expect(tables.invoices[0].status).toBe("unpaid");
 	});

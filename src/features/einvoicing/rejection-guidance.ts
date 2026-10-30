@@ -3,20 +3,28 @@ export type RejectionGuidance = Readonly<{
 	fix: string;
 }>;
 
+/**
+ * Guidance for the MOCK provider's submission codes. Every key here is a
+ * Velure-invented code, so each carries a `MOCK_` prefix to prevent it being
+ * mistaken for a real NRS or provider code. The real rejection-code catalogue
+ * is UNKNOWN and must come from the NITDA guideline or a provider contract
+ * (see docs/EINVOICE-GAP-ANALYSIS.md §6). A real code that arrives with no
+ * mapping falls back to the generic fix below.
+ */
 const REJECTION_FIXES: Readonly<Record<string, string>> = {
-	BUYER_TIN_INVALID:
+	MOCK_BUYER_TIN_INVALID:
 		"Check the buyer TIN and update the buyer record before retrying.",
-	SUPPLIER_TIN_INVALID:
+	MOCK_SUPPLIER_TIN_INVALID:
 		"Check the supplier TIN in workspace compliance settings before retrying.",
-	LINE_CLASSIFICATION_MISSING:
+	MOCK_LINE_CLASSIFICATION_MISSING:
 		"Add a unit, VAT category, and goods or service code to each invoice line.",
-	TOTAL_MISMATCH:
+	MOCK_TOTAL_MISMATCH:
 		"Review line prices, quantities, tax treatment, and invoice totals.",
-	LOCAL_VALIDATION_FAILED:
+	MOCK_LOCAL_VALIDATION_FAILED:
 		"Correct the listed invoice validation issues before retrying.",
-	IDEMPOTENCY_KEY_REQUIRED:
+	MOCK_IDEMPOTENCY_KEY_REQUIRED:
 		"Retry from the invoice using the existing sandbox submission action.",
-	IDEMPOTENCY_KEY_REUSED:
+	MOCK_IDEMPOTENCY_KEY_REUSED:
 		"Start a new sandbox submission for this invoice; the existing key belongs to another request.",
 	MOCK_REJECTION:
 		"Review the invoice details and correct any issues before retrying.",

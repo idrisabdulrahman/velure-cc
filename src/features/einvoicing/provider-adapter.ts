@@ -148,7 +148,7 @@ export function createMockProviderAdapter(
 					operation: "submit",
 					outcome: "duplicate",
 					reference: existing.result.reference,
-					rejectionCode: "IDEMPOTENCY_KEY_REUSED",
+					rejectionCode: "MOCK_IDEMPOTENCY_KEY_REUSED",
 				};
 			}
 
@@ -161,8 +161,8 @@ export function createMockProviderAdapter(
 				outcome = "rejected";
 				status = "rejected";
 				rejectionCode = key
-					? "LOCAL_VALIDATION_FAILED"
-					: "IDEMPOTENCY_KEY_REQUIRED";
+					? "MOCK_LOCAL_VALIDATION_FAILED"
+					: "MOCK_IDEMPOTENCY_KEY_REQUIRED";
 				issues = clone(validation.issues);
 			} else {
 				outcome =
@@ -181,7 +181,7 @@ export function createMockProviderAdapter(
 							: scenario === "rejection"
 								? "rejected"
 								: scenario;
-				if (scenario === "rejection") rejectionCode = "BUYER_TIN_INVALID";
+				if (scenario === "rejection") rejectionCode = "MOCK_BUYER_TIN_INVALID";
 			}
 			const result: ProviderSubmissionResult = {
 				...MOCK_METADATA,
