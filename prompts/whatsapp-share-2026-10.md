@@ -256,3 +256,40 @@ items), the invoices ledger at 375 px, and the sidebar/⌘K palette need a signe
 session. The five `better_auth.user` rows have no known test password, so these
 remained unchecked rather than assumed. `create-invoice-panel.responsive.test.ts`
 asserts source strings only; it is not evidence that those layouts work.
+
+### Authenticated pass — real session, 2026-10-31
+
+The user approved creating a dedicated QA user. It was created against a second
+dev server whose `RESEND_API_KEY` was deliberately invalid, so the onboarding
+send failed at Resend and **no email was delivered**.
+
+**Touch drag-and-drop works — the suspected failure is refuted.** Reordering was
+driven with real CDP touch events (`touchStart` → 14 `touchMove` → `touchEnd`),
+not mouse emulation. Order flipped `FIRSTLINE, SECONDLINE` → `SECONDLINE,
+FIRSTLINE`.
+
+**Three real defects found, all fixed:**
+
+1. **No way to search on a phone.** The search field was `hidden … md:flex` and
+   the palette's other entry point was `⌘K`. A `md:hidden` icon button now opens
+   it. Verified: the button is visible and the palette opens inside the viewport
+   at 320/375/414.
+2. **Builder document-type strip overflowed.** `flex w-fit` with no wrap pushed
+   "Pro-forma" out and squeezed labels to "Pro form…". Now
+   `flex w-fit max-w-full flex-wrap` — all four tabs fully visible and
+   untruncated.
+3. **Ledger table was 755 px wide in a 286 px scroller.** `DataTableColumn` gained
+   `hideBelow`, and `Issued`/`Type` step out below `md`; width drops to 551 px.
+   Desktop markup is unchanged.
+
+Adding the search button squeezed the 320 px breadcrumb to "Inv…", so the page
+title is now hidden below 360 px.
+
+**Durable check:** `e2e/authenticated-responsive.spec.ts` — 9 tests over
+320/375/414, gated on `E2E_EMAIL`/`E2E_PASSWORD`, read-only. Proven
+non-vacuous: reverting the three fixes fails all three tests at 320 px.
+
+**Left as findings, not changed:** the ledger still needs one horizontal swipe to
+reach Amount at 320 px (data is reachable; a mobile card layout is a design
+change), and the header icon buttons remain 36×36 px — expanding them all leaves
+no room for the breadcrumb at 320 px, so it needs a design decision.

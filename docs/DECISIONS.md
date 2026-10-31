@@ -615,3 +615,55 @@ These block work that depends on the answer. Unattended runs must stop here.
   needed. `create-invoice-panel.responsive.test.ts` asserts source strings and is
   **not** layout evidence.
 - **Prompt:** `prompts/whatsapp-share-2026-10.md`.
+
+### 2026-10-30/31 — T8 authenticated surfaces: real session, three defects found
+
+- **Question the decision:** the builder, ledger and sidebar were declared
+  "unverified — needs a login". How should a session be obtained?
+- **User answer (2026-10-30):** "Create a dedicated QA user".
+- **How it was done safely:** a second dev server on `:3001` with
+  `RESEND_API_KEY` set to a deliberately invalid value. `RESEND_API_KEY` is
+  required and non-empty in `src/env.ts`, so it cannot simply be blanked; an
+  invalid key makes Resend reject the send and `sendOnboardingEmail` swallows
+  the failure. Confirmed: one failed send attempt, **no email delivered**.
+  The QA user is `qa-responsive@velure.test` (workspace auto-provisioned by
+  `ensureWorkspaceForUser` on first sign-in). No production user was touched and
+  no invitation was sent.
+- **Touch drag works — the suspicion is refuted.** Line-item reordering was
+  driven with real CDP `Input.dispatchTouchEvent` (touchStart → 14 touchMove
+  steps → touchEnd). Order flipped `FIRSTLINE, SECONDLINE` →
+  `SECONDLINE, FIRSTLINE`. The handle is 32×32 with `touch-none` and
+  `PointerSensor` at 5 px activation distance, which is adequate.
+
+**Defects found and fixed (all verified in a real browser at 320/375/414 px):**
+
+1. **The global search was unreachable on every phone.** The search field in
+   `DashboardLayout.tsx` was `hidden … md:flex`, and the palette's only other
+   entry point was `⌘K` — a key a phone does not have. A `md:hidden` icon button
+   now opens the palette. This also violates `design.md:338` ("No hover-only
+   affordances. Everything reachable by keyboard.") at mobile widths.
+2. **The builder's document-type strip overflowed.** `flex w-fit` with no
+   wrapping pushed "Pro-forma" out of the paper and squeezed labels to
+   "Pro form…". Now `flex w-fit max-w-full flex-wrap`: all four tabs are fully
+   visible and untruncated at 320/375/414.
+3. **The ledger table was 755 px wide in a 286 px scroller at 320 px**, so the
+   Amount column was never visible at rest. `DataTableColumn` gained an optional
+   `hideBelow` (`sm|md|lg` → `hidden md:table-cell`), and the `Issued` and `Type`
+   columns step out below `md`. Table width drops 755 → 551 px.
+   Desktop is byte-identical: the class only applies below the breakpoint.
+- **Header title at 320 px:** adding the search button squeezed the breadcrumb
+  to "Inv…", which reads as a fault. The page title is now hidden below 360 px
+  (the page heading still names the screen). At 375/414 it renders in full.
+- **Durable check:** `e2e/authenticated-responsive.spec.ts` (9 tests across
+  320/375/414, gated on `E2E_EMAIL`/`E2E_PASSWORD`, read-only — the builder is
+  never submitted). Proven non-vacuous: reverting all three fixes fails all
+  three tests at 320 px.
+- **Reported, not changed:** the ledger still needs one horizontal swipe to see
+  Amount at 320 px (all data is reachable; the partial next column is the
+  conventional scroll hint). The status filter pills likewise scroll. A mobile
+  card layout would remove the swipe but is a design change, not a bug fix, so
+  it is left to the user.
+- **Also noted, not changed:** the header's icon buttons are 36×36 px, below the
+  44 px touch floor applied to the public page. Expanding all four plus the
+  burger leaves ~16 px for the breadcrumb at 320 px, so this needs a design
+  decision (fewer controls, or a second row) rather than a one-off size bump.

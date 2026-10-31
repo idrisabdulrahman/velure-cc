@@ -704,13 +704,27 @@ export function DashboardLayout() {
 									{workspaceLabel}
 								</span>
 								<span className="mx-2 hidden sm:inline">/</span>
-								<span className="min-w-0 truncate font-medium text-ink">
+								{/* Below 360 px the header controls leave no room for the page
+								    title, and a truncated "Inv…" reads as a fault. The page
+								    heading below still names the screen. */}
+								<span className="hidden min-w-0 truncate font-medium text-ink min-[360px]:inline">
 									{activePageLabel}
 								</span>
 							</p>
 						</div>
 
 						<div className="flex items-center gap-2">
+							{/* Below md the search field is hidden, and a phone has no ⌘K.
+							    Without this the palette was unreachable on every phone. */}
+							<button
+								type="button"
+								onClick={() => setPaletteOpen(true)}
+								aria-label="Search or jump to"
+								title="Search or jump to"
+								className="grid h-9 w-9 place-items-center rounded-[var(--hm-r-btn)] border border-rule bg-paper-2 text-ink-3 transition-colors hover:border-brand-line hover:bg-brand-soft hover:text-ink md:hidden"
+							>
+								<Search className="h-4 w-4" />
+							</button>
 							<button
 								type="button"
 								onClick={() => setPaletteOpen(true)}

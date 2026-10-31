@@ -2219,7 +2219,7 @@ export function CreateInvoicePanel({
 										))}
 									</ol>
 								) : null}
-								<div className="mb-5 flex w-fit rounded-md border border-rule bg-paper-2 p-1">
+								<div className="mb-5 flex w-fit max-w-full flex-wrap rounded-md border border-rule bg-paper-2 p-1">
 									{DOCUMENT_TYPE_OPTIONS.map((option) => (
 										<button
 											key={option.value}

@@ -892,6 +892,7 @@ function InvoicesIndex() {
 		{
 			key: "issued",
 			header: "Issued",
+			hideBelow: "md",
 			render: (invoice) => (
 				<span className="font-num whitespace-nowrap text-ink-3 tabular-nums">
 					{formatDate(invoice.issueDate)}
@@ -901,6 +902,7 @@ function InvoicesIndex() {
 		{
 			key: "type",
 			header: "Type",
+			hideBelow: "md",
 			render: (invoice) => (
 				<span className="flex flex-col gap-1 capitalize">
 					<span className="text-ink-2">
