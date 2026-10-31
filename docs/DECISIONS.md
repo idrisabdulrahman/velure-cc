@@ -667,3 +667,34 @@ These block work that depends on the answer. Unattended runs must stop here.
   44 px touch floor applied to the public page. Expanding all four plus the
   burger leaves ~16 px for the breadcrumb at 320 px, so this needs a design
   decision (fewer controls, or a second row) rather than a one-off size bump.
+
+### 2026-10-31 — Observed: sign-in throws Cloudflare 1101 roughly one time in three
+
+**Not caused by this change; found while running the authenticated e2e spec
+against the deployment.**
+
+- `POST /api/auth/sign-in/email` on production returns Cloudflare **error 1101**
+  ("Worker threw a JavaScript exception") for roughly 1/3–1/2 of requests, with
+  an otherwise-valid payload. Measured 10 sequential calls: `500 200 500 200 500
+  500 200 200 500 200`. It still fails with 3 s spacing, so it is not request
+  concurrency.
+- It reproduces on the **previous** deployment (`f5d3e82b`) as well as the
+  current one, so it predates the T8/UI work.
+- Reads are unaffected: `GET /api/auth/get-session` returned 200 six times out of
+  six. Only the write path (session creation) throws.
+- Local dev is unaffected, which points at the Worker runtime. `src/lib/auth.ts`
+  builds a module-scope `pg.Pool`; `pg` inside Workers depends on the
+  `pg-cloudflare` socket shim, and `compatibility_flags: ["nodejs_only"]` is not
+  the issue — `nodejs_compat` is present in `dist/_worker.js/wrangler.json`.
+- **Cause not confirmed.** `wrangler whoami` fails ("Failed to automatically
+  retrieve account IDs"), so `wrangler pages deployment tail` could not be used
+  to read the real exception. This needs either a re-authenticated wrangler
+  session or the Cloudflare dashboard's deployment logs.
+- **Impact:** email/password sign-in intermittently fails for real users. If the
+  true pilot count is zero (Q-F still unanswered) this has been invisible.
+- **Left unfixed deliberately:** changing the auth database handle is a risky,
+  non-trivial change to the login path and belongs in its own slice with logs
+  in hand, not as a side effect of a UI task.
+- **Consequence for tests:** `e2e/authenticated-responsive.spec.ts` is reliable
+  against local dev but will flake against a deployment until this is fixed,
+  because its `signIn` helper asserts a 200.
