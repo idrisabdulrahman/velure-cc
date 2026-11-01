@@ -111,6 +111,9 @@ function formatExportKind(value: string) {
 	if (value === "invoices_csv") return "Invoice report";
 	if (value === "tax_summary_csv") return "Tax summary";
 	if (value === "customer_ledger_csv") return "Customer balance report";
+	if (value === "accountant_lines_csv") return "Accountant line export";
+	if (value === "accountant_lines_xlsx")
+		return "Accountant line export (Excel)";
 	return value
 		.split("_")
 		.filter(Boolean)
@@ -124,11 +127,26 @@ function formatExportDisplayName(record: { kind: string; createdAt?: number }) {
 	return date === "No exports yet" ? label : `${label} - ${date}`;
 }
 
-function downloadExportContent(record: { fileName: string; content: string }) {
+const XLSX_MIME =
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+function blobForExport(record: { fileName: string; content: string }): Blob {
 	const extension = record.fileName.split(".").pop()?.toLowerCase();
+	if (extension === "xlsx") {
+		// invoice_exports.content stores the workbook bytes base64-encoded
+		// (docs/EXPORT-FORMATS.md) — decode back to binary.
+		const binary = Uint8Array.from(window.atob(record.content), (char) =>
+			char.charCodeAt(0),
+		);
+		return new Blob([binary], { type: XLSX_MIME });
+	}
 	const mimeType =
 		extension === "json" ? "application/json" : "text/csv;charset=utf-8";
-	const blob = new Blob([record.content], { type: mimeType });
+	return new Blob([record.content], { type: mimeType });
+}
+
+function downloadExportContent(record: { fileName: string; content: string }) {
+	const blob = blobForExport(record);
 	const url = window.URL.createObjectURL(blob);
 	const link = document.createElement("a");
 
@@ -1103,7 +1121,7 @@ function ComplianceSettingsPage() {
 				<section aria-label="Exports">
 					<Panel
 						title="Exports"
-						sub="Your data is yours. Export invoices as PDF or CSV anytime. Downloadable CSV reports cover invoicing, customer balances, and tax review."
+						sub="Your data is yours. Export invoices as PDF or CSV/Excel anytime. Downloadable reports cover invoicing, customer balances, tax review, and a per-line accounting export."
 					>
 						<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
 							<div className="grid gap-3 rounded-md border border-rule bg-paper-2 px-4 py-3">
@@ -1185,6 +1203,55 @@ function ComplianceSettingsPage() {
 								>
 									<Download className="h-4 w-4" />
 									Generate CSV
+								</Button>
+							</div>
+							<div className="grid gap-3 rounded-md border border-rule bg-paper-2 px-4 py-3">
+								<div>
+									<p className="text-sm font-medium text-ink">
+										Accountant line export
+									</p>
+									<p className="mt-1 text-xs text-ink-3">
+										One row per invoice line for ledger posting; totals group by
+										invoice.
+									</p>
+								</div>
+								<Button
+									type="button"
+									variant="outline"
+									className="border-rule bg-transparent"
+									onClick={async () => {
+										const result = await createExport({
+											kind: "accountant_lines_csv",
+										});
+										downloadExportContent(result);
+										toast({
+											title: "Accountant line export generated",
+											description: "Download started.",
+											variant: "success",
+										});
+									}}
+								>
+									<Download className="h-4 w-4" />
+									Generate CSV
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									className="border-rule bg-transparent"
+									onClick={async () => {
+										const result = await createExport({
+											kind: "accountant_lines_xlsx",
+										});
+										downloadExportContent(result);
+										toast({
+											title: "Accountant line export generated",
+											description: "Download started.",
+											variant: "success",
+										});
+									}}
+								>
+									<Download className="h-4 w-4" />
+									Generate Excel
 								</Button>
 							</div>
 						</div>

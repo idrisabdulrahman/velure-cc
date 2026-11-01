@@ -1,10 +1,16 @@
+import { resolveInvoiceDiscount } from "#/features/compliance/calculate";
 import { NRS_INFORMATIONAL_DISCLAIMER } from "#/features/compliance/nigeria";
+import type { DiscountMode } from "#/features/compliance/types";
+import { priceToKobo } from "#/features/invoices/line-money";
 
 export type ComplianceExportKind =
 	| "invoices_csv"
 	| "tax_summary_csv"
 	| "customer_ledger_csv"
-	| "normalized_accounting";
+	| "normalized_accounting"
+	/** T10 step 1 (`docs/EXPORT-FORMATS.md`): one row per invoice line. */
+	| "accountant_lines_csv"
+	| "accountant_lines_xlsx";
 
 export type ComplianceExportInvoiceRow = {
 	invoice_number: string | null;
@@ -18,6 +24,8 @@ export type ComplianceExportInvoiceRow = {
 	due_date: string | null;
 	compliance?: unknown;
 	line_items?: unknown;
+	/** Raw craft settings JSON — the discount/discountMode source. */
+	template_settings?: unknown;
 };
 
 /**
@@ -105,7 +113,12 @@ const FORMULA_LEAD = /^[=+\-@\t\r]/;
 
 function csvTextCell(value: unknown): string {
 	const text = value === null || value === undefined ? "" : String(value);
-	return JSON.stringify(FORMULA_LEAD.test(text) ? `'${text}` : text);
+	return JSON.stringify(guardFormulaLead(text));
+}
+
+/** Neutralises a spreadsheet formula lead (see `guardFormulaLead`). */
+function guardFormulaLead(text: string): string {
+	return FORMULA_LEAD.test(text) ? `'${text}` : text;
 }
 
 function csvValueCell(value: unknown): string {
@@ -169,6 +182,32 @@ export function buildInvoiceExportContent(
 		);
 	}
 
+	if (kind === "accountant_lines_csv") {
+		return [
+			JSON.stringify(NRS_INFORMATIONAL_DISCLAIMER),
+			ACCOUNTANT_LINE_HEADERS.join(","),
+			...rows
+				.flatMap(accountantRowsForInvoice)
+				.map((cells) =>
+					cells
+						.map((cell) =>
+							typeof cell === "number"
+								? JSON.stringify(cell)
+								: csvTextCell(cell),
+						)
+						.join(","),
+				),
+		].join("\n");
+	}
+
+	// The workbook needs async serialization; going through the sync builder
+	// would silently emit CSV bytes named `.xlsx`.
+	if (kind === "accountant_lines_xlsx") {
+		throw new Error(
+			"Use buildInvoiceExportArtifact for accountant_lines_xlsx.",
+		);
+	}
+
 	return [
 		JSON.stringify(NRS_INFORMATIONAL_DISCLAIMER),
 		CSV_HEADERS.join(","),
@@ -189,4 +228,370 @@ export function buildInvoiceExportContent(
 			].join(",");
 		}),
 	].join("\n");
+}
+
+/* -----------------------------------------------------------------------
+ * Accountant line export (T10 step 1) — `docs/EXPORT-FORMATS.md`.
+ *
+ * One row per invoice line, both CSV and XLSX projections of one row model.
+ * All money is computed in KOBO integer arithmetic (single rounding rule)
+ * and is reconciled EXACTLY to the stored compliance snapshot; the stored
+ * snapshot is always the authority. WHT stays an invoice-level,
+ * payment-time deduction (2026-10 decision) and is never allocated to a
+ * line. A credit note negates every money column of its rows, like the
+ * invoice-level CSVs.
+ * --------------------------------------------------------------------- */
+
+const ACCOUNTANT_LINE_HEADERS = [
+	"invoiceNumber",
+	"customerName",
+	"documentType",
+	"currency",
+	"status",
+	"issueDate",
+	"dueDate",
+	"lineDescription",
+	"quantity",
+	"unit",
+	"unitPrice",
+	"lineGross",
+	"lineDiscount",
+	"vat",
+	"lineNet",
+	"vatCategory",
+	"classificationCode",
+	"invoiceSubtotal",
+	"invoiceDiscount",
+	"invoiceVat",
+	"invoiceWht",
+	"invoiceNetPayable",
+] as const;
+
+/** One output row; `null` renders as an empty cell (continuation rows). */
+type AccountantLineCells = Array<string | number | null>;
+
+function assertKobo(value: number, label: string): number {
+	if (!Number.isSafeInteger(value)) {
+		throw new RangeError(`${label} leaves the safe kobo range.`);
+	}
+	return value;
+}
+
+/** Stored snapshot values as exact kobo (major-unit → kobo). */
+function koboOfStored(value: unknown): number {
+	return priceToKobo(numeric(value) ?? 0);
+}
+
+function naira(kobo: number): number {
+	return assertKobo(kobo, "money value") / 100;
+}
+
+/**
+ * Exact integer largest-remainder allocation: Σ shares = `total` precisely.
+ * Base shares floor(total·w/W); the unit leftover goes to the largest
+ * fractional remainders, ties to the earlier line. Weights are non-negative.
+ */
+function allocateMinor(total: number, weights: readonly number[]): number[] {
+	if (total === 0) return weights.map(() => 0);
+	const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+	if (weightTotal <= 0) {
+		throw new RangeError("Allocation weights must sum to a positive number.");
+	}
+	const totalBig = BigInt(assertKobo(total, "allocation total"));
+	const weightBig = BigInt(weightTotal);
+	const shares = weights.map((weight) => {
+		const numerator = totalBig * BigInt(weight);
+		return {
+			base: Number(numerator / weightBig),
+			remainder: Number(numerator % weightBig),
+		};
+	});
+	let leftover = total - shares.reduce((sum, share) => sum + share.base, 0);
+	const order = shares
+		.map((share, index) => ({ index, remainder: share.remainder }))
+		.sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+	for (const entry of order) {
+		if (leftover <= 0) break;
+		shares[entry.index].base += 1;
+		leftover -= 1;
+	}
+	return shares.map((share) => assertKobo(share.base, "allocation share"));
+}
+
+/** Stored line, sanitized to kobo inputs (legacy rules: EXPORT-FORMATS.md). */
+const ACCOUNTANT_NO_LINE_LABEL = "(no line items recorded)";
+
+type StoredExportLine = {
+	name: string;
+	quantity: number;
+	unit: string;
+	unitPriceKobo: number;
+	grossKobo: number;
+	/** Line's own stored discount (line mode), in kobo. */
+	ownDiscountKobo: number;
+	vatCategory: "standard" | "zero_rated" | "exempt";
+	classificationCode: string;
+};
+
+function lineTotalKoboExact(quantity: number, unitPriceKobo: number): number {
+	return assertKobo(
+		Number(BigInt(quantity) * BigInt(unitPriceKobo)),
+		"line gross",
+	);
+}
+
+function storedLinesOf(row: ComplianceExportInvoiceRow): StoredExportLine[] {
+	const raw = Array.isArray(row.line_items) ? row.line_items : [];
+	return raw.map((entry) => {
+		const item = (entry ?? {}) as Record<string, unknown>;
+		// Legacy rows may carry malformed quantities; truncation keeps the
+		// money conservative (documented in EXPORT-FORMATS.md).
+		const quantity = Math.max(0, Math.trunc(numeric(item.quantity) ?? 0));
+		const unitPriceKobo = koboOfStored(item.price);
+		return {
+			name: typeof item.name === "string" ? item.name : "",
+			quantity,
+			unit: typeof item.unit === "string" ? item.unit : "",
+			unitPriceKobo,
+			grossKobo: lineTotalKoboExact(quantity, unitPriceKobo),
+			ownDiscountKobo: koboOfStored(item.discount),
+			vatCategory:
+				item.vatCategory === "zero_rated" || item.vatCategory === "exempt"
+					? item.vatCategory
+					: "standard",
+			classificationCode:
+				typeof item.classificationCode === "string"
+					? item.classificationCode
+					: "",
+		};
+	});
+}
+
+function syntheticLine(subtotalKobo: number): StoredExportLine[] {
+	return [
+		{
+			name: ACCOUNTANT_NO_LINE_LABEL,
+			quantity: 0,
+			unit: "",
+			unitPriceKobo: subtotalKobo,
+			grossKobo: subtotalKobo,
+			ownDiscountKobo: 0,
+			vatCategory: "standard",
+			classificationCode: "",
+		},
+	];
+}
+
+/**
+ * Builds the line rows of one invoice. The four pinned identities
+ * (EXPORT-FORMATS.md) hold for every stored invoice: Σ gross = subtotal,
+ * Σ discount = invoice discount, Σ vat = invoice vat, Σ(net+vat) = grand
+ * total, all in kobo against the stored snapshot.
+ */
+function accountantRowsForInvoice(
+	row: ComplianceExportInvoiceRow,
+): AccountantLineCells[] {
+	const compliance = (row.compliance ?? {}) as Record<string, unknown>;
+	const settings = (row.template_settings ?? {}) as Record<string, unknown>;
+
+	const lines = storedLinesOf(row);
+	const synthetic = lines.length === 0;
+
+	// Stored subtotal is authoritative; legacy rows without one fall back to
+	// their line sums, then the paid amount (mirrors the invoice-level CSVs).
+	let subtotalTargetKobo: number;
+	if (numeric(compliance.subtotal) !== undefined) {
+		subtotalTargetKobo = assertKobo(
+			koboOfStored(compliance.subtotal),
+			"invoice subtotal",
+		);
+	} else {
+		const lineSum = lines.reduce((sum, line) => sum + line.grossKobo, 0);
+		subtotalTargetKobo = assertKobo(
+			lineSum > 0 ? lineSum : Math.max(0, koboOfStored(row.payment_amount)),
+			"invoice subtotal",
+		);
+	}
+
+	const workingLines = synthetic ? syntheticLine(subtotalTargetKobo) : lines;
+	const grossKobo = workingLines.map((line) => line.grossKobo);
+
+	// Legacy drift: stored lines that do not sum to the stored subtotal.
+	// The LAST line absorbs the residual so the invoice still reconciles.
+	if (!synthetic && workingLines.length > 0) {
+		const residual =
+			subtotalTargetKobo -
+			workingLines.reduce((sum, line) => sum + line.grossKobo, 0);
+		if (residual !== 0) {
+			const last = grossKobo.length - 1;
+			grossKobo[last] = assertKobo(
+				grossKobo[last] + residual,
+				"reconciled line gross",
+			);
+		}
+	}
+
+	// Discount engine — the same precedence the compliance calculator uses.
+	// Stored data passes the write-path guards (`assertInvoiceInput`); a
+	// malformed legacy row degrades to no discount instead of aborting the
+	// whole workspace export.
+	let mode: DiscountMode = "none";
+	let invoiceDiscountMinor = 0;
+	try {
+		const resolved = resolveInvoiceDiscount({
+			lineItems: workingLines.map((line) => ({
+				quantity: line.quantity,
+				price: naira(line.unitPriceKobo),
+				discount: naira(line.ownDiscountKobo),
+			})),
+			discount:
+				settings.includeDiscount === true
+					? naira(koboOfStored(settings.discount))
+					: 0,
+			discountMode:
+				typeof settings.discountMode === "string"
+					? (settings.discountMode as DiscountMode)
+					: undefined,
+		});
+		mode = resolved.mode;
+		invoiceDiscountMinor = resolved.invoiceDiscountMinor;
+	} catch {
+		mode = "none";
+		invoiceDiscountMinor = 0;
+	}
+
+	let discountKobo: number[];
+	if (mode === "line") {
+		discountKobo = workingLines.map((line) => line.ownDiscountKobo);
+	} else if (mode === "invoice_before_tax" || mode === "invoice_after_tax") {
+		discountKobo = allocateMinor(invoiceDiscountMinor, grossKobo);
+	} else {
+		discountKobo = workingLines.map(() => 0);
+	}
+	const discountTotalKobo = discountKobo.reduce((sum, value) => sum + value, 0);
+
+	// VAT: the stored invoice VAT total distributed over standard lines
+	// weighted by (gross − discount). zero_rated/exempt lines take 0. A
+	// legacy invoice that has VAT but no standard-weighted line falls back
+	// to all lines, and the last line takes the remainder.
+	const vatTargetKobo = assertKobo(
+		numeric(compliance.totalTax) !== undefined
+			? koboOfStored(compliance.totalTax)
+			: 0,
+		"invoice vat",
+	);
+	let vatWeights = workingLines.map((line, index) =>
+		line.vatCategory === "standard"
+			? Math.max(0, grossKobo[index] - discountKobo[index])
+			: 0,
+	);
+	if (vatTargetKobo > 0 && vatWeights.reduce((sum, w) => sum + w, 0) <= 0) {
+		const last = vatWeights.length - 1;
+		vatWeights = vatWeights.map((_, index) => (index === last ? 1 : 0));
+	}
+	const vatKobo = allocateMinor(vatTargetKobo, vatWeights);
+	const vatTotalKobo = vatKobo.reduce((sum, value) => sum + value, 0);
+
+	// inclusive iff the stored treatment says so; legacy rows without a
+	// treatment infer it from the stored totals (EXPORT-FORMATS.md).
+	const treatment = compliance.taxTreatment;
+	const grandTotalKobo =
+		numeric(compliance.grandTotal) !== undefined
+			? assertKobo(koboOfStored(compliance.grandTotal), "grand total")
+			: 0;
+	const inclusive =
+		typeof treatment === "string"
+			? treatment === "inclusive_rate"
+			: vatTotalKobo > 0 &&
+				grandTotalKobo === subtotalTargetKobo - discountTotalKobo;
+
+	const netKobo = grossKobo.map((gross, index) =>
+		assertKobo(
+			gross - discountKobo[index] - (inclusive ? vatKobo[index] : 0),
+			"line net",
+		),
+	);
+
+	// WHT is invoice-level only (2026-10 Q-H decision) and never on a line.
+	const whtKobo = assertKobo(
+		koboOfStored(compliance.withholdingTaxAmount),
+		"wht",
+	);
+	const payableKobo = assertKobo(
+		priceToKobo(invoiceTotalForExportRow(row)),
+		"net payable",
+	);
+
+	const sign = row.document_type === "credit_note" ? -1 : 1;
+
+	return workingLines.map((line, index) => {
+		const first = index === 0;
+		return [
+			row.invoice_number ?? "",
+			row.customer_name ?? "",
+			documentTypeForExportRow(row),
+			row.currency ?? "",
+			row.status ?? "",
+			row.issue_date ?? "",
+			row.due_date ?? "",
+			line.name,
+			line.quantity,
+			line.unit,
+			naira(sign * line.unitPriceKobo),
+			naira(sign * grossKobo[index]),
+			naira(sign * discountKobo[index]),
+			naira(sign * vatKobo[index]),
+			naira(sign * netKobo[index]),
+			line.vatCategory,
+			line.classificationCode,
+			first ? naira(sign * subtotalTargetKobo) : null,
+			first ? naira(sign * discountTotalKobo) : null,
+			first ? naira(sign * vatTotalKobo) : null,
+			first ? naira(sign * whtKobo) : null,
+			first ? naira(sign * payableKobo) : null,
+		];
+	});
+}
+
+/**
+ * The XLSX projection. `invoice_exports.content` is a text column, so the
+ * workbook bytes are stored base64-encoded; the download path decodes them
+ * with the SpreadsheetML MIME. The disclaimer sits in cell A1 above the
+ * header row, mirroring the CSV's leading disclaimer line.
+ */
+async function buildAccountantLinesXlsx(
+	rows: ComplianceExportInvoiceRow[],
+): Promise<string> {
+	const XLSX = await import("xlsx");
+	const sheetData: Array<Array<string | number | null>> = [
+		[NRS_INFORMATIONAL_DISCLAIMER],
+		[...ACCOUNTANT_LINE_HEADERS],
+		...rows
+			.flatMap(accountantRowsForInvoice)
+			.map((cells) =>
+				cells.map((cell) =>
+					typeof cell === "string" ? guardFormulaLead(cell) : cell,
+				),
+			),
+	];
+	const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+	const workbook = XLSX.utils.book_new();
+	XLSX.utils.book_append_sheet(workbook, worksheet, "Invoice lines");
+	return XLSX.write(workbook, { bookType: "xlsx", type: "base64" });
+}
+
+/**
+ * The stored artifact for `createInvoiceExport`: `accountant_lines_xlsx`
+ * needs async workbook serialization (base64 text in `content`), the other
+ * kinds are plain strings.
+ */
+export async function buildInvoiceExportArtifact(
+	kind: ComplianceExportKind,
+	rows: ComplianceExportInvoiceRow[],
+	generatedAt: number,
+): Promise<string> {
+	if (kind === "accountant_lines_xlsx") {
+		return buildAccountantLinesXlsx(rows);
+	}
+	return buildInvoiceExportContent(kind, rows, generatedAt);
 }

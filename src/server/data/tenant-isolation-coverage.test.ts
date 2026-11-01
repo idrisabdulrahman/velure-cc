@@ -81,6 +81,9 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	buildComplianceDashboardReport: "pure",
 	// compliance-export.ts
 	buildInvoiceExportContent: "pure",
+	// Pure serializer over already-loaded export rows (no client access); the
+	// xlsx projection is a base64 workbook string of the same rows.
+	buildInvoiceExportArtifact: "pure",
 	// Pure per-row total derivation over an already-loaded export row; no reads.
 	invoiceTotalForExportRow: "pure",
 	// einvoice-validation.ts — caller session selects active workspace, then

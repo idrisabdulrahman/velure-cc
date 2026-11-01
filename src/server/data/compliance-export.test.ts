@@ -21,7 +21,13 @@ const ALL_KINDS: ComplianceExportKind[] = [
 	"tax_summary_csv",
 	"customer_ledger_csv",
 	"normalized_accounting",
+	"accountant_lines_csv",
 ];
+
+// accountant_lines_xlsx is async (base64 workbook) and is covered in
+// compliance-export-accountant.test.ts; calling the sync builder with it
+// must fail loudly instead of emitting CSV bytes named `.xlsx`.
+const SYNC_ONLY = "accountant_lines_xlsx";
 
 describe("compliance export content", () => {
 	it("embeds the not-NRS-cleared disclaimer inside every exported artifact", () => {
@@ -31,6 +37,12 @@ describe("compliance export content", () => {
 			const content = buildInvoiceExportContent(kind, [ROW], 1729000000000);
 			expect(content, kind).toContain(NRS_INFORMATIONAL_DISCLAIMER);
 		}
+	});
+
+	it("rejects the async xlsx kind on the sync builder", () => {
+		expect(() => buildInvoiceExportContent(SYNC_ONLY, [ROW], 0)).toThrow(
+			/buildInvoiceExportArtifact/,
+		);
 	});
 
 	it("leads CSV exports with the disclaimer before the header row", () => {

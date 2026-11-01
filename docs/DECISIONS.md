@@ -862,4 +862,59 @@ migration SQL was executed inside `begin; … rollback;` against the live databa
 and parsed cleanly. Read-only live counts: 0 flagged `tin_format`, 0 rows with an
 11/12-digit TIN.
 
+---
+
+## 2026-11-01 — T10 step 1: one accountant export format, two files (CSV + XLSX)
+
+**Task ID:** `accountant-line-export-2026-11`
+
+**Question.** T10 (export quality) was split into a four-step build order. What
+does step 1 deliver, and where is the contract documented?
+
+**Decision (user, 2026-11-01).** Step 1 = a **generic accountant export with one
+row per invoice line**, usable for ledger posting, in **both** CSV and Excel —
+and `docs/EXPORT-FORMATS.md` written first as the column-contract document. Every
+column carries a language tag (`[stored]` / `[derived]` / `[computed]` /
+`[inferred]`) so derived number is never mistaken for authority or NRS data.
+
+**Design rules (money).** All money math is kobo integer arithmetic
+(`priceToKobo` largest-remainder allocation, `Number.isSafeInteger` guard),
+reconciled exactly to the stored compliance snapshot: Σ lineGross = Subtotal,
+Σ lineDiscount = invoice discount, Σ vat = stored VAT (weighted over standard
+lines only), Σ(lineNet+vat) = grandTotal in every discount/tax mode. WHT stays
+invoice-level only (Q-H). Credit notes negate every money column, as the
+existing CSVs already do.
+
+**Legacy rules.** Rows whose stored lines do not sum to the stored subtotal get
+the residual on the LAST line (stored snapshot is always authoritative); rows
+without line items get one synthetic `"(no line items recorded)"` row; a
+malformed discount combination degrades to no discount rather than aborting the
+whole workspace export.
+
+**Storage.** The XLSX workbook is stored base64-encoded in
+`invoice_exports.content` (text column) and decoded on download with the
+SpreadsheetML MIME. The disclaimer lives in cell A1 (CSV: leading quoted line).
+
+**Migration.** `20261102000000_invoice_export_kinds_accountant.sql` widens the
+`invoice_exports_kind_check` constraint from four kinds to six
+(`accountant_lines_csv`, `accountant_lines_xlsx`). Reversible: the reversal
+deletes any rows using the new kinds and restores the original four; no existing
+row is rewritten. **Applied:** not yet — it goes out through the file-based
+pipeline (`supabase db push`) with the deploy, exactly like the TIN widening
+migration. Until then the new export buttons cannot persist on live (verified:
+the old constraint is active and rejects a probe insert; the swap itself parsed
+cleanly under `begin…rollback`).
+
+**Not changed:** the four existing CSV/JSON kinds' row output (only an additive
+`template_settings` key inside `normalized_accounting` JSON rows), money,
+numbering, issued-invoice immutability, and the audit-log path. No NRS or
+provider artifacts were consulted; T10 steps 2 (TaxPro Max-shaped VAT schedule),
+3 (QBO/Zoho/Xero import files) and 4 (received-WHT tracker) remain not built.
+
+**Evidence.** `pnpm test` 921 passed / 86 skipped (was 896 — 25 new tests,
+including a SheetJS round-trip and the four pinned identities for every
+discount/tax mode); `pnpm typecheck` clean; `pnpm check` exit 0 / 359
+pre-existing warnings. The tenant-isolation coverage guard classified the new
+exported serializer `buildInvoiceExportArtifact` as `pure`.
+
 

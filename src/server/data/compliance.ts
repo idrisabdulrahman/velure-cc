@@ -8,7 +8,7 @@ import type {
 	ComplianceExportInvoiceRow,
 	ComplianceExportKind,
 } from "./compliance-export";
-import { buildInvoiceExportContent } from "./compliance-export";
+import { buildInvoiceExportArtifact } from "./compliance-export";
 import {
 	assertSequenceCounterChangeAllowed,
 	workspaceNumberingLocked,
@@ -396,7 +396,7 @@ async function loadAllExportInvoices(
 		const { data, error } = await client
 			.from("invoices")
 			.select(
-				"invoice_number, customer_name, document_type, currency, payment_amount, status, issue_date, due_date, compliance, line_items",
+				"invoice_number, customer_name, document_type, currency, payment_amount, status, issue_date, due_date, compliance, line_items, template_settings",
 			)
 			.eq("workspace_id", workspaceId)
 			.order("id", { ascending: true })
@@ -430,8 +430,14 @@ export async function createInvoiceExport(
 			.toUpperCase() || "VELURE";
 	const rows = await loadAllExportInvoices(client, workspaceId);
 	const now = Date.now();
-	const content = buildInvoiceExportContent(kind, rows, now);
-	const fileName = `${prefix}-${kind}-${now}.${kind === "normalized_accounting" ? "json" : "csv"}`;
+	const content = await buildInvoiceExportArtifact(kind, rows, now);
+	const fileExtension =
+		kind === "normalized_accounting"
+			? "json"
+			: kind === "accountant_lines_xlsx"
+				? "xlsx"
+				: "csv";
+	const fileName = `${prefix}-${kind}-${now}.${fileExtension}`;
 	const { data, error } = await client
 		.from("invoice_exports")
 		.insert({
