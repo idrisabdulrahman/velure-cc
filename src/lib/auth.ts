@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
-import pg from "pg";
 import { env } from "#/env";
+import { createAuthPool } from "#/server/auth-database";
 import { sendOnboardingEmail } from "#/server/onboarding-mailer";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -9,10 +9,8 @@ if (!databaseUrl) {
 		"DATABASE_URL is required for the Postgres Better Auth runtime; run the Better Auth migration first",
 	);
 }
-const pool = new pg.Pool({
-	connectionString: databaseUrl,
-	options: "-c search_path=better_auth",
-});
+// A module-scope `pg.Pool` is not safe here: see `createAuthPool`.
+const pool = createAuthPool(databaseUrl);
 
 export const auth = betterAuth({
 	appName: "Velure",

@@ -698,3 +698,55 @@ against the deployment.**
 - **Consequence for tests:** `e2e/authenticated-responsive.spec.ts` is reliable
   against local dev but will flake against a deployment until this is fixed,
   because its `signIn` helper asserts a 200.
+
+### 2026-10-31 — Fix: intermittent sign-in 1101 (module-scope `pg.Pool`)
+
+- **Question the decision:** sign-in fails ~1/3-1/2 of the time on production and
+  predates the UI work. TIN migration was the chosen next slice. Which first?
+- **User answer (2026-10-31):** "Fix sign-in first (Recommended)" — it affects
+  real users.
+- **Cause (verified in the Worker runtime, not inferred):** `src/lib/auth.ts`
+  built a module-scope `pg.Pool`. A Worker invocation owns its sockets and the
+  runtime cancels outstanding I/O when the response is returned, so the pooled
+  client outlived its invocation dead. The next request was handed that client,
+  its query never settled, and the runtime answered
+  `Uncaught Error: The Workers runtime canceled this request because it detected
+  that your Worker's code had hung and would never generate a response.`
+  (HTTP 500 / Cloudflare 1101, in 12-28 ms versus 1.2-1.9 s for a real success).
+- **Refuted hypothesis:** scrypt. An **unknown email** — which never verifies a
+  password — failed identically (`401 500 401 500 ...`). Measured for the record:
+  `@noble/hashes` scrypt at better-auth's parameters is ~212 ms CPU / 32 MB per
+  verify, and both 1.8.0 and 2.2.0 ship a no-op
+  `export const nextTick = async () => { };`.
+- **Fix:** `src/server/auth-database.ts` provides `createAuthPool` (no connection
+  outlives its invocation) and `withAuthConnection` (all queries in one auth
+  request share one connection, closed once at the end). `auth.handler` is
+  wrapped at all three call sites: `src/routes/api/auth/$.ts`,
+  `src/routes/api/auth/$first/$second.ts`, `src/server/security-stepup.ts`.
+- **Why the second half mattered:** with one connection per acquisition the count
+  of 500s was already zero, but sign-in took 3.7-8.0 s because a fresh
+  connection to Supabase's pooler measured 0.6-0.9 s from Node. Sharing one
+  connection per request returned it to 1.5-2.2 s.
+- **Untouched, deliberately:** password hashing, session shape, cookies, route
+  contracts, numbering, money. The five `better_auth.account` credential hashes
+  are byte-identical (161-char `salt:hex`), so no existing user is invalidated.
+- **Verified in the real Worker runtime** (built `dist`, `wrangler pages dev`,
+  real `DATABASE_URL`): sign-in ×10 → all 200; unknown email ×4 and wrong
+  password ×4 → all 401; 4 rounds × 5 concurrent → 20/20 200; worker log shows 0
+  "hung", 0 uncaught, 0 crashes; real-browser sign-in 5/5 lands on `/invoices`
+  with a live session.
+- **Tests:** `src/server/auth-database.test.ts` (8 tests) pins both properties.
+  Mutation-checked: making `connect()` ignore the request scope fails 5 of the 8.
+- **Checks:** `pnpm test` 863 passed / 86 skipped, `pnpm typecheck` clean,
+  `pnpm check` exit 0 / 359 pre-existing warnings.
+- **Harness note:** the local reproduction passed
+  `--binding BETTER_AUTH_URL/SITE_URL=http://localhost:8788` so the local origin
+  was trusted. Production trusted origins were separately confirmed correct:
+  a `callbackURL` on the production origin is accepted, a foreign one is rejected
+  with `INVALID_CALLBACKURL`.
+- **Known remaining cost (proposal, not applied):** every authenticated request
+  still pays one connection (~1-2 s to the EU pooler), because a Worker socket
+  cannot outlive an invocation. Cloudflare **Hyperdrive** is the structural fix
+  and would need an infrastructure decision (plan, Hyperdrive config, and an
+  extra connection string) before any code change. Recorded here so the latency
+  is not mistaken for a new defect.
