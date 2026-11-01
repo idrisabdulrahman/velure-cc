@@ -47,6 +47,7 @@ the sheet, above the header row.
 | `normalized_accounting` | `.json` | all rows as JSON | `{generatedAt, disclaimer, invoices[]}` |
 | `accountant_lines_csv` | `.csv` | one row per invoice **line** | disclaimer line, header, data |
 | `accountant_lines_xlsx` | `.xlsx` | one row per invoice **line** | sheet `Invoice lines`; A1 = disclaimer; row 2 = header; data from row 3 |
+| `vat_sales_schedule_csv` | `.csv` | one row per invoice | disclaimer line, header, data (see *VAT sales schedule* below) |
 
 The three invoice-level CSV kinds share one writer; today they emit the same
 columns (`invoiceNumber… dueDate`) plus the provisional accountant columns
@@ -186,11 +187,88 @@ file name ends `.xlsx`; CSV/JSON kinds stay plain text.
 
 ---
 
+## VAT sales schedule (T10 step 2, 2026-11-01)
+
+Kind `vat_sales_schedule_csv`. Purpose: a VAT-only schedule for manual entry
+against the FIRS **TaxPro Max** platform (or an accountant's VAT return): one
+row per invoice, with the buyer TIN and the taxable/VAT split.
+
+> **Provisional shape.** No official TaxPro Max sample has been supplied, so
+> the **column order, the exact column names and the CSV-vs-XLSX choice are
+> best-effort and may change** once a sample is available. This file is an
+> informational export; it is **not** an NRS/TaxPro Max-validated or cleared
+> filing (SPEC A2).
+
+### Row semantics
+
+- One row per invoice, in `invoices.id` order.
+- The buyer TIN comes from the invoice's linked client (`clients.tax_id`); the
+  seller TIN comes from the workspace (`workspaces.tax_id`).
+- **Unknown TIN prints `0`.** A TIN is "unknown" when it is blank, fails the
+  shared Nigerian TIN format check (10-12 digits), is an obvious placeholder
+  /all-same-digit value, or the invoice has no linked client. The literal
+  string `0` is written so a manual filing has a value to key on; it must
+  never be read as a real, verified TIN.
+
+### Column reference
+
+| # | Column | Tag | Notes |
+| --- | --- | --- | --- |
+| 1 | `supplierTin` | `[derived]` | `workspaces.tax_id`; `0` when unknown |
+| 2 | `customerTin` | `[derived]` | linked `clients.tax_id`; **`0` when unknown** |
+| 3 | `customerName` | `[stored]` | `invoices.customer_name` |
+| 4 | `invoiceNumber` | `[stored]` | |
+| 5 | `invoiceDate` | `[stored]` | `issue_date` |
+| 6 | `description` | `[inferred]` | first stored line name (formula-lead guarded); `(no line items recorded)` when none |
+| 7 | `taxableAmount` | `[computed]` | VAT-exclusive taxable value (rule below) |
+| 8 | `vatAmount` | `[derived]` | stored `compliance.totalTax`, never recomputed |
+| 9 | `totalAmount` | `[computed]` | `taxableAmount + vatAmount` |
+| 10 | `documentType` | `[stored]` | defaults `standard` |
+| 11 | `currency` | `[stored]` | |
+
+### Taxable computation (`taxableAmount`)
+
+Recomputed with the same rule as `calculateInvoiceCompliance`, from the stored
+snapshot (never re-deriving tax from a guessed rate):
+
+- `taxableBase = subtotal − beforeTaxDiscount`, where `beforeTaxDiscount` is the
+  invoice-level discount only for `invoice_before_tax` and the summed line
+  discounts for line mode; an **`invoice_after_tax` discount does not reduce
+  the taxable base** (tax was already computed on the pre-discount base).
+- **Exclusive** (`exclusive_rate`): `taxableAmount = taxableBase`,
+  `totalAmount = taxableBase + vatAmount`.
+- **Inclusive** (`inclusive_rate`): the stored prices already contain VAT, so
+  `taxableAmount = taxableBase − vatAmount`, `totalAmount = taxableBase`.
+- **No VAT** (`none`/`exempt`/`zero_rated`): `vatAmount = 0`,
+  `taxableAmount = totalAmount = taxableBase`.
+- Legacy rows without a stored `taxTreatment` infer inclusive exactly like the
+  accountant export (`grandTotal = subtotal − discount` and VAT > 0 → inclusive).
+
+Therefore `taxableAmount + vatAmount = totalAmount` in every mode. For an
+after-tax discount this `totalAmount` is the **pre-discount** VAT-able total
+(the commercial discount is applied after tax), so it can exceed the invoice
+`grandTotal`; that is intentional and documented.
+
+### Sign convention
+
+Credit notes negate `taxableAmount`, `vatAmount` and `totalAmount`, matching
+the other exports. Text columns (TINs, name, number, description, dates, doc
+type, currency) are never negated.
+
+### Layout and storage
+
+CSV only in this step: a leading `JSON.stringify(NRS_INFORMATIONAL_DISCLAIMER)`
+line, then the header row, then one data row per invoice. Free-text cells are
+formula-lead guarded (`= + - @ TAB CR` → leading apostrophe). Stored as plain
+UTF-8 text in `invoice_exports.content`; the file name ends `.csv`. An `.xlsx`
+variant is **not built**.
+
+---
+
 ## Not built yet (planned T10 order)
 
-1. **TaxPro Max-shaped VAT sales schedule** — a VAT-only schedule whose TIN
-   column prints `0` for unknown buyer TINs, shaped for manual entry against
-   the FIRS platform. Not built (2026-11-01).
+1. ~~**TaxPro Max-shaped VAT sales schedule**~~ — **built** as
+   `vat_sales_schedule_csv` (provisional; see above).
 2. **QBO/Zoho import CSVs, then Xero** — per-accounting-system import files
    respecting each system's row limits. Not built.
 3. **Received-WHT credit tracker** — payment-time withholding credits

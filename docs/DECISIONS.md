@@ -899,11 +899,10 @@ SpreadsheetML MIME. The disclaimer lives in cell A1 (CSV: leading quoted line).
 `invoice_exports_kind_check` constraint from four kinds to six
 (`accountant_lines_csv`, `accountant_lines_xlsx`). Reversible: the reversal
 deletes any rows using the new kinds and restores the original four; no existing
-row is rewritten. **Applied:** not yet — it goes out through the file-based
-pipeline (`supabase db push`) with the deploy, exactly like the TIN widening
-migration. Until then the new export buttons cannot persist on live (verified:
-the old constraint is active and rejects a probe insert; the swap itself parsed
-cleanly under `begin…rollback`).
+row is rewritten. **Applied:** yes (2026-11-01, file-based `supabase db push`;
+see the 2026-11-01 "migration push" decision below). Live
+`invoice_exports_kind_check` now admits all six kinds, so the new export buttons
+can persist.
 
 **Not changed:** the four existing CSV/JSON kinds' row output (only an additive
 `template_settings` key inside `normalized_accounting` JSON rows), money,
@@ -916,5 +915,111 @@ including a SheetJS round-trip and the four pinned identities for every
 discount/tax mode); `pnpm typecheck` clean; `pnpm check` exit 0 / 359
 pre-existing warnings. The tenant-isolation coverage guard classified the new
 exported serializer `buildInvoiceExportArtifact` as `pure`.
+
+---
+
+## 2026-11-01 — migration push: four pending migrations applied to live
+
+**Task ID:** `migration-push-2026-11`
+
+**Question (user).** "Run the push and then start step 2." Apply the pending
+file-based migrations to the live project (`kbexydkmmfabfutgkbxn`)?
+
+**Answer (user, 2026-11-01).** Yes — apply, then begin T10 step 2.
+
+**What was pending.** `supabase migration list --linked` showed four local
+migrations unapplied — `20261028000000_einvoice_paystack_webhook_safety`,
+`20261029000000_scheduler_pg_cron`,
+`20261101000000_widen_nigeria_tin_length`,
+`20261102000000_invoice_export_kinds_accountant` — plus a **remote-only** ledger
+row `20261029161459` whose `name` is `20261029000000_scheduler_pg_cron` (the
+version an earlier MCP `apply_migration` stamped from `now()`, so it could not
+match the filename version). The remote-only row made `supabase db push` refuse
+("Remote migration versions not found in local migrations directory").
+
+**Resolution.** The MCP-applied scheduler effects were already live and the
+local file is written idempotent (`create unique index if not exists`, guarded
+extension creation, `create or replace function`, unschedule-then-`cron.schedule`
+by jobname), so re-running it is safe. The remote-only ledger row was removed
+with `supabase migration repair --status reverted 20261029161459` (ledger-only;
+no object or data touched), then `supabase db push --linked` applied all four.
+
+**Post-push verification (read-only SQL on live).**
+
+- Ledger `>= 20261028` is exactly the four filenames; `20261029161459` is gone.
+- `invoice_exports_kind_check` now admits `accountant_lines_csv` and
+  `accountant_lines_xlsx` (six kinds total).
+- Scheduler is intact and **not duplicated**: `cron.job` holds exactly one active
+  `velure-scheduler-tick` (total jobs = 1), the
+  `reminder_events_invoice_stage_channel_unique` index exists, and
+  `invoke_scheduler_tick` exists. (Push NOTICE: the unique index already existed,
+  skipping — the intended idempotent path.)
+- `confirm_paystack_payment` still carries the `invoice_canceled` guard and the
+  structured `{ok, reason}` result.
+- TIN widening remains a data no-op: 0 rows flagged `tin_format` (supplier or
+  buyer); the one pre-existing `tin_placeholder` supplier flag is untouched
+  (the migration is scoped to `tin_format` only).
+
+**Not changed.** No schema object outside these four migrations; money,
+numbering, issued-invoice immutability, and the audit-log path untouched. No NRS
+or provider contact. The earlier "(superseded below)" note about the scheduler
+migration being written-but-not-applied is now fully resolved: the effects were
+live via MCP and are now also recorded under the correct filename in the ledger.
+
+---
+
+## 2026-11-01 — T10 step 2: provisional TaxPro Max-shaped VAT sales schedule
+
+**Task ID:** `taxpro-vat-schedule-2026-11`
+
+**Question.** After the migration push, what does T10 step 2 deliver, and how
+do we handle the missing official TaxPro Max sample?
+
+**Decision (user, 2026-11-01).** Start step 2: a VAT sales schedule shaped like
+TaxPro Max with `"0"` for unknown buyer TINs. Because no official sample exists
+(human input still open), the **column order and CSV-vs-XLSX choice are
+explicitly provisional**, tagged as such in `docs/EXPORT-FORMATS.md`; the
+artifact never claims TaxPro Max/NRS validation.
+
+**Shape (new kind `vat_sales_schedule_csv`).** One row per invoice (line detail
+already ships as the accountant export). Columns: `supplierTin`, `customerTin`,
+`customerName`, `invoiceNumber`, `invoiceDate`, `description`, `taxableAmount`,
+`vatAmount`, `totalAmount`, `documentType`, `currency`.
+
+**TIN `0` rule.** `customerTin` comes from the invoice's linked
+`clients.tax_id`; `supplierTin` from `workspaces.tax_id`. Either prints the
+literal `0` when blank, malformed, a placeholder/all-same-digit value, or
+(buyer) unlinked. The rule reuses `validateSupplierTin` so buyer and supplier
+cannot drift. This is a filing convenience, never a verified TIN.
+
+**Taxable base.** Recomputed exactly as `calculateInvoiceCompliance`: only
+before-tax/line discounts reduce `taxableBase`; an after-tax discount does not.
+Exclusive: `taxable = base`, `total = base + VAT`. Inclusive: `taxable = base −
+VAT`, `total = base`. So `taxableAmount + vatAmount = totalAmount` in every
+mode and `vatAmount` is the stored `compliance.totalTax` (never re-derived).
+For an after-tax discount `totalAmount` is the pre-discount VAT-able total, so
+it can exceed `grandTotal`; documented. Credit notes negate all money columns;
+`description` is the first line name (formula-lead guarded).
+
+**Plumbing.** `loadAllExportInvoices` now selects `customer_id` and resolves the
+buyer TIN from a paged `clients` map; `createInvoiceExport` selects
+`workspaces.tax_id` and passes `{ sellerTin }` into the builder. The builder gains
+an optional 4th `meta` arg (backward-compatible with existing 3-arg calls).
+
+**Migration.** `20261103000000_invoice_export_kinds_vat_schedule.sql` widens
+`invoice_exports_kind_check` from six to seven kinds. Additive and reversible;
+the reversal (comment-only, never auto-run) restores the six kinds. The applied
+`20261102000000_invoice_export_kinds_accountant.sql` is untouched. **Applied**
+to live 2026-11-01 via `supabase db push`; the live constraint admits
+`vat_sales_schedule_csv`, and a probe insert was accepted then rolled back.
+
+**Not changed.** Existing kinds' output, money, numbering, issued-invoice
+immutability, audit-log path. No NRS/provider contact. Steps 3 (QBO/Zoho then
+Xero) and 4 (received-WHT tracker, proposal only) remain not built.
+
+**Evidence.** `pnpm test` 943 passed / 86 skipped (was 921 — 22 new tests);
+`pnpm typecheck` clean; `pnpm check` exit 0 / 359 pre-existing warnings. The
+NRS honesty guard rejected "FIRS" in the new UI copy (SPEC A1-A3); the card
+now reads "TaxPro Max VAT filing".
 
 

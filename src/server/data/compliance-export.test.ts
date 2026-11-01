@@ -22,6 +22,7 @@ const ALL_KINDS: ComplianceExportKind[] = [
 	"customer_ledger_csv",
 	"normalized_accounting",
 	"accountant_lines_csv",
+	"vat_sales_schedule_csv",
 ];
 
 // accountant_lines_xlsx is async (base64 workbook) and is covered in

@@ -387,16 +387,43 @@ export async function getComplianceDashboard(
  */
 const EXPORT_INVOICE_PAGE_SIZE = 1000;
 
+/** `clients.id` → `tax_id` for a workspace (buyer TIN of the VAT schedule). */
+async function loadClientTinMap(
+	client: Supabase,
+	workspaceId: string,
+): Promise<Map<string, string | null>> {
+	const tinByClientId = new Map<string, string | null>();
+	for (let offset = 0; ; offset += EXPORT_INVOICE_PAGE_SIZE) {
+		const { data, error } = await client
+			.from("clients")
+			.select("id, tax_id")
+			.eq("workspace_id", workspaceId)
+			.order("id", { ascending: true })
+			.range(offset, offset + EXPORT_INVOICE_PAGE_SIZE - 1);
+		if (error) throw error;
+		const page = (data ?? []) as Array<{
+			id: string;
+			tax_id: string | null;
+		}>;
+		for (const entry of page) {
+			tinByClientId.set(entry.id, entry.tax_id ?? null);
+		}
+		if (page.length < EXPORT_INVOICE_PAGE_SIZE) break;
+	}
+	return tinByClientId;
+}
+
 async function loadAllExportInvoices(
 	client: Supabase,
 	workspaceId: string,
+	kind: ComplianceExportKind,
 ): Promise<ComplianceExportInvoiceRow[]> {
 	const rows: ComplianceExportInvoiceRow[] = [];
 	for (let offset = 0; ; offset += EXPORT_INVOICE_PAGE_SIZE) {
 		const { data, error } = await client
 			.from("invoices")
 			.select(
-				"invoice_number, customer_name, document_type, currency, payment_amount, status, issue_date, due_date, compliance, line_items, template_settings",
+				"invoice_number, customer_name, customer_id, document_type, currency, payment_amount, status, issue_date, due_date, compliance, line_items, template_settings",
 			)
 			.eq("workspace_id", workspaceId)
 			.order("id", { ascending: true })
@@ -406,7 +433,17 @@ async function loadAllExportInvoices(
 		rows.push(...page);
 		if (page.length < EXPORT_INVOICE_PAGE_SIZE) break;
 	}
-	return rows;
+	// Only the VAT sales schedule needs the buyer TIN, which lives on the
+	// client, not on the invoice. Resolve it once per workspace for that kind.
+	if (kind !== "vat_sales_schedule_csv") return rows;
+	const tinByClientId = await loadClientTinMap(client, workspaceId);
+	return rows.map((row) => ({
+		...row,
+		customer_tin:
+			row.customer_id != null
+				? (tinByClientId.get(String(row.customer_id)) ?? null)
+				: null,
+	}));
 }
 
 export async function createInvoiceExport(
@@ -418,7 +455,7 @@ export async function createInvoiceExport(
 	if (!workspaceId) throw new Error("Workspace not found.");
 	const { data: workspace } = await client
 		.from("workspaces")
-		.select("id, name, legal_name")
+		.select("id, name, legal_name, tax_id")
 		.eq("id", workspaceId)
 		.single();
 	const source = workspace?.legal_name || workspace?.name || "VELURE";
@@ -428,9 +465,11 @@ export async function createInvoiceExport(
 			.join("")
 			.slice(0, 12)
 			.toUpperCase() || "VELURE";
-	const rows = await loadAllExportInvoices(client, workspaceId);
+	const rows = await loadAllExportInvoices(client, workspaceId, kind);
 	const now = Date.now();
-	const content = await buildInvoiceExportArtifact(kind, rows, now);
+	const content = await buildInvoiceExportArtifact(kind, rows, now, {
+		sellerTin: workspace?.tax_id ?? null,
+	});
 	const fileExtension =
 		kind === "normalized_accounting"
 			? "json"
