@@ -750,3 +750,68 @@ against the deployment.**
   and would need an infrastructure decision (plan, Hyperdrive config, and an
   extra connection string) before any code change. Recorded here so the latency
   is not mistaken for a new defect.
+
+---
+
+## 2026-11-01 — sign-in 1102 is a CPU-budget limit; Velure moves to a Node host
+
+**Task ID:** `auth-signin-1101-2026-11`, `vps-node-deployment-2026-11`
+
+**Question.** The 1101 dead-pool fix (`c541839`, deployed `47c0d657`) removed the
+"hung Worker" error, but `POST /api/auth/sign-in/email` then failed with
+Cloudflare **1102** / `exceededCpu` (`Worker exceeded CPU time limit.`). Is that
+fixable in code, and if not, how should we host the app?
+
+**Answer (user, 2026-11-01).** First "test 3 & 2 so far it runs on cloudflare"
+(both options), then, after the results below, **"go for option 3 i will host it
+on a VPS ... i don use docker there but i do commit using what linux already
+provides meaning i let them run as a service"**, on `velure.variadic.ng`, port
+`8490`.
+
+**Finding.** The 1102 is a platform budget, not an application defect.
+`usage_model: "bundled"`; Cloudflare documents 10 ms (Free) / 50 ms (legacy
+Bundled) CPU per request with termination once an isolate hits it consistently.
+Measured on the edge: a `get-session` with a real session cookie (DB lookup, no
+scrypt) costs 15-20 ms; sign-in costs 131-146 ms because better-auth runs one
+scrypt on every attempt — including for unknown emails, as a timing equalizer
+(`dist/api/routes/sign-in.mjs:196/202/208`). The scrypt parameters are fixed by
+the stored `${salt}:${keyHex}` credential format, so the cost is irreducible.
+
+**Tested and rejected: option 2 (free CPU reduction).** A native `node:crypto`
+scrypt proved byte-identical to better-auth's `@noble/hashes` scrypt (verified
+against the live QA hash and a fresh hash), giving 0/15 -> 9/15 on a fair
+alternating A/B. It is a strict improvement but 142 ms still cannot fit 10-50 ms.
+Reverted at the user's direction.
+
+**Chosen: option 3 (Node host).** The Nitro `node-server` build runs without a
+per-request CPU cap. Implemented: `AUTH_DB_MODE=pool` (a real `pg.Pool` on Node;
+the Worker-safe invocation strategy stays the default and Cloudflare support stays
+in the repo), auth hardening, and `deploy/` (systemd + env template + nginx).
+
+**Security hardening applied to auth (same date, user: "totally hardened and
+enterprise level"):**
+
+- Explicit rate limiting: sign-in/sign-up pinned at 3 per 10 s per IP; password
+  reset and forget-password capped at 5 per hour (they were uncapped at the
+  general 100-per-10 s default).
+- `advanced.ipAddress.ipAddressHeaders: ["x-forwarded-for"]` pinned, and nginx
+  **replaces** that header with `$remote_addr`. better-auth reads the *first*
+  entry, so appending would make the rate-limit key spoofable.
+- `minPasswordLength: 12`, `maxPasswordLength: 128`, and
+  `revokeSessionsOnPasswordReset: true`.
+- `BETTER_AUTH_SECRET` must be >= 32 characters (fail fast at boot).
+- Every auth log line is email-redacted and capped at `warn`
+  (`src/server/auth-logger.ts`).
+- systemd sandboxing, root-only `0600` env file, loopback-only bind, TLS 1.2+,
+  HSTS and security headers in nginx.
+
+**Not changed:** password hashing (better-auth's own scrypt is restored; the
+stored hashes are untouched), cookie shape, tenancy, money, numbering, and the
+Supabase schema. No RLS, migration, or issued-invoice behaviour was touched.
+
+**Evidence.** `pnpm test` 880 passed / 86 skipped; `pnpm typecheck` clean;
+`pnpm check` exit 0 / 359 pre-existing warnings;
+`systemd-analyze verify deploy/velure.service` exit 0. Pool mode measured on the
+VPS-equivalent Node run: authenticated request 1.0-2.4 s -> 0.4-0.7 s, sign-in
+1.6-2.0 s -> ~0.7 s. `nginx -t` was not run (nginx is not installed here).
+

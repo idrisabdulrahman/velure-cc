@@ -32,12 +32,37 @@ import pg from "pg";
  *
  * The database is Supabase's transaction-mode pooler (port 6543), which expects
  * a logical connection per transaction anyway.
+ *
+ * ## Node / VPS hosts
+ *
+ * The invocation-scoped strategy is only needed because a Worker invocation
+ * owns its sockets. On a long-lived Node process the opposite is true: keeping
+ * connections open is correct and much faster. Measured on Node against
+ * Supabase's EU pooler with the invocation strategy, every authenticated request
+ * cost a fresh connection (~1.0-2.4 s); a real `pg.Pool` amortises that to a
+ * pool checkout. Set `AUTH_DB_MODE=pool` on a Node host to opt in (see
+ * `deploy/velure.env.example`). The default stays Worker-safe so an accidental
+ * Cloudflare deployment cannot regress into error 1101.
  */
 export type AuthPool = {
 	connect: () => Promise<Client & { release: () => void }>;
 	query: (text: string, values?: unknown[]) => Promise<QueryResult>;
 	end: () => Promise<void>;
 };
+
+type AuthDbMode = "invocation" | "pool";
+
+/**
+ * Reads the deployment mode from `AUTH_DB_MODE`.
+ *
+ * Anything other than the exact value `pool` keeps the Worker-safe default, so
+ * a typo fails safe rather than silently changing connection lifetime.
+ */
+export function authDbMode(): AuthDbMode {
+	return process.env.AUTH_DB_MODE?.trim().toLowerCase() === "pool"
+		? "pool"
+		: "invocation";
+}
 
 type RequestScope = {
 	client: Promise<Client> | null;
@@ -70,6 +95,10 @@ function scoped(
 }
 
 export function createAuthPool(connectionString: string): AuthPool {
+	if (authDbMode() === "pool") {
+		return createNodePool(connectionString);
+	}
+
 	const connect: AuthPool["connect"] = async () => {
 		const scope = requestScope.getStore();
 
@@ -106,9 +135,40 @@ export function createAuthPool(connectionString: string): AuthPool {
 }
 
 /**
+ * A real `pg.Pool` for long-lived Node hosts (VPS). `pg` keeps idle clients
+ * open between requests and hands them back to the pool on `release()`, which is
+ * both correct and far cheaper than reconnecting per request. The pool is created
+ * once per process, at module scope, exactly as `pg` is designed to be used.
+ *
+ * `withAuthConnection` deliberately does not close these clients: the pool owns
+ * their lifecycle, and `release()` returns them to it.
+ */
+function createNodePool(connectionString: string): AuthPool {
+	const pool = new pg.Pool({
+		connectionString,
+		// `search_path` is per connection, so `pg` applies it to every client it
+		// opens for this pool.
+		options: "-c search_path=better_auth",
+		max: 10,
+		idleTimeoutMillis: 30_000,
+		connectionTimeoutMillis: 10_000,
+	});
+
+	return {
+		connect: () => pool.connect(),
+		query: (text: string, values?: unknown[]) =>
+			pool.query(text, values as unknown[]),
+		end: () => pool.end(),
+	};
+}
+
+/**
  * Runs one auth request on a single database connection and closes it
  * afterwards. Every `auth.handler` call site must be wrapped: without the
  * wrapper the pool still behaves correctly, but pays a new connection per query.
+ *
+ * In `pool` mode this wrapper only exists for call-site symmetry: the pooled
+ * clients are returned to `pg.Pool`, never ended here.
  */
 export async function withAuthConnection<T>(
 	handler: () => Promise<T>,

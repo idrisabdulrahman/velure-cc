@@ -35,11 +35,37 @@ class TestClient implements FakeClient {
 	}
 }
 
+type FakePool = {
+	options: unknown;
+	connect: ReturnType<typeof vi.fn>;
+	query: ReturnType<typeof vi.fn>;
+	end: ReturnType<typeof vi.fn>;
+};
+
+const pools: FakePool[] = [];
+
+class TestPool implements FakePool {
+	options: unknown;
+	connect = vi.fn(async () => {
+		const client = new TestClient();
+		// `pg.PoolClient.release()` returns the client to the pool.
+		client.release = vi.fn();
+		return client;
+	});
+	query = vi.fn(async () => ({ rows: [], command: "SELECT" }));
+	end = vi.fn(async () => undefined);
+
+	constructor(options: unknown) {
+		this.options = options;
+		pools.push(this);
+	}
+}
+
 vi.mock("pg", () => ({
-	default: { Client: TestClient },
+	default: { Client: TestClient, Pool: TestPool },
 }));
 
-const { createAuthPool, withAuthConnection } = await import(
+const { authDbMode, createAuthPool, withAuthConnection } = await import(
 	"#/server/auth-database"
 );
 
@@ -47,6 +73,8 @@ const CONNECTION_STRING = "postgres://test:test@localhost:5432/test";
 
 beforeEach(() => {
 	created.length = 0;
+	pools.length = 0;
+	vi.unstubAllEnvs();
 });
 
 describe("createAuthPool without a request scope", () => {
@@ -159,5 +187,66 @@ describe("withAuthConnection", () => {
 		});
 
 		expect(created[0]?.end).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe("authDbMode", () => {
+	it("defaults to the Worker-safe invocation mode", () => {
+		expect(authDbMode()).toBe("invocation");
+	});
+
+	it("selects pool mode for AUTH_DB_MODE=pool, case and space insensitive", () => {
+		vi.stubEnv("AUTH_DB_MODE", "  Pool ");
+		expect(authDbMode()).toBe("pool");
+	});
+
+	it("fails safe on an unrecognised value", () => {
+		vi.stubEnv("AUTH_DB_MODE", "pooled");
+		expect(authDbMode()).toBe("invocation");
+	});
+});
+
+describe("createAuthPool in pool mode (Node / VPS)", () => {
+	it("creates one real pg.Pool and delegates acquisitions to it", async () => {
+		vi.stubEnv("AUTH_DB_MODE", "pool");
+		const pool = createAuthPool(CONNECTION_STRING);
+
+		expect(pools).toHaveLength(1);
+		expect(pools[0]?.options).toMatchObject({
+			options: "-c search_path=better_auth",
+			max: 10,
+		});
+
+		const first = await pool.connect();
+		const second = await pool.connect();
+
+		// The pool decides connection reuse; each acquisition is its own checkout.
+		expect(pools[0]?.connect).toHaveBeenCalledTimes(2);
+		expect(typeof first.release).toBe("function");
+		expect(typeof second.release).toBe("function");
+	});
+
+	it("never ends pooled connections when the auth request finishes", async () => {
+		vi.stubEnv("AUTH_DB_MODE", "pool");
+		const pool = createAuthPool(CONNECTION_STRING);
+
+		await withAuthConnection(() => pool.connect());
+
+		// The pool owns the lifecycle: the wrapper must not close the client.
+		expect(created[0]?.end).not.toHaveBeenCalled();
+		expect(pools[0]?.end).not.toHaveBeenCalled();
+	});
+
+	it("does not open a bare client per request", async () => {
+		vi.stubEnv("AUTH_DB_MODE", "pool");
+		const pool = createAuthPool(CONNECTION_STRING);
+
+		await pool.connect();
+		await pool.connect();
+		await pool.connect();
+
+		// All acquisitions came from the pool, and the pool was built once.
+		expect(pools).toHaveLength(1);
+		expect(pools[0]?.connect).toHaveBeenCalledTimes(3);
 	});
 });

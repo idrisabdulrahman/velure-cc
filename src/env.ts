@@ -4,7 +4,9 @@ import { z } from "zod";
 export const env = createEnv({
 	server: {
 		SERVER_URL: z.url().optional(),
-		BETTER_AUTH_SECRET: z.string().min(1),
+		BETTER_AUTH_SECRET: z
+			.string()
+			.min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
 		SUPABASE_JWT_PRIVATE_JWK: z.string().min(1).optional(),
 		SUPABASE_JWT_KEY_ID: z.string().min(1).optional(),
 		SUPABASE_JWT_SECRET: z.string().min(1).optional(),

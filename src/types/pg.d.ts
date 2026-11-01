@@ -15,8 +15,16 @@ declare module "pg" {
 		end(): Promise<void>;
 	}
 
+	export type PoolClient = Client & {
+		/** Returns the client to the pool; it does not close the socket. */
+		release: (error?: unknown) => void;
+	};
+
 	export class Pool {
 		constructor(config?: Record<string, unknown>);
+		connect(): Promise<PoolClient>;
+		query(text: string, values?: unknown[]): Promise<QueryResult>;
+		end(): Promise<void>;
 	}
 
 	const pg: { Pool: typeof Pool; Client: typeof Client };
