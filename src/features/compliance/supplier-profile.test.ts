@@ -12,6 +12,8 @@ import {
 describe("validateSupplierTin (B1, SPEC 6.2 item 4)", () => {
 	it.each([
 		["plain 10-digit", "1234560000"],
+		["plain 11-digit", "12345600001"],
+		["plain 12-digit", "123456000012"],
 		["digits with spaces are compacted", " 1234 5600 00 "],
 		["leading/trailing whitespace tolerated", "\t2345678901\n"],
 	])("accepts %s", (_label, value) => {
@@ -32,7 +34,7 @@ describe("validateSupplierTin (B1, SPEC 6.2 item 4)", () => {
 
 	it.each([
 		["too short", "123456789"],
-		["too long", "12345678901"],
+		["too long", "1234567890123"],
 		["letters", "123456789A"],
 		["alphanumeric", "1234567890A"],
 	])("rejects %s as a format problem", (_label, value) => {
@@ -46,6 +48,8 @@ describe("validateSupplierTin (B1, SPEC 6.2 item 4)", () => {
 		["all zeros", "0000000000"],
 		["all ones", "1111111111"],
 		["all nines", "9999999999"],
+		["11-digit all ones", "11111111111"],
+		["12-digit all twos", "222222222222"],
 		["ascending sequence", "0123456789"],
 		["descending sequence", "9876543210"],
 	])("rejects the placeholder class: %s", (_label, value) => {

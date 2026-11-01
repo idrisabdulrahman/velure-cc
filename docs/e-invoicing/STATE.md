@@ -64,3 +64,11 @@ The WP6/WP7/WP8 rows above are owned by run 2's session — this run does not to
 
 - Auditor command permissions in `.opencode/agents/auditor.md` were fixed by the orchestrator (commit 05bad04, lines 21–23): invalid YAML replaced with `pnpm test*` / `pnpm check*` / `pnpm typecheck*` allow rules.
 - The `auditor` agent id is not registered in the running OpenCode session; audits are executed by fresh `general` subagents given the auditor.md rules verbatim (read-only instructions, same output format).
+
+## Post-run-2 changes
+
+Changes after the WP1-WP16 run. Not WP-scoped, but they touch the same seams, so
+they are recorded here.
+
+- `2026-11-01` — **Nigerian TIN widened to 10-12 digits** (`tin-length-10-12-2026-11`). The canonical rule in `src/features/compliance/supplier-profile.ts` now accepts `^\d{10,12}$` (NRS/Zoho guidance); `tin_format` stays a warning, `tin_required`/`tin_placeholder` stay blocking. UI hints/clamps and the B2B buyer message follow the shared constants. The two applied TIN-rule migrations are untouched and their parity tests now pin the historical `^[0-9]{10}$`; the widened SQL rule ships as `supabase/migrations/20261101000000_widen_nigeria_tin_length.sql` (flag-only, scoped to rows flagged `tin_format`, idempotent, comment-only reversal). It is **not yet applied** to live — a verified no-op today (0 flagged rows, 0 rows with an 11/12-digit TIN) — and must go out through the file-based migration pipeline so the ledger version matches the filename. Checks: `pnpm test` 896 passed / 86 skipped; typecheck clean; `check` exit 0 / 359 warnings.
+

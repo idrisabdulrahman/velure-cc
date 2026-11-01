@@ -1,3 +1,4 @@
+import { NIGERIA_TIN_PATTERN } from "./supplier-profile";
 import type {
 	InvoiceWithholdingSnapshot,
 	LegacyWithholdingTaxPreset,
@@ -63,7 +64,12 @@ export const NIGERIA_FOREIGN_CURRENCY_WARNING =
 	"Foreign currency invoices must be settled through a CBN-licensed financial institution. Confirm with your accountant before issuing.";
 export const RESEND_FREE_TIER_DAILY_LIMIT = 100;
 
-export const NIGERIA_TIN_REGEX = /^\d{10}$/;
+/**
+ * @deprecated Legacy alias of the canonical `NIGERIA_TIN_PATTERN` (B1
+ * supplier-profile). Re-exported so the TIN shape cannot drift between this
+ * module and the validator.
+ */
+export const NIGERIA_TIN_REGEX = NIGERIA_TIN_PATTERN;
 export const NIGERIA_RC_REGEX = /^RC-\d{7}$/i;
 const NIGERIA_LOCAL_PHONE_REGEX = /^0\d{10}$/;
 const NIGERIA_E164_PHONE_REGEX = /^\+234\d{10}$/;

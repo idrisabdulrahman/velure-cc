@@ -24,6 +24,8 @@ import { toast } from "#/components/ui/use-toast";
 import { NIGERIA_TAX_RULE_SET_VERSION } from "#/features/compliance/nigeria";
 import {
 	composeSupplierAddress,
+	NIGERIA_TIN_MAX_DIGITS,
+	NIGERIA_TIN_MIN_DIGITS,
 	SUPPLIER_ADDRESS_MAX_LENGTHS,
 	type SupplierProfileIssueCode,
 	type SupplierProfileValidation,
@@ -627,17 +629,19 @@ function SettingsPage() {
 								<FormField
 									label="TIN *"
 									error={errors.taxId}
-									hint="10 digits from your tax record. Placeholder values are rejected."
+									hint={`${NIGERIA_TIN_MIN_DIGITS}-${NIGERIA_TIN_MAX_DIGITS} digits from your tax record. Placeholder values are rejected.`}
 								>
 									<Input
 										value={form.taxId}
 										onChange={(event) =>
 											updateField(
 												"taxId",
-												event.target.value.replace(/\D/g, "").slice(0, 10),
+												event.target.value
+													.replace(/\D/g, "")
+													.slice(0, NIGERIA_TIN_MAX_DIGITS),
 											)
 										}
-										placeholder="10-digit TIN"
+										placeholder={`${NIGERIA_TIN_MIN_DIGITS}-${NIGERIA_TIN_MAX_DIGITS} digit TIN`}
 										inputMode="numeric"
 										aria-invalid={Boolean(errors.taxId)}
 										className={`rounded-md bg-paper text-ink focus-visible:border-brand ${

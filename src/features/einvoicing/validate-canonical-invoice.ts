@@ -9,7 +9,7 @@ export type CanonicalInvoiceIssue = Readonly<{
 	message: string;
 	/**
 	 * `blocking` fails the readiness check; `warning` is reported but does not
-	 * fail it. Omitted means `blocking`. Only the unconfirmed 10-digit TIN
+	 * fail it. Omitted means `blocking`. Only the unconfirmed 10-12 digit TIN
 	 * shape is a warning today (2026-10-30 review).
 	 */
 	severity?: "blocking" | "warning";

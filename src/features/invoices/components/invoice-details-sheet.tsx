@@ -1117,7 +1117,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															placeholder="10-digit TIN"
+															placeholder="10-12 digit TIN"
 															className="h-10 rounded-md border-rule bg-paper text-ink"
 														/>
 													</div>
@@ -1255,7 +1255,7 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															placeholder="10-digit TIN"
+															placeholder="10-12 digit TIN"
 															className="h-10 rounded-md border-rule bg-paper text-ink"
 														/>
 													</div>

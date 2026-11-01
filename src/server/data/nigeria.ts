@@ -331,8 +331,8 @@ export function legacyPresetFromWithholding(
 
 /**
  * TIN format is UNCONFIRMED (SPEC 6.2 item 4; a provider sample even shows a
- * dashed TIN). Since the 2026-10-30 review the 10-digit shape is a WARNING, not
- * a block, so an invoice is never refused over an unconfirmed rule — the
+ * dashed TIN). Since the 2026-10-30 review the 10-12 digit shape is a WARNING,
+ * not a block, so an invoice is never refused over an unconfirmed rule — the
  * warning surfaces through the supplier/buyer `needs_review` profile flags
  * instead. Only clearly invalid placeholder TINs still throw here. Reuses the
  * one shared validator so the severity policy cannot drift.

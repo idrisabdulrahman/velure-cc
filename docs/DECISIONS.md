@@ -815,3 +815,51 @@ Supabase schema. No RLS, migration, or issued-invoice behaviour was touched.
 VPS-equivalent Node run: authenticated request 1.0-2.4 s -> 0.4-0.7 s, sign-in
 1.6-2.0 s -> ~0.7 s. `nginx -t` was not run (nginx is not installed here).
 
+---
+
+## 2026-11-01 — the Nigerian TIN format widens from 10 to 10-12 digits
+
+**Task ID:** `tin-length-10-12-2026-11`
+
+**Question.** The TIN rule accepted exactly 10 digits. Is that correct, and does
+the check block a save?
+
+**Decision (recorded earlier, 2026-10-30).** `tin_format` is a **warning**, not a
+block, because the exact Nigerian TIN structure is UNCONFIRMED (SPEC 6.2 item 4;
+a provider sample even shows a dashed TIN). `tin_required` and `tin_placeholder`
+stay blocking.
+
+**Finding.** The 10-digit-only shape was too narrow. NRS guidance and mainstream
+accounting tools (Zoho Books) describe a **10-12 digit** TIN, so a strict
+10-digit rule can flag a valid customer TIN. Widened the canonical rule to
+`^\d{10,12}$` (`src/features/compliance/supplier-profile.ts`:
+`NIGERIA_TIN_MIN_DIGITS = 10`, `NIGERIA_TIN_MAX_DIGITS = 12`). The placeholder
+rule (all-same-digit / explicit list) is unchanged and still blocking; a 10-12
+digit all-same value is a placeholder, not a TIN.
+
+**SQL mirrors.** The two TIN-rule mirrors
+(`20261016000001_supplier_profile_validation_flags.sql`,
+`20261019000000_einvoice_b2_buyer_profile_flags.sql`) are **already applied**, so
+they are left byte-for-byte untouched and their parity tests now pin the
+historical `^[0-9]{10}$` rule. The widened rule lands in a **new, reversible,
+flag-only migration**, `supabase/migrations/20261101000000_widen_nigeria_tin_length.sql`,
+scoped to rows already flagged `tin_format` (a fresh workspace's `needs_review` +
+empty issue list is never touched), idempotent via `is distinct from`, with a
+comment-only reversal. It has **not been applied** to the live database: the
+project's migration ledger stores `<timestamp>_<name>` versions that must match
+the filename, which only the file-based pipeline (`supabase db push`) produces.
+The migration is a verified no-op today (0 supplier/buyer rows flagged
+`tin_format`, 0 rows with an 11/12-digit TIN), so leaving it for the next deploy
+is safe.
+
+**Not changed:** the `tin_format` severity, `tin_required`/`tin_placeholder`
+blocking behaviour, the applied migrations, money, numbering, issued-invoice
+immutability, and the audit-log guards. No NRS or provider contact was made.
+
+**Evidence.** `pnpm test` 896 passed / 86 skipped (was 880 — 16 new tests);
+`pnpm typecheck` clean; `pnpm check` exit 0 / 359 pre-existing warnings. The
+migration SQL was executed inside `begin; … rollback;` against the live database
+and parsed cleanly. Read-only live counts: 0 flagged `tin_format`, 0 rows with an
+11/12-digit TIN.
+
+

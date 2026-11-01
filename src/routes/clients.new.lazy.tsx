@@ -242,7 +242,7 @@ function NewClient() {
 											}))
 										}
 										className={inputClass}
-										placeholder="10-digit TIN"
+										placeholder="10-12 digit TIN"
 									/>
 								</Field>
 								<Field label="Buyer Type">

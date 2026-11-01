@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
 	NIGERIA_RC_PATTERN,
-	NIGERIA_TIN_PATTERN,
 	PLACEHOLDER_TIN_VALUES,
 } from "#/features/compliance/supplier-profile";
 
@@ -121,8 +120,13 @@ describe("supplier profile validator / migration parity", () => {
 		expect(sqlPlaceholders).toEqual([...PLACEHOLDER_TIN_VALUES].sort());
 	});
 
-	it("uses the same TIN shape rule", () => {
-		expect(upSql).toContain(`~ '${sqlShape(NIGERIA_TIN_PATTERN)}'`);
+	it("pins the historical 10-digit TIN shape (widened by a later migration)", () => {
+		// This migration is already applied and must stay byte-for-byte as it
+		// ran. The TIN rule was widened to 10-12 digits by
+		// supabase/migrations/20261101000000_widen_nigeria_tin_length.sql,
+		// which is pinned against the live app constant separately in
+		// tin-length-migration.test.ts.
+		expect(upSql).toContain("~ '^[0-9]{10}$'");
 	});
 
 	it("uses the same CAC RC shape rule (SQL matches case-insensitively; the app uppercases first)", () => {
@@ -134,7 +138,7 @@ describe("supplier profile validator / migration parity", () => {
 		// only ever sees 10-digit values — the same order as validateSupplierTin
 		// (format check, then placeholder check).
 		expect(upSql).toContain("'^(.)\\1{9}$'");
-		expect(upSql.indexOf(sqlShape(NIGERIA_TIN_PATTERN))).toBeLessThan(
+		expect(upSql.indexOf("'^[0-9]{10}$'")).toBeLessThan(
 			upSql.indexOf("^(.)\\1{9}$"),
 		);
 	});

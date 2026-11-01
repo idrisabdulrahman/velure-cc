@@ -103,6 +103,10 @@ import {
 	PERSISTABLE_WARNING_CODES,
 } from "#/features/compliance/persist";
 import {
+	NIGERIA_TIN_MAX_DIGITS,
+	NIGERIA_TIN_MIN_DIGITS,
+} from "#/features/compliance/supplier-profile";
+import {
 	DISCOUNT_MODE_OPTIONS,
 	type DiscountMode,
 	type InvoiceComplianceSnapshot,
@@ -425,7 +429,7 @@ export function toPersistableCompliance(compliance: InvoiceComplianceSnapshot) {
 }
 
 function sanitizeTinInput(raw: string) {
-	return raw.replace(/\D/g, "").slice(0, 10);
+	return raw.replace(/\D/g, "").slice(0, NIGERIA_TIN_MAX_DIGITS);
 }
 
 function sanitizeRcInput(raw: string) {
@@ -1080,20 +1084,20 @@ export function CreateInvoicePanel({
 		"inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-[opacity,background-color,border-color,color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-paper-2 hover:text-ink";
 
 	const tinDigits = sellerTinForSubmission.length;
-	const tinIsValid =
-		sellerTinForSubmission.length === 0 || sellerTinForSubmission.length === 10;
-	const tinHintText =
-		tinDigits === 10
-			? "Valid TIN format"
-			: tinDigits === 0
-				? "0/10 digits"
-				: `${tinDigits}/10 digits`;
-	const tinHintClass =
-		tinDigits === 10
-			? "text-ok"
-			: tinDigits === 0
-				? "text-ink-3"
-				: "text-brand";
+	const tinLengthValid =
+		tinDigits >= NIGERIA_TIN_MIN_DIGITS && tinDigits <= NIGERIA_TIN_MAX_DIGITS;
+	const tinIsValid = tinDigits === 0 || tinLengthValid;
+	const tinRangeLabel = `${NIGERIA_TIN_MIN_DIGITS}-${NIGERIA_TIN_MAX_DIGITS} digits`;
+	const tinHintText = tinLengthValid
+		? "Valid TIN format"
+		: tinDigits === 0
+			? `0/${tinRangeLabel}`
+			: `${tinDigits}/${tinRangeLabel}`;
+	const tinHintClass = tinLengthValid
+		? "text-ok"
+		: tinDigits === 0
+			? "text-ink-3"
+			: "text-brand";
 	const rcIsValid =
 		sellerRcForSubmission.length === 0 ||
 		/^RC-\d{7}$/i.test(sellerRcForSubmission);
@@ -1821,7 +1825,7 @@ export function CreateInvoicePanel({
 		if (!tinIsValid) {
 			toast({
 				title: "Check seller tax ID",
-				description: "Leave TIN blank or enter exactly 10 digits.",
+				description: `Leave TIN blank or enter ${NIGERIA_TIN_MIN_DIGITS}-${NIGERIA_TIN_MAX_DIGITS} digits.`,
 				variant: "error",
 			});
 			return;
@@ -1837,8 +1841,7 @@ export function CreateInvoicePanel({
 		if (requiresSellerTin && !sellerTinForSubmission) {
 			toast({
 				title: "Seller TIN needed for VAT",
-				description:
-					"Switch to Below threshold or add a 10-digit TIN before charging VAT.",
+				description: `Switch to Below threshold or add a ${NIGERIA_TIN_MIN_DIGITS}-${NIGERIA_TIN_MAX_DIGITS} digit TIN before charging VAT.`,
 				variant: "error",
 			});
 			openComplianceDialog();

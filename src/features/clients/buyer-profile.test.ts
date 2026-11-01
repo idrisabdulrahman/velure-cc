@@ -71,10 +71,20 @@ describe("validateBuyerProfile", () => {
 		["walkthrough placeholder", "1234567890"],
 		["all zeros", "0000000000"],
 		["all ones", "1111111111"],
+		["11-digit all ones", "11111111111"],
 	])("rejects a placeholder TIN (%s)", (_label, taxId) => {
 		const result = validateBuyerProfile({ ...validB2b, taxId });
 		expect(codes(result)).toEqual(["tin_placeholder"]);
 		expect(result.valid).toBe(false);
+	});
+
+	it("accepts an 11-12 digit B2B TIN (widened rule)", () => {
+		for (const taxId of ["12345600001", "123456000012"]) {
+			const result = validateBuyerProfile({ ...validB2b, taxId });
+			expect(codes(result)).toEqual([]);
+			expect(result.valid).toBe(true);
+			expect(result.complete).toBe(true);
+		}
 	});
 
 	it("requires name and email and rejects a malformed email", () => {

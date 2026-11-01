@@ -21,7 +21,8 @@
  */
 
 import {
-	NIGERIA_TIN_DIGITS,
+	NIGERIA_TIN_MAX_DIGITS,
+	NIGERIA_TIN_MIN_DIGITS,
 	validateSupplierTin,
 } from "../compliance/supplier-profile";
 
@@ -160,7 +161,7 @@ export function validateBuyerProfile(
 	} else if (buyerType === "b2b" && !taxId) {
 		push(
 			"tin_required",
-			`TIN is required for B2B buyers (${NIGERIA_TIN_DIGITS} digits).`,
+			`TIN is required for B2B buyers (${NIGERIA_TIN_MIN_DIGITS}-${NIGERIA_TIN_MAX_DIGITS} digits).`,
 		);
 	} else if (taxId) {
 		const tinResult = validateSupplierTin(taxId);
