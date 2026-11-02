@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NRS_INFORMATIONAL_DISCLAIMER } from "../../features/compliance/nigeria";
 import {
+	buildInvoiceExportArtifact,
 	buildInvoiceExportContent,
 	type ComplianceExportInvoiceRow,
 	type ComplianceExportKind,
@@ -48,6 +49,17 @@ describe("compliance export content", () => {
 				/buildInvoiceExportArtifact/,
 			);
 		}
+	});
+
+	it("rejects the QuickBooks kind on both generic builders", async () => {
+		// QuickBooks needs its dedicated profile (warnings + limits); falling
+		// through to the generic writer would emit the wrong columns.
+		expect(() =>
+			buildInvoiceExportContent("qbo_invoices_csv", [ROW], 0),
+		).toThrow(/buildQboInvoicesExport/);
+		await expect(
+			buildInvoiceExportArtifact("qbo_invoices_csv", [ROW], 0),
+		).rejects.toThrow(/buildQboInvoicesExport/);
 	});
 
 	it("leads CSV exports with the disclaimer before the header row", () => {

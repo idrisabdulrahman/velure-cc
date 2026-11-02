@@ -40,17 +40,42 @@ const EXCLUSIVE = {
 	netPayable: 1025,
 };
 
+/** RFC 4180 reader for one physical line (no embedded newlines in tests). */
+function parseCsvLine(line: string): string[] {
+	const cells: string[] = [];
+	let cell = "";
+	let quoted = false;
+	for (let index = 0; index < line.length; index += 1) {
+		const char = line[index];
+		if (quoted) {
+			if (char === '"') {
+				if (line[index + 1] === '"') {
+					cell += '"';
+					index += 1;
+				} else {
+					quoted = false;
+				}
+			} else {
+				cell += char;
+			}
+		} else if (char === '"') {
+			quoted = true;
+		} else if (char === ",") {
+			cells.push(cell);
+			cell = "";
+		} else {
+			cell += char;
+		}
+	}
+	cells.push(cell);
+	return cells;
+}
+
 function rows(content: string): string[][] {
-	// Every data cell is JSON-stringified or a bare number, so wrapping the
-	// line in brackets parses it.
+	// The disclaimer and header are the first two physical lines; the data
+	// cells are RFC 4180 quoted text or bare numbers.
 	const lines = content.split("\n");
-	return lines
-		.slice(2)
-		.map((line) =>
-			(JSON.parse(`[${line}]`) as Array<string | number | null>).map((cell) =>
-				String(cell ?? ""),
-			),
-		);
+	return lines.slice(2).map(parseCsvLine);
 }
 
 function accountantCsv(rowsData: ComplianceExportInvoiceRow[]): string[][] {

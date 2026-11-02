@@ -86,6 +86,11 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	buildInvoiceExportArtifact: "pure",
 	// Pure per-row total derivation over an already-loaded export row; no reads.
 	invoiceTotalForExportRow: "pure",
+	// Typed per-line projection of the same accountant rows; no reads.
+	canonicalAccountingLines: "pure",
+	// QuickBooks CSV projection of already-loaded export rows; warnings and
+	// limits only, no reads.
+	buildQboInvoicesExport: "pure",
 	// einvoice-validation.ts — caller session selects active workspace, then
 	// invoice and customer reads both carry that workspace filter.
 	validateWorkspaceInvoice: "app-scoped",

@@ -3,11 +3,14 @@
 Every export leaves the Compliance page (Settings → Compliance → Exports) and
 every artifact carries the NRS information disclaimer **inside the file
 itself** — a downloaded copy can never read as a cleared tax filing
-(e-invoicing SPEC A2). No Velure export is ever an NRS-validated or
-NRS-cleared document.
+(e-invoicing SPEC A2). The one exception is accounting-system **import files**
+(QuickBooks today, Zoho/Xero next): their first line must be the vendor's
+headers exactly, so the disclaimer lives on the export screen and in the audit
+log instead (see *QuickBooks invoice import* below). No Velure export is ever
+an NRS-validated or NRS-cleared document.
 
 **Status of this document:** descriptive contract for what ships today
-(2026-11-01). Planned formats are listed at the end as *not built*.
+(2026-11-02). Planned formats are listed at the end as *not built*.
 
 **Language tags.** Each column carries one tag so nobody mistakes derived
 number for authority:
@@ -33,7 +36,8 @@ revenue. WHT is never negative from a source deduction; it appears as stored.
 **Disclaimer.** The value of `NRS_INFORMATIONAL_DISCLAIMER`
 (`src/features/compliance/nigeria.ts`). In CSV it is a quoted line above the
 header row; in JSON it is a `disclaimer` field; in XLSX it sits in cell A1 of
-the sheet, above the header row.
+the sheet, above the header row. Accounting-system **import files** omit it
+because a leading row breaks the importer (see *QuickBooks invoice import*).
 
 ---
 
@@ -48,6 +52,7 @@ the sheet, above the header row.
 | `accountant_lines_csv` | `.csv` | one row per invoice **line** | disclaimer line, header, data |
 | `accountant_lines_xlsx` | `.xlsx` | one row per invoice **line** | sheet `Invoice lines`; A1 = disclaimer; row 2 = header; data from row 3 |
 | `vat_sales_schedule_xlsx` | `.xlsx` | one row per invoice **line** | sheet `VAT sales data`; A1 = disclaimer; A2 = paste-ready/unverified note; row 3 = header; data from row 4 (see *Rev360 VAT sales data* below) |
+| `qbo_invoices_csv` | `.csv` | one row per invoice **line** | **vendor headers first** (no disclaimer row); QuickBooks invoice import (see *QuickBooks invoice import* below) |
 
 The three invoice-level CSV kinds share one writer; today they emit the same
 columns (`invoiceNumber… dueDate`) plus the provisional accountant columns
@@ -281,24 +286,105 @@ paid amount). Missing snapshot values never appear as `null`/`NaN`.
 
 ---
 
+## QuickBooks invoice import (T10 step 3, 2026-11-02)
+
+Kind `qbo_invoices_csv`. Purpose: a QuickBooks Online **invoice import** file.
+One row per invoice **line**, with the invoice number repeated on every line so
+the importer groups the lines into one invoice.
+
+The target is a thin profile over the shared canonical row model
+(`canonicalAccountingLines`), which is a typed projection of
+`accountantRowsForInvoice`. Every money value therefore comes from the same
+kobo identity as `accountant_lines_csv`; the QuickBooks writer never re-derives
+a subtotal, discount, VAT or total.
+
+### Columns (vendor order, exact)
+
+| # | Header | Tag | Notes |
+| --- | --- | --- | --- |
+| 1 | `Invoice No.` | `[stored]` | `invoices.invoice_number`, repeated per line. Custom numbers survive only when the QuickBooks company has **"Custom transaction numbers"** on; the card says so. |
+| 2 | `Customer` | `[stored]` | `invoices.customer_name`. An invoice with no customer name is excluded. |
+| 3 | `Invoice Date` | `[stored]` | `issue_date`, rendered `DD/MM/YYYY` by default. |
+| 4 | `Due Date` | `[stored]` | `due_date`, same date rendering. |
+| 5 | `Terms` | — | Always blank. Velure stores payment-terms **days**, not a QuickBooks term name; an invented `Net 30` could fail the import. |
+| 6 | `Item` | `[stored]` | stored line name, formula-lead guarded. |
+| 7 | `Item Description` | `[inferred]` | the same line name; Velure has a single line label. |
+| 8 | `Item Quantity` | `[stored]` | stored line quantity. A synthetic legacy line exports `1`. |
+| 9 | `Item Rate` | `[derived]` | line unit price in naira. A synthetic line exports its gross amount. |
+| 10 | `Item Amount` | `[computed]` | line gross (quantity × unit price), from the canonical row. |
+| 11 | `Item Tax Code` | `[derived]` | `QBO_ITEM_TAX_CODE_CONFIG`; **blank by default**, never invented. |
+
+### Exclusions (returned as warnings)
+
+The vendor invoice columns cannot express these correctly, so the invoice is
+left out of the file and a deterministic warning is returned to the export
+screen (and stored in the audit entry):
+
+| Excluded | Reason |
+| --- | --- |
+| `credit_note` | QuickBooks imports credit notes separately as credit memos; a negative invoice line would be wrong. |
+| any invoice with a non-zero discount | the vendor invoice columns have no discount field. |
+| an invoice whose currency differs from the workspace base currency | the CSV import uses the company home currency. |
+| an invoice with a blank customer name | QuickBooks requires a customer. |
+
+A legacy invoice with no stored line items is **not** excluded: it exports one
+synthetic line (`(no line items recorded)`, quantity `1`, rate = amount = the
+stored subtotal) and a warning. Zero matched invoices produce a header-only file
+and a warning.
+
+### Limits
+
+QuickBooks accepts at most **100 invoices** and **1,000 data rows** per import.
+Above either limit the export aborts with an actionable error until automatic
+splitting exists; it never truncates, because a silently shortened ledger is
+worse than no file.
+
+### Dates
+
+`src/features/compliance/accounting-import.ts` owns the date contract. The
+default is `DD/MM/YYYY`; `MM/DD/YYYY` is available as a builder option. Xero
+depends on the organisation's regional settings, so the persisted export
+setting (with the chosen format shown on screen) lands with the Xero slice.
+Missing or invalid calendar dates render blank rather than an unparseable value.
+
+### Encoding and the disclaimer exception
+
+The first line is the eleven vendor headers, unquoted and exactly as listed.
+Text cells are RFC 4180 quoted (embedded `"` doubled) and formula-lead guarded
+(`= + - @ TAB CR` → leading apostrophe); numbers stay bare. This file
+intentionally carries **no in-file disclaimer line** — a leading row breaks the
+importer. The export screen, this document, and the audit entry carry the
+informational framing instead.
+
+### Unverified against the vendor sample
+
+No QuickBooks sample CSV has been supplied yet. The headings and limits come
+from the 2026-11-02 research and live in `QBO_INVOICE_HEADERS` /
+`QBO_MAX_ROWS` / `QBO_MAX_INVOICES`; diff them against a real sample when it is
+available, without changing the canonical row model.
+
+---
+
 ## Not built yet (planned T10 order)
 
 1. ~~**Rev360 VAT sales data**~~ — **built** as `vat_sales_schedule_xlsx`
    (nine columns, XLSX, per line; paste-ready, layout not verified; see above).
-2. **QBO/Zoho import CSVs, then Xero** — per-accounting-system import files
-   respecting each system's row limits. Not built. One canonical flat export
-   (one row per invoice line) plus per-target mapping profiles; only Xero has
-   a rigid heading/order template. Date format is an export setting (default
-   `DD/MM/YYYY`); Zoho auto-numbering stays off so Velure numbers survive;
-   QuickBooks keeps custom numbers only with "Custom transaction numbers" on.
-3. **Received-WHT credit tracker** — payment-time withholding credits
+2. ~~**QuickBooks invoice import**~~ — **built** as `qbo_invoices_csv`
+   (vendor columns, per line, `DD/MM/YYYY`, exclusions + 100/1,000 limits; see
+   above). The canonical row model is shared by the remaining targets.
+3. **Zoho Books, then Xero** — the same canonical rows behind per-target
+   profiles. Zoho auto-numbering must stay **off** so Velure numbers survive;
+   Xero uses fixed columns, so its profile neither reorders nor renames them.
+   Dates become a persisted export setting with the Xero slice.
+4. **Received-WHT credit tracker** — payment-time withholding credits
    receivable from clients. Proposal only; **not built** and not scheduled
    without product review (lightweight inventory/product boundary is the
    first constraint).
-4. Step 2 needs a real **Rev360 VAT template** to lock the layout; step 3
-   needs the QBO sample CSV, Xero template and Zoho sample to lock headings
-   and row limits. Until then the exporters stay config-driven and labelled
-   unverified. Every new sheet format restates the disclaimer rule above.
+5. Step 2 needs a real **Rev360 VAT template** to lock the layout; the
+   accounting targets need the QBO sample CSV, Xero template and Zoho sample to
+   lock headings and row limits. Until then the exporters stay config-driven
+   and labelled unverified. Every new sheet format restates the disclaimer rule
+   above.
 
 ## Known limitations
 

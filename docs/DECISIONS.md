@@ -1124,3 +1124,62 @@ corrects the Rev360 VAT design and the Tax ID rule. What changes now?
   `DD/MM/YYYY`, shown to the user); Zoho auto-numbering defaults **off** so
   Velure numbers survive; QuickBooks keeps custom numbers only with "Custom
   transaction numbers" on. Not built yet.
+
+---
+
+## 2026-11-02 — Next slice, invoice Tax ID layout, Tax ID kind storage
+
+**Task ID:** `qbo-invoice-export-2026-11`
+
+**Question 1.** What should I build next?
+
+**Answer (user, 2026-11-02).** Proceed to T10 **step 3**: the canonical flat
+export, then QuickBooks → Zoho → Xero, behind configurable headings. Diff
+against the real vendor template files when they are supplied.
+
+**Question 2.** Do you approve changing the invoice PDF/public page to show the
+seller's Tax ID prominently (with a Settings warning when it is missing)?
+
+**Answer (user, 2026-11-02).** **No — "sometimes simple invoice just be needed
+so find a sweet spot".** Do not force the seller Tax ID onto every invoice
+layout. A conditional/opt-in treatment is required before any layout change;
+the missing-Tax-ID Settings warning is still acceptable.
+
+**Question 3.** If we implement the TIN/NIN/RC Tax ID change, how should we
+record which kind it is?
+
+**Answer (user, 2026-11-02).** **Add a `tax_id_type` column** (additive,
+reversible) and backfill by shape (10-12 digits = TIN/NIN, `RC` = RC). Not
+implemented in this slice; it stays queued after step 3.
+
+---
+
+## 2026-11-02 — T10 step 3: canonical accounting rows + QuickBooks import
+
+**Task ID:** `qbo-invoice-export-2026-11`
+
+**Decision.** Ship one canonical typed per-line row model
+(`canonicalAccountingLines`) and the first target profile,
+`qbo_invoices_csv`, instead of a separate exporter per accounting system.
+Every money value comes from `accountantRowsForInvoice`, so the kobo identity
+is derived once and targets cannot drift.
+
+- QuickBooks uses the vendor invoice columns exactly, first line, with no
+  in-file disclaimer row (documented exception: importers reject a leading
+  row). The screen and audit entry carry the informational framing.
+- Dates default to `DD/MM/YYYY`; the format is a builder option and a persisted
+  export setting is deferred to the Xero slice (Xero depends on the
+  organisation's regional settings).
+- `Terms` is blank (Velure stores days, not a QBO term name) and
+  `Item Tax Code` is a blank-default config table (`QBO_ITEM_TAX_CODE_CONFIG`).
+- Excluded with returned warnings: credit notes, discounted invoices, invoices
+  outside the workspace base currency, and invoices without a customer name.
+- Hard limits of 100 invoices / 1,000 rows; above either the export aborts
+  rather than truncating.
+- Incidental fix: CSV text cells now use RFC 4180 quoting instead of JSON
+  escaping, because a quoted value in a vendor import must be doubled, not
+  backslash-escaped.
+
+**Not in this slice.** Zoho and Xero profiles; the persisted date setting; the
+`tax_id_type` column; the conditional seller-Tax-ID invoice treatment; the
+WHT tracker.

@@ -8,7 +8,10 @@ import type {
 	ComplianceExportInvoiceRow,
 	ComplianceExportKind,
 } from "./compliance-export";
-import { buildInvoiceExportArtifact } from "./compliance-export";
+import {
+	buildInvoiceExportArtifact,
+	buildQboInvoicesExport,
+} from "./compliance-export";
 import {
 	assertSequenceCounterChangeAllowed,
 	workspaceNumberingLocked,
@@ -455,7 +458,7 @@ export async function createInvoiceExport(
 	if (!workspaceId) throw new Error("Workspace not found.");
 	const { data: workspace } = await client
 		.from("workspaces")
-		.select("id, name, legal_name")
+		.select("id, name, legal_name, base_currency")
 		.eq("id", workspaceId)
 		.single();
 	const source = workspace?.legal_name || workspace?.name || "VELURE";
@@ -467,7 +470,17 @@ export async function createInvoiceExport(
 			.toUpperCase() || "VELURE";
 	const rows = await loadAllExportInvoices(client, workspaceId, kind);
 	const now = Date.now();
-	const content = await buildInvoiceExportArtifact(kind, rows, now);
+	const built =
+		kind === "qbo_invoices_csv"
+			? buildQboInvoicesExport(rows, {
+					baseCurrency: workspace?.base_currency ?? "NGN",
+				})
+			: {
+					content: await buildInvoiceExportArtifact(kind, rows, now),
+					warnings: [] as string[],
+					invoiceCount: rows.length,
+					lineCount: rows.length,
+				};
 	const fileExtension =
 		kind === "normalized_accounting"
 			? "json"
@@ -483,7 +496,7 @@ export async function createInvoiceExport(
 			kind,
 			status: "ready",
 			file_name: fileName,
-			content,
+			content: built.content,
 		})
 		.select("id, file_name, content")
 		.single();
@@ -492,10 +505,21 @@ export async function createInvoiceExport(
 		action: "invoice.export",
 		resourceType: "invoice_export",
 		resourceId: data.id,
-		after: { kind, fileName, rowCount: rows.length },
+		after: {
+			kind,
+			fileName,
+			rowCount: built.lineCount,
+			invoiceCount: built.invoiceCount,
+			warnings: built.warnings,
+		},
 		message: `Generated a ${kind} export.`,
 	});
-	return { id: data.id, fileName: data.file_name, content: data.content };
+	return {
+		id: data.id,
+		fileName: data.file_name,
+		content: data.content,
+		warnings: built.warnings,
+	};
 }
 
 export async function retryInvoiceExport(

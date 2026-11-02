@@ -1,3 +1,12 @@
+import {
+	type AccountingDateFormat,
+	DEFAULT_ACCOUNTING_DATE_FORMAT,
+	formatAccountingDate,
+	QBO_INVOICE_HEADERS,
+	QBO_MAX_INVOICES,
+	QBO_MAX_ROWS,
+	qboItemTaxCodeFor,
+} from "#/features/compliance/accounting-import";
 import { resolveInvoiceDiscount } from "#/features/compliance/calculate";
 import { NRS_INFORMATIONAL_DISCLAIMER } from "#/features/compliance/nigeria";
 import {
@@ -10,6 +19,7 @@ import {
 } from "#/features/compliance/supplier-profile";
 import type { DiscountMode } from "#/features/compliance/types";
 import { priceToKobo } from "#/features/invoices/line-money";
+import type { VatCategory } from "#/features/invoices/types";
 
 export type ComplianceExportKind =
 	| "invoices_csv"
@@ -20,7 +30,9 @@ export type ComplianceExportKind =
 	| "accountant_lines_csv"
 	| "accountant_lines_xlsx"
 	/** T10 step 2 (Rev360): six-field VAT sales schedule, XLSX, per line. */
-	| "vat_sales_schedule_xlsx";
+	| "vat_sales_schedule_xlsx"
+	/** T10 step 3: QuickBooks Online invoice import, one row per line. */
+	| "qbo_invoices_csv";
 
 export type ComplianceExportInvoiceRow = {
 	invoice_number: string | null;
@@ -130,7 +142,9 @@ const FORMULA_LEAD = /^[=+\-@\t\r]/;
 
 function csvTextCell(value: unknown): string {
 	const text = value === null || value === undefined ? "" : String(value);
-	return JSON.stringify(guardFormulaLead(text));
+	// RFC 4180: wrap the field and double any embedded quote. JSON escaping
+	// (`\"`) is not CSV and importers would keep the backslash.
+	return `"${guardFormulaLead(text).replace(/"/g, '""')}"`;
 }
 
 /** Neutralises a spreadsheet formula lead (see `guardFormulaLead`). */
@@ -218,7 +232,11 @@ export function buildInvoiceExportContent(
 	}
 
 	// The workbook kinds need async serialization; going through the sync
-	// builder would silently emit CSV bytes named `.xlsx`.
+	// builder would silently emit CSV bytes named `.xlsx`. QuickBooks has its
+	// own profile (warnings + limits), so it must use its dedicated builder.
+	if (kind === "qbo_invoices_csv") {
+		throw new Error(`Use buildQboInvoicesExport for ${kind}.`);
+	}
 	if (kind === "accountant_lines_xlsx" || kind === "vat_sales_schedule_xlsx") {
 		throw new Error(`Use buildInvoiceExportArtifact for ${kind}.`);
 	}
@@ -568,6 +586,256 @@ function accountantRowsForInvoice(
 	});
 }
 
+/* -----------------------------------------------------------------------
+ * Canonical accounting line rows (T10 step 3, 2026-11-02).
+ *
+ * ONE typed per-line model feeds every accounting-system target. It is a
+ * read-only projection of `accountantRowsForInvoice`, so the kobo money
+ * identity (Σ gross = subtotal, Σ discount = invoice discount, Σ vat = stored
+ * VAT, Σ net + vat = grand total) is derived exactly once. Targets supply
+ * headings, date rendering and code tables only; they never redo money math.
+ *
+ * Invoice-level cells (`invoiceSubtotal`…) are `null` on continuation rows,
+ * exactly like the accountant export, so a target must read them from the
+ * first line of each invoice.
+ * --------------------------------------------------------------------- */
+
+type AccountantColumn = (typeof ACCOUNTANT_LINE_HEADERS)[number];
+
+const ACCOUNTANT_COLUMN = ACCOUNTANT_LINE_HEADERS.reduce(
+	(map, header, index) => {
+		map[header] = index;
+		return map;
+	},
+	{} as Record<AccountantColumn, number>,
+);
+
+function vatCategoryOf(value: string): VatCategory {
+	return value === "zero_rated" || value === "exempt" ? value : "standard";
+}
+
+export type CanonicalAccountingLine = {
+	invoiceNumber: string;
+	customerName: string;
+	documentType: string;
+	currency: string;
+	status: string;
+	issueDate: string;
+	dueDate: string;
+	lineDescription: string;
+	quantity: number;
+	unit: string;
+	unitPrice: number;
+	lineGross: number;
+	lineDiscount: number;
+	vat: number;
+	lineNet: number;
+	vatCategory: VatCategory;
+	classificationCode: string;
+	invoiceSubtotal: number | null;
+	invoiceDiscount: number | null;
+	invoiceVat: number | null;
+	invoiceWht: number | null;
+	invoiceNetPayable: number | null;
+	/** The invoice had no stored line items; one synthetic line was used. */
+	synthetic: boolean;
+};
+
+function canonicalLinesForInvoice(
+	row: ComplianceExportInvoiceRow,
+): CanonicalAccountingLine[] {
+	const synthetic = storedLinesOf(row).length === 0;
+	return accountantRowsForInvoice(row).map((cells) => {
+		const text = (column: AccountantColumn) => {
+			const value = cells[ACCOUNTANT_COLUMN[column]];
+			return value === null || value === undefined ? "" : String(value);
+		};
+		const amount = (column: AccountantColumn) => {
+			const value = cells[ACCOUNTANT_COLUMN[column]];
+			return typeof value === "number" ? value : 0;
+		};
+		const nullableAmount = (column: AccountantColumn) => {
+			const value = cells[ACCOUNTANT_COLUMN[column]];
+			return typeof value === "number" ? value : null;
+		};
+		return {
+			invoiceNumber: text("invoiceNumber"),
+			customerName: text("customerName"),
+			documentType: text("documentType"),
+			currency: text("currency"),
+			status: text("status"),
+			issueDate: text("issueDate"),
+			dueDate: text("dueDate"),
+			lineDescription: text("lineDescription"),
+			quantity: amount("quantity"),
+			unit: text("unit"),
+			unitPrice: amount("unitPrice"),
+			lineGross: amount("lineGross"),
+			lineDiscount: amount("lineDiscount"),
+			vat: amount("vat"),
+			lineNet: amount("lineNet"),
+			vatCategory: vatCategoryOf(text("vatCategory")),
+			classificationCode: text("classificationCode"),
+			invoiceSubtotal: nullableAmount("invoiceSubtotal"),
+			invoiceDiscount: nullableAmount("invoiceDiscount"),
+			invoiceVat: nullableAmount("invoiceVat"),
+			invoiceWht: nullableAmount("invoiceWht"),
+			invoiceNetPayable: nullableAmount("invoiceNetPayable"),
+			synthetic,
+		};
+	});
+}
+
+/**
+ * Every canonical line of every invoice, in stored invoice/line order. Exposed
+ * for targets (and their tests) that need the shared projection without the
+ * accountant column layout.
+ */
+export function canonicalAccountingLines(
+	rows: ComplianceExportInvoiceRow[],
+): CanonicalAccountingLine[] {
+	return rows.flatMap(canonicalLinesForInvoice);
+}
+
+/* -----------------------------------------------------------------------
+ * QuickBooks Online invoice import (T10 step 3) — `qbo_invoices_csv`.
+ *
+ * One row per invoice LINE; the invoice number repeats on every line so the
+ * importer groups the lines. Headings are the vendor's invoice columns exactly
+ * and must stay the first line: a leading disclaimer row would break the
+ * import, so this is the documented in-file disclaimer exception (the screen
+ * and audit log still carry the informational framing).
+ *
+ * Excluded with a returned warning: credit notes (imported separately as
+ * credit memos), discounted invoices (the vendor columns have no discount
+ * field), invoices outside the workspace base currency (the import uses the
+ * company home currency), and invoices without a customer name (QBO requires
+ * one). Above 100 invoices or 1,000 rows the export aborts until auto-split
+ * exists — silently truncating would produce a wrong ledger.
+ * --------------------------------------------------------------------- */
+
+export type QboInvoiceExportOptions = {
+	dateFormat?: AccountingDateFormat;
+	/** Workspace base currency; defaults to `NGN` when unknown. */
+	baseCurrency?: string | null;
+};
+
+export type BuiltQboInvoiceExport = {
+	content: string;
+	warnings: string[];
+	invoiceCount: number;
+	lineCount: number;
+};
+
+export function buildQboInvoicesExport(
+	rows: ComplianceExportInvoiceRow[],
+	options: QboInvoiceExportOptions = {},
+): BuiltQboInvoiceExport {
+	const dateFormat = options.dateFormat ?? DEFAULT_ACCOUNTING_DATE_FORMAT;
+	const baseCurrency = String(options.baseCurrency ?? "NGN").toUpperCase();
+	const warnings: string[] = [];
+	const dataRows: string[] = [];
+	let invoiceCount = 0;
+	let skippedCreditNotes = 0;
+	let skippedDiscounts = 0;
+	let skippedCurrency = 0;
+	let skippedCustomer = 0;
+	let syntheticInvoices = 0;
+
+	for (const row of rows) {
+		if (documentTypeForExportRow(row) === "credit_note") {
+			skippedCreditNotes += 1;
+			continue;
+		}
+		const currency = row.currency?.trim() || baseCurrency;
+		if (currency.toUpperCase() !== baseCurrency) {
+			skippedCurrency += 1;
+			continue;
+		}
+		if (!String(row.customer_name ?? "").trim()) {
+			skippedCustomer += 1;
+			continue;
+		}
+		const lines = canonicalLinesForInvoice(row);
+		if (lines.some((line) => line.lineDiscount !== 0)) {
+			skippedDiscounts += 1;
+			continue;
+		}
+		if (lines.length === 0) continue;
+
+		invoiceCount += 1;
+		if (invoiceCount > QBO_MAX_INVOICES) {
+			throw new RangeError(
+				`QuickBooks imports at most ${QBO_MAX_INVOICES} invoices per file; this export has more. Split it or wait for automatic splitting.`,
+			);
+		}
+		if (lines.some((line) => line.synthetic)) syntheticInvoices += 1;
+
+		for (const line of lines) {
+			const quantity = line.synthetic ? 1 : line.quantity;
+			const rate = line.synthetic ? line.lineGross : line.unitPrice;
+			dataRows.push(
+				[
+					csvTextCell(line.invoiceNumber),
+					csvTextCell(line.customerName),
+					csvTextCell(formatAccountingDate(line.issueDate, dateFormat)),
+					csvTextCell(formatAccountingDate(line.dueDate, dateFormat)),
+					csvTextCell(""),
+					csvTextCell(line.lineDescription),
+					csvTextCell(line.lineDescription),
+					csvValueCell(quantity),
+					csvValueCell(rate),
+					csvValueCell(line.lineGross),
+					csvTextCell(qboItemTaxCodeFor(line.vatCategory)),
+				].join(","),
+			);
+			if (dataRows.length > QBO_MAX_ROWS) {
+				throw new RangeError(
+					`QuickBooks imports at most ${QBO_MAX_ROWS.toLocaleString("en-US")} rows per file; this export has more. Split it or wait for automatic splitting.`,
+				);
+			}
+		}
+	}
+
+	const count = (value: number, one: string, many: string) =>
+		`${value} ${value === 1 ? one : many}`;
+	if (skippedCreditNotes > 0) {
+		warnings.push(
+			`${count(skippedCreditNotes, "credit note was", "credit notes were")} left out; import credit notes as credit memos in QuickBooks.`,
+		);
+	}
+	if (skippedDiscounts > 0) {
+		warnings.push(
+			`${count(skippedDiscounts, "discounted invoice was", "discounted invoices were")} left out; the QuickBooks invoice columns have no discount field.`,
+		);
+	}
+	if (skippedCurrency > 0) {
+		warnings.push(
+			`${count(skippedCurrency, "invoice in another currency was", "invoices in another currency were")} left out; the QuickBooks import uses the company home currency.`,
+		);
+	}
+	if (skippedCustomer > 0) {
+		warnings.push(
+			`${count(skippedCustomer, "invoice without a customer name was", "invoices without a customer name were")} left out; QuickBooks requires a customer.`,
+		);
+	}
+	if (syntheticInvoices > 0) {
+		warnings.push(
+			`${count(syntheticInvoices, "invoice had", "invoices had")} no stored line items and ${syntheticInvoices === 1 ? "was" : "were"} exported as a single line at the stored subtotal.`,
+		);
+	}
+	if (invoiceCount === 0) {
+		warnings.push("No invoices matched; the file has only the header row.");
+	}
+
+	return {
+		content: [QBO_INVOICE_HEADERS.join(","), ...dataRows].join("\n"),
+		warnings,
+		invoiceCount,
+		lineCount: dataRows.length,
+	};
+}
+
 /**
  * The XLSX projection. `invoice_exports.content` is a text column, so the
  * workbook bytes are stored base64-encoded; the download path decodes them
@@ -736,6 +1004,9 @@ export async function buildInvoiceExportArtifact(
 	rows: ComplianceExportInvoiceRow[],
 	generatedAt: number,
 ): Promise<string> {
+	if (kind === "qbo_invoices_csv") {
+		throw new Error("Use buildQboInvoicesExport for qbo_invoices_csv.");
+	}
 	if (kind === "accountant_lines_xlsx") {
 		return buildAccountantLinesXlsx(rows);
 	}
