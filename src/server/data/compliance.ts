@@ -11,6 +11,7 @@ import type {
 import {
 	buildInvoiceExportArtifact,
 	buildQboInvoicesExport,
+	buildZohoInvoicesExport,
 } from "./compliance-export";
 import {
 	assertSequenceCounterChangeAllowed,
@@ -475,12 +476,16 @@ export async function createInvoiceExport(
 			? buildQboInvoicesExport(rows, {
 					baseCurrency: workspace?.base_currency ?? "NGN",
 				})
-			: {
-					content: await buildInvoiceExportArtifact(kind, rows, now),
-					warnings: [] as string[],
-					invoiceCount: rows.length,
-					lineCount: rows.length,
-				};
+			: kind === "zoho_invoices_csv"
+				? buildZohoInvoicesExport(rows, {
+						baseCurrency: workspace?.base_currency ?? "NGN",
+					})
+				: {
+						content: await buildInvoiceExportArtifact(kind, rows, now),
+						warnings: [] as string[],
+						invoiceCount: rows.length,
+						lineCount: rows.length,
+					};
 	const fileExtension =
 		kind === "normalized_accounting"
 			? "json"

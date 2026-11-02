@@ -62,6 +62,17 @@ describe("compliance export content", () => {
 		).rejects.toThrow(/buildQboInvoicesExport/);
 	});
 
+	it("rejects the Zoho kind on both generic builders", async () => {
+		// Zoho needs its dedicated profile (tax name/amount, 10 MB guard);
+		// falling through to the generic writer would emit the wrong columns.
+		expect(() =>
+			buildInvoiceExportContent("zoho_invoices_csv", [ROW], 0),
+		).toThrow(/buildZohoInvoicesExport/);
+		await expect(
+			buildInvoiceExportArtifact("zoho_invoices_csv", [ROW], 0),
+		).rejects.toThrow(/buildZohoInvoicesExport/);
+	});
+
 	it("leads CSV exports with the disclaimer before the header row", () => {
 		const lines = buildInvoiceExportContent(
 			"tax_summary_csv",

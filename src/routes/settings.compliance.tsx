@@ -116,6 +116,7 @@ function formatExportKind(value: string) {
 		return "Accountant line export (Excel)";
 	if (value === "vat_sales_schedule_xlsx") return "VAT sales data (Rev360)";
 	if (value === "qbo_invoices_csv") return "QuickBooks invoices";
+	if (value === "zoho_invoices_csv") return "Zoho Books invoices";
 	return value
 		.split("_")
 		.filter(Boolean)
@@ -1322,6 +1323,54 @@ function ComplianceSettingsPage() {
 										} catch (error) {
 											toast({
 												title: "QuickBooks export failed",
+												description:
+													error instanceof Error
+														? error.message
+														: "Please try again.",
+												variant: "error",
+											});
+										}
+									}}
+								>
+									<Download className="h-4 w-4" />
+									Generate CSV
+								</Button>
+							</div>
+							<div className="grid gap-3 rounded-md border border-rule bg-paper-2 px-4 py-3">
+								<div>
+									<p className="text-sm font-medium text-ink">
+										Zoho Books invoices (CSV)
+									</p>
+									<p className="mt-1 text-xs text-ink-3">
+										One row per invoice line, dates DD/MM/YYYY. Leave
+										&quot;Auto-generate Invoice Numbers&quot; off in the Zoho
+										import wizard so Velure numbers survive. Credit notes,
+										discounted invoices, other currencies and rows without a
+										customer are left out with a warning; files over 10 MB are
+										refused.
+									</p>
+								</div>
+								<Button
+									type="button"
+									variant="outline"
+									className="border-rule bg-transparent"
+									onClick={async () => {
+										try {
+											const result = await createExport({
+												kind: "zoho_invoices_csv",
+											});
+											downloadExportContent(result);
+											toast({
+												title: "Zoho Books invoices generated",
+												description:
+													result.warnings.length > 0
+														? `${result.warnings.join(" ")} Download started.`
+														: "Download started.",
+												variant: "success",
+											});
+										} catch (error) {
+											toast({
+												title: "Zoho Books export failed",
 												description:
 													error instanceof Error
 														? error.message

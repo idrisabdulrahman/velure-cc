@@ -6,6 +6,9 @@ import {
 	QBO_MAX_INVOICES,
 	QBO_MAX_ROWS,
 	qboItemTaxCodeFor,
+	ZOHO_INVOICE_HEADERS,
+	ZOHO_MAX_FILE_BYTES,
+	zohoVatNameFor,
 } from "#/features/compliance/accounting-import";
 import { resolveInvoiceDiscount } from "#/features/compliance/calculate";
 import { NRS_INFORMATIONAL_DISCLAIMER } from "#/features/compliance/nigeria";
@@ -32,7 +35,9 @@ export type ComplianceExportKind =
 	/** T10 step 2 (Rev360): six-field VAT sales schedule, XLSX, per line. */
 	| "vat_sales_schedule_xlsx"
 	/** T10 step 3: QuickBooks Online invoice import, one row per line. */
-	| "qbo_invoices_csv";
+	| "qbo_invoices_csv"
+	/** T10 step 3: Zoho Books invoice import, one row per line. */
+	| "zoho_invoices_csv";
 
 export type ComplianceExportInvoiceRow = {
 	invoice_number: string | null;
@@ -236,6 +241,9 @@ export function buildInvoiceExportContent(
 	// own profile (warnings + limits), so it must use its dedicated builder.
 	if (kind === "qbo_invoices_csv") {
 		throw new Error(`Use buildQboInvoicesExport for ${kind}.`);
+	}
+	if (kind === "zoho_invoices_csv") {
+		throw new Error(`Use buildZohoInvoicesExport for ${kind}.`);
 	}
 	if (kind === "accountant_lines_xlsx" || kind === "vat_sales_schedule_xlsx") {
 		throw new Error(`Use buildInvoiceExportArtifact for ${kind}.`);
@@ -727,21 +735,35 @@ export type BuiltQboInvoiceExport = {
 	lineCount: number;
 };
 
-export function buildQboInvoicesExport(
+type IncludedAccountingInvoice = {
+	lines: CanonicalAccountingLine[];
+	synthetic: boolean;
+};
+
+type AccountingInclusions = {
+	included: IncludedAccountingInvoice[];
+	skippedCreditNotes: number;
+	skippedDiscounts: number;
+	skippedCurrency: number;
+	skippedCustomer: number;
+};
+
+/**
+ * The invoice-level filters every accounting-system target shares. A credit
+ * note (imported separately), a discounted invoice, an invoice outside the
+ * workspace base currency and an invoice without a customer cannot be
+ * represented by the provisional vendor columns, so the target leaves them out
+ * and reports a warning instead of silently misstating money.
+ */
+function includeAccountingInvoices(
 	rows: ComplianceExportInvoiceRow[],
-	options: QboInvoiceExportOptions = {},
-): BuiltQboInvoiceExport {
-	const dateFormat = options.dateFormat ?? DEFAULT_ACCOUNTING_DATE_FORMAT;
-	const baseCurrency = String(options.baseCurrency ?? "NGN").toUpperCase();
-	const warnings: string[] = [];
-	const dataRows: string[] = [];
-	let invoiceCount = 0;
+	baseCurrency: string,
+): AccountingInclusions {
+	const included: IncludedAccountingInvoice[] = [];
 	let skippedCreditNotes = 0;
 	let skippedDiscounts = 0;
 	let skippedCurrency = 0;
 	let skippedCustomer = 0;
-	let syntheticInvoices = 0;
-
 	for (const row of rows) {
 		if (documentTypeForExportRow(row) === "credit_note") {
 			skippedCreditNotes += 1;
@@ -762,16 +784,51 @@ export function buildQboInvoicesExport(
 			continue;
 		}
 		if (lines.length === 0) continue;
+		included.push({
+			lines,
+			synthetic: lines.some((line) => line.synthetic),
+		});
+	}
+	return {
+		included,
+		skippedCreditNotes,
+		skippedDiscounts,
+		skippedCurrency,
+		skippedCustomer,
+	};
+}
 
-		invoiceCount += 1;
-		if (invoiceCount > QBO_MAX_INVOICES) {
-			throw new RangeError(
-				`QuickBooks imports at most ${QBO_MAX_INVOICES} invoices per file; this export has more. Split it or wait for automatic splitting.`,
-			);
-		}
-		if (lines.some((line) => line.synthetic)) syntheticInvoices += 1;
+/** `"1 credit note was"` / `"2 credit notes were"` warning prefix. */
+function skippedWarning(count: number, one: string, many: string): string {
+	return `${count} ${count === 1 ? one : many}`;
+}
 
-		for (const line of lines) {
+export function buildQboInvoicesExport(
+	rows: ComplianceExportInvoiceRow[],
+	options: QboInvoiceExportOptions = {},
+): BuiltQboInvoiceExport {
+	const dateFormat = options.dateFormat ?? DEFAULT_ACCOUNTING_DATE_FORMAT;
+	const baseCurrency = String(options.baseCurrency ?? "NGN").toUpperCase();
+	const {
+		included,
+		skippedCreditNotes,
+		skippedDiscounts,
+		skippedCurrency,
+		skippedCustomer,
+	} = includeAccountingInvoices(rows, baseCurrency);
+	const warnings: string[] = [];
+	const dataRows: string[] = [];
+	let syntheticInvoices = 0;
+
+	if (included.length > QBO_MAX_INVOICES) {
+		throw new RangeError(
+			`QuickBooks imports at most ${QBO_MAX_INVOICES} invoices per file; this export has ${included.length}. Split it or wait for automatic splitting.`,
+		);
+	}
+
+	for (const invoice of included) {
+		if (invoice.synthetic) syntheticInvoices += 1;
+		for (const line of invoice.lines) {
 			const quantity = line.synthetic ? 1 : line.quantity;
 			const rate = line.synthetic ? line.lineGross : line.unitPrice;
 			dataRows.push(
@@ -789,49 +846,167 @@ export function buildQboInvoicesExport(
 					csvTextCell(qboItemTaxCodeFor(line.vatCategory)),
 				].join(","),
 			);
-			if (dataRows.length > QBO_MAX_ROWS) {
-				throw new RangeError(
-					`QuickBooks imports at most ${QBO_MAX_ROWS.toLocaleString("en-US")} rows per file; this export has more. Split it or wait for automatic splitting.`,
-				);
-			}
 		}
 	}
 
-	const count = (value: number, one: string, many: string) =>
-		`${value} ${value === 1 ? one : many}`;
+	if (dataRows.length > QBO_MAX_ROWS) {
+		throw new RangeError(
+			`QuickBooks imports at most ${QBO_MAX_ROWS.toLocaleString("en-US")} rows per file; this export has ${dataRows.length}. Split it or wait for automatic splitting.`,
+		);
+	}
+
 	if (skippedCreditNotes > 0) {
 		warnings.push(
-			`${count(skippedCreditNotes, "credit note was", "credit notes were")} left out; import credit notes as credit memos in QuickBooks.`,
+			`${skippedWarning(skippedCreditNotes, "credit note was", "credit notes were")} left out; import credit notes as credit memos in QuickBooks.`,
 		);
 	}
 	if (skippedDiscounts > 0) {
 		warnings.push(
-			`${count(skippedDiscounts, "discounted invoice was", "discounted invoices were")} left out; the QuickBooks invoice columns have no discount field.`,
+			`${skippedWarning(skippedDiscounts, "discounted invoice was", "discounted invoices were")} left out; the QuickBooks invoice columns have no discount field.`,
 		);
 	}
 	if (skippedCurrency > 0) {
 		warnings.push(
-			`${count(skippedCurrency, "invoice in another currency was", "invoices in another currency were")} left out; the QuickBooks import uses the company home currency.`,
+			`${skippedWarning(skippedCurrency, "invoice in another currency was", "invoices in another currency were")} left out; the QuickBooks import uses the company home currency.`,
 		);
 	}
 	if (skippedCustomer > 0) {
 		warnings.push(
-			`${count(skippedCustomer, "invoice without a customer name was", "invoices without a customer name were")} left out; QuickBooks requires a customer.`,
+			`${skippedWarning(skippedCustomer, "invoice without a customer name was", "invoices without a customer name were")} left out; QuickBooks requires a customer.`,
 		);
 	}
 	if (syntheticInvoices > 0) {
 		warnings.push(
-			`${count(syntheticInvoices, "invoice had", "invoices had")} no stored line items and ${syntheticInvoices === 1 ? "was" : "were"} exported as a single line at the stored subtotal.`,
+			`${skippedWarning(syntheticInvoices, "invoice had", "invoices had")} no stored line items and ${syntheticInvoices === 1 ? "was" : "were"} exported as a single line at the stored subtotal.`,
 		);
 	}
-	if (invoiceCount === 0) {
+	if (included.length === 0) {
 		warnings.push("No invoices matched; the file has only the header row.");
 	}
 
 	return {
 		content: [QBO_INVOICE_HEADERS.join(","), ...dataRows].join("\n"),
 		warnings,
-		invoiceCount,
+		invoiceCount: included.length,
+		lineCount: dataRows.length,
+	};
+}
+
+/* -----------------------------------------------------------------------
+ * Zoho Books invoice import (T10 step 3) — `zoho_invoices_csv`.
+ *
+ * Zoho Books maps imported columns to fields in its wizard, so this profile
+ * ships a readable provisional header set rather than a rigid template. One
+ * row per line; the invoice number repeats so Zoho groups the lines. Auto-
+ * generate Invoice Numbers must stay OFF so Velure numbers survive.
+ *
+ * `Tax Name` is a blank-default config table (never invented) and
+ * `Tax Amount` carries the line VAT. Exclusions mirror QuickBooks; the file
+ * byte cap (10 MB) is Zoho's own documented limit. No in-file disclaimer row.
+ * --------------------------------------------------------------------- */
+
+export type ZohoInvoiceExportOptions = {
+	dateFormat?: AccountingDateFormat;
+	/** Workspace base currency; defaults to `NGN` when unknown. */
+	baseCurrency?: string | null;
+};
+
+export type BuiltZohoInvoiceExport = {
+	content: string;
+	warnings: string[];
+	invoiceCount: number;
+	lineCount: number;
+};
+
+export function buildZohoInvoicesExport(
+	rows: ComplianceExportInvoiceRow[],
+	options: ZohoInvoiceExportOptions = {},
+): BuiltZohoInvoiceExport {
+	const dateFormat = options.dateFormat ?? DEFAULT_ACCOUNTING_DATE_FORMAT;
+	const baseCurrency = String(options.baseCurrency ?? "NGN").toUpperCase();
+	const {
+		included,
+		skippedCreditNotes,
+		skippedDiscounts,
+		skippedCurrency,
+		skippedCustomer,
+	} = includeAccountingInvoices(rows, baseCurrency);
+	const warnings: string[] = [];
+	const dataRows: string[] = [];
+	let syntheticInvoices = 0;
+	let unTaxedLines = 0;
+
+	for (const invoice of included) {
+		if (invoice.synthetic) syntheticInvoices += 1;
+		for (const line of invoice.lines) {
+			const taxName = zohoVatNameFor(line.vatCategory);
+			if (line.vat > 0 && taxName === "") unTaxedLines += 1;
+			const quantity = line.synthetic ? 1 : line.quantity;
+			const price = line.synthetic ? line.lineGross : line.unitPrice;
+			dataRows.push(
+				[
+					csvTextCell(line.invoiceNumber),
+					csvTextCell(formatAccountingDate(line.issueDate, dateFormat)),
+					csvTextCell(formatAccountingDate(line.dueDate, dateFormat)),
+					csvTextCell(line.customerName),
+					csvTextCell(line.lineDescription),
+					csvTextCell(line.lineDescription),
+					csvValueCell(quantity),
+					csvValueCell(price),
+					csvValueCell(line.lineGross),
+					csvTextCell(taxName),
+					csvValueCell(line.vat),
+				].join(","),
+			);
+		}
+	}
+
+	if (skippedCreditNotes > 0) {
+		warnings.push(
+			`${skippedWarning(skippedCreditNotes, "credit note was", "credit notes were")} left out; import credit notes as credit notes in Zoho Books.`,
+		);
+	}
+	if (skippedDiscounts > 0) {
+		warnings.push(
+			`${skippedWarning(skippedDiscounts, "discounted invoice was", "discounted invoices were")} left out; the provisional Zoho columns carry no discount.`,
+		);
+	}
+	if (skippedCurrency > 0) {
+		warnings.push(
+			`${skippedWarning(skippedCurrency, "invoice in another currency was", "invoices in another currency were")} left out; the Zoho import uses the organisation base currency.`,
+		);
+	}
+	if (skippedCustomer > 0) {
+		warnings.push(
+			`${skippedWarning(skippedCustomer, "invoice without a customer name was", "invoices without a customer name were")} left out; Zoho Books requires a customer.`,
+		);
+	}
+	if (syntheticInvoices > 0) {
+		warnings.push(
+			`${skippedWarning(syntheticInvoices, "invoice had", "invoices had")} no stored line items and ${syntheticInvoices === 1 ? "was" : "were"} exported as a single line at the stored subtotal.`,
+		);
+	}
+	if (unTaxedLines > 0) {
+		warnings.push(
+			`${skippedWarning(unTaxedLines, "taxable line carries", "taxable lines carry")} VAT but no Zoho tax name is configured; choose a Tax Name in Zoho's import wizard.`,
+		);
+	}
+	if (included.length === 0) {
+		warnings.push("No invoices matched; the file has only the header row.");
+	}
+
+	const content = [ZOHO_INVOICE_HEADERS.join(","), ...dataRows].join("\n");
+	const bytes = new TextEncoder().encode(content).length;
+	if (bytes > ZOHO_MAX_FILE_BYTES) {
+		throw new RangeError(
+			`Zoho Books accepts files up to 10 MB; this export is ${(bytes / (1024 * 1024)).toFixed(1)} MB. Split it or wait for automatic splitting.`,
+		);
+	}
+
+	return {
+		content,
+		warnings,
+		invoiceCount: included.length,
 		lineCount: dataRows.length,
 	};
 }
@@ -1006,6 +1181,9 @@ export async function buildInvoiceExportArtifact(
 ): Promise<string> {
 	if (kind === "qbo_invoices_csv") {
 		throw new Error("Use buildQboInvoicesExport for qbo_invoices_csv.");
+	}
+	if (kind === "zoho_invoices_csv") {
+		throw new Error("Use buildZohoInvoicesExport for zoho_invoices_csv.");
 	}
 	if (kind === "accountant_lines_xlsx") {
 		return buildAccountantLinesXlsx(rows);

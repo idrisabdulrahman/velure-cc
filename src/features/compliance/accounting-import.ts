@@ -100,3 +100,47 @@ export const QBO_ITEM_TAX_CODE_CONFIG: Readonly<Record<VatCategory, string>> = {
 export function qboItemTaxCodeFor(category: VatCategory): string {
 	return QBO_ITEM_TAX_CODE_CONFIG[category] ?? "";
 }
+
+/* -----------------------------------------------------------------------
+ * Zoho Books invoice import
+ *
+ * Zoho Books maps imported columns to fields in its wizard, so the header
+ * order is not a rigid contract. These names are the provisional, readable set
+ * from the 2026-11-02 research and must be diffed against the vendor's sample
+ * file when it is available. Zoho accepts CSV/TSV/XLS up to 10 MB.
+ * --------------------------------------------------------------------- */
+
+export const ZOHO_INVOICE_HEADERS = [
+	"Invoice Number",
+	"Invoice Date",
+	"Due Date",
+	"Customer Name",
+	"Item Name",
+	"Item Description",
+	"Quantity",
+	"Item Price",
+	"Item Total",
+	"Tax Name",
+	"Tax Amount",
+] as const;
+
+/** Zoho Books' import help page: the file must not exceed 10 MB. */
+export const ZOHO_MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Zoho **tax names** are organisation-specific (the user's own tax list). The
+ * table is **empty by default**: every line emits a blank `Tax Name` rather
+ * than an invented tax. Fill it from the user's Zoho Books organisation; a
+ * taxable line with a blank name is warned about, never guessed. Keys are
+ * Velure line VAT categories.
+ */
+export const ZOHO_TAX_NAME_CONFIG: Readonly<Record<VatCategory, string>> = {
+	standard: "",
+	zero_rated: "",
+	exempt: "",
+};
+
+/** The configured Zoho tax name for a line, else `""`. */
+export function zohoVatNameFor(category: VatCategory): string {
+	return ZOHO_TAX_NAME_CONFIG[category] ?? "";
+}

@@ -1183,3 +1183,34 @@ is derived once and targets cannot drift.
 **Not in this slice.** Zoho and Xero profiles; the persisted date setting; the
 `tax_id_type` column; the conditional seller-Tax-ID invoice treatment; the
 WHT tracker.
+
+---
+
+## 2026-11-02 — T10 step 3b: Zoho Books invoice import
+
+**Task ID:** `zoho-invoice-export-2026-11`
+
+**Decision.** Ship the second accounting-system target behind the same canonical
+typed per-line row model as QuickBooks; no new money math.
+
+- Zoho's import wizard **maps columns to fields**, so the profile ships a
+  readable **provisional** header set (`ZOHO_INVOICE_HEADERS`) rather than a
+  rigid vendor template. It is explicitly unverified until a real Zoho sample
+  file is supplied.
+- **Auto-generate Invoice Numbers must stay off** in the Zoho wizard so Velure
+  numbers survive; the Exports card says so.
+- Zoho's import help page caps the upload at **10 MB**; the export aborts above
+  the byte cap rather than truncating. No row/invoice count is documented, so
+  none is invented.
+- `Tax Name` is a blank-default config table (`ZOHO_TAX_NAME_CONFIG`), never
+  invented; `Tax Amount` carries the canonical line VAT. A taxable line with a
+  blank tax name adds a warning telling the user to choose one in the wizard.
+- Exclusions match QuickBooks for the same reasons: credit notes, discounted
+  invoices, invoices outside the workspace base currency, and invoices without
+  a customer name.
+- No in-file disclaimer row (importer exception); the screen and audit entry
+  carry the informational framing.
+
+**Not in this slice.** Xero (fixed columns + persisted date setting); the
+`tax_id_type` column; the conditional seller-Tax-ID invoice treatment; the WHT
+tracker.

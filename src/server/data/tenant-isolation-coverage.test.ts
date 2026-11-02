@@ -91,6 +91,9 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	// QuickBooks CSV projection of already-loaded export rows; warnings and
 	// limits only, no reads.
 	buildQboInvoicesExport: "pure",
+	// Zoho Books CSV projection of already-loaded export rows; warnings and a
+	// byte guard only, no reads.
+	buildZohoInvoicesExport: "pure",
 	// einvoice-validation.ts — caller session selects active workspace, then
 	// invoice and customer reads both carry that workspace filter.
 	validateWorkspaceInvoice: "app-scoped",
