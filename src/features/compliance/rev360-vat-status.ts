@@ -23,3 +23,19 @@ export const REV360_VAT_STATUS_CONFIG: Readonly<Record<VatCategory, string>> = {
 export function rev360VatStatusFor(category: VatCategory): string {
 	return REV360_VAT_STATUS_CONFIG[category];
 }
+
+/**
+ * Rev360 Sales-sheet **product codes** (unconfirmed).
+ *
+ * The Rev360 Sales sheet reportedly uses "product codes" that the public
+ * sources do not explain. This map is **empty by default**: the resolver
+ * returns `""` for every line rather than inventing a code. Edit this table
+ * once a real template or code list is supplied. Keys are Velure line
+ * classification codes (`invoices.line_items[].classificationCode`).
+ */
+export const REV360_PRODUCT_CODE_CONFIG: Readonly<Record<string, string>> = {};
+
+/** The configured product code for a line classification, else `""`. */
+export function rev360ProductCodeFor(classificationCode: string): string {
+	return REV360_PRODUCT_CODE_CONFIG[classificationCode] ?? "";
+}

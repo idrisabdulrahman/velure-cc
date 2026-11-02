@@ -1,7 +1,13 @@
 import { resolveInvoiceDiscount } from "#/features/compliance/calculate";
 import { NRS_INFORMATIONAL_DISCLAIMER } from "#/features/compliance/nigeria";
-import { rev360VatStatusFor } from "#/features/compliance/rev360-vat-status";
-import { validateSupplierTin } from "#/features/compliance/supplier-profile";
+import {
+	rev360ProductCodeFor,
+	rev360VatStatusFor,
+} from "#/features/compliance/rev360-vat-status";
+import {
+	validateSupplierRcNumber,
+	validateSupplierTin,
+} from "#/features/compliance/supplier-profile";
 import type { DiscountMode } from "#/features/compliance/types";
 import { priceToKobo } from "#/features/invoices/line-money";
 
@@ -590,51 +596,63 @@ async function buildAccountantLinesXlsx(
 }
 
 /* -----------------------------------------------------------------------
- * Rev360 VAT sales schedule (T10 step 2 correction, 2026-11-01) — XLSX.
+ * Rev360 VAT sales data (T10 step 2 correction, 2026-11-02) — XLSX.
  *
- * NRS retired TaxPro Max and replaced it with **Rev360**
- * (selfservice.nrs.gov.ng, live ~April 2026). The Rev360 VAT sales-schedule
- * template is not public; the 2026-11-01 research supplies a six-field list
- * from pre-Rev360 guidance:
+ * Rev360 VAT is a **schedule-based Excel template**: NRS expects the official
+ * workbook filled in, and guides warn that editing its return-form sheet breaks
+ * the upload. Velure therefore does NOT generate an uploadable replacement.
+ * It exports **paste-ready Sales-sheet rows** for the official template, one
+ * row per invoice LINE, with invoice number/date appended for the accountant's
+ * cross-check.
  *
- *   beneficiary_name, beneficiary_tin, item, item_cost, item_description,
- *   vat_status
+ * Columns (the six template-named fields, then product code and cross-check):
+ *   beneficiary_name, beneficiary_tax_id, item, item_cost, item_description,
+ *   vat_status, product_code, invoice_number, invoice_date
  *
- * One row per invoice LINE. The layout is UNVERIFIED and the status labels
- * live in `REV360_VAT_STATUS_CONFIG`, so a real downloaded template only needs
- * that config changed, never this exporter. The buyer TIN prints the literal
- * `0` when it is unknown (blank, malformed, a placeholder, or the invoice has
- * no linked client). A credit note negates `item_cost`. Informational only;
- * never a filing-ready or NRS-cleared document (SPEC A2).
+ * The layout is UNVERIFIED against the live template. VAT status and product
+ * codes live in `rev360-vat-status.ts` (product codes default to blank, never
+ * invented). The buyer Tax ID prints the literal `0` when unknown (blank,
+ * malformed, a placeholder, or the invoice has no linked client) and accepts a
+ * TIN, an RC number or a NIN. A credit note negates `item_cost`. Informational
+ * only; never a filing-ready or NRS-cleared document (SPEC A2).
  * --------------------------------------------------------------------- */
 
 const REV360_VAT_HEADERS = [
 	"beneficiary_name",
-	"beneficiary_tin",
+	"beneficiary_tax_id",
 	"item",
 	"item_cost",
 	"item_description",
 	"vat_status",
+	"product_code",
+	"invoice_number",
+	"invoice_date",
 ] as const;
 
-const REV360_VAT_SHEET_NAME = "VAT sales schedule";
+const REV360_VAT_SHEET_NAME = "VAT sales data";
 
 /**
- * The in-file warning that the layout is unverified, on row 2 of the sheet
- * above the header row. Mirrors the UI label; never claims NRS compatibility.
+ * The in-file warning that this is paste-ready data, not an uploadable
+ * workbook, and that the layout is unverified. Mirrors the UI label; never
+ * claims NRS compatibility.
  */
 const REV360_LAYOUT_NOTE =
-	"Unverified layout - verify against your Rev360 VAT sales-schedule template before filing.";
+	"Paste into the official Rev360 template. Layout not verified against the live template.";
 
 /**
- * A TIN for a filing cell: the normalized digits when the value passes the
- * shared Nigerian TIN format/placeholder rule, otherwise the literal `0`
- * ("unknown"). Reuses `validateSupplierTin` so the buyer rule cannot drift
- * from the supplier-profile rule.
+ * A Tax ID for a filing cell: a TIN (10-12 digits), an RC number, or a NIN
+ * (11 digits) when it passes the shared supplier-profile rules, otherwise the
+ * literal `0` ("unknown"). TIN and NIN are covered by the 10-12 digit rule;
+ * RC numbers are validated and canonicalised separately. Placeholder and
+ * all-same-digit values are rejected by both, so they also print `0`.
  */
-function tinOrZero(value: unknown): string {
-	const result = validateSupplierTin(typeof value === "string" ? value : null);
-	return result.ok ? result.tin : "0";
+function taxIdOrZero(value: unknown): string {
+	if (typeof value !== "string") return "0";
+	const tin = validateSupplierTin(value);
+	if (tin.ok) return tin.tin;
+	const rc = validateSupplierRcNumber(value);
+	if (rc.ok) return rc.rcNumber;
+	return "0";
 }
 
 /** The lines to schedule: stored lines, or one synthetic row when none exist. */
@@ -654,10 +672,11 @@ function rev360LinesOf(row: ComplianceExportInvoiceRow): StoredExportLine[] {
 }
 
 /**
- * The six cells of one scheduled line. `item_cost` is the line's extended
+ * The nine cells of one scheduled line. `item_cost` is the line's extended
  * amount (quantity × unit price) in naira, negated for a credit note; the
- * unverified six-field layout has no discount or VAT-amount column. Velure
- * stores a single line label, so both `item` and `item_description` carry it.
+ * paste-ready layout has no discount or VAT-amount column. Velure stores a
+ * single line label, so both `item` and `item_description` carry it.
+ * `product_code` is blank unless the user has configured it.
  */
 function rev360VatRowForLine(
 	row: ComplianceExportInvoiceRow,
@@ -666,20 +685,23 @@ function rev360VatRowForLine(
 ): Array<string | number> {
 	return [
 		row.customer_name ?? "",
-		tinOrZero(row.customer_tin),
+		taxIdOrZero(row.customer_tin),
 		line.name,
 		naira(sign * line.grossKobo),
 		line.name,
 		rev360VatStatusFor(line.vatCategory),
+		rev360ProductCodeFor(line.classificationCode),
+		row.invoice_number ?? "",
+		row.issue_date ?? "",
 	];
 }
 
 /**
  * The XLSX projection. `invoice_exports.content` is a text column, so the
  * workbook bytes are stored base64-encoded (decoded on download with the
- * SpreadsheetML MIME). Row 1 = NRS disclaimer, row 2 = unverified-layout note,
- * row 3 = header, data from row 4. `item_cost` stays numeric so a spreadsheet
- * can total it; text cells are formula-lead guarded.
+ * SpreadsheetML MIME). Row 1 = NRS disclaimer, row 2 = paste-ready/unverified
+ * note, row 3 = header, data from row 4. `item_cost` stays numeric so a
+ * spreadsheet can total it; text cells are formula-lead guarded.
  */
 async function buildRev360VatScheduleXlsx(
 	rows: ComplianceExportInvoiceRow[],

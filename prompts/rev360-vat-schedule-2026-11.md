@@ -129,3 +129,16 @@ This is not a Midday parity port. Classification: N/A (local export feature).
 
 - 2026-11-01 (user research): TaxPro Max retired → Rev360; six-field XLSX
   replaces the provisional CSV; VAT status becomes a config table.
+
+## Scope changes
+
+- 2026-11-01 (user research): TaxPro Max retired → Rev360; six-field XLSX
+  replaces the provisional CSV; VAT status becomes a config table.
+- 2026-11-02 (user addendum): Rev360 VAT is a schedule-based official workbook,
+  so the export is **paste-ready Sales-sheet data**, not an uploadable file.
+  Added `invoice_number`/`invoice_date` cross-check columns and a configurable
+  (blank-default) `product_code`; renamed `beneficiary_tin` →
+  `beneficiary_tax_id` and accept TIN/NIN/RC; sheet note changed to "Paste into
+  the official Rev360 template. Layout not verified against the live template."
+  Explicitly **not** started: Tax ID kind recording, seller Tax ID on invoices,
+  and the WHT tracker (needs user answers/approval).

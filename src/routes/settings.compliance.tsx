@@ -114,7 +114,7 @@ function formatExportKind(value: string) {
 	if (value === "accountant_lines_csv") return "Accountant line export";
 	if (value === "accountant_lines_xlsx")
 		return "Accountant line export (Excel)";
-	if (value === "vat_sales_schedule_xlsx") return "VAT sales schedule (Rev360)";
+	if (value === "vat_sales_schedule_xlsx") return "VAT sales data (Rev360)";
 	return value
 		.split("_")
 		.filter(Boolean)
@@ -1258,12 +1258,12 @@ function ComplianceSettingsPage() {
 							<div className="grid gap-3 rounded-md border border-rule bg-paper-2 px-4 py-3">
 								<div>
 									<p className="text-sm font-medium text-ink">
-										VAT sales schedule (Rev360)
+										VAT sales data (Rev360)
 									</p>
 									<p className="mt-1 text-xs text-ink-3">
-										One row per invoice line for the Rev360 VAT filing; buyer
-										TIN is 0 when unknown. Unverified layout — verify against
-										your Rev360 template.
+										Paste-ready rows for the official Rev360 Sales sheet; buyer
+										Tax ID is 0 when unknown. Layout not verified against the
+										live template.
 									</p>
 								</div>
 								<Button
@@ -1276,7 +1276,7 @@ function ComplianceSettingsPage() {
 										});
 										downloadExportContent(result);
 										toast({
-											title: "VAT sales schedule generated",
+											title: "VAT sales data generated",
 											description: "Download started.",
 											variant: "success",
 										});

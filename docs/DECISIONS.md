@@ -1087,3 +1087,40 @@ not built.
   when a real submission payload is built, send the gross figure as payable
   unless the provider's schema says otherwise. Confidence: likely for Nigerian
   practice, unknown for the NRS payload. **Status: provisional.**
+
+---
+
+## 2026-11-02 — Rev360 addendum: paste-ready VAT data, Tax ID types, WHT credits
+
+**Task ID:** `rev360-vat-schedule-2026-11` (step 2 follow-up)
+
+**Question.** The 2026-11-02 addendum to `export-formats-and-answers.md`
+corrects the Rev360 VAT design and the Tax ID rule. What changes now?
+
+**Answer (user research, 2026-11-02).**
+
+- **Rev360 VAT is a schedule-based official Excel workbook.** The user fills
+  the Sales/Purchases/Adjustments sheets and the VAT Return Form sheet
+  auto-populates; guides warn that editing/hiding that sheet breaks the upload.
+  Velure must **not** generate an uploadable replacement. It now exports
+  **paste-ready Sales-sheet rows**: `beneficiary_name`, `beneficiary_tax_id`,
+  `item`, `item_cost`, `item_description`, `vat_status`, `product_code`,
+  `invoice_number`, `invoice_date` (one row per line). Row 2 of the sheet says
+  "Paste into the official Rev360 template. Layout not verified against the
+  live template."
+- **Tax ID accepts TIN, NIN or RC number.** Under the 2024 WHT regulations a
+  NIN (individuals) or RC number (companies) is acceptable where a TIN is not
+  available. The buyer Tax ID cell now accepts a 10-12 digit TIN/NIN or a
+  canonicalised RC number; unknown still prints `0`. The broader product
+  rename ("Tax ID (TIN, RC number or NIN)") and recording the ID kind are
+  **not yet implemented** — they need a stored type field and UI changes.
+- **VAT status and product codes stay config**, defaulting blank. Product codes
+  are empty because the sources do not explain them; never invent codes.
+- **Seller Tax ID prominence** and the missing-Tax-ID WHT warning are product
+  changes that alter the invoice layout; **awaiting user approval** (T-protocol).
+- **WHT credit tracker** stays a proposal. The addendum's five questions must be
+  answered before it is written. Do not build.
+- **Step 3 export settings:** date format is a user setting (default
+  `DD/MM/YYYY`, shown to the user); Zoho auto-numbering defaults **off** so
+  Velure numbers survive; QuickBooks keeps custom numbers only with "Custom
+  transaction numbers" on. Not built yet.

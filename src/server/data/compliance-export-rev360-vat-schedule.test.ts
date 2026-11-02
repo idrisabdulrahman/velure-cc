@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { NRS_INFORMATIONAL_DISCLAIMER } from "../../features/compliance/nigeria";
 import {
+	REV360_PRODUCT_CODE_CONFIG,
 	REV360_VAT_STATUS_CONFIG,
+	rev360ProductCodeFor,
 	rev360VatStatusFor,
 } from "../../features/compliance/rev360-vat-status";
 import {
@@ -11,15 +13,16 @@ import {
 } from "./compliance-export";
 
 /**
- * T10 step 2 correction (2026-11-01) — Rev360 VAT sales schedule
+ * T10 step 2 correction (2026-11-02 addendum) — Rev360 VAT sales data
  * (docs/EXPORT-FORMATS.md).
  *
- * NRS retired TaxPro Max; the Rev360 VAT sales schedule is a six-field XLSX
- * with one row per invoice LINE:
- *   beneficiary_name, beneficiary_tin, item, item_cost, item_description,
- *   vat_status
- * The buyer TIN prints the literal `0` when it is unknown. The status labels
- * come from `REV360_VAT_STATUS_CONFIG` (config, not hardcoded) and the layout
+ * Rev360 VAT is a schedule-based official workbook, so Velure exports
+ * **paste-ready Sales-sheet rows**, not an uploadable replacement. One row per
+ * invoice LINE:
+ *   beneficiary_name, beneficiary_tax_id, item, item_cost, item_description,
+ *   vat_status, product_code, invoice_number, invoice_date
+ * The buyer Tax ID (TIN/RC/NIN) prints the literal `0` when unknown. VAT status
+ * and product codes come from config (product codes default blank). The layout
  * is labelled unverified in the file itself.
  */
 
@@ -47,23 +50,29 @@ const EXCLUSIVE = {
 	netPayable: 1025,
 };
 
-/** Column indices of the Rev360 schedule (see EXPORT-FORMATS.md). */
+/** Column indices of the Rev360 paste-ready sales data. */
 const COL = {
 	beneficiaryName: 0,
-	beneficiaryTin: 1,
+	beneficiaryTaxId: 1,
 	item: 2,
 	itemCost: 3,
 	itemDescription: 4,
 	vatStatus: 5,
+	productCode: 6,
+	invoiceNumber: 7,
+	invoiceDate: 8,
 } as const;
 
 const HEADERS = [
 	"beneficiary_name",
-	"beneficiary_tin",
+	"beneficiary_tax_id",
 	"item",
 	"item_cost",
 	"item_description",
 	"vat_status",
+	"product_code",
+	"invoice_number",
+	"invoice_date",
 ];
 
 type Grid = Array<Array<string | number>>;
@@ -76,7 +85,7 @@ async function vatGrid(invoices: ComplianceExportInvoiceRow[]): Promise<Grid> {
 	);
 	const XLSX = await import("xlsx");
 	const workbook = XLSX.read(base64, { type: "base64" });
-	const sheet = workbook.Sheets["VAT sales schedule"];
+	const sheet = workbook.Sheets["VAT sales data"];
 	expect(sheet).toBeDefined();
 	const grid = XLSX.utils.sheet_to_json<Array<string | number | null>>(
 		sheet ?? workbook.Sheets[workbook.SheetNames[0]],
@@ -85,33 +94,38 @@ async function vatGrid(invoices: ComplianceExportInvoiceRow[]): Promise<Grid> {
 	return grid.map((row) => row.map((cell) => cell ?? ""));
 }
 
-/** Data rows only: drops the disclaimer, the layout note and the header. */
+/** Data rows only: drops the disclaimer, the note and the header. */
 async function dataRows(invoices: ComplianceExportInvoiceRow[]): Promise<Grid> {
 	const grid = await vatGrid(invoices);
 	return grid.slice(3);
 }
 
-describe("Rev360 VAT sales schedule layout", () => {
-	it("leads with the disclaimer, the unverified-layout note and the header", async () => {
+describe("Rev360 VAT sales data layout", () => {
+	it("leads with the disclaimer, the paste-ready note and the header", async () => {
 		const grid = await vatGrid([
 			{ ...BASE, line_items: TWO_LINE, compliance: EXCLUSIVE },
 		]);
 		expect(grid[0][0]).toBe(NRS_INFORMATIONAL_DISCLAIMER);
-		expect(String(grid[1][0])).toMatch(/unverified layout/i);
 		expect(String(grid[1][0])).toMatch(
-			/verify against your rev360 vat sales-schedule template/i,
+			/paste into the official rev360 template/i,
+		);
+		expect(String(grid[1][0])).toMatch(
+			/layout not verified against the live template/i,
 		);
 		expect(grid[2]).toEqual(HEADERS);
-		expect(grid).toHaveLength(5); // note + disclaimer + header + two lines
+		expect(grid).toHaveLength(5); // disclaimer + note + header + two lines
 	});
 
-	it("emits one row per invoice line", async () => {
+	it("emits one row per invoice line with the invoice keys repeated", async () => {
 		const grid = await dataRows([
 			{ ...BASE, line_items: TWO_LINE, compliance: EXCLUSIVE },
 		]);
 		expect(grid).toHaveLength(2);
 		expect(grid[0][COL.item]).toBe("Goods A");
 		expect(grid[1][COL.item]).toBe("Goods B");
+		expect(grid[0][COL.invoiceNumber]).toBe("INV-2026-0001");
+		expect(grid[1][COL.invoiceNumber]).toBe("INV-2026-0001");
+		expect(grid[0][COL.invoiceDate]).toBe("2026-01-01");
 	});
 
 	it("is rejected by the sync builder and must use the async artifact", () => {
@@ -121,17 +135,17 @@ describe("Rev360 VAT sales schedule layout", () => {
 	});
 });
 
-describe("Rev360 VAT sales schedule buyer TIN (unknown -> 0)", () => {
-	it("prints 0 when the buyer TIN is missing or the invoice is unlinked", async () => {
+describe("Rev360 VAT sales data buyer Tax ID (unknown -> 0)", () => {
+	it("prints 0 when the buyer Tax ID is missing or the invoice is unlinked", async () => {
 		const grid = await dataRows([
 			{ ...BASE, line_items: TWO_LINE, compliance: EXCLUSIVE },
 		]);
-		expect(grid[0][COL.beneficiaryTin]).toBe("0");
-		expect(grid[1][COL.beneficiaryTin]).toBe("0");
+		expect(grid[0][COL.beneficiaryTaxId]).toBe("0");
+		expect(grid[1][COL.beneficiaryTaxId]).toBe("0");
 	});
 
-	it("prints 0 for a blank or malformed TIN", async () => {
-		for (const customer_tin of ["", "   ", "123", "not-a-tin"]) {
+	it("prints 0 for a blank or malformed Tax ID", async () => {
+		for (const customer_tin of ["", "   ", "123", "not-a-tin", "RC-12"]) {
 			const grid = await dataRows([
 				{
 					...BASE,
@@ -140,17 +154,18 @@ describe("Rev360 VAT sales schedule buyer TIN (unknown -> 0)", () => {
 					compliance: EXCLUSIVE,
 				},
 			]);
-			expect(grid[0][COL.beneficiaryTin], customer_tin).toBe("0");
+			expect(grid[0][COL.beneficiaryTaxId], customer_tin).toBe("0");
 		}
 	});
 
-	it("prints 0 for a placeholder or all-same-digit TIN", async () => {
+	it("prints 0 for a placeholder or all-same-digit value", async () => {
 		for (const customer_tin of [
 			"1234567890",
 			"0123456789",
 			"9876543210",
 			"1111111111",
 			"000000000000",
+			"RC-0000000",
 		]) {
 			const grid = await dataRows([
 				{
@@ -160,27 +175,35 @@ describe("Rev360 VAT sales schedule buyer TIN (unknown -> 0)", () => {
 					compliance: EXCLUSIVE,
 				},
 			]);
-			expect(grid[0][COL.beneficiaryTin], customer_tin).toBe("0");
+			expect(grid[0][COL.beneficiaryTaxId], customer_tin).toBe("0");
 		}
 	});
 
-	it("passes a valid 10-12 digit buyer TIN through unchanged", async () => {
-		for (const tin of ["2345678901", "23456789012", "234567890123"]) {
+	it("accepts a TIN, an NIN (11 digits) and an RC number", async () => {
+		for (const taxId of [
+			"2345678901",
+			"23456789012",
+			"234567890123",
+			"12345678901",
+			"RC-1234567",
+			"RC1234567",
+		]) {
 			const grid = await dataRows([
 				{
 					...BASE,
-					customer_tin: tin,
+					customer_tin: taxId,
 					line_items: TWO_LINE,
 					compliance: EXCLUSIVE,
 				},
 			]);
-			expect(grid[0][COL.beneficiaryTin], tin).toBe(tin);
+			const expected = taxId.startsWith("RC") ? "RC-1234567" : taxId;
+			expect(grid[0][COL.beneficiaryTaxId], taxId).toBe(expected);
 		}
 	});
 });
 
-describe("Rev360 VAT sales schedule values", () => {
-	it("carries the beneficiary name, item label and extended line cost", async () => {
+describe("Rev360 VAT sales data values", () => {
+	it("carries the beneficiary, item, amount and cross-check keys", async () => {
 		const grid = await dataRows([
 			{ ...BASE, line_items: TWO_LINE, compliance: EXCLUSIVE },
 		]);
@@ -224,9 +247,30 @@ describe("Rev360 VAT sales schedule values", () => {
 		]);
 		expect(grid[0][COL.vatStatus]).toBe(rev360VatStatusFor("standard"));
 	});
+
+	it("leaves product codes blank until the user configures them", async () => {
+		expect(REV360_PRODUCT_CODE_CONFIG).toEqual({});
+		expect(rev360ProductCodeFor("")).toBe("");
+		expect(rev360ProductCodeFor("some-classification")).toBe("");
+		const grid = await dataRows([
+			{
+				...BASE,
+				line_items: [
+					{
+						name: "Goods A",
+						quantity: 1,
+						price: 100,
+						classificationCode: "some-classification",
+					},
+				],
+				compliance: EXCLUSIVE,
+			},
+		]);
+		expect(grid[0][COL.productCode]).toBe("");
+	});
 });
 
-describe("Rev360 VAT sales schedule sign, legacy and safety", () => {
+describe("Rev360 VAT sales data sign, legacy and safety", () => {
 	it("negates item_cost for a credit note but never the text", async () => {
 		const grid = await dataRows([
 			{
