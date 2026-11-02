@@ -114,8 +114,7 @@ function formatExportKind(value: string) {
 	if (value === "accountant_lines_csv") return "Accountant line export";
 	if (value === "accountant_lines_xlsx")
 		return "Accountant line export (Excel)";
-	if (value === "vat_sales_schedule_csv")
-		return "VAT sales schedule (TaxPro Max)";
+	if (value === "vat_sales_schedule_xlsx") return "VAT sales schedule (Rev360)";
 	return value
 		.split("_")
 		.filter(Boolean)
@@ -1259,11 +1258,12 @@ function ComplianceSettingsPage() {
 							<div className="grid gap-3 rounded-md border border-rule bg-paper-2 px-4 py-3">
 								<div>
 									<p className="text-sm font-medium text-ink">
-										VAT sales schedule (TaxPro Max)
+										VAT sales schedule (Rev360)
 									</p>
 									<p className="mt-1 text-xs text-ink-3">
-										One row per invoice for the TaxPro Max VAT filing; buyer TIN
-										is 0 when unknown. Provisional shape.
+										One row per invoice line for the Rev360 VAT filing; buyer
+										TIN is 0 when unknown. Unverified layout — verify against
+										your Rev360 template.
 									</p>
 								</div>
 								<Button
@@ -1272,7 +1272,7 @@ function ComplianceSettingsPage() {
 									className="border-rule bg-transparent"
 									onClick={async () => {
 										const result = await createExport({
-											kind: "vat_sales_schedule_csv",
+											kind: "vat_sales_schedule_xlsx",
 										});
 										downloadExportContent(result);
 										toast({
@@ -1283,7 +1283,7 @@ function ComplianceSettingsPage() {
 									}}
 								>
 									<Download className="h-4 w-4" />
-									Generate CSV
+									Generate Excel
 								</Button>
 							</div>
 						</div>

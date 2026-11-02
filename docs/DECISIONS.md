@@ -1023,3 +1023,67 @@ NRS honesty guard rejected "FIRS" in the new UI copy (SPEC A1-A3); the card
 now reads "TaxPro Max VAT filing".
 
 
+
+---
+
+## 2026-11-01 — T10 step 2 correction: Rev360 replaces TaxPro Max
+
+**Task ID:** `rev360-vat-schedule-2026-11`
+
+**Question.** The user supplied 2026-11-01 export research: is the step-2
+TaxPro Max-shaped VAT sales schedule still valid?
+
+**Answer (user research, 2026-11-01).** No. NRS **retired TaxPro Max and
+replaced it with Rev360** (selfservice.nrs.gov.ng, live around 30 April 2026;
+one source says 10 June 2026). Every earlier "TaxPro Max" reference must read
+"Rev360 (formerly TaxPro Max)". The Rev360 VAT sales-schedule template is not
+public, so its layout is unverified.
+
+**Decision.** Replace the provisional `vat_sales_schedule_csv` with
+`vat_sales_schedule_xlsx`:
+
+- **Six fields, exact order:** `beneficiary_name`, `beneficiary_tin`, `item`,
+  `item_cost`, `item_description`, `vat_status`.
+- **XLSX**, one row per invoice **line** (not per invoice). A1 =
+  `NRS_INFORMATIONAL_DISCLAIMER`; A2 = "Unverified layout - verify against your
+  Rev360 VAT sales-schedule template before filing."; row 3 = header.
+- **`beneficiary_tin` = `0`** when the buyer TIN is unknown (blank, malformed,
+  placeholder, or no linked client), reusing `validateSupplierTin`.
+- **`item_cost`** = line extended amount (quantity × unit price); negated for a
+  credit note. The unverified layout has no discount/VAT-amount column.
+- **VAT status is a config table**, `REV360_VAT_STATUS_CONFIG` in
+  `src/features/compliance/rev360-vat-status.ts` (provisional `VATable` /
+  `Zero-rated` / `Exempt`). Never hardcoded in the exporter; a real template
+  changes only the config.
+- **Seller TIN is dropped** (the six-field list has no seller column; Rev360
+  identifies the seller by login).
+
+**Migration.** `20261104000000_invoice_export_kinds_rev360_vat_schedule.sql`
+replaces `invoice_exports_kind_check` with the six prior kinds +
+`vat_sales_schedule_xlsx`, removing the retired `vat_sales_schedule_csv`. No
+row used the retired kind (verified: zero rows). Reversible; the applied
+`20261103000000` migration is untouched.
+
+**Not changed.** Money, numbering, issued-invoice immutability, audit-log path.
+Steps 3 (QBO/Zoho then Xero) and 4 (received-WHT tracker, proposal only) remain
+not built.
+
+---
+
+## 2026-11-01 — Answers logged from the export-format research (Q-D, Q-F, Q-H)
+
+**Task ID:** `rev360-vat-schedule-2026-11`
+
+- **Q-D (target segment) — recommended, awaiting confirmation.** Serve **small
+  businesses under ₦1bn turnover only** for the next release. Medium taxpayers
+  (₦1bn–₦5bn) are already in the e-invoicing mandate (from 1 July 2026,
+  enforcement January–March 2027) and Velure's sandbox cannot serve them; do
+  not use compliance claims aimed at them. **Status: unconfirmed.**
+- **Q-F (real pilots) — OPEN, user must fill in.** Weekly-active businesses
+  ___, paying ___, names/sectors (no personal data) ___. If zero, write `0`.
+  The agent must not invent a number. **Status: blocked.**
+- **Q-H (WHT and payable) — recommended, pending provider/accountant.** Keep
+  invoice totals at **gross**; show WHT as a separate payment-time deduction;
+  when a real submission payload is built, send the gross figure as payable
+  unless the provider's schema says otherwise. Confidence: likely for Nigerian
+  practice, unknown for the NRS payload. **Status: provisional.**

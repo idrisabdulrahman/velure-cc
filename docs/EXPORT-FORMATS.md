@@ -47,7 +47,7 @@ the sheet, above the header row.
 | `normalized_accounting` | `.json` | all rows as JSON | `{generatedAt, disclaimer, invoices[]}` |
 | `accountant_lines_csv` | `.csv` | one row per invoice **line** | disclaimer line, header, data |
 | `accountant_lines_xlsx` | `.xlsx` | one row per invoice **line** | sheet `Invoice lines`; A1 = disclaimer; row 2 = header; data from row 3 |
-| `vat_sales_schedule_csv` | `.csv` | one row per invoice | disclaimer line, header, data (see *VAT sales schedule* below) |
+| `vat_sales_schedule_xlsx` | `.xlsx` | one row per invoice **line** | sheet `VAT sales schedule`; A1 = disclaimer; A2 = unverified-layout note; row 3 = header; data from row 4 (see *Rev360 VAT sales schedule* below) |
 
 The three invoice-level CSV kinds share one writer; today they emit the same
 columns (`invoiceNumber… dueDate`) plus the provisional accountant columns
@@ -187,98 +187,100 @@ file name ends `.xlsx`; CSV/JSON kinds stay plain text.
 
 ---
 
-## VAT sales schedule (T10 step 2, 2026-11-01)
+## Rev360 VAT sales schedule (T10 step 2, corrected 2026-11-01)
 
-Kind `vat_sales_schedule_csv`. Purpose: a VAT-only schedule for manual entry
-against the FIRS **TaxPro Max** platform (or an accountant's VAT return): one
-row per invoice, with the buyer TIN and the taxable/VAT split.
+Kind `vat_sales_schedule_xlsx`. Purpose: a VAT sales schedule for the NRS
+**Rev360** platform (formerly TaxPro Max) or an accountant's VAT return: one
+row per invoice **line**, in the six fields the 2026-11-01 research lists.
 
-> **Provisional shape.** No official TaxPro Max sample has been supplied, so
-> the **column order, the exact column names and the CSV-vs-XLSX choice are
-> best-effort and may change** once a sample is available. This file is an
-> informational export; it is **not** an NRS/TaxPro Max-validated or cleared
-> filing (SPEC A2).
+> **Unverified layout — verify against your Rev360 template.** NRS retired
+> TaxPro Max and replaced it with Rev360 (selfservice.nrs.gov.ng, live around
+> April 2026). No public Rev360 VAT-template file exists, and the field list
+> below comes from pre-Rev360 guidance. The **column order, exact headings and
+> the XLSX choice are unverified** and may change once a real downloaded
+> template is supplied. This file is an informational export; it is **not** an
+> NRS/Rev360-validated or cleared filing (SPEC A2). The same warning is written
+> on row 2 of the sheet and shown on the Exports card.
 
 ### Row semantics
 
-- One row per invoice, in `invoices.id` order.
-- The buyer TIN comes from the invoice's linked client (`clients.tax_id`); the
-  seller TIN comes from the workspace (`workspaces.tax_id`).
+- One row per invoice **line**, in `invoices.id` order, lines in stored order.
+- `beneficiary_name` and `beneficiary_tin` repeat on every line of an invoice.
+- The buyer TIN comes from the invoice's linked client (`clients.tax_id`).
 - **Unknown TIN prints `0`.** A TIN is "unknown" when it is blank, fails the
-  shared Nigerian TIN format check (10-12 digits), is an obvious placeholder
-  /all-same-digit value, or the invoice has no linked client. The literal
-  string `0` is written so a manual filing has a value to key on; it must
-  never be read as a real, verified TIN.
+  shared Nigerian TIN format check (10-12 digits), is an obvious placeholder /
+  all-same-digit value, or the invoice has no linked client. The literal string
+  `0` is written so a manual filing has a value to key on; it must never be
+  read as a real, verified TIN.
+- The seller is identified by the Rev360 login, so the schedule carries no
+  seller column. (The earlier provisional CSV carried one; it was dropped.)
 
 ### Column reference
 
 | # | Column | Tag | Notes |
 | --- | --- | --- | --- |
-| 1 | `supplierTin` | `[derived]` | `workspaces.tax_id`; `0` when unknown |
-| 2 | `customerTin` | `[derived]` | linked `clients.tax_id`; **`0` when unknown** |
-| 3 | `customerName` | `[stored]` | `invoices.customer_name` |
-| 4 | `invoiceNumber` | `[stored]` | |
-| 5 | `invoiceDate` | `[stored]` | `issue_date` |
-| 6 | `description` | `[inferred]` | first stored line name (formula-lead guarded); `(no line items recorded)` when none |
-| 7 | `taxableAmount` | `[computed]` | VAT-exclusive taxable value (rule below) |
-| 8 | `vatAmount` | `[derived]` | stored `compliance.totalTax`, never recomputed |
-| 9 | `totalAmount` | `[computed]` | `taxableAmount + vatAmount` |
-| 10 | `documentType` | `[stored]` | defaults `standard` |
-| 11 | `currency` | `[stored]` | |
+| 1 | `beneficiary_name` | `[stored]` | `invoices.customer_name` |
+| 2 | `beneficiary_tin` | `[derived]` | linked `clients.tax_id`; **`0` when unknown** |
+| 3 | `item` | `[stored]` | stored line name (formula-lead guarded) |
+| 4 | `item_cost` | `[computed]` | line extended amount: `quantity × unitPrice` in naira; negated for a credit note |
+| 5 | `item_description` | `[inferred]` | the same line name; Velure stores a single line label, so both `item` and `item_description` carry it (formula-lead guarded) |
+| 6 | `vat_status` | `[derived]` | from `REV360_VAT_STATUS_CONFIG` (see below) |
 
-### Taxable computation (`taxableAmount`)
+### VAT status config table
 
-Recomputed with the same rule as `calculateInvoiceCompliance`, from the stored
-snapshot (never re-deriving tax from a guessed rate):
+`vat_status` is **not hardcoded** in the exporter. It is resolved through
+`src/features/compliance/rev360-vat-status.ts`:
 
-- `taxableBase = subtotal − beforeTaxDiscount`, where `beforeTaxDiscount` is the
-  invoice-level discount only for `invoice_before_tax` and the summed line
-  discounts for line mode; an **`invoice_after_tax` discount does not reduce
-  the taxable base** (tax was already computed on the pre-discount base).
-- **Exclusive** (`exclusive_rate`): `taxableAmount = taxableBase`,
-  `totalAmount = taxableBase + vatAmount`.
-- **Inclusive** (`inclusive_rate`): the stored prices already contain VAT, so
-  `taxableAmount = taxableBase − vatAmount`, `totalAmount = taxableBase`.
-- **No VAT** (`none`/`exempt`/`zero_rated`): `vatAmount = 0`,
-  `taxableAmount = totalAmount = taxableBase`.
-- Legacy rows without a stored `taxTreatment` infer inclusive exactly like the
-  accountant export (`grandTotal = subtotal − discount` and VAT > 0 → inclusive).
+| Line `vatCategory` | Configured label (unverified) |
+| --- | --- |
+| `standard` | `VATable` |
+| `zero_rated` | `Zero-rated` |
+| `exempt` | `Exempt` |
 
-Therefore `taxableAmount + vatAmount = totalAmount` in every mode. For an
-after-tax discount this `totalAmount` is the **pre-discount** VAT-able total
-(the commercial discount is applied after tax), so it can exceed the invoice
-`grandTotal`; that is intentional and documented.
-
-### Sign convention
-
-Credit notes negate `taxableAmount`, `vatAmount` and `totalAmount`, matching
-the other exports. Text columns (TINs, name, number, description, dates, doc
-type, currency) are never negated.
+A missing/unknown category defaults to `standard`. When a real Rev360 template
+is supplied, change only this config map — never the exporter or the tests'
+column contract.
 
 ### Layout and storage
 
-CSV only in this step: a leading `JSON.stringify(NRS_INFORMATIONAL_DISCLAIMER)`
-line, then the header row, then one data row per invoice. Free-text cells are
-formula-lead guarded (`= + - @ TAB CR` → leading apostrophe). Stored as plain
-UTF-8 text in `invoice_exports.content`; the file name ends `.csv`. An `.xlsx`
-variant is **not built**.
+XLSX only. Row 1 (A1) = `NRS_INFORMATIONAL_DISCLAIMER`; row 2 = the
+unverified-layout note; row 3 = the six headers; data from row 4. `item_cost`
+is a numeric cell so a spreadsheet can total it; text cells are formula-lead
+guarded (`= + - @ TAB CR` → leading apostrophe). The workbook bytes are stored
+**base64-encoded** in `invoice_exports.content` and decoded on download with
+the SpreadsheetML MIME (same as `accountant_lines_xlsx`); the file name ends
+`.xlsx`.
+
+### Credit notes
+
+A `credit_note` negates `item_cost` only. Text columns (name, TIN, item,
+description, status) are never negated.
+
+### Legacy and empty input
+
+An invoice with no stored line items gets **one synthetic row**,
+`item = "(no line items recorded)"`, `item_cost =` the stored subtotal (else the
+paid amount). Missing snapshot values never appear as `null`/`NaN`.
 
 ---
 
 ## Not built yet (planned T10 order)
 
-1. ~~**TaxPro Max-shaped VAT sales schedule**~~ — **built** as
-   `vat_sales_schedule_csv` (provisional; see above).
+1. ~~**Rev360 VAT sales schedule**~~ — **built** as
+   `vat_sales_schedule_xlsx` (six fields, XLSX, per line; unverified layout —
+   verify against the Rev360 template; see above).
 2. **QBO/Zoho import CSVs, then Xero** — per-accounting-system import files
-   respecting each system's row limits. Not built.
+   respecting each system's row limits. Not built. One canonical flat export
+   (one row per invoice line) plus per-target mapping profiles; only Xero has
+   a rigid heading/order template.
 3. **Received-WHT credit tracker** — payment-time withholding credits
    receivable from clients. Proposal only; **not built** and not scheduled
    without product review (lightweight inventory/product boundary is the
    first constraint).
-4. Steps 2–3 require official TaxPro Max / QBO / Zoho / Xero samples to
-   confirm column order and row limits; the format doc will gain a new
-   section per delivered file. Every new sheet format will restate the
-   disclaimer rule above.
+4. Step 2 needs a real **Rev360 VAT template** to lock the layout; step 3
+   needs the QBO sample CSV, Xero template and Zoho sample to lock headings
+   and row limits. Until then the exporters stay config-driven and labelled
+   unverified. Every new sheet format restates the disclaimer rule above.
 
 ## Known limitations
 

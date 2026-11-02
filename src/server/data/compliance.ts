@@ -435,7 +435,7 @@ async function loadAllExportInvoices(
 	}
 	// Only the VAT sales schedule needs the buyer TIN, which lives on the
 	// client, not on the invoice. Resolve it once per workspace for that kind.
-	if (kind !== "vat_sales_schedule_csv") return rows;
+	if (kind !== "vat_sales_schedule_xlsx") return rows;
 	const tinByClientId = await loadClientTinMap(client, workspaceId);
 	return rows.map((row) => ({
 		...row,
@@ -455,7 +455,7 @@ export async function createInvoiceExport(
 	if (!workspaceId) throw new Error("Workspace not found.");
 	const { data: workspace } = await client
 		.from("workspaces")
-		.select("id, name, legal_name, tax_id")
+		.select("id, name, legal_name")
 		.eq("id", workspaceId)
 		.single();
 	const source = workspace?.legal_name || workspace?.name || "VELURE";
@@ -467,13 +467,11 @@ export async function createInvoiceExport(
 			.toUpperCase() || "VELURE";
 	const rows = await loadAllExportInvoices(client, workspaceId, kind);
 	const now = Date.now();
-	const content = await buildInvoiceExportArtifact(kind, rows, now, {
-		sellerTin: workspace?.tax_id ?? null,
-	});
+	const content = await buildInvoiceExportArtifact(kind, rows, now);
 	const fileExtension =
 		kind === "normalized_accounting"
 			? "json"
-			: kind === "accountant_lines_xlsx"
+			: kind === "accountant_lines_xlsx" || kind === "vat_sales_schedule_xlsx"
 				? "xlsx"
 				: "csv";
 	const fileName = `${prefix}-${kind}-${now}.${fileExtension}`;

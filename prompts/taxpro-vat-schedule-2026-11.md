@@ -190,3 +190,7 @@ No Midday source is ported.
 ## Scope changes
 
 - (none)
+- 2026-11-01 (superseded): NRS retired TaxPro Max in favour of **Rev360**.
+  This CSV shape is replaced by `vat_sales_schedule_xlsx` (six fields, XLSX,
+  one row per line, unverified layout). See
+  `prompts/rev360-vat-schedule-2026-11.md`. The history above is retained.

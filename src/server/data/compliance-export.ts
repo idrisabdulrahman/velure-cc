@@ -1,5 +1,6 @@
 import { resolveInvoiceDiscount } from "#/features/compliance/calculate";
 import { NRS_INFORMATIONAL_DISCLAIMER } from "#/features/compliance/nigeria";
+import { rev360VatStatusFor } from "#/features/compliance/rev360-vat-status";
 import { validateSupplierTin } from "#/features/compliance/supplier-profile";
 import type { DiscountMode } from "#/features/compliance/types";
 import { priceToKobo } from "#/features/invoices/line-money";
@@ -12,8 +13,8 @@ export type ComplianceExportKind =
 	/** T10 step 1 (`docs/EXPORT-FORMATS.md`): one row per invoice line. */
 	| "accountant_lines_csv"
 	| "accountant_lines_xlsx"
-	/** T10 step 2: provisional TaxPro Max-shaped VAT sales schedule. */
-	| "vat_sales_schedule_csv";
+	/** T10 step 2 (Rev360): six-field VAT sales schedule, XLSX, per line. */
+	| "vat_sales_schedule_xlsx";
 
 export type ComplianceExportInvoiceRow = {
 	invoice_number: string | null;
@@ -36,12 +37,6 @@ export type ComplianceExportInvoiceRow = {
 	 * when the invoice has no client link. Only the VAT sales schedule reads it.
 	 */
 	customer_tin?: string | null;
-};
-
-/** Extra per-export context that is not part of an invoice row. */
-export type ComplianceExportMeta = {
-	/** Workspace (seller) TIN, from `workspaces.tax_id`. */
-	sellerTin?: string | null;
 };
 
 /**
@@ -185,7 +180,6 @@ export function buildInvoiceExportContent(
 	kind: ComplianceExportKind,
 	rows: ComplianceExportInvoiceRow[],
 	generatedAt: number,
-	meta: ComplianceExportMeta = {},
 ): string {
 	if (kind === "normalized_accounting") {
 		return JSON.stringify(
@@ -217,30 +211,10 @@ export function buildInvoiceExportContent(
 		].join("\n");
 	}
 
-	if (kind === "vat_sales_schedule_csv") {
-		return [
-			JSON.stringify(NRS_INFORMATIONAL_DISCLAIMER),
-			VAT_SCHEDULE_HEADERS.join(","),
-			...rows
-				.map((row) => vatScheduleRowForInvoice(row, meta.sellerTin))
-				.map((cells) =>
-					cells
-						.map((cell) =>
-							typeof cell === "number"
-								? JSON.stringify(cell)
-								: csvTextCell(cell),
-						)
-						.join(","),
-				),
-		].join("\n");
-	}
-
-	// The workbook needs async serialization; going through the sync builder
-	// would silently emit CSV bytes named `.xlsx`.
-	if (kind === "accountant_lines_xlsx") {
-		throw new Error(
-			"Use buildInvoiceExportArtifact for accountant_lines_xlsx.",
-		);
+	// The workbook kinds need async serialization; going through the sync
+	// builder would silently emit CSV bytes named `.xlsx`.
+	if (kind === "accountant_lines_xlsx" || kind === "vat_sales_schedule_xlsx") {
+		throw new Error(`Use buildInvoiceExportArtifact for ${kind}.`);
 	}
 
 	return [
@@ -616,177 +590,135 @@ async function buildAccountantLinesXlsx(
 }
 
 /* -----------------------------------------------------------------------
- * VAT sales schedule (T10 step 2) — `docs/EXPORT-FORMATS.md`.
+ * Rev360 VAT sales schedule (T10 step 2 correction, 2026-11-01) — XLSX.
  *
- * A provisional, TaxPro Max-shaped VAT-only schedule, one row per invoice.
- * The buyer TIN prints the literal `0` when it is unknown (blank, malformed,
- * a placeholder, or the invoice has no linked client) so a manual filing has
- * a value to key on. Taxable/VAT come from the stored snapshot with the same
- * discount rule `calculateInvoiceCompliance` uses, so
- * `taxableAmount + vatAmount = totalAmount` in every mode.
+ * NRS retired TaxPro Max and replaced it with **Rev360**
+ * (selfservice.nrs.gov.ng, live ~April 2026). The Rev360 VAT sales-schedule
+ * template is not public; the 2026-11-01 research supplies a six-field list
+ * from pre-Rev360 guidance:
+ *
+ *   beneficiary_name, beneficiary_tin, item, item_cost, item_description,
+ *   vat_status
+ *
+ * One row per invoice LINE. The layout is UNVERIFIED and the status labels
+ * live in `REV360_VAT_STATUS_CONFIG`, so a real downloaded template only needs
+ * that config changed, never this exporter. The buyer TIN prints the literal
+ * `0` when it is unknown (blank, malformed, a placeholder, or the invoice has
+ * no linked client). A credit note negates `item_cost`. Informational only;
+ * never a filing-ready or NRS-cleared document (SPEC A2).
  * --------------------------------------------------------------------- */
 
-const VAT_SCHEDULE_HEADERS = [
-	"supplierTin",
-	"customerTin",
-	"customerName",
-	"invoiceNumber",
-	"invoiceDate",
-	"description",
-	"taxableAmount",
-	"vatAmount",
-	"totalAmount",
-	"documentType",
-	"currency",
+const REV360_VAT_HEADERS = [
+	"beneficiary_name",
+	"beneficiary_tin",
+	"item",
+	"item_cost",
+	"item_description",
+	"vat_status",
 ] as const;
+
+const REV360_VAT_SHEET_NAME = "VAT sales schedule";
+
+/**
+ * The in-file warning that the layout is unverified, on row 2 of the sheet
+ * above the header row. Mirrors the UI label; never claims NRS compatibility.
+ */
+const REV360_LAYOUT_NOTE =
+	"Unverified layout - verify against your Rev360 VAT sales-schedule template before filing.";
 
 /**
  * A TIN for a filing cell: the normalized digits when the value passes the
  * shared Nigerian TIN format/placeholder rule, otherwise the literal `0`
- * ("unknown"). Reuses `validateSupplierTin` so the buyer and seller rules
- * cannot drift from the supplier-profile rule.
+ * ("unknown"). Reuses `validateSupplierTin` so the buyer rule cannot drift
+ * from the supplier-profile rule.
  */
 function tinOrZero(value: unknown): string {
 	const result = validateSupplierTin(typeof value === "string" ? value : null);
 	return result.ok ? result.tin : "0";
 }
 
-type VatScheduleCells = Array<string | number>;
-
-function vatScheduleRowForInvoice(
-	row: ComplianceExportInvoiceRow,
-	sellerTin: string | null | undefined,
-): VatScheduleCells {
-	const compliance = (row.compliance ?? {}) as Record<string, unknown>;
-	const settings = (row.template_settings ?? {}) as Record<string, unknown>;
-
+/** The lines to schedule: stored lines, or one synthetic row when none exist. */
+function rev360LinesOf(row: ComplianceExportInvoiceRow): StoredExportLine[] {
 	const lines = storedLinesOf(row);
-	const synthetic = lines.length === 0;
+	if (lines.length > 0) return lines;
 
-	// Stored subtotal is authoritative; legacy rows fall back to line sums,
-	// then the paid amount (mirrors the accountant export).
-	let subtotalTargetKobo: number;
-	if (numeric(compliance.subtotal) !== undefined) {
-		subtotalTargetKobo = assertKobo(
-			koboOfStored(compliance.subtotal),
-			"invoice subtotal",
-		);
-	} else {
-		const lineSum = lines.reduce((sum, line) => sum + line.grossKobo, 0);
-		subtotalTargetKobo = assertKobo(
-			lineSum > 0 ? lineSum : Math.max(0, koboOfStored(row.payment_amount)),
-			"invoice subtotal",
-		);
-	}
+	const compliance = (row.compliance ?? {}) as Record<string, unknown>;
+	const explicit = numeric(compliance.subtotal);
+	// Stored subtotal is authoritative; legacy rows fall back to the line sum
+	// (already empty here), then the paid amount (mirrors the accountant export).
+	const subtotalKobo =
+		explicit !== undefined
+			? koboOfStored(explicit)
+			: Math.max(0, koboOfStored(row.payment_amount));
+	return syntheticLine(assertKobo(subtotalKobo, "invoice subtotal"));
+}
 
-	const workingLines = synthetic ? syntheticLine(subtotalTargetKobo) : lines;
-
-	// Same discount engine as the calculator / accountant export. A malformed
-	// legacy combination degrades to no discount instead of aborting.
-	let mode: DiscountMode = "none";
-	let invoiceDiscountMinor = 0;
-	let lineDiscountMinor = 0;
-	try {
-		const resolved = resolveInvoiceDiscount({
-			lineItems: workingLines.map((line) => ({
-				quantity: line.quantity,
-				price: naira(line.unitPriceKobo),
-				discount: naira(line.ownDiscountKobo),
-			})),
-			discount:
-				settings.includeDiscount === true
-					? naira(koboOfStored(settings.discount))
-					: 0,
-			discountMode:
-				typeof settings.discountMode === "string"
-					? (settings.discountMode as DiscountMode)
-					: undefined,
-		});
-		mode = resolved.mode;
-		invoiceDiscountMinor = resolved.invoiceDiscountMinor;
-		lineDiscountMinor = resolved.lineDiscountMinor;
-	} catch {
-		mode = "none";
-		invoiceDiscountMinor = 0;
-		lineDiscountMinor = 0;
-	}
-
-	// Only before-tax and line discounts reduce the taxable base; an after-tax
-	// discount is applied to the total after tax (calculate.ts:279-303).
-	const beforeTaxDiscountMinor =
-		mode === "invoice_before_tax"
-			? invoiceDiscountMinor
-			: mode === "line"
-				? lineDiscountMinor
-				: 0;
-	const taxableBaseKobo = assertKobo(
-		subtotalTargetKobo - beforeTaxDiscountMinor,
-		"taxable base",
-	);
-
-	const vatKobo = assertKobo(
-		numeric(compliance.totalTax) !== undefined
-			? koboOfStored(compliance.totalTax)
-			: 0,
-		"invoice vat",
-	);
-	const grandTotalKobo =
-		numeric(compliance.grandTotal) !== undefined
-			? assertKobo(koboOfStored(compliance.grandTotal), "grand total")
-			: 0;
-	const treatment = compliance.taxTreatment;
-	const discountTotalKobo = invoiceDiscountMinor + lineDiscountMinor;
-	// Legacy rows without a stored treatment infer inclusive exactly like the
-	// accountant export (grand == subtotal − discount while VAT > 0).
-	const inclusive =
-		typeof treatment === "string"
-			? treatment === "inclusive_rate"
-			: vatKobo > 0 &&
-				grandTotalKobo === subtotalTargetKobo - discountTotalKobo;
-
-	const taxableKobo = inclusive
-		? assertKobo(taxableBaseKobo - vatKobo, "taxable amount")
-		: taxableBaseKobo;
-	const totalKobo = inclusive
-		? taxableBaseKobo
-		: assertKobo(taxableBaseKobo + vatKobo, "total amount");
-
-	const firstLine = workingLines[0];
-	const description =
-		firstLine && firstLine.name.trim().length > 0
-			? firstLine.name
-			: ACCOUNTANT_NO_LINE_LABEL;
-
-	const sign = row.document_type === "credit_note" ? -1 : 1;
-
+/**
+ * The six cells of one scheduled line. `item_cost` is the line's extended
+ * amount (quantity × unit price) in naira, negated for a credit note; the
+ * unverified six-field layout has no discount or VAT-amount column. Velure
+ * stores a single line label, so both `item` and `item_description` carry it.
+ */
+function rev360VatRowForLine(
+	row: ComplianceExportInvoiceRow,
+	line: StoredExportLine,
+	sign: number,
+): Array<string | number> {
 	return [
-		tinOrZero(sellerTin),
-		tinOrZero(row.customer_tin),
 		row.customer_name ?? "",
-		row.invoice_number ?? "",
-		row.issue_date ?? "",
-		description,
-		naira(sign * taxableKobo),
-		naira(sign * vatKobo),
-		naira(sign * totalKobo),
-		documentTypeForExportRow(row),
-		row.currency ?? "",
+		tinOrZero(row.customer_tin),
+		line.name,
+		naira(sign * line.grossKobo),
+		line.name,
+		rev360VatStatusFor(line.vatCategory),
 	];
 }
 
 /**
- * The stored artifact for `createInvoiceExport`: `accountant_lines_xlsx`
- * needs async workbook serialization (base64 text in `content`), the other
- * kinds are plain strings.
+ * The XLSX projection. `invoice_exports.content` is a text column, so the
+ * workbook bytes are stored base64-encoded (decoded on download with the
+ * SpreadsheetML MIME). Row 1 = NRS disclaimer, row 2 = unverified-layout note,
+ * row 3 = header, data from row 4. `item_cost` stays numeric so a spreadsheet
+ * can total it; text cells are formula-lead guarded.
+ */
+async function buildRev360VatScheduleXlsx(
+	rows: ComplianceExportInvoiceRow[],
+): Promise<string> {
+	const XLSX = await import("xlsx");
+	const sheetData: Array<Array<string | number | null>> = [
+		[NRS_INFORMATIONAL_DISCLAIMER],
+		[REV360_LAYOUT_NOTE],
+		[...REV360_VAT_HEADERS],
+		...rows.flatMap((row) => {
+			const sign = row.document_type === "credit_note" ? -1 : 1;
+			return rev360LinesOf(row).map((line) =>
+				rev360VatRowForLine(row, line, sign).map((cell) =>
+					typeof cell === "string" ? guardFormulaLead(cell) : cell,
+				),
+			);
+		}),
+	];
+	const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+	const workbook = XLSX.utils.book_new();
+	XLSX.utils.book_append_sheet(workbook, worksheet, REV360_VAT_SHEET_NAME);
+	return XLSX.write(workbook, { bookType: "xlsx", type: "base64" });
+}
+
+/**
+ * The stored artifact for `createInvoiceExport`: the XLSX kinds need async
+ * workbook serialization (base64 text in `content`), the other kinds are
+ * plain strings.
  */
 export async function buildInvoiceExportArtifact(
 	kind: ComplianceExportKind,
 	rows: ComplianceExportInvoiceRow[],
 	generatedAt: number,
-	meta: ComplianceExportMeta = {},
 ): Promise<string> {
 	if (kind === "accountant_lines_xlsx") {
 		return buildAccountantLinesXlsx(rows);
 	}
-	return buildInvoiceExportContent(kind, rows, generatedAt, meta);
+	if (kind === "vat_sales_schedule_xlsx") {
+		return buildRev360VatScheduleXlsx(rows);
+	}
+	return buildInvoiceExportContent(kind, rows, generatedAt);
 }
