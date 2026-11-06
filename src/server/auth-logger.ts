@@ -30,6 +30,18 @@ export function redactEmails(value: string): string {
 	return value.replace(EMAIL_PATTERN, REDACTED);
 }
 
+/**
+ * Depth-limited, email-redacting walk over arbitrary log data.
+ *
+ * Exported so other server loggers (`src/server/observability.ts`) share the
+ * exact same PII rule instead of re-implementing it. See the `redact` contract
+ * below: strings are email-redacted, Errors become plain objects with a
+ * redacted `stack`, and traversal stops at `MAX_DEPTH`.
+ */
+export function redactLogValue(value: unknown, depth = 0): unknown {
+	return redact(value, depth);
+}
+
 function redact(value: unknown, depth = 0): unknown {
 	if (typeof value === "string") return redactEmails(value);
 

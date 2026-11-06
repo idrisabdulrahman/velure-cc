@@ -14,6 +14,7 @@ type AuthSession = {
 	user: {
 		id: string;
 		email: string;
+		emailVerified?: boolean | null;
 		twoFactorEnabled?: boolean | null;
 	};
 };

@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-router";
 import { Keyboard } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { VelureSymbol } from "#/components/brand/velure-symbol";
+import { InvoiclySymbol } from "#/components/brand/invoicly-symbol";
 import { ThemeToggle } from "#/components/theme/theme-toggle";
 import { AppLoader } from "#/components/ui/app-loader";
 import { Button } from "#/components/ui/button";
@@ -16,6 +16,11 @@ import { Input } from "#/components/ui/input";
 import { Spinner } from "#/components/ui/spinner";
 import { authClient } from "#/lib/auth-client";
 import { useWorkspaceActions } from "#/lib/auth-hook";
+import {
+	appCallbackURL,
+	authRedirectPath,
+	verificationCallbackURL,
+} from "#/lib/auth-redirect";
 
 export const Route = createLazyFileRoute("/auth")({
 	component: AuthPage,
@@ -57,6 +62,22 @@ function authErrorStatus(error: unknown) {
 
 	const numericStatus = Number.parseInt(status, 10);
 	return Number.isFinite(numericStatus) ? numericStatus : undefined;
+}
+
+/**
+ * Better Auth returns `403` with the message "Email not verified" (no `code`
+ * field in 1.4.9) when a password account has not confirmed its address. The
+ * sign-in attempt also triggers an automatic resend when `sendOnSignIn` is on,
+ * so the UI only has to explain what happened.
+ */
+function isEmailNotVerifiedError(error: unknown) {
+	const status = authErrorStatus(error);
+	const message = authErrorField(error, "message");
+	return (
+		status === 403 &&
+		typeof message === "string" &&
+		message.toLowerCase().includes("email not verified")
+	);
 }
 
 function isNetworkError(error: unknown) {
@@ -145,22 +166,6 @@ function searchStringValue(search: unknown, key: string) {
 	return typeof value === "string" ? value : null;
 }
 
-function appCallbackURL(path: string) {
-	if (typeof window === "undefined") return path;
-	return new URL(path, window.location.origin).toString();
-}
-
-function authRedirectPath(rawRedirect: string | null) {
-	const redirect = rawRedirect?.trim();
-	if (!redirect) return "/invoices";
-	if (!redirect.startsWith("/") || redirect.startsWith("//"))
-		return "/invoices";
-	if (redirect.startsWith("/auth") || redirect.startsWith("/api/auth")) {
-		return "/invoices";
-	}
-	return redirect;
-}
-
 function AuthPage() {
 	const navigate = useNavigate();
 	const location = useLocation();
@@ -195,6 +200,12 @@ function AuthPage() {
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [successMessage, setSuccessMessage] = useState<string | null>(null);
 	const [hydrated, setHydrated] = useState(false);
+	// Set when the address still has to be confirmed: after sign-up, after the
+	// blocked sign-in, or when a session arrives for an unverified user.
+	const [awaitingVerification, setAwaitingVerification] = useState<
+		string | null
+	>(null);
+	const [resendingVerification, setResendingVerification] = useState(false);
 
 	// Caps Lock awareness for the password fields. Chromium draws its own
 	// native, unstyled tooltip for `type="password"` (the clipped floating
@@ -253,13 +264,20 @@ function AuthPage() {
 	useEffect(() => {
 		if (search.google === "failed") {
 			setErrorMessage(
-				"Google sign-in is only available after you link Google from Security.",
+				"Google sign-in could not be completed. Try again, or sign in with your email and password.",
 			);
 		}
 	}, [search.google]);
 
 	useEffect(() => {
 		if (!sessionPending && session?.user) {
+			// An unverified session cannot pass the dashboard gate or mint a
+			// Supabase token, so bouncing it there would loop. Show the
+			// verification panel instead.
+			if (session.user.emailVerified === false) {
+				setAwaitingVerification(session.user.email);
+				return;
+			}
 			if (typeof window !== "undefined") {
 				window.location.replace(search.redirectTo);
 				return;
@@ -346,11 +364,12 @@ function AuthPage() {
 			}
 
 			if (mode === "sign-up") {
+				const requestedBusinessName = businessName.trim() || undefined;
 				const signUpPayload = {
 					name: name.trim(),
 					email: email.trim().toLowerCase(),
 					password,
-					callbackURL: appCallbackURL(search.redirectTo),
+					callbackURL: verificationCallbackURL(search.redirectTo),
 					businessName: businessName.trim(),
 				} as Parameters<typeof authClient.signUp.email>[0] & {
 					businessName: string;
@@ -364,38 +383,51 @@ function AuthPage() {
 					setErrorMessage(result.error.message ?? "Could not create account.");
 					return;
 				}
-			} else {
-				const result = await retryAuthSubmit(() =>
-					authClient.signIn.email({
-						email: email.trim().toLowerCase(),
-						password,
-						callbackURL: appCallbackURL(search.redirectTo),
-						rememberMe,
-					}),
-				);
 
-				if (result.error) {
-					setErrorMessage(result.error.message ?? "Invalid login credentials.");
-					return;
+				// With `requireEmailVerification` Better Auth issues no session
+				// here, so the business name has to survive until the dashboard
+				// bootstrap runs after the user opens the emailed link.
+				if (typeof window !== "undefined" && requestedBusinessName) {
+					window.sessionStorage.setItem(
+						pendingBusinessNameKey,
+						requestedBusinessName,
+					);
 				}
+
+				setAwaitingVerification(email.trim().toLowerCase());
+				setPassword("");
+				setConfirmPassword("");
+				setSuccessMessage(
+					"Account created. Open the verification link we emailed you to finish signing in.",
+				);
+				return;
 			}
 
-			const requestedBusinessName =
-				mode === "sign-up" ? businessName.trim() || undefined : undefined;
-			if (typeof window !== "undefined" && requestedBusinessName) {
-				window.sessionStorage.setItem(
-					pendingBusinessNameKey,
-					requestedBusinessName,
-				);
+			const result = await retryAuthSubmit(() =>
+				authClient.signIn.email({
+					email: email.trim().toLowerCase(),
+					password,
+					callbackURL: appCallbackURL(search.redirectTo),
+					rememberMe,
+				}),
+			);
+
+			if (result.error) {
+				// The password was correct but the address is unconfirmed;
+				// `sendOnSignIn` has already mailed a fresh link.
+				if (isEmailNotVerifiedError(result.error)) {
+					setAwaitingVerification(email.trim().toLowerCase());
+					setSuccessMessage(
+						"Your email address is not verified yet. We sent a fresh link - check your inbox.",
+					);
+					return;
+				}
+				setErrorMessage(result.error.message ?? "Invalid login credentials.");
+				return;
 			}
 
 			try {
-				await ensureWorkspaceContext({
-					businessName: requestedBusinessName,
-				});
-				if (typeof window !== "undefined" && requestedBusinessName) {
-					window.sessionStorage.removeItem(pendingBusinessNameKey);
-				}
+				await ensureWorkspaceContext({});
 			} catch {
 				// The dashboard repeats this bootstrap after the auth bridge catches up.
 			}
@@ -437,7 +469,7 @@ function AuthPage() {
 			if (result.error) {
 				setErrorMessage(
 					result.error.message ??
-						"Google sign-in is only available after linking Google in Security.",
+						"Google sign-in could not be completed. Try again.",
 				);
 			}
 		} catch (error) {
@@ -453,17 +485,53 @@ function AuthPage() {
 		}
 	};
 
+	const onResendVerification = async () => {
+		if (!awaitingVerification || resendingVerification) return;
+
+		setResendingVerification(true);
+		setErrorMessage(null);
+
+		try {
+			const result = await authClient.sendVerificationEmail({
+				email: awaitingVerification,
+				callbackURL: verificationCallbackURL(search.redirectTo),
+			});
+
+			if (result.error) {
+				setErrorMessage(
+					result.error.message ??
+						"Could not resend the verification email. Try again in a moment.",
+				);
+				return;
+			}
+
+			setSuccessMessage(
+				"If that address has a Invoicly account, a new verification link is on its way.",
+			);
+		} catch (error) {
+			setErrorMessage(
+				isNetworkError(error)
+					? "You appear to be offline. Please check your connection and try again."
+					: "Could not resend the verification email. Try again in a moment.",
+			);
+		} finally {
+			setResendingVerification(false);
+		}
+	};
+
 	const isRecoveryMode = mode === "forgot" || mode === "reset";
-	const pageTitle =
-		mode === "sign-up"
+	const pageTitle = awaitingVerification
+		? "Verify your email"
+		: mode === "sign-up"
 			? "Create account"
 			: mode === "forgot"
 				? "Reset password"
 				: mode === "reset"
 					? "Choose a new password"
 					: "Sign in";
-	const pageDescription =
-		mode === "sign-up"
+	const pageDescription = awaitingVerification
+		? "One more step before your workspace opens."
+		: mode === "sign-up"
 			? "Create an account and set up your business workspace."
 			: mode === "forgot"
 				? "Enter your email to receive a reset link."
@@ -471,7 +539,11 @@ function AuthPage() {
 					? "Set a new password for your account."
 					: "Enter your account details to continue.";
 
-	if (!hydrated || sessionPending || session?.user) {
+	if (
+		!hydrated ||
+		sessionPending ||
+		(session?.user && session.user.emailVerified !== false)
+	) {
 		// Transient pre-redirect gate, never provisioning: bare spinner.
 		return (
 			<div className="hm-app flex min-h-screen items-center justify-center bg-paper">
@@ -493,9 +565,9 @@ function AuthPage() {
 								to="/"
 								className="inline-flex items-center gap-2.5 text-sm font-medium text-ink"
 							>
-								<VelureSymbol className="h-7 w-7" />
+								<InvoiclySymbol className="h-7 w-auto" />
 								<span style={{ fontFamily: "var(--hm-font-display)" }}>
-									Velure
+									Invoicly
 								</span>
 							</Link>
 						</div>
@@ -511,8 +583,8 @@ function AuthPage() {
 								Welcome
 							</h1>
 							<p className="mt-5 max-w-sm text-sm leading-7 text-ink-3">
-								Velure keeps sign-in direct: dense spacing, clear fields, and a
-								quieter visual system that matches the product instead of
+								Invoicly keeps sign-in direct: dense spacing, clear fields, and
+								a quieter visual system that matches the product instead of
 								breaking away from it.
 							</p>
 
@@ -543,265 +615,327 @@ function AuthPage() {
 										lineHeight: 1.05,
 									}}
 								>
-									{mode === "sign-up"
-										? "Open your workspace"
-										: mode === "forgot"
-											? "Reset your password"
-											: mode === "reset"
-												? "Choose a new password"
-												: "Sign in to Velure"}
+									{awaitingVerification
+										? "Check your inbox"
+										: mode === "sign-up"
+											? "Open your workspace"
+											: mode === "forgot"
+												? "Reset your password"
+												: mode === "reset"
+													? "Choose a new password"
+													: "Sign in to Invoicly"}
 								</h2>
 								<p className="mt-2 text-sm leading-6 text-ink-3">
 									{pageDescription}
 								</p>
 							</div>
 
-							{mode !== "forgot" && mode !== "reset" ? (
-								<div
-									className="mb-5 inline-flex items-center gap-1 rounded-full border border-rule bg-paper-2 p-1 text-sm"
-									role="tablist"
-									aria-label="Authentication mode"
-								>
-									<button
-										type="button"
-										role="tab"
-										aria-selected={mode === "sign-in"}
-										onClick={() => setMode("sign-in")}
-										className={`rounded-full px-4 py-1.5 transition-colors duration-150 ${
-											mode === "sign-in"
-												? "bg-brand text-brand-ink shadow-(--hm-shadow-soft)"
-												: "text-ink-3 hover:text-ink"
-										}`}
-									>
-										Sign in
-									</button>
-									<button
-										type="button"
-										role="tab"
-										aria-selected={mode === "sign-up"}
-										onClick={() => setMode("sign-up")}
-										className={`rounded-full px-4 py-1.5 transition-colors duration-150 ${
-											mode === "sign-up"
-												? "bg-brand text-brand-ink shadow-(--hm-shadow-soft)"
-												: "text-ink-3 hover:text-ink"
-										}`}
-									>
-										Sign up
-									</button>
-								</div>
-							) : null}
+							{awaitingVerification ? (
+								<div className="space-y-4">
+									<p className="rounded-[var(--hm-r-input)] border border-warn-line bg-warn-soft px-3 py-2 text-sm leading-6 text-warn">
+										We sent a verification link to{" "}
+										<span className="font-medium">{awaitingVerification}</span>.
+										Open it to finish signing in. The link expires in one hour.
+									</p>
 
-							{mode === "sign-in" ? (
-								<div className="mb-5 space-y-2">
+									{errorMessage ? (
+										<p className="rounded-[var(--hm-r-input)] border border-danger-line bg-danger-soft px-3 py-2 text-sm text-danger">
+											{errorMessage}
+										</p>
+									) : null}
+
+									{successMessage ? (
+										<p className="rounded-[var(--hm-r-input)] border border-warn-line bg-warn-soft px-3 py-2 text-sm text-warn">
+											{successMessage}
+										</p>
+									) : null}
+
 									<Button
 										type="button"
-										variant="outline"
 										onClick={() => {
-											void onGoogleSignIn();
+											void onResendVerification();
 										}}
-										disabled={googleSubmitting || submitting}
-										className="hm-btn hm-btn--ghost h-11 w-full"
+										disabled={resendingVerification}
+										className="hm-btn hm-btn--primary h-11 w-full"
 									>
-										{googleSubmitting ? (
+										{resendingVerification ? (
 											<>
 												<Spinner size={16} className="mr-2" />
-												Opening Google
+												Sending
 											</>
 										) : (
-											<>
-												<Icons.Google className="mr-2 h-4 w-4" />
-												Continue with Google
-											</>
+											"Resend verification email"
 										)}
 									</Button>
-									<p className="text-xs leading-5 text-ink-3">
-										Google sign-in only works after you link Google from
-										Security.
-									</p>
-									<div
-										className="hm-label flex items-center gap-3 text-ink-3"
-										style={{ letterSpacing: "0.005em" }}
-									>
-										<span className="h-px flex-1 bg-rule" />
-										<span>Email sign-in</span>
-										<span className="h-px flex-1 bg-rule" />
-									</div>
-								</div>
-							) : null}
 
-							<form onSubmit={onSubmit} className="space-y-4">
-								{mode === "sign-up" ? (
-									<Field label="Name" htmlFor="name">
-										<Input
-											id="name"
-											value={name}
-											onChange={(event) => setName(event.target.value)}
-											placeholder="Jane Doe"
-											className="h-10 rounded-(--hm-r-input) border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-brand-line"
-										/>
-									</Field>
-								) : null}
-
-								{mode === "sign-up" ? (
-									<Field label="Business name" htmlFor="businessName">
-										<Input
-											id="businessName"
-											value={businessName}
-											onChange={(event) => setBusinessName(event.target.value)}
-											placeholder="Acme Ventures Ltd"
-											className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-brand-line"
-										/>
-									</Field>
-								) : null}
-
-								{mode !== "reset" ? (
-									<Field label="Email" htmlFor="email">
-										<Input
-											id="email"
-											type="email"
-											value={email}
-											onChange={(event) => setEmail(event.target.value)}
-											placeholder="name@domain.com"
-											className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-brand-line"
-										/>
-									</Field>
-								) : null}
-
-								{mode !== "forgot" ? (
-									<Field
-										label="Password"
-										htmlFor="password"
-										hint={
-											<CapsLockBadge
-												active={capsLockOn && capsField === "password"}
-											/>
-										}
-									>
-										<Input
-											id="password"
-											type="password"
-											value={password}
-											onChange={(event) => setPassword(event.target.value)}
-											onKeyDown={readCapsLock}
-											onKeyUp={readCapsLock}
-											onPointerDown={readCapsLock}
-											onFocus={focusCapsField}
-											onBlur={blurCapsField}
-											placeholder={
-												mode === "reset"
-													? "Enter a new password"
-													: "Enter your password"
-											}
-											className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-brand-line"
-										/>
-									</Field>
-								) : null}
-
-								{mode === "sign-up" || mode === "reset" ? (
-									<Field
-										label="Confirm password"
-										htmlFor="confirmPassword"
-										hint={
-											<CapsLockBadge
-												active={capsLockOn && capsField === "confirmPassword"}
-											/>
-										}
-									>
-										<Input
-											id="confirmPassword"
-											type="password"
-											value={confirmPassword}
-											onChange={(event) =>
-												setConfirmPassword(event.target.value)
-											}
-											onKeyDown={readCapsLock}
-											onKeyUp={readCapsLock}
-											onPointerDown={readCapsLock}
-											onFocus={focusCapsField}
-											onBlur={blurCapsField}
-											placeholder="Confirm your password"
-											className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-brand-line"
-										/>
-									</Field>
-								) : null}
-
-								{mode === "sign-in" ? (
-									<div className="flex items-center justify-between gap-3 text-xs text-ink-3">
-										<label
-											htmlFor="rememberMe"
-											className="inline-flex items-center gap-2 text-ink-3"
-										>
-											<Checkbox
-												id="rememberMe"
-												checked={rememberMe}
-												onCheckedChange={(checked) =>
-													setRememberMe(checked === true)
-												}
-												className="h-3.5 w-3.5 border-brand-line bg-paper text-brand-ink data-[state=checked]:border-brand data-[state=checked]:bg-brand"
-											/>
-											Keep me signed in
-										</label>
-										<button
-											type="button"
-											onClick={() => {
-												setMode("forgot");
-												setErrorMessage(null);
-												setSuccessMessage(null);
-											}}
-											className="text-brand-hi underline-offset-2 transition-colors duration-150 hover:underline"
-										>
-											Forgot password?
-										</button>
-									</div>
-								) : null}
-
-								{errorMessage ? (
-									<p className="rounded-[var(--hm-r-input)] border border-danger-line bg-danger-soft px-3 py-2 text-sm text-danger">
-										{errorMessage}
-									</p>
-								) : null}
-
-								{successMessage ? (
-									<p className="rounded-[var(--hm-r-input)] border border-warn-line bg-warn-soft px-3 py-2 text-sm text-warn">
-										{successMessage}
-									</p>
-								) : null}
-
-								<Button
-									type="submit"
-									disabled={!canSubmit || submitting}
-									className="hm-btn hm-btn--primary h-11 w-full"
-								>
-									{submitting ? (
-										<>
-											<Spinner size={16} className="mr-2" />
-											Working
-										</>
-									) : mode === "forgot" ? (
-										"Send reset email"
-									) : mode === "reset" ? (
-										"Update password"
-									) : mode === "sign-up" ? (
-										"Create account"
-									) : (
-										"Log in"
-									)}
-								</Button>
-
-								{isRecoveryMode ? (
 									<button
 										type="button"
 										onClick={() => {
+											setAwaitingVerification(null);
 											setMode("sign-in");
 											setErrorMessage(null);
 											setSuccessMessage(null);
+											if (session?.user) void authClient.signOut();
 										}}
 										className="block w-full text-center text-sm text-ink-3 transition-colors duration-150 hover:text-brand"
 									>
 										Back to sign in
 									</button>
-								) : null}
-							</form>
+								</div>
+							) : (
+								<>
+									{mode !== "forgot" && mode !== "reset" ? (
+										<div
+											className="mb-5 inline-flex items-center gap-1 rounded-full border border-rule bg-paper-2 p-1 text-sm"
+											role="tablist"
+											aria-label="Authentication mode"
+										>
+											<button
+												type="button"
+												role="tab"
+												aria-selected={mode === "sign-in"}
+												onClick={() => setMode("sign-in")}
+												className={`rounded-full px-4 py-1.5 transition-colors duration-150 ${
+													mode === "sign-in"
+														? "bg-brand text-brand-ink shadow-(--hm-shadow-soft)"
+														: "text-ink-3 hover:text-ink"
+												}`}
+											>
+												Sign in
+											</button>
+											<button
+												type="button"
+												role="tab"
+												aria-selected={mode === "sign-up"}
+												onClick={() => setMode("sign-up")}
+												className={`rounded-full px-4 py-1.5 transition-colors duration-150 ${
+													mode === "sign-up"
+														? "bg-brand text-brand-ink shadow-(--hm-shadow-soft)"
+														: "text-ink-3 hover:text-ink"
+												}`}
+											>
+												Sign up
+											</button>
+										</div>
+									) : null}
+
+									{mode === "sign-in" ? (
+										<div className="mb-5 space-y-2">
+											<Button
+												type="button"
+												variant="outline"
+												onClick={() => {
+													void onGoogleSignIn();
+												}}
+												disabled={googleSubmitting || submitting}
+												className="hm-btn hm-btn--ghost h-11 w-full"
+											>
+												{googleSubmitting ? (
+													<>
+														<Spinner size={16} className="mr-2" />
+														Opening Google
+													</>
+												) : (
+													<>
+														<Icons.Google className="mr-2 h-4 w-4" />
+														Continue with Google
+													</>
+												)}
+											</Button>
+											<p className="text-xs leading-5 text-ink-3">
+												Use the Google account whose address matches your
+												Invoicly account.
+											</p>
+											<div
+												className="hm-label flex items-center gap-3 text-ink-3"
+												style={{ letterSpacing: "0.005em" }}
+											>
+												<span className="h-px flex-1 bg-rule" />
+												<span>Email sign-in</span>
+												<span className="h-px flex-1 bg-rule" />
+											</div>
+										</div>
+									) : null}
+
+									<form onSubmit={onSubmit} className="space-y-4">
+										{mode === "sign-up" ? (
+											<Field label="Name" htmlFor="name">
+												<Input
+													id="name"
+													value={name}
+													onChange={(event) => setName(event.target.value)}
+													placeholder="Jane Doe"
+													className="h-10 rounded-(--hm-r-input) border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-brand-line"
+												/>
+											</Field>
+										) : null}
+
+										{mode === "sign-up" ? (
+											<Field label="Business name" htmlFor="businessName">
+												<Input
+													id="businessName"
+													value={businessName}
+													onChange={(event) =>
+														setBusinessName(event.target.value)
+													}
+													placeholder="Acme Ventures Ltd"
+													className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-brand-line"
+												/>
+											</Field>
+										) : null}
+
+										{mode !== "reset" ? (
+											<Field label="Email" htmlFor="email">
+												<Input
+													id="email"
+													type="email"
+													value={email}
+													onChange={(event) => setEmail(event.target.value)}
+													placeholder="name@domain.com"
+													className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-brand-line"
+												/>
+											</Field>
+										) : null}
+
+										{mode !== "forgot" ? (
+											<Field
+												label="Password"
+												htmlFor="password"
+												hint={
+													<CapsLockBadge
+														active={capsLockOn && capsField === "password"}
+													/>
+												}
+											>
+												<Input
+													id="password"
+													type="password"
+													value={password}
+													onChange={(event) => setPassword(event.target.value)}
+													onKeyDown={readCapsLock}
+													onKeyUp={readCapsLock}
+													onPointerDown={readCapsLock}
+													onFocus={focusCapsField}
+													onBlur={blurCapsField}
+													placeholder={
+														mode === "reset"
+															? "Enter a new password"
+															: "Enter your password"
+													}
+													className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-brand-line"
+												/>
+											</Field>
+										) : null}
+
+										{mode === "sign-up" || mode === "reset" ? (
+											<Field
+												label="Confirm password"
+												htmlFor="confirmPassword"
+												hint={
+													<CapsLockBadge
+														active={
+															capsLockOn && capsField === "confirmPassword"
+														}
+													/>
+												}
+											>
+												<Input
+													id="confirmPassword"
+													type="password"
+													value={confirmPassword}
+													onChange={(event) =>
+														setConfirmPassword(event.target.value)
+													}
+													onKeyDown={readCapsLock}
+													onKeyUp={readCapsLock}
+													onPointerDown={readCapsLock}
+													onFocus={focusCapsField}
+													onBlur={blurCapsField}
+													placeholder="Confirm your password"
+													className="h-10 rounded-[var(--hm-r-input)] border-rule bg-paper-2 text-ink placeholder:text-ink-3 focus-visible:border-brand-line"
+												/>
+											</Field>
+										) : null}
+
+										{mode === "sign-in" ? (
+											<div className="flex items-center justify-between gap-3 text-xs text-ink-3">
+												<label
+													htmlFor="rememberMe"
+													className="inline-flex items-center gap-2 text-ink-3"
+												>
+													<Checkbox
+														id="rememberMe"
+														checked={rememberMe}
+														onCheckedChange={(checked) =>
+															setRememberMe(checked === true)
+														}
+														className="h-3.5 w-3.5 border-brand-line bg-paper text-brand-ink data-[state=checked]:border-brand data-[state=checked]:bg-brand"
+													/>
+													Keep me signed in
+												</label>
+												<button
+													type="button"
+													onClick={() => {
+														setMode("forgot");
+														setErrorMessage(null);
+														setSuccessMessage(null);
+													}}
+													className="text-brand-hi underline-offset-2 transition-colors duration-150 hover:underline"
+												>
+													Forgot password?
+												</button>
+											</div>
+										) : null}
+
+										{errorMessage ? (
+											<p className="rounded-[var(--hm-r-input)] border border-danger-line bg-danger-soft px-3 py-2 text-sm text-danger">
+												{errorMessage}
+											</p>
+										) : null}
+
+										{successMessage ? (
+											<p className="rounded-[var(--hm-r-input)] border border-warn-line bg-warn-soft px-3 py-2 text-sm text-warn">
+												{successMessage}
+											</p>
+										) : null}
+
+										<Button
+											type="submit"
+											disabled={!canSubmit || submitting}
+											className="hm-btn hm-btn--primary h-11 w-full"
+										>
+											{submitting ? (
+												<>
+													<Spinner size={16} className="mr-2" />
+													Working
+												</>
+											) : mode === "forgot" ? (
+												"Send reset email"
+											) : mode === "reset" ? (
+												"Update password"
+											) : mode === "sign-up" ? (
+												"Create account"
+											) : (
+												"Log in"
+											)}
+										</Button>
+
+										{isRecoveryMode ? (
+											<button
+												type="button"
+												onClick={() => {
+													setMode("sign-in");
+													setErrorMessage(null);
+													setSuccessMessage(null);
+												}}
+												className="block w-full text-center text-sm text-ink-3 transition-colors duration-150 hover:text-brand"
+											>
+												Back to sign in
+											</button>
+										) : null}
+									</form>
+								</>
+							)}
 
 							<div className="mt-8 border-t border-rule pt-5 text-xs text-ink-3">
 								{mode === "sign-in" ? (
@@ -811,6 +945,7 @@ function AuthPage() {
 											type="button"
 											onClick={() => {
 												setMode("sign-up");
+												setAwaitingVerification(null);
 												setErrorMessage(null);
 												setSuccessMessage(null);
 											}}

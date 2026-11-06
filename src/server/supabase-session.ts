@@ -13,6 +13,14 @@ export async function mintSupabaseAccessToken(
 	const session = await getAuthSessionFromRequest(request);
 	const userId = session?.user.id;
 	if (!userId) return null;
+
+	// A session that exists before the address was confirmed must not reach
+	// tenant data. `requireEmailVerification` blocks the password sign-in that
+	// would create one, and the UI gates unverified sessions, but a session
+	// minted earlier (pre-deploy cookie, a social login whose provider omitted
+	// `email_verified`) would otherwise still obtain a Supabase JWT and bypass
+	// both. Deny at the trust boundary, not just in the UI.
+	if (session?.user.emailVerified === false) return null;
 	const expiresAt = Math.floor(Date.now() / 1000) + 60 * 30;
 	const privateJwk = process.env.SUPABASE_JWT_PRIVATE_JWK;
 	const legacySecret = process.env.SUPABASE_JWT_SECRET;
