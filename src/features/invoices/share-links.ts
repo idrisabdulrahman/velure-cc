@@ -9,6 +9,8 @@ export type InvoiceShareLinkInput = {
 	invoiceNumber: string;
 	customerName: string;
 	documentType?: InvoiceDocumentType;
+	/** Pre-formatted amount due, e.g. "₦666,500". Optional. */
+	amountLabel?: string;
 };
 
 export type InvoiceShareLinks = {
@@ -36,12 +38,24 @@ export function buildInvoiceShareLinks({
 	invoiceNumber,
 	customerName,
 	documentType,
+	amountLabel,
 }: InvoiceShareLinkInput): InvoiceShareLinks {
 	const publicUrl = `${origin}/i/${token}`;
 	const downloadUrl = `${publicUrl}?download=1`;
 	const label = INVOICE_DOCUMENT_TYPE_LABELS[documentType ?? "standard"];
 	const text = `${label} ${invoiceNumber} for ${customerName}`;
-	const body = `${text}\n\nView & download: ${downloadUrl}`;
+	// A payer reading the message should see what to pay before they tap the
+	// link. Optional, so a caller without the value keeps the original
+	// two-line message byte-for-byte. The invoice number in `text` is already
+	// the payment reference, so it is not repeated.
+	const detailLines: string[] = [];
+	if (amountLabel) detailLines.push(`Amount: ${amountLabel}`);
+	const body = [
+		text,
+		...detailLines,
+		"",
+		`View & download: ${downloadUrl}`,
+	].join("\n");
 
 	const telegramHref = `https://t.me/share/url?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(body)}`;
 	const whatsappHref = `https://wa.me/?text=${encodeURIComponent(body)}`;

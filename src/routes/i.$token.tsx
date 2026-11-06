@@ -15,6 +15,7 @@ import {
 import { buildInvoiceShareLinks } from "#/features/invoices/share-links";
 import type { InvoiceRecord } from "#/features/invoices/types";
 import { INVOICE_DOCUMENT_TYPE_LABELS } from "#/features/invoices/types";
+import { getInvoicePaymentReference } from "#/lib/invoice-document/payment-reference";
 import { HtmlTemplate } from "#/lib/invoice-document/templates/html";
 import type {
 	PaymentSource,
@@ -70,6 +71,12 @@ function PublicInvoicePage() {
 	const [isLinkCopied, setIsLinkCopied] = useState(false);
 	const [isAccountCopied, setIsAccountCopied] = useState(false);
 	const [isCreatingCharge, setIsCreatingCharge] = useState(false);
+	const [showClaimForm, setShowClaimForm] = useState(false);
+	const [claimAmount, setClaimAmount] = useState("");
+	const [claimReference, setClaimReference] = useState("");
+	const [claimNote, setClaimNote] = useState("");
+	const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
+	const [claimSubmitted, setClaimSubmitted] = useState(false);
 
 	useEffect(() => {
 		if (invoice && invoice.status !== "canceled") {
@@ -119,6 +126,7 @@ function PublicInvoicePage() {
 					invoiceNumber: invoice.invoiceNumber,
 					customerName: invoice.customerName,
 					documentType: invoice.documentType,
+					amountLabel: formatMoney(invoice.total, invoice.currency),
 				});
 	const statusLabel =
 		invoice.status === "unpaid"
@@ -205,6 +213,71 @@ function PublicInvoicePage() {
 	const collectionAmountLabel = paymentContext?.collectionAmount
 		? formatMoney(paymentContext.collectionAmount, invoice.currency)
 		: null;
+
+	// Match the document renderers: "scheduled" prints as "draft".
+	const paymentReference = getInvoicePaymentReference({
+		invoiceNumber: invoice.invoiceNumber,
+		status: invoice.status === "scheduled" ? "draft" : invoice.status,
+	});
+	const canClaimPayment =
+		invoice.status !== "paid" &&
+		invoice.status !== "canceled" &&
+		invoice.balance > 0;
+
+	const openClaimForm = () => {
+		setClaimAmount(invoice.balance > 0 ? String(invoice.balance) : "");
+		setClaimReference(paymentReference?.value ?? invoice.invoiceNumber);
+		setShowClaimForm(true);
+	};
+
+	const submitPaymentClaim = async () => {
+		const amount = Number(claimAmount);
+		if (!Number.isFinite(amount) || amount <= 0) {
+			toast({
+				title: "Enter the amount you paid",
+				description: "Use a number greater than zero.",
+				variant: "error",
+			});
+			return;
+		}
+		setIsSubmittingClaim(true);
+		try {
+			const response = await fetch("/api/invoice/public/claim", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					token: invoice.token,
+					amount,
+					reference: claimReference.trim() || undefined,
+					note: claimNote.trim() || undefined,
+				}),
+			});
+			const payload = (await response.json().catch(() => null)) as {
+				ok?: boolean;
+				error?: string;
+			} | null;
+			if (!response.ok || !payload?.ok) {
+				throw new Error(
+					payload?.error ?? "Could not send your payment notice.",
+				);
+			}
+			setClaimSubmitted(true);
+			setShowClaimForm(false);
+			toast({
+				title: "Payment notice sent",
+				description: `${sellerName} will confirm your payment.`,
+				variant: "success",
+			});
+		} catch (error) {
+			toast({
+				title: "Could not send payment notice",
+				description: error instanceof Error ? error.message : "Try again.",
+				variant: "error",
+			});
+		} finally {
+			setIsSubmittingClaim(false);
+		}
+	};
 
 	const createTransferCharge = async () => {
 		setIsCreatingCharge(true);
@@ -383,6 +456,119 @@ function PublicInvoicePage() {
 							)}
 						</div>
 					) : null}
+					{canClaimPayment ? (
+						<section className="mt-4 w-full rounded-md border border-[#242426] bg-[#101011] p-4">
+							<div className="flex items-start justify-between gap-4">
+								<div>
+									<p className="text-sm font-medium text-ink">
+										Paying by bank transfer?
+									</p>
+									<p className="mt-1 text-xs text-ink-3">
+										Pay {formatMoney(invoice.balance, invoice.currency)} with
+										the details below, then let {sellerName} know.
+									</p>
+								</div>
+								<Banknote className="h-5 w-5 text-brand" />
+							</div>
+
+							{invoice.paymentDetails?.trim() ? (
+								<div className="mt-4 whitespace-pre-wrap rounded-md border border-rule bg-paper p-3 text-sm text-ink-2">
+									{invoice.paymentDetails}
+								</div>
+							) : null}
+
+							{paymentReference ? (
+								<div className="mt-3 flex items-center justify-between gap-4 rounded-md border border-rule bg-paper p-3">
+									<div className="text-[11px] text-ink-3">
+										{paymentReference.label}
+									</div>
+									<div className="select-all font-mono text-sm font-medium text-ink">
+										{paymentReference.value}
+									</div>
+								</div>
+							) : null}
+
+							{claimSubmitted ? (
+								<p
+									role="status"
+									aria-live="polite"
+									className="mt-4 flex items-center gap-2 text-sm text-ink-2"
+								>
+									<Check className="h-4 w-4 shrink-0 text-brand" />
+									<span>
+										Thanks — we&apos;ve told {sellerName} you paid. They&apos;ll
+										confirm it shortly.
+									</span>
+								</p>
+							) : showClaimForm ? (
+								<div className="mt-4 grid gap-3">
+									<label className="text-xs text-ink-3">
+										Amount you paid
+										<input
+											type="number"
+											inputMode="decimal"
+											min="0"
+											step="0.01"
+											value={claimAmount}
+											onChange={(event) => setClaimAmount(event.target.value)}
+											className="mt-1 h-10 w-full rounded-md border border-rule bg-paper px-3 text-sm text-ink outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+										/>
+									</label>
+									<label className="text-xs text-ink-3">
+										Reference (optional)
+										<input
+											type="text"
+											value={claimReference}
+											onChange={(event) =>
+												setClaimReference(event.target.value)
+											}
+											className="mt-1 h-10 w-full rounded-md border border-rule bg-paper px-3 text-sm text-ink outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+										/>
+									</label>
+									<label className="text-xs text-ink-3">
+										Note (optional)
+										<textarea
+											rows={2}
+											value={claimNote}
+											onChange={(event) => setClaimNote(event.target.value)}
+											className="mt-1 w-full rounded-md border border-rule bg-paper px-3 py-2 text-sm text-ink outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+										/>
+									</label>
+									<div className="flex flex-wrap gap-2">
+										<button
+											type="button"
+											onClick={() => void submitPaymentClaim()}
+											disabled={isSubmittingClaim}
+											className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand px-4 text-[13px] font-medium text-brand-ink transition-colors hover:bg-brand-hi disabled:cursor-not-allowed disabled:opacity-60"
+										>
+											{isSubmittingClaim ? (
+												<Spinner size={16} />
+											) : (
+												<Check className="h-4 w-4" />
+											)}
+											<span>Send payment notice</span>
+										</button>
+										<button
+											type="button"
+											onClick={() => setShowClaimForm(false)}
+											className="inline-flex h-10 items-center justify-center rounded-md border border-rule px-4 text-[13px] font-medium text-ink-2 transition-colors hover:bg-white/10 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+										>
+											Cancel
+										</button>
+									</div>
+								</div>
+							) : (
+								<button
+									type="button"
+									onClick={openClaimForm}
+									className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand px-4 text-[13px] font-medium text-brand-ink transition-colors hover:bg-brand-hi focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+								>
+									<Check className="h-4 w-4" />
+									<span>I&apos;ve paid</span>
+								</button>
+							)}
+						</section>
+					) : null}
 					<section className="mt-4 w-full rounded-md border border-[#242426] bg-[#101011] p-4">
 						<div className="flex items-start justify-between gap-4">
 							<div>
@@ -473,7 +659,7 @@ function PublicInvoicePage() {
 			</div>
 
 			<div className="fixed bottom-4 right-4 hidden text-[9px] text-[#878787] md:block">
-				Powered by <span className="text-[#d7d3cc]">Velure</span>
+				Powered by <span className="text-[#d7d3cc]">Invoicly</span>
 			</div>
 		</section>
 	);

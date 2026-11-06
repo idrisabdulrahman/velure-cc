@@ -3,7 +3,7 @@ import { buildInvoiceShareLinks } from "./share-links";
 
 const base = {
 	token: "tok_abc123",
-	origin: "https://velure.app",
+	origin: "https://invoicly.cv",
 	invoiceNumber: "INV-0001",
 	customerName: "Ada Lovelace",
 	documentType: "standard" as const,
@@ -13,13 +13,37 @@ describe("buildInvoiceShareLinks", () => {
 	it("builds the public URL and the ?download=1 body link", () => {
 		const links = buildInvoiceShareLinks(base);
 
-		expect(links.publicUrl).toBe("https://velure.app/i/tok_abc123");
+		expect(links.publicUrl).toBe("https://invoicly.cv/i/tok_abc123");
 		expect(links.downloadUrl).toBe(
-			"https://velure.app/i/tok_abc123?download=1",
+			"https://invoicly.cv/i/tok_abc123?download=1",
 		);
 		expect(links.body).toBe(
-			"Standard invoice INV-0001 for Ada Lovelace\n\nView & download: https://velure.app/i/tok_abc123?download=1",
+			"Standard invoice INV-0001 for Ada Lovelace\n\nView & download: https://invoicly.cv/i/tok_abc123?download=1",
 		);
+	});
+
+	it("adds an Amount line before the link when an amount label is given", () => {
+		const links = buildInvoiceShareLinks({
+			...base,
+			amountLabel: "₦666,500",
+		});
+
+		expect(links.body).toBe(
+			"Standard invoice INV-0001 for Ada Lovelace\nAmount: ₦666,500\n\nView & download: https://invoicly.cv/i/tok_abc123?download=1",
+		);
+		// The amount must be carried into both click-to-chat hrefs, encoded.
+		expect(links.whatsappHref).toContain(
+			encodeURIComponent("Amount: ₦666,500"),
+		);
+		expect(links.telegramHref).toContain(
+			encodeURIComponent("Amount: ₦666,500"),
+		);
+	});
+
+	it("omits the Amount line when no amount label is given", () => {
+		const links = buildInvoiceShareLinks(base);
+
+		expect(links.body).not.toContain("Amount:");
 	});
 
 	it("uses the standard document-type label by default", () => {
