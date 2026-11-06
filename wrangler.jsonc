@@ -1,0 +1,36 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "velure",
+	"compatibility_date": "2026-11-02",
+	// The workers.dev origin is the temporary public entry point
+	// (https://velure.noicepikachu.workers.dev) while the custom domain is not
+	// moved. Pinned explicitly so the deploy does not depend on a default.
+	"workers_dev": true,
+	// Per-version preview URLs are extra public endpoints nothing here uses.
+	"preview_urls": false,
+	// Nitro's cloudflare-module preset defaults `no_bundle` to true, shipping the
+	// SSR build as ~260 separate ES modules. Under workerd that unbundled graph
+	// hits a V8 fatal error ("Module in unexpected status Evaluating") while the
+	// modules link, so every dynamic request aborts and Cloudflare answers 502.
+	// Forcing Wrangler's own bundling collapses the graph into a single module
+	// and fixes it. Nitro only applies its default when this key is absent, so
+	// this value wins. See prompts/invoicly-rename-and-domain.md (2026-11-05).
+	"no_bundle": false,
+	"observability": {
+		"enabled": true
+	},
+	// The password hasher lives in its own script because the class must be
+	// exported from a Worker entry and Nitro owns this Worker's entry module.
+	// `script_name` binds the namespace defined there; the class is not redefined
+	// here, so this file needs no `migrations` block. Deploy order matters:
+	// `velure-password-hasher` must exist before this Worker is deployed.
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "PASSWORD_HASHER",
+				"class_name": "PasswordHasher",
+				"script_name": "velure-password-hasher"
+			}
+		]
+	}
+}
