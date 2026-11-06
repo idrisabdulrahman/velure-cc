@@ -11,6 +11,7 @@ import {
 	FileText,
 	LayoutGrid,
 	Menu,
+	ReceiptText,
 	Repeat2,
 	Scale,
 	Search,
@@ -98,6 +99,13 @@ const navItems = [
 		match: (pathname: string) => matchesPathSegment(pathname, "/reports"),
 		label: "Reports",
 		description: "Revenue and cash-flow clarity",
+	},
+	{
+		to: "/expenses",
+		icon: ReceiptText,
+		match: (pathname: string) => matchesPathSegment(pathname, "/expenses"),
+		label: "Expenses",
+		description: "Log and categorise spend",
 	},
 	{
 		to: "/invoices/products",

@@ -295,7 +295,7 @@ class FakeBuilder implements PromiseLike<Result> {
 	private head = false;
 	private limitValue: number | null = null;
 	private rangeValue: { from: number; to: number } | null = null;
-	private orderValue: { column: string; ascending: boolean } | null = null;
+	private orderValues: Array<{ column: string; ascending: boolean }> = [];
 	private terminal: "none" | "single" | "maybeSingle" = "none";
 
 	constructor(
@@ -373,7 +373,7 @@ class FakeBuilder implements PromiseLike<Result> {
 	}
 
 	order(column: string, options?: { ascending?: boolean }) {
-		this.orderValue = { column, ascending: options?.ascending !== false };
+		this.orderValues.push({ column, ascending: options?.ascending !== false });
 		return this;
 	}
 
@@ -403,13 +403,19 @@ class FakeBuilder implements PromiseLike<Result> {
 		let out = rows.filter((row) =>
 			this.filters.every((filter) => matches(row, filter)),
 		);
-		if (this.orderValue) {
-			const { column, ascending } = this.orderValue;
-			out = [...out].sort((a, b) =>
-				ascending
-					? compare(a[column], b[column])
-					: compare(b[column], a[column]),
-			);
+		if (this.orderValues.length > 0) {
+			// Apply every ORDER BY key in declaration order, matching PostgREST:
+			// the first key dominates and each later key breaks earlier ties.
+			const keys = this.orderValues;
+			out = [...out].sort((a, b) => {
+				for (const { column, ascending } of keys) {
+					const cmp = ascending
+						? compare(a[column], b[column])
+						: compare(b[column], a[column]);
+					if (cmp !== 0) return cmp;
+				}
+				return 0;
+			});
 		}
 		if (this.rangeValue) {
 			const { from, to } = this.rangeValue;

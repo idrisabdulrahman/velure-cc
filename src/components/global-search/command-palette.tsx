@@ -36,6 +36,7 @@ const PAGE_TARGETS: Array<{ label: string; hint: string; to: string }> = [
 	{ label: "Invoices", hint: "Workspace", to: "/invoices" },
 	{ label: "Clients", hint: "Workspace", to: "/clients" },
 	{ label: "Reports", hint: "Workspace", to: "/reports" },
+	{ label: "Expenses", hint: "Workspace", to: "/expenses" },
 	{ label: "Products", hint: "Workspace", to: "/invoices/products" },
 	{ label: "Compliance", hint: "Settings", to: "/settings/compliance" },
 	{

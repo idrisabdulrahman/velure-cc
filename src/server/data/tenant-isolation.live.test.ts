@@ -142,6 +142,7 @@ const TABLES: TableSpec[] = [
 	},
 	{ table: "payment_charges", anchor: "workspace", marker: "account_name" },
 	{ table: "payment_claims", anchor: "workspace", marker: "claim_reference" },
+	{ table: "expenses", anchor: "workspace", marker: "note" },
 	{
 		table: "recurring_invoice_schedules",
 		anchor: "workspace",
@@ -276,6 +277,14 @@ async function seedRow(
 			invoice_id: seeded.get("invoices")?.id,
 			claimed_amount: 1000,
 			claim_reference: `wp3-claim-${suffix}`,
+		},
+		expenses: {
+			...base,
+			owner_id: USER_A,
+			amount: 1000,
+			currency: "NGN",
+			category_code: "rent",
+			incurred_on: "2026-10-01",
 		},
 		recurring_invoice_schedules: {
 			...base,
@@ -615,6 +624,16 @@ gate("WP3 tenant isolation: live RLS matrix", () => {
 				},
 			],
 			[
+				"expenses",
+				{
+					workspace_id: workspaceA,
+					amount: 1,
+					currency: "NGN",
+					category_code: "rent",
+					incurred_on: "2026-10-01",
+				},
+			],
+			[
 				"tax_profiles",
 				{
 					owner_id: USER_A,
@@ -724,5 +743,53 @@ gate("WP3 tenant isolation: live RLS matrix", () => {
 			{ token: tokenB },
 		);
 		expect(rows(read.body)).toEqual([]);
+	});
+
+	it("keeps expense_categories a readable global reference with no browser write path", async () => {
+		// `listExpenseCategories` is classified `rls-only` (no app-layer tenant
+		// filter because the table holds no tenant data). This proves that RLS
+		// story directly: an authenticated session reads the shared set and
+		// every browser mutation is refused, so the reference data cannot be
+		// poisoned by a tenant.
+		const read = await rest(
+			"GET",
+			"expense_categories?select=code&code=eq.rent",
+			{
+				token: tokenA,
+			},
+		);
+		expect(read.status, read.text).toBe(200);
+		expect(rows(read.body)).toHaveLength(1);
+
+		const insert = await rest("POST", `expense_categories?select=code`, {
+			token: tokenA,
+			body: { code: `wp3-${suffix}`, name: "WP3 probe" },
+		});
+		expect([401, 403], insert.text).toContain(insert.status);
+
+		for (const [method, body] of [
+			["PATCH", { name: "mutated" }],
+			["DELETE", undefined],
+		] as const) {
+			const result = await rest(method, "expense_categories?code=eq.rent", {
+				token: tokenA,
+				body,
+			});
+			if (result.status === 200) {
+				expect(rows(result.body), result.text).toEqual([]);
+			} else {
+				expect([401, 403], result.text).toContain(result.status);
+			}
+		}
+
+		// The seeded row is intact after the refused mutations.
+		const after = await rest(
+			"GET",
+			"expense_categories?code=eq.rent&select=name",
+			{ token: tokenA },
+		);
+		expect((rows(after.body)[0] as { name?: string } | undefined)?.name).toBe(
+			"Rent",
+		);
 	});
 });
