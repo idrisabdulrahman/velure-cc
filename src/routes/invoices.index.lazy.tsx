@@ -13,6 +13,7 @@ import {
 	ReceiptText,
 	Repeat2,
 	Search,
+	Send,
 	SlidersHorizontal,
 	Trash2,
 	Upload,
@@ -96,7 +97,10 @@ import type {
 	InvoiceRecord,
 	InvoiceStatus,
 } from "#/features/invoices/types";
-import { INVOICE_DOCUMENT_TYPE_LABELS } from "#/features/invoices/types";
+import {
+	INVOICE_DOCUMENT_TYPE_LABELS,
+	QUOTE_STATUS_LABELS,
+} from "#/features/invoices/types";
 import { useUnifiedAuth } from "#/lib/auth-hook";
 import { assertImportFileSize } from "#/lib/import-limits";
 import { useSupabaseSession } from "#/lib/supabase-session";
@@ -110,6 +114,7 @@ import {
 	importCsv,
 	listPage as listInvoicePage,
 	listSummary as listInvoiceSummary,
+	markInvoiceSent,
 	previewBulkCleanup,
 	renumberInvoices,
 	save,
@@ -908,7 +913,15 @@ function InvoicesIndex() {
 					<span className="text-ink-2">
 						{INVOICE_DOCUMENT_TYPE_LABELS[invoice.documentType ?? "standard"]}
 					</span>
-					{invoice.convertedToInvoiceId ? (
+					{invoice.quoteStatus ? (
+						<span
+							className={`text-[10px] font-medium ${
+								invoice.quoteStatus === "accepted" ? "text-brand" : "text-ink-3"
+							}`}
+						>
+							{QUOTE_STATUS_LABELS[invoice.quoteStatus]}
+						</span>
+					) : invoice.convertedToInvoiceId ? (
 						<span className="text-[10px] font-medium text-brand">
 							Converted
 						</span>
@@ -1021,6 +1034,15 @@ function InvoicesIndex() {
 					>
 						<ReceiptText className="mr-2 h-4 w-4" />
 						Convert to invoice
+					</DropdownMenuItem>
+				) : null}
+				{invoice.documentType === "proforma" && invoice.status === "draft" ? (
+					<DropdownMenuItem
+						onClick={() => void onMarkQuoteSent(invoice.id)}
+						className="focus:bg-brand-soft"
+					>
+						<Send className="mr-2 h-4 w-4" />
+						Mark as sent
 					</DropdownMenuItem>
 				) : null}
 				<DropdownMenuSub>
@@ -1211,6 +1233,26 @@ function InvoicesIndex() {
 		toast({
 			title: "Pro-forma converted",
 			description: "A standard invoice was created in this workspace.",
+			variant: "success",
+		});
+	};
+
+	const onMarkQuoteSent = async (id: string) => {
+		const { client, userId } = requireSupabase();
+		try {
+			await markInvoiceSent(client, userId, id);
+		} catch (error) {
+			toast({
+				title: "Could not mark the quote as sent",
+				description: error instanceof Error ? error.message : "Try again.",
+				variant: "error",
+			});
+			return;
+		}
+		await queryClient.invalidateQueries({ queryKey: ["supabase-invoices"] });
+		toast({
+			title: "Quote marked as sent",
+			description: "The client can now accept it on the public page.",
 			variant: "success",
 		});
 	};

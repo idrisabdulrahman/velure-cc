@@ -201,6 +201,13 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	deleteEmptyDrafts: "app-scoped",
 	duplicate: "app-scoped",
 	convertProformaToInvoice: "app-scoped",
+	// WP-D: pure accept predicate over an already-loaded quote.
+	quoteAcceptanceIssue: "pure",
+	// WP-D: public accept path. The workspace id is resolved from the bearer
+	// token by public-invoice-repository before this is called; every read and
+	// write below is filtered by that workspace id (defense in depth on top of
+	// the token-scoped read).
+	convertQuoteToInvoice: "public-token",
 	importCsv: "app-scoped",
 	markInvoiceSent: "app-scoped",
 	recordDeliveryEvent: "app-scoped",
@@ -355,6 +362,11 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	// derived from the bearer token by this same module, never from input; the
 	// insert only records an unverified claim (never a payment).
 	submitPublicPaymentClaim: "public-token",
+	// WP-D: Admin client accept. The workspace and the quote are resolved from
+	// the bearer token by this module, never from input; the created invoice is
+	// linked to the quote exactly once by a conditional update whose database
+	// backstop is the partial unique index `invoices_quote_converted_invoice_unique`.
+	submitPublicQuoteAcceptance: "public-token",
 };
 
 const DATA_DIR = join(import.meta.dirname);
@@ -529,6 +541,9 @@ const ROUTE_CLASSIFICATIONS: Record<string, Classification> = {
 	"invoice/public/$token.ts": "public-token",
 	// WP-A: buyer "I've paid" — token-scoped, rate-limited, evidence only.
 	"invoice/public/claim.ts": "public-token",
+	// WP-D: buyer "Accept quote" — token-scoped, rate-limited; creates one
+	// invoice from the quote resolved by the bearer token.
+	"invoice/public/quote-accept.ts": "public-token",
 	// WP-A: seller confirm/reject — identity from the verified session; the
 	// user-scoped client carries RLS for the claim write.
 	"invoice/claims/$id.ts": "session",
