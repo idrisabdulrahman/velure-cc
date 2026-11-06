@@ -48,6 +48,12 @@ import {
 	upsertWorkspaceSettings,
 } from "./compliance";
 import {
+	createExpense,
+	listExpenses,
+	updateExpense,
+	voidExpense,
+} from "./expenses";
+import {
 	disconnect,
 	getConnectionSecret,
 	listConnections,
@@ -380,6 +386,34 @@ function seedTables(): FakeTables {
 				status: "pending",
 				expires_at: "2099-01-01T00:00:00.000Z",
 				created_at: "2026-01-07T00:00:00.000Z",
+			},
+		],
+		expenses: [
+			{
+				id: "expense-a",
+				workspace_id: WS_A,
+				owner_id: USER_A,
+				amount: 10,
+				currency: "NGN",
+				category_code: "rent",
+				incurred_on: "2026-01-10",
+				note: null,
+				voided_at: null,
+				created_at: "2026-01-10T00:00:00.000Z",
+				updated_at: "2026-01-10T00:00:00.000Z",
+			},
+			{
+				id: "expense-b",
+				workspace_id: WS_B,
+				owner_id: USER_B,
+				amount: 20,
+				currency: "NGN",
+				category_code: "software",
+				incurred_on: "2026-01-11",
+				note: null,
+				voided_at: null,
+				created_at: "2026-01-11T00:00:00.000Z",
+				updated_at: "2026-01-11T00:00:00.000Z",
 			},
 		],
 		recurring_invoice_schedules: [
@@ -1170,6 +1204,38 @@ describe("payments", () => {
 		).find((entry) => entry.reference === "manual-b-1");
 		expect(inserted?.workspace_id).toBe(WS_B);
 		expect(inserted?.owner_id).toBe(USER_B);
+	});
+});
+
+describe("expenses", () => {
+	it("lists only B's expenses", async () => {
+		const listed = await listExpenses(clientB, USER_B);
+		expect(listed.map((entry) => entry.id)).toEqual(["expense-b"]);
+	});
+
+	it("does not update or void A's expense by id", async () => {
+		await expect(
+			updateExpense(clientB, USER_B, "expense-a", {
+				amount: 1,
+				categoryCode: "rent",
+				incurredOn: "2026-01-10",
+			}),
+		).rejects.toThrow("Expense not found.");
+		await expect(voidExpense(clientB, USER_B, "expense-a")).rejects.toThrow(
+			"Expense not found.",
+		);
+		expect(row("expenses", "expense-a")?.amount).toBe(10);
+		expect(row("expenses", "expense-a")?.voided_at).toBeNull();
+	});
+
+	it("creates B's expense inside B's workspace with B as owner", async () => {
+		const id = await createExpense(clientB, USER_B, {
+			amount: 25,
+			categoryCode: "software",
+			incurredOn: "2026-03-01",
+		});
+		expect(row("expenses", id)?.workspace_id).toBe(WS_B);
+		expect(row("expenses", id)?.owner_id).toBe(USER_B);
 	});
 });
 

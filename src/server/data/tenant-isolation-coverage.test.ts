@@ -100,6 +100,19 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	loadWorkspaceInvoiceSubmissionSnapshot: "app-scoped",
 	// Pure shape predicate over an already-loaded snapshot; performs no reads.
 	hasStoredComplianceSnapshot: "pure",
+	// expenses.ts — WP-C. list/create/update/void/totals resolve the caller's
+	// active workspace and filter by it; writes additionally gate on the
+	// owner|member role in application code (the no-RLS fake has no policies).
+	listExpenses: "app-scoped",
+	createExpense: "app-scoped",
+	updateExpense: "app-scoped",
+	voidExpense: "app-scoped",
+	getExpenseTotals: "app-scoped",
+	// Pure aggregation over already-loaded expense rows; no query surface.
+	buildExpenseTotals: "pure",
+	// Global reference lookup: no tenant column exists, RLS grants SELECT to
+	// authenticated and no write path is exposed.
+	listExpenseCategories: "rls-only",
 	// einvoice-provider-credentials.ts — derives active workspace with the
 	// verified user client, then scopes service-role ciphertext access by it.
 	saveEInvoiceProviderCredentials: "server-admin",

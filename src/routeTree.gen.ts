@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ClientsRouteImport } from './routes/clients'
 import { Route as ComplianceRouteImport } from './routes/compliance'
+import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as FeaturesRouteImport } from './routes/features'
 import { Route as InvoicesRouteImport } from './routes/invoices'
 import { Route as PricingRouteImport } from './routes/pricing'
@@ -24,6 +25,7 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as ClientsIndexRouteImport } from './routes/clients.index'
 import { Route as ClientsNewRouteImport } from './routes/clients.new'
+import { Route as ExpensesIndexRouteImport } from './routes/expenses.index'
 import { Route as ITokenRouteImport } from './routes/i.$token'
 import { Route as InvoicesIndexRouteImport } from './routes/invoices.index'
 import { Route as InvoicesNewRouteImport } from './routes/invoices.new'
@@ -87,6 +89,11 @@ const ComplianceRoute = ComplianceRouteImport.update({
   path: '/compliance',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ExpensesRoute = ExpensesRouteImport.update({
+  id: '/expenses',
+  path: '/expenses',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FeaturesRoute = FeaturesRouteImport.update({
   id: '/features',
   path: '/features',
@@ -142,6 +149,13 @@ const ClientsNewRoute = ClientsNewRouteImport.update({
   path: '/new',
   getParentRoute: () => ClientsRoute,
 } as any).lazy(() => import('./routes/clients.new.lazy').then((d) => d.Route))
+const ExpensesIndexRoute = ExpensesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ExpensesRoute,
+} as any).lazy(() =>
+  import('./routes/expenses.index.lazy').then((d) => d.Route),
+)
 const ITokenRoute = ITokenRouteImport.update({
   id: '/i/$token',
   path: '/i/$token',
@@ -371,6 +385,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/clients': typeof ClientsRouteWithChildren
   '/compliance': typeof ComplianceRoute
+  '/expenses': typeof ExpensesRouteWithChildren
   '/features': typeof FeaturesRoute
   '/invoices': typeof InvoicesRouteWithChildren
   '/pricing': typeof PricingRoute
@@ -392,6 +407,7 @@ export interface FileRoutesByFullPath {
   '/solutions/enterprise': typeof SolutionsEnterpriseRoute
   '/solutions/small-business': typeof SolutionsSmallBusinessRoute
   '/clients/': typeof ClientsIndexRoute
+  '/expenses/': typeof ExpensesIndexRoute
   '/invoices/': typeof InvoicesIndexRoute
   '/reports/': typeof ReportsIndexRoute
   '/settings/': typeof SettingsIndexRoute
@@ -447,6 +463,7 @@ export interface FileRoutesByTo {
   '/solutions/enterprise': typeof SolutionsEnterpriseRoute
   '/solutions/small-business': typeof SolutionsSmallBusinessRoute
   '/clients': typeof ClientsIndexRoute
+  '/expenses': typeof ExpensesIndexRoute
   '/invoices': typeof InvoicesIndexRoute
   '/reports': typeof ReportsIndexRoute
   '/settings': typeof SettingsIndexRoute
@@ -486,6 +503,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/clients': typeof ClientsRouteWithChildren
   '/compliance': typeof ComplianceRoute
+  '/expenses': typeof ExpensesRouteWithChildren
   '/features': typeof FeaturesRoute
   '/invoices': typeof InvoicesRouteWithChildren
   '/pricing': typeof PricingRoute
@@ -507,6 +525,7 @@ export interface FileRoutesById {
   '/solutions/enterprise': typeof SolutionsEnterpriseRoute
   '/solutions/small-business': typeof SolutionsSmallBusinessRoute
   '/clients/': typeof ClientsIndexRoute
+  '/expenses/': typeof ExpensesIndexRoute
   '/invoices/': typeof InvoicesIndexRoute
   '/reports/': typeof ReportsIndexRoute
   '/settings/': typeof SettingsIndexRoute
@@ -547,6 +566,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/clients'
     | '/compliance'
+    | '/expenses'
     | '/features'
     | '/invoices'
     | '/pricing'
@@ -568,6 +588,7 @@ export interface FileRouteTypes {
     | '/solutions/enterprise'
     | '/solutions/small-business'
     | '/clients/'
+    | '/expenses/'
     | '/invoices/'
     | '/reports/'
     | '/settings/'
@@ -623,6 +644,7 @@ export interface FileRouteTypes {
     | '/solutions/enterprise'
     | '/solutions/small-business'
     | '/clients'
+    | '/expenses'
     | '/invoices'
     | '/reports'
     | '/settings'
@@ -661,6 +683,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/clients'
     | '/compliance'
+    | '/expenses'
     | '/features'
     | '/invoices'
     | '/pricing'
@@ -682,6 +705,7 @@ export interface FileRouteTypes {
     | '/solutions/enterprise'
     | '/solutions/small-business'
     | '/clients/'
+    | '/expenses/'
     | '/invoices/'
     | '/reports/'
     | '/settings/'
@@ -721,6 +745,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ClientsRoute: typeof ClientsRouteWithChildren
   ComplianceRoute: typeof ComplianceRoute
+  ExpensesRoute: typeof ExpensesRouteWithChildren
   FeaturesRoute: typeof FeaturesRoute
   InvoicesRoute: typeof InvoicesRouteWithChildren
   PricingRoute: typeof PricingRoute
@@ -790,6 +815,13 @@ declare module '@tanstack/react-router' {
       path: '/compliance'
       fullPath: '/compliance'
       preLoaderRoute: typeof ComplianceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/expenses': {
+      id: '/expenses'
+      path: '/expenses'
+      fullPath: '/expenses'
+      preLoaderRoute: typeof ExpensesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/features': {
@@ -868,6 +900,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/clients/new'
       preLoaderRoute: typeof ClientsNewRouteImport
       parentRoute: typeof ClientsRoute
+    }
+    '/expenses/': {
+      id: '/expenses/'
+      path: '/'
+      fullPath: '/expenses/'
+      preLoaderRoute: typeof ExpensesIndexRouteImport
+      parentRoute: typeof ExpensesRoute
     }
     '/i/$token': {
       id: '/i/$token'
@@ -1179,6 +1218,18 @@ const ClientsRouteChildren: ClientsRouteChildren = {
 const ClientsRouteWithChildren =
   ClientsRoute._addFileChildren(ClientsRouteChildren)
 
+interface ExpensesRouteChildren {
+  ExpensesIndexRoute: typeof ExpensesIndexRoute
+}
+
+const ExpensesRouteChildren: ExpensesRouteChildren = {
+  ExpensesIndexRoute: ExpensesIndexRoute,
+}
+
+const ExpensesRouteWithChildren = ExpensesRoute._addFileChildren(
+  ExpensesRouteChildren,
+)
+
 interface InvoicesProductsRouteChildren {
   InvoicesProductsIdRoute: typeof InvoicesProductsIdRoute
   InvoicesProductsNewRoute: typeof InvoicesProductsNewRoute
@@ -1246,6 +1297,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ClientsRoute: ClientsRouteWithChildren,
   ComplianceRoute: ComplianceRoute,
+  ExpensesRoute: ExpensesRouteWithChildren,
   FeaturesRoute: FeaturesRoute,
   InvoicesRoute: InvoicesRouteWithChildren,
   PricingRoute: PricingRoute,

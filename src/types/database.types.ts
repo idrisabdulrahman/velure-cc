@@ -331,6 +331,87 @@ export type Database = {
           },
         ]
       }
+      expense_categories: {
+        Row: {
+          code: string
+          created_at: string
+          is_active: boolean
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      expenses: {
+        Row: {
+          amount: number
+          category_code: string
+          created_at: string
+          currency: string
+          id: string
+          incurred_on: string
+          note: string | null
+          owner_id: string | null
+          updated_at: string
+          voided_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          amount: number
+          category_code: string
+          created_at?: string
+          currency?: string
+          id?: string
+          incurred_on: string
+          note?: string | null
+          owner_id?: string | null
+          updated_at?: string
+          voided_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          amount?: number
+          category_code?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          incurred_on?: string
+          note?: string | null
+          owner_id?: string | null
+          updated_at?: string
+          voided_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_category_code_fkey"
+            columns: ["category_code"]
+            isOneToOne: false
+            referencedRelation: "expense_categories"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "expenses_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integration_connections: {
         Row: {
           access_token: string | null

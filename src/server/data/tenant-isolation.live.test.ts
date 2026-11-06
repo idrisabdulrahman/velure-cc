@@ -142,6 +142,7 @@ const TABLES: TableSpec[] = [
 	},
 	{ table: "payment_charges", anchor: "workspace", marker: "account_name" },
 	{ table: "payment_claims", anchor: "workspace", marker: "claim_reference" },
+	{ table: "expenses", anchor: "workspace", marker: "note" },
 	{
 		table: "recurring_invoice_schedules",
 		anchor: "workspace",
@@ -276,6 +277,14 @@ async function seedRow(
 			invoice_id: seeded.get("invoices")?.id,
 			claimed_amount: 1000,
 			claim_reference: `wp3-claim-${suffix}`,
+		},
+		expenses: {
+			...base,
+			owner_id: USER_A,
+			amount: 1000,
+			currency: "NGN",
+			category_code: "rent",
+			incurred_on: "2026-10-01",
 		},
 		recurring_invoice_schedules: {
 			...base,
@@ -612,6 +621,16 @@ gate("WP3 tenant isolation: live RLS matrix", () => {
 					invoice_id: seeded.get("invoices")?.id,
 					claimed_amount: 1,
 					claim_reference: `wp3-i-${suffix}`,
+				},
+			],
+			[
+				"expenses",
+				{
+					workspace_id: workspaceA,
+					amount: 1,
+					currency: "NGN",
+					category_code: "rent",
+					incurred_on: "2026-10-01",
 				},
 			],
 			[
