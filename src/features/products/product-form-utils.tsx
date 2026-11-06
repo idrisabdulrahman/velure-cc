@@ -1,3 +1,10 @@
+import {
+	cloneElement,
+	isValidElement,
+	type ReactElement,
+	type ReactNode,
+	useId,
+} from "react";
 import { Label } from "#/components/ui/label";
 import type { VatCategory } from "#/features/invoices/types";
 
@@ -104,14 +111,27 @@ export function Field({
 	label: string;
 	error?: string;
 	htmlFor?: string;
-	children: React.ReactNode;
+	children: ReactNode;
 }) {
+	// When the caller does not supply an explicit id, generate one and attach it
+	// to the control so the label is programmatically associated. Radix `Select`
+	// children cannot receive an `id` this way, so those fields pass `htmlFor`
+	// (with the id on `SelectTrigger`) instead.
+	const generatedId = useId();
+	const controlId = htmlFor ?? generatedId;
+	const control =
+		htmlFor || !isValidElement(children)
+			? children
+			: cloneElement(children as ReactElement<{ id?: string }>, {
+					id: controlId,
+				});
+
 	return (
 		<div className="space-y-1.5">
-			<Label htmlFor={htmlFor} className="text-xs text-ink-3">
+			<Label htmlFor={controlId} className="text-xs text-ink-3">
 				{label}
 			</Label>
-			{children}
+			{control}
 			{error ? <p className="text-xs text-danger">{error}</p> : null}
 		</div>
 	);

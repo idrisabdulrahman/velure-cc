@@ -1,5 +1,5 @@
 // `pg@8.23.0` ships no type declarations and `@types/pg` is not installed.
-// This is the minimal structural surface Velure actually uses, so the project
+// This is the minimal structural surface Invoicly actually uses, so the project
 // typechecks without pulling in a large third-party declaration file.
 declare module "pg" {
 	export type QueryResult = {

@@ -173,7 +173,8 @@ function RecurringBillingSettingsPage() {
 				title: editingScheduleId
 					? "Recurring invoice schedule updated"
 					: "Recurring invoice schedule created",
-				description: "Velure will generate invoices when the schedule is due.",
+				description:
+					"Invoicly will generate invoices when the schedule is due.",
 			});
 		} catch (error) {
 			toast({
@@ -265,7 +266,7 @@ function RecurringBillingSettingsPage() {
 					<h1 className="text-3xl font-semibold text-ink">Recurring billing</h1>
 					<p className="mt-2 max-w-2xl text-sm text-ink-3">
 						Schedule repeat invoices for retainers, monthly services, and
-						maintenance billing. Generated invoices stay in the normal Velure
+						maintenance billing. Generated invoices stay in the normal Invoicly
 						invoice flow.
 					</p>
 				</div>
@@ -284,7 +285,7 @@ function RecurringBillingSettingsPage() {
 			</div>
 
 			<Callout tone="info" title="Status: automatic drafts.">
-				Velure's background scheduler creates a draft invoice for each due
+				Invoicly's background scheduler creates a draft invoice for each due
 				schedule (run records appear below). Drafts are never issued or emailed
 				automatically: a schedule does not store a customer record, so you
 				complete the customer and send the draft from the normal invoice flow.

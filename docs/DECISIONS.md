@@ -1214,3 +1214,41 @@ typed per-line row model as QuickBooks; no new money math.
 **Not in this slice.** Xero (fixed columns + persisted date setting); the
 `tax_id_type` column; the conditional seller-Tax-ID invoice treatment; the WHT
 tracker.
+
+---
+
+## 2026-11-06 — Gate 0: current-state contradictions reconciled (competitive build plan)
+
+**Task ID:** `competitive-build-plan-2026-11`
+
+**Question.** The competitive build plan (`build_plan.md`) was blocked on three
+current-state contradictions the Goldfish review flagged. The user was asked
+directly and answered.
+
+**Answers (user, 2026-11-06).**
+
+- **Data layer:** **Supabase Postgres + RLS** is live; Convex is not present in
+  the checkout. `AGENTS.md` §1's "Convex + Better Auth" line was stale.
+- **Host:** **Cloudflare Workers free** is production. This matches `AGENTS.md`
+  §10 all along; the Node-VPS deployment (`deploy/`, `velure.variadic.ng:8490`,
+  task `vps-node-deployment-2026-11` marked done) is **not** the live host. §10
+  now says so explicitly so a future agent is not misled by the VPS record.
+- **Name:** the product is **Invoicly** (`invoicly.cv`), with `velure` kept as the
+  infrastructure/persistence slug.
+
+**Changes.** `AGENTS.md` §1 (runtime, product name, data layer), §2 (brand),
+§8 (dropped the stale Convex Phase-A clause), §10 (host clarification). No code,
+schema, route, or migration touched.
+
+**Residual conflict — tested and closed (2026-11-06).** The 2026-11-01 entry
+recorded Cloudflare **1102 / `exceededCpu`** on sign-in. A live probe of
+`https://invoicly.cv/api/auth/sign-in/email` on 2026-11-06 returned
+`401 INVALID_EMAIL_OR_PASSWORD` three times, then `429` (rate limit), with no
+500/1102. Sign-in works on the live host and the auth rate limit is active, so
+the earlier CPU concern does not reproduce on the current deployment. The
+`deploy/` VPS path remains an unused option.
+
+**Still open (noted, not fixed here).** `AGENTS.md` §1 still references
+`migration-plan.md`, which does not exist in this checkout (`ProductStrategy.md`
+and `Architecture.md` are likewise absent). Fixing those references is a
+separate documented change.

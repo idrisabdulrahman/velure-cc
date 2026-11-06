@@ -437,7 +437,7 @@ function defaultCompliance(args: {
 
 	return {
 		seller: {
-			legalName: "Velure",
+			legalName: "Invoicly",
 			countryCode: "NG",
 		},
 		buyer: {

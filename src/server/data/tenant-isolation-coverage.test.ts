@@ -237,6 +237,16 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	listPublicInvoicePayments: "public-token",
 	listPublicInvoicePaymentsForInvoice: "public-token",
 	rawRowToInvoiceState: "pure",
+	// payment-claims.ts — WP-A. list/confirm/reject take the USER-scoped
+	// client: reads are workspace-scoped by RLS, and confirm/reject first
+	// resolve the claim (and recordPayment resolves the active workspace) from
+	// the verified session. insertPaymentClaim takes the service-role client,
+	// but its workspace/invoice ids are derived by the caller from the bearer
+	// token, never from the request body.
+	listPaymentClaims: "app-scoped",
+	confirmPaymentClaim: "app-scoped",
+	rejectPaymentClaim: "app-scoped",
+	insertPaymentClaim: "public-token",
 	// paystack-server.ts
 	ensurePaystackTransferCharge: "server-admin",
 	confirmPaystackWebhookPayment: "server-admin",
@@ -328,6 +338,10 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	// for the caller's own share token, never from input, so the write stays
 	// on that one invoice.
 	recordPublicInvoiceView: "public-token",
+	// Admin client INSERT of a payment_claim: the workspace/invoice ids are
+	// derived from the bearer token by this same module, never from input; the
+	// insert only records an unverified claim (never a payment).
+	submitPublicPaymentClaim: "public-token",
 };
 
 const DATA_DIR = join(import.meta.dirname);
@@ -500,6 +514,14 @@ const ROUTE_CLASSIFICATIONS: Record<string, Classification> = {
 	// `$id` is the public share token, not a row id
 	"invoice/download/$id.ts": "public-token",
 	"invoice/public/$token.ts": "public-token",
+	// WP-A: buyer "I've paid" — token-scoped, rate-limited, evidence only.
+	"invoice/public/claim.ts": "public-token",
+	// WP-A: seller confirm/reject — identity from the verified session; the
+	// user-scoped client carries RLS for the claim write.
+	"invoice/claims/$id.ts": "session",
+	// WP-A: seller claim list for one invoice — session; the repository
+	// resolves the invoice through the caller's active workspace.
+	"invoice/claims.index.ts": "session",
 	"invoice/scheduled.ts": "server-admin",
 	// invoice read goes through getById(session client, session user, id)
 	"invoice/send/$id.ts": "session",

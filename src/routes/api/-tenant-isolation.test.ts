@@ -25,6 +25,10 @@ const {
 	ensurePaystackTransferChargeMock,
 	renderInvoicePdfMock,
 	sendQueuedEmailsMock,
+	submitPublicPaymentClaimMock,
+	confirmPaymentClaimMock,
+	rejectPaymentClaimMock,
+	listPaymentClaimsMock,
 } = vi.hoisted(() => ({
 	resendSendSpy: vi.fn(
 		async (_payload: unknown, _options?: unknown) =>
@@ -37,6 +41,10 @@ const {
 	ensurePaystackTransferChargeMock: vi.fn(async () => undefined),
 	renderInvoicePdfMock: vi.fn(async () => new Uint8Array([1, 2, 3])),
 	sendQueuedEmailsMock: vi.fn(async () => ({ sent: 0, skipped: 0 })),
+	submitPublicPaymentClaimMock: vi.fn(),
+	confirmPaymentClaimMock: vi.fn(),
+	rejectPaymentClaimMock: vi.fn(),
+	listPaymentClaimsMock: vi.fn(),
 }));
 
 vi.mock("#/server/invoice-repository", () => ({
@@ -46,6 +54,12 @@ vi.mock("#/server/invoice-repository", () => ({
 }));
 vi.mock("#/server/public-invoice-repository", () => ({
 	getInvoiceByToken: getInvoiceByTokenMock,
+	submitPublicPaymentClaim: submitPublicPaymentClaimMock,
+}));
+vi.mock("#/server/data/payment-claims", () => ({
+	confirmPaymentClaim: confirmPaymentClaimMock,
+	rejectPaymentClaim: rejectPaymentClaimMock,
+	listPaymentClaims: listPaymentClaimsMock,
 }));
 vi.mock("#/server/data/paystack-server", () => ({
 	ensurePaystackTransferCharge: ensurePaystackTransferChargeMock,
@@ -66,7 +80,10 @@ vi.mock("resend", () => ({
 	},
 }));
 
+import { handle as handleClaimAction } from "./invoice/claims/$id";
+import { handle as handleClaimsList } from "./invoice/claims.index";
 import { handle as handleDownload } from "./invoice/download/$id";
+import { handle as handlePublicClaim } from "./invoice/public/claim";
 import { handle as handleSend } from "./invoice/send/$id";
 import { handle as handleSendQueue } from "./reminders/send-queue";
 
@@ -212,6 +229,151 @@ describe("POST /api/reminders/send-queue — session-derived tenancy", () => {
 		expect(sendQueuedEmailsMock).toHaveBeenCalledWith(
 			context.client,
 			context.userId,
+		);
+	});
+});
+
+describe("POST /api/invoice/public/claim — token-only public boundary", () => {
+	function claimRequest(body: Record<string, unknown>) {
+		return new Request("http://velure.test/api/invoice/public/claim", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify(body),
+		});
+	}
+
+	it("ignores any workspace/invoice id in the body — only the token reaches the repository", async () => {
+		submitPublicPaymentClaimMock.mockResolvedValue({
+			ok: true,
+			duplicate: false,
+		});
+
+		const response = await handlePublicClaim({
+			request: claimRequest({
+				token: "pub-token-a",
+				amount: 5000,
+				// Forged tenancy handles must not be forwarded.
+				workspaceId: "ws-b",
+				invoiceId: "inv-b",
+				userId: "user-b",
+			}),
+		});
+
+		expect(response.status).toBe(200);
+		expect(submitPublicPaymentClaimMock).toHaveBeenCalledTimes(1);
+		const [token, input] = submitPublicPaymentClaimMock.mock.calls[0] as [
+			string,
+			Record<string, unknown>,
+			unknown,
+		];
+		expect(token).toBe("pub-token-a");
+		expect(input).toMatchObject({ amount: 5000 });
+		expect(input).not.toHaveProperty("workspaceId");
+		expect(input).not.toHaveProperty("invoiceId");
+	});
+
+	it("404s for an unknown/foreign token with nothing else touched", async () => {
+		submitPublicPaymentClaimMock.mockResolvedValue({
+			ok: false,
+			reason: "not_found",
+		});
+
+		const response = await handlePublicClaim({
+			request: claimRequest({ token: "no-such-token", amount: 5000 }),
+		});
+
+		expect(response.status).toBe(404);
+	});
+});
+
+describe("POST /api/invoice/claims/$id — session-derived tenancy", () => {
+	it("resolves the claim only through the path id + session context — never the body", async () => {
+		getInvoiceUserContextMock.mockResolvedValue(WORKSPACE_B_CONTEXT);
+		confirmPaymentClaimMock.mockResolvedValue({
+			ok: true,
+			duplicate: false,
+			invoiceId: "inv-b",
+		});
+
+		const forged = new Request(
+			"http://velure.test/api/invoice/claims/claim-b",
+			{
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					action: "confirm",
+					claimId: "claim-a",
+					workspaceId: "ws-a",
+					userId: "user-a",
+				}),
+			},
+		);
+		const response = await handleClaimAction({
+			request: forged,
+			params: { id: "claim-b" },
+		});
+
+		expect(response.status).toBe(200);
+		expect(confirmPaymentClaimMock).toHaveBeenCalledTimes(1);
+		expect(confirmPaymentClaimMock).toHaveBeenCalledWith(
+			WORKSPACE_B_CONTEXT.client,
+			WORKSPACE_B_CONTEXT.userId,
+			"claim-b",
+		);
+		expect(rejectPaymentClaimMock).not.toHaveBeenCalled();
+	});
+
+	it("404s with no settlement when the scoped claim lookup misses", async () => {
+		getInvoiceUserContextMock.mockResolvedValue(WORKSPACE_B_CONTEXT);
+		confirmPaymentClaimMock.mockRejectedValue(
+			new Error("Payment claim not found."),
+		);
+
+		const response = await handleClaimAction({
+			request: new Request("http://velure.test/api/invoice/claims/claim-a", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ action: "confirm" }),
+			}),
+			params: { id: "claim-a" },
+		});
+
+		expect(response.status).toBe(404);
+		expect(rejectPaymentClaimMock).not.toHaveBeenCalled();
+	});
+});
+
+describe("GET /api/invoice/claims — session-scoped claim list", () => {
+	it("401s without a session and reads nothing", async () => {
+		getInvoiceUserContextMock.mockResolvedValue(null);
+
+		const response = await handleClaimsList({
+			request: new Request(
+				"http://velure.test/api/invoice/claims?invoiceId=inv-a",
+			),
+		});
+
+		expect(response.status).toBe(401);
+		expect(listPaymentClaimsMock).not.toHaveBeenCalled();
+	});
+
+	it("scopes the read to the session client + user and the requested invoice", async () => {
+		getInvoiceUserContextMock.mockResolvedValue(WORKSPACE_B_CONTEXT);
+		listPaymentClaimsMock.mockResolvedValue([]);
+
+		const response = await handleClaimsList({
+			request: new Request(
+				"http://velure.test/api/invoice/claims?invoiceId=inv-a",
+			),
+		});
+
+		expect(response.status).toBe(200);
+		// The scoped repository returns [] for a foreign invoice id; the route
+		// never widens the lookup or supplies a tenant handle from the query.
+		expect(listPaymentClaimsMock).toHaveBeenCalledWith(
+			WORKSPACE_B_CONTEXT.client,
+			WORKSPACE_B_CONTEXT.userId,
+			"inv-a",
 		);
 	});
 });

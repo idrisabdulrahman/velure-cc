@@ -1279,9 +1279,9 @@ function InvoicesIndex() {
 			const grid = xlsxData?.grid ?? parseCsvGrid(csvText);
 			if (looksLikeSupplierReceivingGrid(grid)) {
 				toast({
-					title: "Supplier receiving sheets are outside Velure invoices",
+					title: "Supplier receiving sheets are outside Invoicly invoices",
 					description:
-						"Create a pro-forma or standard invoice for customer billing. Supplier receiving and variance worksheets are outside Velure.",
+						"Create a pro-forma or standard invoice for customer billing. Supplier receiving and variance worksheets are outside Invoicly.",
 					variant: "error",
 				});
 				return;
@@ -1394,8 +1394,9 @@ function InvoicesIndex() {
 								Currency-scoped totals
 							</p>
 							<p className="mt-1 text-xs text-ink-3">
-								Totals and chart are showing {summaryCurrency} only. Velure does
-								not combine currencies without an exchange-rate audit trail.
+								Totals and chart are showing {summaryCurrency} only. Invoicly
+								does not combine currencies without an exchange-rate audit
+								trail.
 							</p>
 						</div>
 						<div className="flex flex-wrap items-center gap-2">

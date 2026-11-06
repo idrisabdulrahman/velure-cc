@@ -242,7 +242,7 @@ function PaymentRemindersSettingsPage() {
 		overdueCadenceDays: 3,
 		maxOverdueReminders: 3,
 		escalateAfterCount: 3,
-		businessSignature: "Velure Finance Team",
+		businessSignature: "Invoicly Finance Team",
 	});
 	const {
 		data: collectionOverview,
@@ -324,7 +324,7 @@ function PaymentRemindersSettingsPage() {
 			overdueCadenceDays: settings.overdueCadenceDays,
 			maxOverdueReminders: settings.maxOverdueReminders,
 			escalateAfterCount: settings.escalateAfterCount,
-			businessSignature: settings.businessSignature ?? "Velure Finance Team",
+			businessSignature: settings.businessSignature ?? "Invoicly Finance Team",
 		});
 	}, [settings]);
 
@@ -360,8 +360,8 @@ function PaymentRemindersSettingsPage() {
 					</h1>
 					<p className="mt-2 text-sm text-ink-3">
 						Find unpaid invoices, queue polite customer emails, and move
-						exceptions into internal review. This stays inside invoicing; Velure
-						does not add legal escalation tools.
+						exceptions into internal review. This stays inside invoicing;
+						Invoicly does not add legal escalation tools.
 					</p>
 				</div>
 				<Button
@@ -373,7 +373,7 @@ function PaymentRemindersSettingsPage() {
 			</div>
 
 			<Callout tone="info" title="Status: scheduled scan.">
-				Velure scans sent, unpaid invoices on a schedule and queues the
+				Invoicly scans sent, unpaid invoices on a schedule and queues the
 				reminders due under the schedule below. Automatic customer email sending
 				is an explicit opt-in, so queued reminders are delivered once background
 				sending is enabled or when you press Send queue. You can also run the
@@ -702,7 +702,7 @@ function PaymentRemindersSettingsPage() {
 									businessSignature: undefined,
 								}));
 							}}
-							placeholder="Velure Finance Team"
+							placeholder="Invoicly Finance Team"
 							className={`${errors.businessSignature ? "border-danger" : "border-rule"} bg-paper`}
 						/>
 						<p className="text-xs text-ink-3">
@@ -770,8 +770,8 @@ function PaymentRemindersSettingsPage() {
 						</div>
 					) : null}
 					<p className="mt-3 text-xs text-ink-3">
-						Customer reminders use the buyer email saved on the invoice. Velure
-						will not send a reminder when that email is missing.
+						Customer reminders use the buyer email saved on the invoice.
+						Invoicly will not send a reminder when that email is missing.
 					</p>
 				</SheetContent>
 			</Sheet>

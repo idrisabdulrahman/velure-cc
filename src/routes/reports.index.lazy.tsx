@@ -245,7 +245,8 @@ function ReportsIndex() {
 					</h1>
 					<p className="mt-2 max-w-xl text-sm text-ink-3">
 						Track billed revenue, collections, open balances, and product
-						concentration from invoice activity.
+						concentration from issued invoices. Drafts and pro-formas are not
+						included.
 					</p>
 				</div>
 
@@ -294,7 +295,7 @@ function ReportsIndex() {
 						<Kpi
 							label="Billed"
 							value={formatCompactMoney(summary.billedAmount, currency)}
-							sub={`${summary.invoiceCount} invoices`}
+							sub={`${summary.invoiceCount} issued invoices`}
 							tone="info"
 						/>
 						<Kpi

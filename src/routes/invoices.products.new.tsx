@@ -149,7 +149,7 @@ function NewProductPage() {
 					<div className="p-4 md:p-5">
 						<form onSubmit={onSubmit} className="space-y-4">
 							<div className="grid gap-3 md:grid-cols-2">
-								<Field label="Product type">
+								<Field label="Product type" htmlFor="product-type">
 									<Select
 										value={state.type}
 										onValueChange={(value) =>
@@ -159,7 +159,10 @@ function NewProductPage() {
 											}))
 										}
 									>
-										<SelectTrigger className={`${inputClass} w-full`}>
+										<SelectTrigger
+											id="product-type"
+											className={`${inputClass} w-full`}
+										>
 											<SelectValue placeholder="Type" />
 										</SelectTrigger>
 										<SelectContent className="border-rule bg-paper-2 text-ink">
@@ -168,14 +171,17 @@ function NewProductPage() {
 										</SelectContent>
 									</Select>
 								</Field>
-								<Field label="Unit name">
+								<Field label="Unit name" htmlFor="product-unit-name">
 									<Select
 										value={state.unitName}
 										onValueChange={(value) =>
 											setState((prev) => ({ ...prev, unitName: value }))
 										}
 									>
-										<SelectTrigger className={`${inputClass} w-full`}>
+										<SelectTrigger
+											id="product-unit-name"
+											className={`${inputClass} w-full`}
+										>
 											<SelectValue placeholder="Unit" />
 										</SelectTrigger>
 										<SelectContent className="border-rule bg-paper-2 text-ink">

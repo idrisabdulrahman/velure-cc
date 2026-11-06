@@ -1176,6 +1176,66 @@ export type Database = {
           },
         ]
       }
+      payment_claims: {
+        Row: {
+          claim_reference: string | null
+          claimed_amount: number
+          claimed_at: string
+          created_at: string
+          id: string
+          invoice_id: string
+          note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          claim_reference?: string | null
+          claimed_amount: number
+          claimed_at?: string
+          created_at?: string
+          id?: string
+          invoice_id: string
+          note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          claim_reference?: string | null
+          claimed_amount?: number
+          claimed_at?: string
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_claims_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_claims_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_transactions: {
         Row: {
           amount: number

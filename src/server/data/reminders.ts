@@ -87,7 +87,7 @@ export function defaultRule(ownerId: string): Omit<ReminderRule, "_id"> {
 		overdueCadenceDays: 3,
 		maxOverdueReminders: 3,
 		escalateAfterCount: 3,
-		businessSignature: "Velure Finance Team",
+		businessSignature: "Invoicly Finance Team",
 		createdAt: now,
 		updatedAt: now,
 	};
@@ -866,7 +866,7 @@ export async function sendQueuedEmails(client: Supabase, userId: string) {
 		}
 		const result = await resend.emails.send({
 			from:
-				getServerEnv("RESEND_FROM_EMAIL") ?? "Velure <onboarding@resend.dev>",
+				getServerEnv("RESEND_FROM_EMAIL") ?? "Invoicly <onboarding@resend.dev>",
 			to: recipient,
 			subject: `Reminder: ${invoice.invoiceNumber}`,
 			text: `Invoice ${invoice.invoiceNumber} for ${invoice.customerName} is currently ${invoice.status}. View it here: ${getServerEnv("SITE_URL") ?? ""}/i/${invoice.token}`,

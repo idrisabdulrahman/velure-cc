@@ -43,7 +43,7 @@ function paystackChargeResponse(reference: string) {
 			data: {
 				status: "pending",
 				reference,
-				account_name: "VELURE/PAYER",
+				account_name: "INVOICLY/PAYER",
 				account_number: "0123456789",
 				bank: { name: "Test Bank", slug: "test-bank" },
 				amount: 150000,

@@ -21,6 +21,7 @@ import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as ClientsIndexRouteImport } from './routes/clients.index'
 import { Route as ClientsNewRouteImport } from './routes/clients.new'
 import { Route as ITokenRouteImport } from './routes/i.$token'
@@ -51,8 +52,11 @@ import { Route as ApiIntegrationsQuickbooksCallbackRouteImport } from './routes/
 import { Route as ApiIntegrationsQuickbooksConnectRouteImport } from './routes/api/integrations/quickbooks/connect'
 import { Route as ApiIntegrationsXeroCallbackRouteImport } from './routes/api/integrations/xero/callback'
 import { Route as ApiIntegrationsXeroConnectRouteImport } from './routes/api/integrations/xero/connect'
+import { Route as ApiInvoiceClaimsIndexRouteImport } from './routes/api/invoice/claims.index'
+import { Route as ApiInvoiceClaimsIdRouteImport } from './routes/api/invoice/claims/$id'
 import { Route as ApiInvoiceDownloadIdRouteImport } from './routes/api/invoice/download/$id'
 import { Route as ApiInvoicePublicTokenRouteImport } from './routes/api/invoice/public/$token'
+import { Route as ApiInvoicePublicClaimRouteImport } from './routes/api/invoice/public/claim'
 import { Route as ApiInvoiceSendIdRouteImport } from './routes/api/invoice/send/$id'
 import { Route as ApiInvoiceSubmissionIdRouteImport } from './routes/api/invoice/submission/$id'
 import { Route as ApiInvoiceSubmissionsScheduledRouteImport } from './routes/api/invoice/submissions/scheduled'
@@ -121,6 +125,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClientsIndexRoute = ClientsIndexRouteImport.update({
@@ -279,6 +288,16 @@ const ApiIntegrationsXeroConnectRoute =
     path: '/api/integrations/xero/connect',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiInvoiceClaimsIndexRoute = ApiInvoiceClaimsIndexRouteImport.update({
+  id: '/api/invoice/claims/',
+  path: '/api/invoice/claims/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInvoiceClaimsIdRoute = ApiInvoiceClaimsIdRouteImport.update({
+  id: '/api/invoice/claims/$id',
+  path: '/api/invoice/claims/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiInvoiceDownloadIdRoute = ApiInvoiceDownloadIdRouteImport.update({
   id: '/api/invoice/download/$id',
   path: '/api/invoice/download/$id',
@@ -287,6 +306,11 @@ const ApiInvoiceDownloadIdRoute = ApiInvoiceDownloadIdRouteImport.update({
 const ApiInvoicePublicTokenRoute = ApiInvoicePublicTokenRouteImport.update({
   id: '/api/invoice/public/$token',
   path: '/api/invoice/public/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInvoicePublicClaimRoute = ApiInvoicePublicClaimRouteImport.update({
+  id: '/api/invoice/public/claim',
+  path: '/api/invoice/public/claim',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiInvoiceSendIdRoute = ApiInvoiceSendIdRouteImport.update({
@@ -355,6 +379,7 @@ export interface FileRoutesByFullPath {
   '/security': typeof SecurityRoute
   '/settings': typeof SettingsRouteWithChildren
   '/terms': typeof TermsRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/clients/new': typeof ClientsNewRoute
   '/i/$token': typeof ITokenRoute
   '/invoices/new': typeof InvoicesNewRoute
@@ -385,8 +410,10 @@ export interface FileRoutesByFullPath {
   '/api/integrations/quickbooks/connect': typeof ApiIntegrationsQuickbooksConnectRoute
   '/api/integrations/xero/callback': typeof ApiIntegrationsXeroCallbackRoute
   '/api/integrations/xero/connect': typeof ApiIntegrationsXeroConnectRoute
+  '/api/invoice/claims/$id': typeof ApiInvoiceClaimsIdRoute
   '/api/invoice/download/$id': typeof ApiInvoiceDownloadIdRoute
   '/api/invoice/public/$token': typeof ApiInvoicePublicTokenRoute
+  '/api/invoice/public/claim': typeof ApiInvoicePublicClaimRoute
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
   '/api/invoice/submission/$id': typeof ApiInvoiceSubmissionIdRoute
   '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
@@ -396,6 +423,7 @@ export interface FileRoutesByFullPath {
   '/api/security/link-stepup/request': typeof ApiSecurityLinkStepupRequestRoute
   '/api/security/link-stepup/status': typeof ApiSecurityLinkStepupStatusRoute
   '/api/security/link-stepup/verify': typeof ApiSecurityLinkStepupVerifyRoute
+  '/api/invoice/claims/': typeof ApiInvoiceClaimsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -406,6 +434,7 @@ export interface FileRoutesByTo {
   '/privacy': typeof PrivacyRoute
   '/security': typeof SecurityRoute
   '/terms': typeof TermsRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/clients/new': typeof ClientsNewRoute
   '/i/$token': typeof ITokenRoute
   '/invoices/new': typeof InvoicesNewRoute
@@ -436,8 +465,10 @@ export interface FileRoutesByTo {
   '/api/integrations/quickbooks/connect': typeof ApiIntegrationsQuickbooksConnectRoute
   '/api/integrations/xero/callback': typeof ApiIntegrationsXeroCallbackRoute
   '/api/integrations/xero/connect': typeof ApiIntegrationsXeroConnectRoute
+  '/api/invoice/claims/$id': typeof ApiInvoiceClaimsIdRoute
   '/api/invoice/download/$id': typeof ApiInvoiceDownloadIdRoute
   '/api/invoice/public/$token': typeof ApiInvoicePublicTokenRoute
+  '/api/invoice/public/claim': typeof ApiInvoicePublicClaimRoute
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
   '/api/invoice/submission/$id': typeof ApiInvoiceSubmissionIdRoute
   '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
@@ -447,6 +478,7 @@ export interface FileRoutesByTo {
   '/api/security/link-stepup/request': typeof ApiSecurityLinkStepupRequestRoute
   '/api/security/link-stepup/status': typeof ApiSecurityLinkStepupStatusRoute
   '/api/security/link-stepup/verify': typeof ApiSecurityLinkStepupVerifyRoute
+  '/api/invoice/claims': typeof ApiInvoiceClaimsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -462,6 +494,7 @@ export interface FileRoutesById {
   '/security': typeof SecurityRoute
   '/settings': typeof SettingsRouteWithChildren
   '/terms': typeof TermsRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/clients/new': typeof ClientsNewRoute
   '/i/$token': typeof ITokenRoute
   '/invoices/new': typeof InvoicesNewRoute
@@ -492,8 +525,10 @@ export interface FileRoutesById {
   '/api/integrations/quickbooks/connect': typeof ApiIntegrationsQuickbooksConnectRoute
   '/api/integrations/xero/callback': typeof ApiIntegrationsXeroCallbackRoute
   '/api/integrations/xero/connect': typeof ApiIntegrationsXeroConnectRoute
+  '/api/invoice/claims/$id': typeof ApiInvoiceClaimsIdRoute
   '/api/invoice/download/$id': typeof ApiInvoiceDownloadIdRoute
   '/api/invoice/public/$token': typeof ApiInvoicePublicTokenRoute
+  '/api/invoice/public/claim': typeof ApiInvoicePublicClaimRoute
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
   '/api/invoice/submission/$id': typeof ApiInvoiceSubmissionIdRoute
   '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
@@ -503,6 +538,7 @@ export interface FileRoutesById {
   '/api/security/link-stepup/request': typeof ApiSecurityLinkStepupRequestRoute
   '/api/security/link-stepup/status': typeof ApiSecurityLinkStepupStatusRoute
   '/api/security/link-stepup/verify': typeof ApiSecurityLinkStepupVerifyRoute
+  '/api/invoice/claims/': typeof ApiInvoiceClaimsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -519,6 +555,7 @@ export interface FileRouteTypes {
     | '/security'
     | '/settings'
     | '/terms'
+    | '/verify-email'
     | '/clients/new'
     | '/i/$token'
     | '/invoices/new'
@@ -549,8 +586,10 @@ export interface FileRouteTypes {
     | '/api/integrations/quickbooks/connect'
     | '/api/integrations/xero/callback'
     | '/api/integrations/xero/connect'
+    | '/api/invoice/claims/$id'
     | '/api/invoice/download/$id'
     | '/api/invoice/public/$token'
+    | '/api/invoice/public/claim'
     | '/api/invoice/send/$id'
     | '/api/invoice/submission/$id'
     | '/api/invoice/submissions/scheduled'
@@ -560,6 +599,7 @@ export interface FileRouteTypes {
     | '/api/security/link-stepup/request'
     | '/api/security/link-stepup/status'
     | '/api/security/link-stepup/verify'
+    | '/api/invoice/claims/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -570,6 +610,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/security'
     | '/terms'
+    | '/verify-email'
     | '/clients/new'
     | '/i/$token'
     | '/invoices/new'
@@ -600,8 +641,10 @@ export interface FileRouteTypes {
     | '/api/integrations/quickbooks/connect'
     | '/api/integrations/xero/callback'
     | '/api/integrations/xero/connect'
+    | '/api/invoice/claims/$id'
     | '/api/invoice/download/$id'
     | '/api/invoice/public/$token'
+    | '/api/invoice/public/claim'
     | '/api/invoice/send/$id'
     | '/api/invoice/submission/$id'
     | '/api/invoice/submissions/scheduled'
@@ -611,6 +654,7 @@ export interface FileRouteTypes {
     | '/api/security/link-stepup/request'
     | '/api/security/link-stepup/status'
     | '/api/security/link-stepup/verify'
+    | '/api/invoice/claims'
   id:
     | '__root__'
     | '/'
@@ -625,6 +669,7 @@ export interface FileRouteTypes {
     | '/security'
     | '/settings'
     | '/terms'
+    | '/verify-email'
     | '/clients/new'
     | '/i/$token'
     | '/invoices/new'
@@ -655,8 +700,10 @@ export interface FileRouteTypes {
     | '/api/integrations/quickbooks/connect'
     | '/api/integrations/xero/callback'
     | '/api/integrations/xero/connect'
+    | '/api/invoice/claims/$id'
     | '/api/invoice/download/$id'
     | '/api/invoice/public/$token'
+    | '/api/invoice/public/claim'
     | '/api/invoice/send/$id'
     | '/api/invoice/submission/$id'
     | '/api/invoice/submissions/scheduled'
@@ -666,6 +713,7 @@ export interface FileRouteTypes {
     | '/api/security/link-stepup/request'
     | '/api/security/link-stepup/status'
     | '/api/security/link-stepup/verify'
+    | '/api/invoice/claims/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -681,6 +729,7 @@ export interface RootRouteChildren {
   SecurityRoute: typeof SecurityRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   TermsRoute: typeof TermsRoute
+  VerifyEmailRoute: typeof VerifyEmailRoute
   ITokenRoute: typeof ITokenRoute
   SolutionsEnterpriseRoute: typeof SolutionsEnterpriseRoute
   SolutionsSmallBusinessRoute: typeof SolutionsSmallBusinessRoute
@@ -697,8 +746,10 @@ export interface RootRouteChildren {
   ApiIntegrationsQuickbooksConnectRoute: typeof ApiIntegrationsQuickbooksConnectRoute
   ApiIntegrationsXeroCallbackRoute: typeof ApiIntegrationsXeroCallbackRoute
   ApiIntegrationsXeroConnectRoute: typeof ApiIntegrationsXeroConnectRoute
+  ApiInvoiceClaimsIdRoute: typeof ApiInvoiceClaimsIdRoute
   ApiInvoiceDownloadIdRoute: typeof ApiInvoiceDownloadIdRoute
   ApiInvoicePublicTokenRoute: typeof ApiInvoicePublicTokenRoute
+  ApiInvoicePublicClaimRoute: typeof ApiInvoicePublicClaimRoute
   ApiInvoiceSendIdRoute: typeof ApiInvoiceSendIdRoute
   ApiInvoiceSubmissionIdRoute: typeof ApiInvoiceSubmissionIdRoute
   ApiInvoiceSubmissionsScheduledRoute: typeof ApiInvoiceSubmissionsScheduledRoute
@@ -708,6 +759,7 @@ export interface RootRouteChildren {
   ApiSecurityLinkStepupRequestRoute: typeof ApiSecurityLinkStepupRequestRoute
   ApiSecurityLinkStepupStatusRoute: typeof ApiSecurityLinkStepupStatusRoute
   ApiSecurityLinkStepupVerifyRoute: typeof ApiSecurityLinkStepupVerifyRoute
+  ApiInvoiceClaimsIndexRoute: typeof ApiInvoiceClaimsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -794,6 +846,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify-email': {
+      id: '/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof VerifyEmailRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/clients/': {
@@ -1006,6 +1065,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiIntegrationsXeroConnectRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/invoice/claims/': {
+      id: '/api/invoice/claims/'
+      path: '/api/invoice/claims'
+      fullPath: '/api/invoice/claims/'
+      preLoaderRoute: typeof ApiInvoiceClaimsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/invoice/claims/$id': {
+      id: '/api/invoice/claims/$id'
+      path: '/api/invoice/claims/$id'
+      fullPath: '/api/invoice/claims/$id'
+      preLoaderRoute: typeof ApiInvoiceClaimsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/invoice/download/$id': {
       id: '/api/invoice/download/$id'
       path: '/api/invoice/download/$id'
@@ -1018,6 +1091,13 @@ declare module '@tanstack/react-router' {
       path: '/api/invoice/public/$token'
       fullPath: '/api/invoice/public/$token'
       preLoaderRoute: typeof ApiInvoicePublicTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/invoice/public/claim': {
+      id: '/api/invoice/public/claim'
+      path: '/api/invoice/public/claim'
+      fullPath: '/api/invoice/public/claim'
+      preLoaderRoute: typeof ApiInvoicePublicClaimRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/invoice/send/$id': {
@@ -1174,6 +1254,7 @@ const rootRouteChildren: RootRouteChildren = {
   SecurityRoute: SecurityRoute,
   SettingsRoute: SettingsRouteWithChildren,
   TermsRoute: TermsRoute,
+  VerifyEmailRoute: VerifyEmailRoute,
   ITokenRoute: ITokenRoute,
   SolutionsEnterpriseRoute: SolutionsEnterpriseRoute,
   SolutionsSmallBusinessRoute: SolutionsSmallBusinessRoute,
@@ -1191,8 +1272,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiIntegrationsQuickbooksConnectRoute: ApiIntegrationsQuickbooksConnectRoute,
   ApiIntegrationsXeroCallbackRoute: ApiIntegrationsXeroCallbackRoute,
   ApiIntegrationsXeroConnectRoute: ApiIntegrationsXeroConnectRoute,
+  ApiInvoiceClaimsIdRoute: ApiInvoiceClaimsIdRoute,
   ApiInvoiceDownloadIdRoute: ApiInvoiceDownloadIdRoute,
   ApiInvoicePublicTokenRoute: ApiInvoicePublicTokenRoute,
+  ApiInvoicePublicClaimRoute: ApiInvoicePublicClaimRoute,
   ApiInvoiceSendIdRoute: ApiInvoiceSendIdRoute,
   ApiInvoiceSubmissionIdRoute: ApiInvoiceSubmissionIdRoute,
   ApiInvoiceSubmissionsScheduledRoute: ApiInvoiceSubmissionsScheduledRoute,
@@ -1202,6 +1285,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSecurityLinkStepupRequestRoute: ApiSecurityLinkStepupRequestRoute,
   ApiSecurityLinkStepupStatusRoute: ApiSecurityLinkStepupStatusRoute,
   ApiSecurityLinkStepupVerifyRoute: ApiSecurityLinkStepupVerifyRoute,
+  ApiInvoiceClaimsIndexRoute: ApiInvoiceClaimsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

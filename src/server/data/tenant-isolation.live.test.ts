@@ -141,6 +141,7 @@ const TABLES: TableSpec[] = [
 		marker: "provider_payment_id",
 	},
 	{ table: "payment_charges", anchor: "workspace", marker: "account_name" },
+	{ table: "payment_claims", anchor: "workspace", marker: "claim_reference" },
 	{
 		table: "recurring_invoice_schedules",
 		anchor: "workspace",
@@ -194,6 +195,17 @@ function markerValue(table: string, marker: string): unknown {
 
 const seeded = new Map<string, { id: string; row: Record<string, unknown> }>();
 
+/**
+ * Rows created once by the workspace-creation leg in `beforeAll`
+ * (`workspaces`, `workspace_members`, `active_workspaces`), keyed by table and
+ * reused as the probe snapshot. Re-inserting them through `seedRow` would
+ * violate their unique keys (23505).
+ */
+const preSeeded = new Map<
+	string,
+	{ id: string; row: Record<string, unknown> }
+>();
+
 async function seedRow(
 	spec: TableSpec,
 ): Promise<{ id: string; row: Record<string, unknown> }> {
@@ -203,13 +215,6 @@ async function seedRow(
 			: { owner_id: USER_A };
 
 	const payloads: Record<string, Record<string, unknown>> = {
-		workspaces: {
-			owner_id: USER_A,
-			name: `WP3 W1 ${suffix}`,
-			country_code: "NG",
-			base_currency: "NGN",
-			reminders_enabled: false,
-		},
 		workspace_members: { user_id: USER_A, role: "owner" },
 		active_workspaces: { user_id: USER_A, workspace_id: workspaceA },
 		clients: {
@@ -243,6 +248,7 @@ async function seedRow(
 		},
 		invoice_delivery_events: {
 			...base,
+			owner_id: USER_A,
 			invoice_id: seeded.get("invoices")?.id,
 			channel: "email",
 			recipient: `wp3-${suffix}@example.test`,
@@ -265,8 +271,15 @@ async function seedRow(
 			currency: "NGN",
 			expires_at: "2026-10-02T00:00:00Z",
 		},
+		payment_claims: {
+			...base,
+			invoice_id: seeded.get("invoices")?.id,
+			claimed_amount: 1000,
+			claim_reference: `wp3-claim-${suffix}`,
+		},
 		recurring_invoice_schedules: {
 			...base,
+			owner_id: USER_A,
 			name: `WP3 Schedule ${suffix}`,
 			status: "active",
 			frequency: "monthly",
@@ -288,6 +301,7 @@ async function seedRow(
 		},
 		invoice_exports: {
 			...base,
+			owner_id: USER_A,
 			invoice_id: seeded.get("invoices")?.id,
 			kind: "invoices_csv",
 			status: "ready",
@@ -304,6 +318,7 @@ async function seedRow(
 		tax_profiles: {
 			...base,
 			name: `WP3 VAT ${suffix}`,
+			jurisdiction_code: "NG",
 			tax_treatment: "exclusive_rate",
 			rate: 7.5,
 			label: "VAT",
@@ -373,11 +388,14 @@ async function seedRow(
 		};
 	}
 
-	const payload = { ...base, ...(payloads[spec.table] ?? {}) };
-	if (spec.table === "workspaces") {
-		// Seeded via the workspace-creation leg below, not per-table.
-		return { id: workspaceA, row: { id: workspaceA } };
+	const pre = preSeeded.get(spec.table);
+	if (pre) {
+		// Created by the workspace-creation leg in beforeAll; reuse the
+		// persisted row as the snapshot instead of inserting a duplicate.
+		return pre;
 	}
+
+	const payload = { ...base, ...(payloads[spec.table] ?? {}) };
 	const created = await rest("POST", `${spec.table}?select=id`, {
 		token: tokenA,
 		body: payload,
@@ -428,6 +446,28 @@ gate("WP3 tenant isolation: live RLS matrix", () => {
 				body: { user_id: userId, workspace_id: id },
 			});
 			expect(active.status, active.text).toBe(201);
+
+			if (label === "A") {
+				// Snapshot A's workspace, membership and active-workspace rows so
+				// `seedRow` reuses them rather than re-inserting duplicates. The
+				// workspace was created with `?select=id`, so re-read it in full:
+				// the byte-for-byte snapshot must include every column.
+				const workspaceRow = await rest("GET", `workspaces?id=eq.${id}`, {
+					token,
+				});
+				preSeeded.set("workspaces", {
+					id,
+					row: (rows(workspaceRow.body)[0] ?? {}) as Record<string, unknown>,
+				});
+				preSeeded.set("workspace_members", {
+					id: (rows(member.body)[0] as { id: string }).id,
+					row: (rows(member.body)[0] ?? {}) as Record<string, unknown>,
+				});
+				preSeeded.set("active_workspaces", {
+					id: (rows(active.body)[0] as { id: string }).id,
+					row: (rows(active.body)[0] ?? {}) as Record<string, unknown>,
+				});
+			}
 		}
 
 		// Seed in FK-dependency order; every spec reads `seeded` for its FKs.
@@ -446,14 +486,16 @@ gate("WP3 tenant isolation: live RLS matrix", () => {
 				token: tokenA,
 			});
 		}
-		for (const table of [
-			"active_workspaces",
-			"workspace_members",
-			"workspaces",
-		]) {
-			await rest("DELETE", `${table}?id=eq.${workspaceA}`, { token: tokenA });
-			await rest("DELETE", `${table}?id=eq.${workspaceB}`, { token: tokenB });
+		for (const table of ["active_workspaces", "workspace_members"]) {
+			// Child tables key their tenant on `workspace_id`, not their own `id`.
+			await rest("DELETE", `${table}?workspace_id=eq.${workspaceA}`, {
+				token: tokenA,
+			});
+			await rest("DELETE", `${table}?workspace_id=eq.${workspaceB}`, {
+				token: tokenB,
+			});
 		}
+		await rest("DELETE", `workspaces?id=eq.${workspaceB}`, { token: tokenB });
 		const gone = await rest("DELETE", `workspaces?id=eq.${workspaceA}`, {
 			token: tokenA,
 		});
@@ -564,6 +606,15 @@ gate("WP3 tenant isolation: live RLS matrix", () => {
 			],
 			["active_workspaces", { user_id: USER_B, workspace_id: workspaceA }],
 			[
+				"payment_claims",
+				{
+					workspace_id: workspaceA,
+					invoice_id: seeded.get("invoices")?.id,
+					claimed_amount: 1,
+					claim_reference: `wp3-i-${suffix}`,
+				},
+			],
+			[
 				"tax_profiles",
 				{
 					owner_id: USER_A,
@@ -644,7 +695,7 @@ gate("WP3 tenant isolation: live RLS matrix", () => {
 		}
 		const write = await rest("POST", "job_runs?select=id", {
 			token: tokenA,
-			body: { workspace_id: workspaceA, kind: "wp3-probe" },
+			body: { workspace_id: workspaceA, job_name: "wp3-probe" },
 		});
 		const planted = rows(write.body)[0] as { id?: string } | undefined;
 		if (planted?.id) {

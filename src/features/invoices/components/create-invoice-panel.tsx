@@ -183,6 +183,7 @@ type CreatedInvoiceSummary = {
 	customerName: string;
 	customerEmail: string;
 	total: number;
+	currency: string;
 };
 
 type SellerProfileType = "freelancer" | "business";
@@ -591,8 +592,8 @@ export function CreateInvoicePanel({
 	const [customerName, setCustomerName] = useState("");
 	const [customerEmail, setCustomerEmail] = useState("");
 	const [customerPoNumber, setCustomerPoNumber] = useState("");
-	const [fromName, setFromName] = useState("Velure Studio");
-	const [fromEmail, setFromEmail] = useState("hello@velure.app");
+	const [fromName, setFromName] = useState("Invoicly Studio");
+	const [fromEmail, setFromEmail] = useState("hello@invoicly.cv");
 	const [paymentDetails, setPaymentDetails] = useState("");
 	const [notes, setNotes] = useState<EditorDoc | null>(null);
 	const [topBlock, setTopBlock] = useState<EditorDoc | null>(null);
@@ -736,6 +737,20 @@ export function CreateInvoicePanel({
 	const autosaveInFlightRef = useRef(false);
 	const autosavePendingRef = useRef(false);
 	const autosaveNowRef = useRef<() => void>(() => {});
+	const autosaveHasUnsavedRef = useRef(false);
+	// The newest save state for the current render. `persistAutosaveDraft` reads
+	// this at call time so a save that starts, and the retry that runs when an
+	// in-flight save finishes, always send the newest edit rather than a stale
+	// snapshot captured when the request began.
+	const autosaveRuntimeRef = useRef<{
+		signature: string;
+		canSave: boolean;
+		buildArgs: () => Parameters<typeof autosaveDraft>[2];
+	}>({
+		signature: "",
+		canSave: false,
+		buildArgs: () => ({}) as Parameters<typeof autosaveDraft>[2],
+	});
 
 	useEffect(() => {
 		if (productSearchIndex === null) {
@@ -827,7 +842,7 @@ export function CreateInvoicePanel({
 				documentType,
 			),
 		);
-		setFromName(workspace.legalName || workspace.name || "Velure Studio");
+		setFromName(workspace.legalName || workspace.name || "Invoicly Studio");
 		setFromEmail(workspace.email ?? "");
 		setLogoUrl(workspace.logoUrl ?? "");
 		setPaymentDetails(workspace.paymentDetails ?? "");
@@ -1168,18 +1183,10 @@ export function CreateInvoicePanel({
 			});
 		}
 	};
-	const autosaveStatusText =
-		autosaveStatus === "saving"
-			? "Saving..."
-			: autosaveStatus === "saved"
-				? "Draft saved"
-				: autosaveStatus === "error"
-					? "Not saved"
-					: "";
 	const hasMeaningfulDraft = useMemo(() => {
 		const defaultFromName =
-			workspace?.legalName || workspace?.name || "Velure Studio";
-		const defaultFromEmail = workspace?.email ?? "hello@velure.app";
+			workspace?.legalName || workspace?.name || "Invoicly Studio";
+		const defaultFromEmail = workspace?.email ?? "hello@invoicly.cv";
 		const defaultLogoUrl = workspace?.logoUrl ?? "";
 		const defaultPaymentDetails = workspace?.paymentDetails ?? "";
 		const defaultSellerTin = workspace?.taxId ?? "";
@@ -1311,6 +1318,22 @@ export function CreateInvoicePanel({
 		],
 	);
 
+	// Never claim "Draft saved" while a newer edit has not been persisted:
+	// `autosaveSignatureRef` only advances on a successful save, so a mismatch
+	// means the on-screen draft is ahead of what is stored. Surface that
+	// immediately instead of after the debounce fires.
+	const hasUnsavedAutosave =
+		hasMeaningfulDraft && autosaveSignature !== autosaveSignatureRef.current;
+	autosaveHasUnsavedRef.current = hasUnsavedAutosave;
+	const autosaveStatusText =
+		autosaveStatus === "error"
+			? "Not saved"
+			: autosaveStatus === "saving" || hasUnsavedAutosave
+				? "Saving..."
+				: autosaveStatus === "saved"
+					? "Draft saved"
+					: "";
+
 	const buildDraftMutationArgs = (id?: string | null) => ({
 		id: id ?? undefined,
 		token: autosaveTokenRef.current,
@@ -1379,18 +1402,23 @@ export function CreateInvoicePanel({
 		},
 	});
 
-	const persistAutosaveDraft = async () => {
-		if (
-			composerStage !== "editor" ||
-			!hasMeaningfulDraft ||
-			!tinIsValid ||
-			!rcIsValid ||
-			(isCorrectionDocumentType(documentType) && !correctsInvoiceId)
-		) {
-			return;
-		}
+	autosaveRuntimeRef.current = {
+		signature: autosaveSignature,
+		canSave:
+			composerStage === "editor" &&
+			hasMeaningfulDraft &&
+			tinIsValid &&
+			rcIsValid &&
+			!(isCorrectionDocumentType(documentType) && !correctsInvoiceId),
+		buildArgs: () => buildDraftMutationArgs(autosaveDraftIdRef.current),
+	};
 
-		if (autosaveSignatureRef.current === autosaveSignature) return;
+	const persistAutosaveDraft = async () => {
+		const runtime = autosaveRuntimeRef.current;
+		if (!runtime.canSave) return;
+
+		const signature = runtime.signature;
+		if (autosaveSignatureRef.current === signature) return;
 		if (autosaveInFlightRef.current) {
 			autosavePendingRef.current = true;
 			return;
@@ -1404,11 +1432,11 @@ export function CreateInvoicePanel({
 			const saved = await autosaveDraft(
 				supabaseClient,
 				userId,
-				buildDraftMutationArgs(autosaveDraftIdRef.current),
+				runtime.buildArgs(),
 			);
 			autosaveDraftIdRef.current = saved.id;
 			setInvoiceNumber(saved.invoiceNumber);
-			autosaveSignatureRef.current = autosaveSignature;
+			autosaveSignatureRef.current = signature;
 			setAutosaveStatus("saved");
 		} catch (_error) {
 			setAutosaveStatus("error");
@@ -1416,6 +1444,8 @@ export function CreateInvoicePanel({
 			autosaveInFlightRef.current = false;
 			if (autosavePendingRef.current) {
 				autosavePendingRef.current = false;
+				// Re-read the runtime ref so a change that landed while this
+				// save was in flight is the one that persists.
 				void persistAutosaveDraft();
 			}
 		}
@@ -1452,14 +1482,24 @@ export function CreateInvoicePanel({
 		const onVisibilityChange = () => {
 			if (document.visibilityState === "hidden") flushDraft();
 		};
+		const onBeforeUnload = (event: BeforeUnloadEvent) => {
+			if (!autosaveHasUnsavedRef.current) return;
+			// Best-effort flush first; the confirmation gives the write a chance
+			// to complete before a hard reload discards the pending edit.
+			flushDraft();
+			event.preventDefault();
+			event.returnValue = "";
+		};
 
 		document.addEventListener("visibilitychange", onVisibilityChange);
 		window.addEventListener("pagehide", flushDraft);
+		window.addEventListener("beforeunload", onBeforeUnload);
 
 		return () => {
 			flushDraft();
 			document.removeEventListener("visibilitychange", onVisibilityChange);
 			window.removeEventListener("pagehide", flushDraft);
+			window.removeEventListener("beforeunload", onBeforeUnload);
 		};
 	}, []);
 
@@ -1753,8 +1793,8 @@ export function CreateInvoicePanel({
 		setCustomerName("");
 		setCustomerEmail("");
 		setCustomerPoNumber("");
-		setFromName(workspace?.legalName || workspace?.name || "Velure Studio");
-		setFromEmail(workspace?.email ?? "hello@velure.app");
+		setFromName(workspace?.legalName || workspace?.name || "Invoicly Studio");
+		setFromEmail(workspace?.email ?? "hello@invoicly.cv");
 		setLogoUrl(workspace?.logoUrl ?? "");
 		setPaymentDetails(workspace?.paymentDetails ?? "");
 		setNotes(null);
@@ -1963,6 +2003,7 @@ export function CreateInvoicePanel({
 				customerName: created.customerName,
 				customerEmail,
 				total: netPayable,
+				currency,
 			});
 			setComposerStage("success");
 			onCreated?.(created.id);
@@ -2010,6 +2051,7 @@ export function CreateInvoicePanel({
 			invoiceNumber: createdInvoice.invoiceNumber,
 			customerName: createdInvoice.customerName,
 			documentType: createdInvoice.documentType,
+			amountLabel: formatMoney(createdInvoice.total, createdInvoice.currency),
 		});
 
 		return (
@@ -3814,6 +3856,7 @@ export function CreateInvoicePanel({
 											autosaveStatus === "error" ? "text-warn" : "text-ink-2",
 										)}
 										aria-live="polite"
+										data-testid="invoice-autosave-status"
 									>
 										{autosaveStatusText || "\u00a0"}
 									</div>

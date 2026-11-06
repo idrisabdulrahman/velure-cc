@@ -21,6 +21,7 @@ import { Input } from "#/components/ui/input";
 import { PanelLoader } from "#/components/ui/panel-loader";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
+import { canConfirmAccountDeletion } from "#/features/account/deletion-confirmation";
 import { NIGERIA_TAX_RULE_SET_VERSION } from "#/features/compliance/nigeria";
 import {
 	composeSupplierAddress,
@@ -398,7 +399,12 @@ function SettingsPage() {
 	const memberSince = formatDate(
 		(user as { createdAt?: string | Date } | undefined)?.createdAt,
 	);
-	const canDeleteAccount = deleteConfirm === "DELETE" && !deletingAccount;
+	// GitHub-style confirmation: the typed keyword is the workspace's own
+	// business name, not a fixed word such as "DELETE". It is empty until the
+	// workspace loads, which keeps the action disabled.
+	const deleteKeyword = (workspace?.name ?? "").trim();
+	const canDeleteAccount =
+		canConfirmAccountDeletion(deleteConfirm, deleteKeyword) && !deletingAccount;
 
 	const handleDeleteAccount = async () => {
 		if (!canDeleteAccount) return;
@@ -410,7 +416,9 @@ function SettingsPage() {
 				headers: { "content-type": "application/json" },
 				body: JSON.stringify({ callbackURL: "/" }),
 			});
-			if (!response.ok) throw new Error("Account deletion is not enabled.");
+			if (!response.ok) {
+				throw new Error("We couldn't delete your account. Please try again.");
+			}
 			if (typeof window !== "undefined") {
 				window.localStorage.removeItem("velure-business-logo");
 			}
@@ -907,7 +915,7 @@ function SettingsPage() {
 									updateField("paymentDetails", event.target.value)
 								}
 								placeholder={
-									"Bank Name: Zenith Bank\nAccount Name: Velure Studio\nAccount Number: 0123456789"
+									"Bank Name: Zenith Bank\nAccount Name: Invoicly Studio\nAccount Number: 0123456789"
 								}
 								className="min-h-28 rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
 							/>
@@ -1031,7 +1039,7 @@ function SettingsPage() {
 					<div className="rounded-md border border-rule bg-paper-2 px-4 py-3">
 						<p className="text-sm font-medium text-ink">Tax disclaimer</p>
 						<p className="mt-1 text-sm text-ink-3">
-							Velure helps structure invoice data for Nigerian finance
+							Invoicly helps structure invoice data for Nigerian finance
 							workflows. Confirm VAT, WHT, and filing treatment with your
 							accountant or tax advisor.
 						</p>
@@ -1069,13 +1077,27 @@ function SettingsPage() {
 								<AlertDialogDescription className="text-ink-3">
 									This cannot be undone. Your workspace, invoices, clients,
 									exports, reminders, sessions, and sign-in records will be
-									permanently deleted. Type DELETE to confirm.
+									permanently deleted. Type{" "}
+									{deleteKeyword ? (
+										<strong className="font-semibold text-ink">
+											{deleteKeyword}
+										</strong>
+									) : (
+										"your business name"
+									)}{" "}
+									to confirm.
 								</AlertDialogDescription>
 							</AlertDialogHeader>
 							<Input
 								value={deleteConfirm}
 								onChange={(event) => setDeleteConfirm(event.target.value)}
-								placeholder="DELETE"
+								placeholder={deleteKeyword || "Business name"}
+								aria-label={
+									deleteKeyword
+										? `Type ${deleteKeyword} to confirm account deletion`
+										: "Type your business name to confirm account deletion"
+								}
+								autoComplete="off"
 								className="rounded-md border-danger-line bg-paper text-ink placeholder:text-ink-3 focus-visible:border-danger-line"
 							/>
 							<AlertDialogFooter>

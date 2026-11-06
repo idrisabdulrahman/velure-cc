@@ -245,8 +245,8 @@ function ComplianceSettingsPage() {
 		retryInvoiceExport(client!, velureUserId!, id);
 
 	const [form, setForm] = useState({
-		name: "Velure Workspace",
-		legalName: "Velure Workspace",
+		name: "Invoicly Workspace",
+		legalName: "Invoicly Workspace",
 		email: "",
 		phone: "",
 		address: "",
@@ -259,7 +259,7 @@ function ComplianceSettingsPage() {
 		taxRuleSetVersion: NIGERIA_TAX_RULE_SET_VERSION,
 		atrsEnvironment: "sandbox",
 		atrsCredentialsConfigured: false,
-		reminderSignature: "Velure Finance Team",
+		reminderSignature: "Invoicly Finance Team",
 		remindersEnabled: true,
 		logoUrl: "",
 		paymentDetails: "",
@@ -355,7 +355,7 @@ function ComplianceSettingsPage() {
 			atrsCredentialsConfigured:
 				(workspace as { atrs?: { credentialsConfigured?: boolean } }).atrs
 					?.credentialsConfigured ?? false,
-			reminderSignature: workspace.reminderSignature ?? "Velure Finance Team",
+			reminderSignature: workspace.reminderSignature ?? "Invoicly Finance Team",
 			remindersEnabled: workspace.remindersEnabled,
 			logoUrl: workspace.logoUrl ?? "",
 			paymentDetails: workspace.paymentDetails ?? "",
@@ -427,7 +427,7 @@ function ComplianceSettingsPage() {
 				aria-label="Compliance disclaimer"
 				className="rounded-md border border-warn-line/35 bg-warn-soft px-4 py-3 text-xs leading-5 text-warn"
 			>
-				{NRS_INFORMATIONAL_DISCLAIMER} Velure is not an NRS-certified
+				{NRS_INFORMATIONAL_DISCLAIMER} Invoicly is not an NRS-certified
 				e-invoicing provider and does not submit invoices to the NRS for
 				clearance.
 			</div>
@@ -769,7 +769,7 @@ function ComplianceSettingsPage() {
 							accounting apps will be added later.
 						</p>
 						<p className="mt-1 text-xs text-ink-3">
-							Velure helps structure invoice data for Nigerian finance
+							Invoicly helps structure invoice data for Nigerian finance
 							workflows. Confirm VAT, WHT, and filing treatment with your
 							accountant or tax advisor.
 						</p>
@@ -1344,7 +1344,7 @@ function ComplianceSettingsPage() {
 									<p className="mt-1 text-xs text-ink-3">
 										One row per invoice line, dates DD/MM/YYYY. Leave
 										&quot;Auto-generate Invoice Numbers&quot; off in the Zoho
-										import wizard so Velure numbers survive. Credit notes,
+										import wizard so Invoicly numbers survive. Credit notes,
 										discounted invoices, other currencies and rows without a
 										customer are left out with a warning; files over 10 MB are
 										refused.

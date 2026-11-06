@@ -184,7 +184,7 @@ function ProductDetailPage() {
 					</div>
 					<form onSubmit={onSubmit} className="space-y-4 p-5">
 						<div className="grid gap-3 md:grid-cols-2">
-							<Field label="Product type">
+							<Field label="Product type" htmlFor="product-type">
 								<Select
 									value={state.type}
 									onValueChange={(value) =>
@@ -195,7 +195,10 @@ function ProductDetailPage() {
 										)
 									}
 								>
-									<SelectTrigger className={`${inputClass} w-full`}>
+									<SelectTrigger
+										id="product-type"
+										className={`${inputClass} w-full`}
+									>
 										<SelectValue placeholder="Type" />
 									</SelectTrigger>
 									<SelectContent className="border-rule bg-paper-2 text-ink">
@@ -204,7 +207,7 @@ function ProductDetailPage() {
 									</SelectContent>
 								</Select>
 							</Field>
-							<Field label="Unit name">
+							<Field label="Unit name" htmlFor="product-unit-name">
 								<Select
 									value={state.unitName}
 									onValueChange={(value) =>
@@ -213,7 +216,10 @@ function ProductDetailPage() {
 										)
 									}
 								>
-									<SelectTrigger className={`${inputClass} w-full`}>
+									<SelectTrigger
+										id="product-unit-name"
+										className={`${inputClass} w-full`}
+									>
 										<SelectValue placeholder="Unit" />
 									</SelectTrigger>
 									<SelectContent className="border-rule bg-paper-2 text-ink">

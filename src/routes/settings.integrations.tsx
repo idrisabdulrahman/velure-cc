@@ -32,7 +32,7 @@ function IntegrationsSettingsPage() {
 					Integrations
 				</h1>
 				<p className="mt-2 max-w-2xl text-sm text-ink-3">
-					Connect Velure with payment and accounting tools. This area is not
+					Connect Invoicly with payment and accounting tools. This area is not
 					open yet.
 				</p>
 			</div>

@@ -155,8 +155,8 @@ function SecuritySettingsPage() {
 
 				<div className="space-y-3 px-5 py-5">
 					<p className="text-sm leading-6 text-ink-3">
-						Velure uses provider records internally to keep password and Google
-						sign-in attached to the same account. Users do not need those
+						Invoicly uses provider records internally to keep password and
+						Google sign-in attached to the same account. Users do not need those
 						internal identifiers.
 					</p>
 					{accounts.map((account) => (

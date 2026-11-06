@@ -15,6 +15,7 @@ import {
 	type InvoiceUserContext,
 	recordInvoiceDeliveryEvent,
 } from "#/server/invoice-repository";
+import { emitActivation } from "#/server/observability";
 import { renderInvoicePdf } from "#/server/pdf";
 
 function isValidEmail(value: string) {
@@ -22,7 +23,7 @@ function isValidEmail(value: string) {
 }
 
 function sanitizeFromAddress(value: string | undefined) {
-	if (!value) return "Velure <onboarding@resend.dev>";
+	if (!value) return "Invoicly <onboarding@resend.dev>";
 	return value;
 }
 
@@ -311,6 +312,15 @@ async function sendInvoiceEmail({
 			);
 		});
 	}
+
+	// WP-H: one activation line when an invoice is issued (sent to the buyer).
+	// Actor + resource ids only; the recipient address stays out of the log
+	// (`AGENTS.md` §8).
+	emitActivation("invoice.issued", {
+		invoiceId: invoice.id,
+		actorUserId: context.userId,
+		documentType: invoice.documentType,
+	});
 
 	return Response.json({ ok: true, id: result.data?.id ?? null });
 }

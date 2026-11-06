@@ -1,10 +1,62 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { getSupabaseAdminClient } from "#/server/supabase";
-import { getInvoiceByToken } from "./public-invoice-repository";
+import {
+	getInvoiceByToken,
+	recordPublicInvoiceView,
+} from "./public-invoice-repository";
 
 vi.mock("#/server/supabase", () => ({
 	getSupabaseAdminClient: vi.fn(),
 }));
+
+afterEach(() => {
+	vi.restoreAllMocks();
+});
+
+/** The snake_case RPC invoice the hardened function returns, minimal but valid. */
+function snakeInvoice(overrides: Record<string, unknown> = {}) {
+	return {
+		id: "invoice-view-1",
+		token: "public-token",
+		document_type: "standard",
+		shipment_details: null,
+		invoice_number: "INV-VIEW",
+		customer_name: "Acme",
+		logo_url: null,
+		customer_po_number: null,
+		currency: "NGN",
+		invoice_type: "one-time",
+		invoice_size: "A4",
+		date_format: "ng",
+		payment_terms_days: 14,
+		template: "Default",
+		issue_date: "2026-08-27",
+		due_date: "2026-09-10",
+		status: "unpaid",
+		payment_amount: 0,
+		delivered_at: null,
+		canceled_at: null,
+		payment_details: null,
+		payment_link: null,
+		payment_provider: null,
+		paid_at: null,
+		payment_reference: null,
+		finalized_at: null,
+		scheduled_at: null,
+		schedule_version: null,
+		notes: null,
+		line_items: [{ name: "Service", quantity: 1, price: 100 }],
+		template_settings: null,
+		top_block: null,
+		bottom_block: null,
+		compliance: null,
+		fiscalization: null,
+		lifecycle: {},
+		created_at: "2026-08-27T09:00:00.000Z",
+		updated_at: "2026-08-27T10:00:00.000Z",
+		...overrides,
+	};
+}
 
 describe("public invoice repository", () => {
 	it("uses the narrow RPC and excludes private invoice fields", async () => {
@@ -125,5 +177,60 @@ describe("public invoice repository", () => {
 		expect(invoice).not.toHaveProperty("internalNotes");
 		expect(invoice).not.toHaveProperty("customerId");
 		expect(from).not.toHaveBeenCalled();
+	});
+
+	it("records the first public view, reads the workspace back and emits the share-open activation", async () => {
+		const rpc = vi.fn(async () => ({
+			data: { countryCode: "NG", invoice: snakeInvoice() },
+			error: null,
+		}));
+		const maybeSingle = vi.fn(async () => ({
+			data: { workspace_id: "ws-1" },
+			error: null,
+		}));
+		const select = vi.fn(() => ({ maybeSingle }));
+		const eq = vi.fn(() => ({ select }));
+		const update = vi.fn(() => ({ eq }));
+		const from = vi.fn(() => ({ update }));
+		vi.mocked(getSupabaseAdminClient).mockReturnValue({ rpc, from } as never);
+		const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+		const result = await recordPublicInvoiceView("public-token");
+
+		expect(result).toEqual({ ok: true, alreadyTracked: false });
+		expect(from).toHaveBeenCalledWith("invoices");
+		expect(update).toHaveBeenCalledTimes(1);
+		// The workspace is read back in the same statement, not a second query.
+		expect(select).toHaveBeenCalledWith("workspace_id");
+
+		const payload = JSON.parse(log.mock.calls.at(-1)?.[0] as string) as Record<
+			string,
+			unknown
+		>;
+		expect(payload.event).toBe("activation");
+		expect(payload.activation).toBe("invoice.share_opened");
+		expect(payload.invoiceId).toBe("invoice-view-1");
+		expect(payload.workspaceId).toBe("ws-1");
+	});
+
+	it("does not re-write or re-emit when the view was already tracked", async () => {
+		const rpc = vi.fn(async () => ({
+			data: {
+				countryCode: "NG",
+				invoice: snakeInvoice({ lifecycle: { firstViewedAt: 123 } }),
+			},
+			error: null,
+		}));
+		const from = vi.fn(() => {
+			throw new Error("an already-tracked view must not write");
+		});
+		vi.mocked(getSupabaseAdminClient).mockReturnValue({ rpc, from } as never);
+		const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+		const result = await recordPublicInvoiceView("public-token");
+
+		expect(result).toEqual({ ok: true, alreadyTracked: true });
+		expect(from).not.toHaveBeenCalled();
+		expect(log).not.toHaveBeenCalled();
 	});
 });
