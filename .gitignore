@@ -5,6 +5,7 @@ skills-outsource/
 # Build output
 dist
 dist-ssr
+dist-worker
 .output
 .nitro
 .tanstack
@@ -12,6 +13,10 @@ dist-ssr
 .wrangler
 .next/
 __unconfig*
+
+# Cloudflare local-only values (never commit)
+.dev.vars
+.dev.vars.*
 
 # Test output
 tests/
@@ -30,14 +35,57 @@ certs/
 # OS
 .DS_Store
 
+# ---------------------------------------------------------------------------
+# AI workflows and AI-related files are LOCAL ONLY.
+#
+# Never commit or push agent configuration/tooling, agent instruction files,
+# AI task prompts, AI-generated contracts, or AI analysis reports. They stay on
+# disk so the agent can use them, but they are not part of the product
+# repository or its history. Anything the product must know lives in source,
+# migrations, or a human-authored doc under docs/.
+# ---------------------------------------------------------------------------
+
 # Local tooling config
 .vscode/mcp.json
 .mcp.json
 skills-lock.json
 
-# Development-only material (kept on disk, never published)
-# Task prompts, design sources/briefs, and demo artifacts are workspace notes.
+# Agent configuration and tooling state
+.claude/
+.opencode/
+.agents/
+.agent/
+.codex/
+.cursor/
+.windsurf/
+.codestudio/
+.commandcode/
+.freebuff/
+.hallmark/
+.zcode/
+.aider*
+.worktrees/
+firstmate/
+@/
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.cursorrules
+.windsurfrules
+.github/copilot-instructions.md
+.github/workflows/pr-visual-recap.yml
+
+# AI workflows, prompts, generated contracts and analysis
 prompts/
+EGM.md
+2026-11-05_DRIFT_REPORT.md
+build_plan.md
+competitive_gap_analysis.md
+concepts_brief.md
+Task List.md
+
+# Development-only material (kept on disk, never published)
+# Design sources/briefs, demo artifacts and workspace notes.
 design/
 design.md
 artifacts/
@@ -49,28 +97,3 @@ REDESIGN_PROMPT.MD
 Architecture.md
 ProductStrategy.md
 migration-plan.md
-
-# Agent tool state
-@/
-firstmate/
-.agents/
-.agent/
-.claude/
-.opencode/
-.codex/
-.cursor/
-.windsurf/
-.aider*
-.codestudio/
-.commandcode/
-.freebuff/
-.hallmark/
-.zcode/
-.worktrees/
-AGENTS.md
-CLAUDE.md
-GEMINI.md
-.cursorrules
-.windsurfrules
-.github/copilot-instructions.md
-.github/workflows/pr-visual-recap.yml
