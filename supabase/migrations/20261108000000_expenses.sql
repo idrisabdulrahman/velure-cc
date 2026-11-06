@@ -83,8 +83,9 @@ create table public.expenses (
   updated_at timestamptz not null default now()
 );
 
-create index expenses_workspace_id_idx
-  on public.expenses (workspace_id);
+-- The composite (workspace_id, incurred_on) index already serves any query
+-- filtered by workspace_id alone (workspace_id is its leading column), so a
+-- standalone (workspace_id) index would be redundant storage and write cost.
 create index expenses_workspace_incurred_on_idx
   on public.expenses (workspace_id, incurred_on);
 create index expenses_workspace_category_idx

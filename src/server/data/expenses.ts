@@ -201,7 +201,13 @@ async function assertExpenseInWorkspace(
 		.eq("id", expenseId)
 		.eq("workspace_id", workspaceId)
 		.maybeSingle();
-	if (error) throw error;
+	// 22P02 = invalid input syntax (a crafted non-uuid id). Report the same
+	// not-found the scoped read returns instead of leaking a raw Postgres
+	// error to the caller (AGENTS.md §8: no SQL in responses).
+	if (error) {
+		if (error.code === "22P02") throw new Error("Expense not found.");
+		throw error;
+	}
 	if (!data) throw new Error("Expense not found.");
 }
 
@@ -228,7 +234,11 @@ async function loadExpenseRows(
 			.from("expenses")
 			.select(EXPENSE_COLUMNS)
 			.eq("workspace_id", workspaceId)
-			.order("incurred_on", { ascending: false });
+			// `id` as a secondary key makes each `range()` page window
+			// deterministic when many rows share an `incurred_on` date, so a
+			// paged totals scan can neither skip nor double-count a row.
+			.order("incurred_on", { ascending: false })
+			.order("id", { ascending: true });
 		if (args.categoryCode) query = query.eq("category_code", args.categoryCode);
 		if (args.from) query = query.gte("incurred_on", args.from);
 		if (args.to) query = query.lte("incurred_on", args.to);
@@ -244,8 +254,8 @@ async function loadExpenseRows(
 		if (pageRows.length < EXPENSE_PAGE_SIZE) break;
 	}
 
-	// Newest first; the tiebreaker keeps same-day ordering deterministic even
-	// though the in-memory test double only applies one ORDER BY.
+	// Newest first, with the most recently recorded row winning a same-day tie;
+	// this display order is independent of the `id`-tiebroken page windows above.
 	collected.sort((a, b) => {
 		const byDate = b.incurredOn.localeCompare(a.incurredOn);
 		if (byDate !== 0) return byDate;
@@ -360,12 +370,19 @@ export async function voidExpense(
 	await assertExpenseInWorkspace(client, workspaceId, id);
 
 	const now = new Date().toISOString();
+	// The `.is("voided_at", null)` guard makes the void idempotent: a repeat
+	// void (a stale double-click, or two tabs racing) matches no row and leaves
+	// the original `voided_at` untouched. `.select("id")` makes that observable
+	// — a `null` result means the row was already voided — so the no-op is
+	// deliberate rather than an accidental "success".
 	const { error } = await client
 		.from("expenses")
 		.update({ voided_at: now, updated_at: now })
 		.eq("id", id)
 		.eq("workspace_id", workspaceId)
-		.is("voided_at", null);
+		.is("voided_at", null)
+		.select("id")
+		.maybeSingle();
 	if (error) throw error;
 	return id;
 }

@@ -213,6 +213,17 @@ describe("expense CRUD", () => {
 		const listed = await listExpenses(client, USER_A);
 		expect(listed.map((entry) => entry.id)).toEqual([EXP_A2]);
 	});
+
+	it("treats a repeat void as an idempotent no-op", async () => {
+		await voidExpense(client, USER_A, EXP_A1);
+		const firstVoidedAt = expense(EXP_A1)?.voided_at;
+		expect(firstVoidedAt).toEqual(expect.any(String));
+
+		// A second void (stale double-click, or two tabs racing) must resolve
+		// without moving the original timestamp.
+		await expect(voidExpense(client, USER_A, EXP_A1)).resolves.toBe(EXP_A1);
+		expect(expense(EXP_A1)?.voided_at).toBe(firstVoidedAt);
+	});
 });
 
 describe("expense totals", () => {
@@ -222,6 +233,25 @@ describe("expense totals", () => {
 		expect(totals?.currency).toBe("NGN");
 		expect(totals?.total).toBe(0.3);
 		expect(totals?.count).toBe(2);
+	});
+
+	it("totals a log larger than one page without skipping or double-counting rows", async () => {
+		// 1200 same-day rows overflow EXPENSE_PAGE_SIZE (1000), so the totals
+		// scan needs two pages; the `id` tiebreaker keeps the windows disjoint.
+		for (let i = 0; i < 1200; i++) {
+			(tables.expenses as Array<Record<string, unknown>>).push(
+				expenseRow(`expense-page-${i}`, WS_A, USER_A, {
+					amount: 1,
+					category_code: "rent",
+					incurred_on: "2026-05-01",
+				}),
+			);
+		}
+
+		const totals = await getExpenseTotals(client, USER_A);
+		// 1200 added + the two active seeded rows (EXP_A3 is voided).
+		expect(totals?.count).toBe(1202);
+		expect(totals?.total).toBe(1200.3);
 	});
 
 	it("builds category and month breakdowns and excludes voided rows", () => {
