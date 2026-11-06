@@ -217,9 +217,9 @@ function LandingPage() {
 									</span>
 								</h1>
 								<p className="hm-lede mx-auto mt-[26px] max-w-[54ch] text-[clamp(1rem,1.6vw,1.1875rem)]">
-									Velure turns invoices, clients, VAT and WHT fields, reminders,
-									PDFs, and exports into one tight workspace for Nigerian
-									businesses.
+									Invoicly turns invoices, clients, VAT and WHT fields,
+									reminders, PDFs, and exports into one tight workspace for
+									Nigerian businesses.
 								</p>
 								<div className="mt-[34px] flex flex-wrap justify-center gap-3">
 									<Link
@@ -290,8 +290,8 @@ function LandingPage() {
 										</h2>
 									</div>
 									<p className="hm-lede text-[17px] lg:mb-1" data-fade-scroll>
-										Velure is built around what happens after an invoice leaves
-										your desk: payment, reminders, tax records, and clean
+										Invoicly is built around what happens after an invoice
+										leaves your desk: payment, reminders, tax records, and clean
 										exports.
 									</p>
 								</div>
@@ -470,7 +470,7 @@ function LandingPage() {
 									className="mt-[26px] max-w-[46ch] text-sm text-[#ffd6cc]"
 									data-fade-scroll
 								>
-									Velure is not an NRS-certified e-invoicing provider. It does
+									Invoicly is not an NRS-certified e-invoicing provider. It does
 									not submit invoices to the NRS, and it cannot get invoices
 									cleared through the MBS.
 								</p>
@@ -478,7 +478,7 @@ function LandingPage() {
 									className="mt-3 max-w-[46ch] text-sm text-[#ffd6cc]"
 									data-fade-scroll
 								>
-									Velure helps structure invoice data for Nigerian finance
+									Invoicly helps structure invoice data for Nigerian finance
 									workflows. Confirm VAT, WHT, and filing treatment with your
 									accountant or tax advisor.
 								</p>
@@ -719,7 +719,7 @@ function HeroStage() {
 					<i className="h-[9px] w-[9px] rounded-full bg-[var(--hm-paper-4)]" />
 					<i className="h-[9px] w-[9px] rounded-full bg-[var(--hm-paper-4)]" />
 					<i className="h-[9px] w-[9px] rounded-full bg-[var(--hm-paper-4)]" />
-					<span className="ml-2.5">velure · Sample workspace</span>
+					<span className="ml-2.5">invoicly · Sample workspace</span>
 				</div>
 				<div className="grid min-h-[430px] sm:grid-cols-[170px_1fr]">
 					<aside className="hidden gap-0.5 border-r border-[var(--hm-rule-soft)] p-2.5 text-[12.5px] text-[var(--hm-ink-2)] sm:grid sm:content-start">

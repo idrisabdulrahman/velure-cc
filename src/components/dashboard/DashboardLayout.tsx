@@ -18,7 +18,7 @@ import {
 	Users,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { VelureSymbol } from "#/components/brand/velure-symbol";
+import { InvoiclySymbol } from "#/components/brand/invoicly-symbol";
 import { ProfileDropdown } from "#/components/dashboard/profile-dropdown";
 import { CommandPalette } from "#/components/global-search/command-palette";
 import { RouteTransition } from "#/components/navigation/RouteTransition";
@@ -26,15 +26,18 @@ import { useLenis } from "#/components/scroll/use-lenis";
 import { TextSizeToggle } from "#/components/text-size/text-size-toggle";
 import { ThemeToggle } from "#/components/theme/theme-toggle";
 import { AppLoader } from "#/components/ui/app-loader";
+import { Button } from "#/components/ui/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
+import { Spinner } from "#/components/ui/spinner";
 import { toast } from "#/components/ui/use-toast";
 import { authClient } from "#/lib/auth-client";
 import { useDashboardAuth, useWorkspaceActions } from "#/lib/auth-hook";
+import { verificationCallbackURL } from "#/lib/auth-redirect";
 import { useSupabaseSession } from "#/lib/supabase-session";
 import { listClients } from "#/server/data/clients";
 import {
@@ -175,6 +178,10 @@ export function DashboardLayout() {
 	const [ensuringWorkspace, setEnsuringWorkspace] = useState(false);
 	const [navOpen, setNavOpen] = useState(false);
 	const [paletteOpen, setPaletteOpen] = useState(false);
+	const [resendingVerification, setResendingVerification] = useState(false);
+	const [verificationMessage, setVerificationMessage] = useState<string | null>(
+		null,
+	);
 
 	// Use unified auth hook
 	const {
@@ -403,6 +410,100 @@ export function DashboardLayout() {
 		});
 	}, [authReturnPath, navigate]);
 
+	// Verification is checked before any of the provisioning gates: an
+	// unverified session cannot mint the Supabase bridge token, so every later
+	// gate would wait forever on a bridge that will never succeed.
+	const sessionNeedsVerification = session?.user?.emailVerified === false;
+
+	const onResendVerification = async () => {
+		const address = session?.user?.email;
+		if (!address || resendingVerification) return;
+
+		setResendingVerification(true);
+		setVerificationMessage(null);
+		try {
+			const result = await authClient.sendVerificationEmail({
+				email: address,
+				callbackURL: verificationCallbackURL(
+					window.location.pathname + window.location.search,
+				),
+			});
+			setVerificationMessage(
+				result.error
+					? (result.error.message ??
+							"Could not send the verification email. Try again in a moment.")
+					: "Verification email sent. Check your inbox.",
+			);
+		} catch {
+			setVerificationMessage(
+				"Could not send the verification email. Try again in a moment.",
+			);
+		} finally {
+			setResendingVerification(false);
+		}
+	};
+
+	if (sessionNeedsVerification) {
+		return (
+			<div className="hm-app flex min-h-dvh items-center justify-center bg-paper p-6 text-ink">
+				<div className="ui-panel w-full max-w-md rounded-[var(--hm-r-card)] border border-rule bg-paper p-6 sm:p-8">
+					<h1
+						className="text-[30px] font-extrabold tracking-[-0.028em] text-ink"
+						style={{ fontFamily: "var(--hm-font-display)", lineHeight: 1.06 }}
+					>
+						Verify your email
+					</h1>
+					<p className="mt-2 text-sm leading-6 text-ink-3">
+						Confirm{" "}
+						<span className="font-medium text-ink">
+							{session?.user?.email ?? "your email address"}
+						</span>{" "}
+						to open your workspace. The verification link expires after one
+						hour.
+					</p>
+
+					{verificationMessage ? (
+						<p
+							role="status"
+							className="mt-4 rounded-[var(--hm-r-input)] border border-warn-line bg-warn-soft px-3 py-2 text-sm text-warn"
+						>
+							{verificationMessage}
+						</p>
+					) : null}
+
+					<Button
+						type="button"
+						onClick={() => {
+							void onResendVerification();
+						}}
+						disabled={resendingVerification}
+						className="hm-btn hm-btn--primary mt-4 h-11 w-full"
+					>
+						{resendingVerification ? (
+							<>
+								<Spinner size={16} className="mr-2" />
+								Sending
+							</>
+						) : (
+							"Resend verification email"
+						)}
+					</Button>
+
+					<button
+						type="button"
+						onClick={async () => {
+							await authClient.signOut();
+							await navigate({ to: "/auth" });
+						}}
+						className="mt-3 block w-full text-center text-sm text-ink-3 transition-colors duration-150 hover:text-brand"
+					>
+						Sign out
+					</button>
+				</div>
+			</div>
+		);
+	}
+
 	if (
 		waitingForInitialSession ||
 		isPending ||
@@ -488,10 +589,10 @@ export function DashboardLayout() {
 						onClick={() => setNavOpen(false)}
 						className="flex items-center gap-3"
 					>
-						<VelureSymbol className="h-7 w-7" />
+						<InvoiclySymbol className="h-7 w-auto" />
 						<div>
 							<p className="text-[11px] font-bold uppercase tracking-[0.24em] text-ink">
-								Velure
+								Invoicly
 							</p>
 							<p className="text-xs text-ink-3">Operations workspace</p>
 						</div>
@@ -699,7 +800,7 @@ export function DashboardLayout() {
 								<Menu className="h-4 w-4" />
 							</button>
 							<p className="flex min-w-0 items-center gap-2 text-[13px] text-ink-3">
-								<VelureSymbol className="h-5 w-5" />
+								<InvoiclySymbol className="h-5 w-auto" />
 								<span className="hidden min-w-0 truncate sm:inline">
 									{workspaceLabel}
 								</span>

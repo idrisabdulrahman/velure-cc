@@ -85,22 +85,22 @@ export function Wordmark() {
 	return (
 		<Link to="/" className="block">
 			{/*
-				Horizontal lockup (Level V symbol + Velure wordmark), cropped to
+				Horizontal lockup (the "i" figure + Invoicly wordmark), cropped to
 				its ink so the asset sizes directly. Height is in em so the logo
 				tracks the app's persisted text-size setting.
 
 				The `.hm` marketing scope is dark in both theme directions
-				(design.md, "Marketing scope"), so this is the light master —
-				paper #FCF8F5 + warm red, the kit's `-reversed` artwork exported
-				as public/velure-lockup-horizontal-light.svg. The ink lockup on
-				`#0a0706` would be invisible here. Masters and guidelines:
-				design/brand/kit/ and design/brand/guidelines.md.
+				(design.md, "Marketing scope"), so this is the `-dark` master —
+				artwork *for dark surfaces*: paper #FCF8F5 wordmark + warm-red
+				figure, exported as public/invoicly-lockup-horizontal-dark.svg.
+				The ink `-light` lockup on `#0a0706` would be invisible here.
+				Masters and guidelines: design/brand/invoicly/.
 			*/}
 			<img
-				src="/velure-lockup-horizontal-light.svg"
-				alt="Velure"
-				width={464}
-				height={110}
+				src="/invoicly-lockup-horizontal-dark.svg"
+				alt="Invoicly"
+				width={584}
+				height={152}
 				// object-contain: if a narrow viewport squeezes the box, the
 				// lockup scales down as a whole instead of squashing.
 				className="w-auto object-contain"
@@ -445,7 +445,7 @@ export function MarketingFooter() {
 						</Link>
 					</nav>
 					<span className="sm:ml-auto">
-						Velure 2026 · Invoicing for Nigerian businesses
+						Invoicly 2026 · Invoicing for Nigerian businesses
 					</span>
 				</div>
 			</div>

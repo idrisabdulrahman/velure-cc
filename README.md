@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="public/velure-lockup-horizontal.svg" alt="Velure" width="220" />
+  <img src="public/invoicly-lockup-horizontal-light.svg" alt="Invoicly" width="220" />
 </p>
 
 <h1 align="center">From first draft to paid invoice, with a clear trail.</h1>
 
 <p align="center">
-  Velure brings invoicing, customer details, payment follow-ups, and finance records into one focused workspace for Nigerian businesses.
+  Invoicly brings invoicing, customer details, payment follow-ups, and finance records into one focused workspace for Nigerian businesses.
 </p>
 
 <p align="center">
@@ -20,7 +20,7 @@
 
 ## What you can do
 
-Velure keeps the everyday work around an invoice together:
+Invoicly keeps the everyday work around an invoice together:
 
 - Create standard, pro-forma, credit, and debit documents with customer and product details.
 - Review line items, tax categories, totals, payment terms, and due dates before delivery.
@@ -31,19 +31,19 @@ Velure keeps the everyday work around an invoice together:
 
 ## E-invoicing, explained plainly
 
-Velure includes the groundwork for an e-invoicing workflow: structured invoice data, validation, lifecycle states, an audit trail, a retryable submission queue, and a provider adapter.
+Invoicly includes the groundwork for an e-invoicing workflow: structured invoice data, validation, lifecycle states, an audit trail, a retryable submission queue, and a provider adapter.
 
-**The provider is a mock sandbox. Velure is not NRS-certified, does not submit invoices to the NRS or MBS, and cannot obtain real clearance.** Any sample status, IRN, or QR payload is mock data. Do not treat it as a cleared invoice or a tax filing.
+**The provider is a mock sandbox. Invoicly is not NRS-certified, does not submit invoices to the NRS or MBS, and cannot obtain real clearance.** Any sample status, IRN, or QR payload is mock data. Do not treat it as a cleared invoice or a tax filing.
 
 The flow below shows where the simulation ends. A real provider integration needs a confirmed provider, credentials, and its approved production process.
 
-![Velure e-invoice workflow: invoice validation, mock sandbox outcomes, customer delivery, and payment tracking](docs/images/invoice-lifecycle.svg)
+![Invoicly e-invoice workflow: invoice validation, mock sandbox outcomes, customer delivery, and payment tracking](docs/images/invoice-lifecycle.svg)
 
 ## What sits behind the workspace
 
 The browser talks to the TanStack Start application. Server routes verify the session and workspace before reading or changing business data. E-invoice simulations use the mock adapter; there is no live NRS or MBS connection.
 
-![Velure application map showing the browser, authenticated TanStack Start server, Supabase Postgres, and mock-only e-invoice adapter](docs/images/system-map.svg)
+![Invoicly application map showing the browser, authenticated TanStack Start server, Supabase Postgres, and mock-only e-invoice adapter](docs/images/system-map.svg)
 
 ## Built with
 
@@ -95,7 +95,7 @@ The live Supabase tests need a separately configured test project and are not ru
 
 The e-invoicing work packages WP1–WP16 are merged. The current milestone builds and tests the workflow with mock provider behavior; it does not deliver NRS or MBS clearance. See the [e-invoicing ledger](docs/e-invoicing/STATE.md) for package status and known verification limits.
 
-Velure stays focused on invoicing, billing, payments, customers, delivery, Nigerian tax context, and lightweight product tools that support selling. It is not an ERP, warehouse, procurement, or payroll system.
+Invoicly stays focused on invoicing, billing, payments, customers, delivery, Nigerian tax context, and lightweight product tools that support selling. It is not an ERP, warehouse, procurement, or payroll system.
 
 ## Contributing
 

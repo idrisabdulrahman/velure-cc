@@ -1,26 +1,26 @@
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { VelureSymbol } from "./velure-symbol";
+import { InvoiclySymbol } from "./invoicly-symbol";
 
 const styles = readFileSync(
 	new URL("../../styles.css", import.meta.url),
 	"utf8",
 );
 const source = readFileSync(
-	new URL("./velure-symbol.tsx", import.meta.url),
+	new URL("./invoicly-symbol.tsx", import.meta.url),
 	"utf8",
 );
 
 const read = (path: string) =>
 	readFileSync(new URL(path, import.meta.url), "utf8");
-const kit = (file: string) =>
+const mark = (file: string) =>
 	readFileSync(
-		new URL(`../../../design/brand/kit/${file}`, import.meta.url),
+		new URL(`../../../design/brand/invoicly/${file}`, import.meta.url),
 		"utf8",
 	);
 
-/** Path data of a `const NAME = "…" [+ "…"]` declaration, whitespace-normalised. */
+/** Path data of a `const NAME = "..."` declaration, whitespace-normalised. */
 function constant(name: string): string {
 	const block = new RegExp(`const ${name} =([\\s\\S]*?);`).exec(source)?.[1];
 	if (!block) throw new Error(`missing constant ${name}`);
@@ -31,23 +31,23 @@ function constant(name: string): string {
 		.trim();
 }
 
-/** Every path `d` in a kit master, whitespace-normalised. */
-function kitPaths(file: string): string[] {
-	return [...kit(file).matchAll(/ d="([^"]+)"/g)].map((match) =>
+/** Every path `d` in the light-surface kit master, whitespace-normalised. */
+function masterPaths(file: string): string[] {
+	return [...mark(file).matchAll(/ d="([^"]+)"/g)].map((match) =>
 		match[1].replace(/\s+/g, " ").trim(),
 	);
 }
 
 /** The element each occurrence of the mark sits in, one string per usage. */
 function wrappers(file: string): string[] {
-	return [...file.matchAll(/<\w+[^>]*?>\s*<VelureSymbol/gs)].map(
+	return [...file.matchAll(/<\w+[^>]*?>\s*<InvoiclySymbol/gs)].map(
 		(match) => match[0],
 	);
 }
 
-describe("velure symbol", () => {
-	it("takes its arms from the theme ink token, so the mark flips with `.dark`", () => {
-		const markup = renderToStaticMarkup(<VelureSymbol />);
+describe("invoicly symbol", () => {
+	it("takes its stem from the theme ink token, so the mark flips with `.dark`", () => {
+		const markup = renderToStaticMarkup(<InvoiclySymbol />);
 
 		expect(markup).toContain('style="fill:var(--hm-ink)"');
 		expect(markup).toContain('fill="#EA373E"');
@@ -65,38 +65,42 @@ describe("velure symbol", () => {
 		expect(styles).toMatch(/\.hm \{(?:[^{}]|\{[^{}]*\})*--hm-ink:/s);
 	});
 
-	it("never pins the arms to a fixed ink or re-tints the level", () => {
+	it("never pins the stem to a fixed ink or re-tints the figure", () => {
 		expect(source).not.toContain("#180F0A");
+		expect(source).not.toContain("#FCF8F5");
 		expect(source).not.toContain("var(--hm-accent)");
 	});
 
 	it("keeps an accessible name only when the mark stands alone", () => {
-		const labelled = renderToStaticMarkup(<VelureSymbol label="Velure" />);
+		const labelled = renderToStaticMarkup(<InvoiclySymbol label="Invoicly" />);
 
-		expect(labelled).toContain("<title>Velure</title>");
+		expect(labelled).toContain("<title>Invoicly</title>");
 		expect(labelled).not.toContain('aria-hidden="true"');
 		expect(labelled).toContain('role="img"');
 	});
 
-	it("matches the kit masters path for path", () => {
-		const [outline, level] = kitPaths("velure-symbol.svg");
+	it("matches the kit master path for path", () => {
+		const [figure, stem] = masterPaths("invoicly-mark-light.svg");
 
-		expect(constant("V_OUTLINE")).toBe(outline);
-		expect(constant("V_LEVEL")).toBe(level);
+		expect(constant("FIGURE")).toBe(figure);
+		expect(constant("STEM")).toBe(stem);
 	});
 
 	it("is what the app surfaces render — bare, with no typed letter left behind", () => {
 		const dashboard = read("../dashboard/DashboardLayout.tsx");
 		const auth = read("../../routes/auth.lazy.tsx");
+		const verify = read("../../routes/verify-email.tsx");
 
-		expect(dashboard.match(/<VelureSymbol/g)).toHaveLength(2);
-		expect(auth.match(/<VelureSymbol/g)).toHaveLength(1);
+		expect(dashboard.match(/<InvoiclySymbol/g)).toHaveLength(2);
+		expect(auth.match(/<InvoiclySymbol/g)).toHaveLength(1);
+		expect(verify.match(/<InvoiclySymbol/g)).toHaveLength(1);
 
 		// No tile, chip or coloured background behind the mark: the artwork
 		// carries the surface, so one component works on every page and mode.
 		for (const [name, file] of [
 			["dashboard", dashboard],
 			["auth", auth],
+			["verify-email", verify],
 		] as const) {
 			const wraps = wrappers(file);
 			expect(wraps.length, name).toBeGreaterThan(0);

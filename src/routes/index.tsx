@@ -6,7 +6,7 @@ export const Route = createFileRoute("/")({
 	// design/landing.html so the public page is indexable with its own copy.
 	head: () => ({
 		meta: [
-			{ title: "Velure — Send the bill. Track the trail." },
+			{ title: "Invoicly — Send the bill. Track the trail." },
 			{
 				name: "description",
 				content:

@@ -67,7 +67,7 @@ function FeaturesPage() {
 			<SplitSection
 				kicker="Workflow"
 				title="Built around invoice movement."
-				body="Velure treats invoicing as an operating loop: create, validate, send, follow up, export, sync. Small enough for owners, structured enough for finance teams."
+				body="Invoicly treats invoicing as an operating loop: create, validate, send, follow up, export, sync. Small enough for owners, structured enough for finance teams."
 				points={[
 					"Draft and duplicate repeat invoices without rebuilding client context.",
 					"See paid, open, overdue, draft, canceled, and scheduled work clearly.",

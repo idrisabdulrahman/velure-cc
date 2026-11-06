@@ -16,9 +16,9 @@ function PrivacyPage() {
 					<section className="rounded-md border border-rule bg-paper-2 p-5">
 						<h2 className="text-base font-medium text-ink">Data we store</h2>
 						<p className="mt-2">
-							Velure stores account profile data, client records, invoices, tax
-							fields, payment details you enter, and export history needed to
-							run the product.
+							Invoicly stores account profile data, client records, invoices,
+							tax fields, payment details you enter, and export history needed
+							to run the product.
 						</p>
 					</section>
 					<section className="rounded-md border border-rule bg-paper-2 p-5">
