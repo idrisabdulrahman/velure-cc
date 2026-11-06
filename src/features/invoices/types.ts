@@ -18,6 +18,27 @@ export type InvoiceStatus =
 	| "canceled"
 	| "scheduled";
 
+/**
+ * WP-D quote lifecycle. A quote is a pro-forma invoice carrying one of these
+ * states; acceptance converts it to a standard invoice (see `quoteStatus` on
+ * `InvoiceRecord`). `draft`/`expired`/`declined` are not client-facing here —
+ * only `sent` and `accepted` are surfaced.
+ */
+export type QuoteStatus =
+	| "draft"
+	| "sent"
+	| "accepted"
+	| "declined"
+	| "expired";
+
+export const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
+	draft: "Draft quote",
+	sent: "Quote sent",
+	accepted: "Quote accepted",
+	declined: "Quote declined",
+	expired: "Quote expired",
+};
+
 export type InvoiceLineItem = {
 	id: string;
 	name: string;
@@ -111,6 +132,10 @@ export type InvoiceRecord = {
 	documentType?: InvoiceDocumentType;
 	correctsInvoiceId?: Id<"invoices">;
 	convertedToInvoiceId?: Id<"invoices">;
+	/** WP-D: quote lifecycle state when this document is a pro-forma quote. */
+	quoteStatus?: QuoteStatus;
+	quoteSentAt?: number;
+	quoteAcceptedAt?: number;
 	shipmentDetails?: InvoiceShipmentDetails;
 	depositRequest?: InvoiceDepositRequest;
 	invoiceNumber: string;

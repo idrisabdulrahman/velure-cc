@@ -877,6 +877,10 @@ export type Database = {
           payment_provider: Database["public"]["Enums"]["payment_source"] | null
           payment_reference: string | null
           payment_terms_days: number | null
+          quote_accepted_at: string | null
+          quote_converted_invoice_id: string | null
+          quote_sent_at: string | null
+          quote_status: string | null
           reminder: Json | null
           schedule_version: string | null
           scheduled_at: string | null
@@ -928,6 +932,10 @@ export type Database = {
             | null
           payment_reference?: string | null
           payment_terms_days?: number | null
+          quote_accepted_at?: string | null
+          quote_converted_invoice_id?: string | null
+          quote_sent_at?: string | null
+          quote_status?: string | null
           reminder?: Json | null
           schedule_version?: string | null
           scheduled_at?: string | null
@@ -979,6 +987,10 @@ export type Database = {
             | null
           payment_reference?: string | null
           payment_terms_days?: number | null
+          quote_accepted_at?: string | null
+          quote_converted_invoice_id?: string | null
+          quote_sent_at?: string | null
+          quote_status?: string | null
           reminder?: Json | null
           schedule_version?: string | null
           scheduled_at?: string | null

@@ -12,7 +12,10 @@ import {
 	INVOICE_LINE_CLASSIFICATION_REQUIRED_MESSAGE,
 	transitionLeavesDraft,
 } from "#/features/invoices/customer-gate";
-import { isCorrectionDocumentType } from "#/features/invoices/types";
+import {
+	isCorrectionDocumentType,
+	type QuoteStatus,
+} from "#/features/invoices/types";
 import type { Database, Json } from "#/types/database.types";
 import { type InvoiceAuditWriter, recordInvoiceAudit } from "./audit-client";
 import {
@@ -148,6 +151,16 @@ export type Invoice = {
 	documentType: InvoiceDocumentType;
 	correctsInvoiceId?: string;
 	convertedToInvoiceId?: string;
+	/**
+	 * WP-D: the ONE invoice this quote produced. First-class column
+	 * (`quote_converted_invoice_id`), mirrored into `lifecycle` for older
+	 * readers; `convertedToInvoiceId` prefers the column when present.
+	 */
+	quoteConvertedInvoiceId?: string;
+	/** WP-D: quote lifecycle state when this document is a pro-forma quote. */
+	quoteStatus?: QuoteStatus;
+	quoteSentAt?: number;
+	quoteAcceptedAt?: number;
 	shipmentDetails?: ShipmentDetails;
 	depositRequest?: DepositRequest;
 	invoiceNumber: string;
@@ -684,6 +697,10 @@ type InvoiceRow = {
 	invoice_size: string;
 	date_format: string;
 	payment_terms_days: number | null;
+	quote_status: QuoteStatus | null;
+	quote_sent_at: string | null;
+	quote_accepted_at: string | null;
+	quote_converted_invoice_id: string | null;
 	template: string | null;
 	issue_date: string;
 	due_date: string;
@@ -724,7 +741,13 @@ export function rowToInvoiceDoc(row: InvoiceRow) {
 		tokenRevokedAt: epoch(row.token_revoked_at),
 		documentType: row.document_type,
 		correctsInvoiceId: row.corrects_invoice_id ?? undefined,
-		convertedToInvoiceId: lifecycle.convertedToInvoiceId as string | undefined,
+		convertedToInvoiceId:
+			row.quote_converted_invoice_id ??
+			(lifecycle.convertedToInvoiceId as string | undefined),
+		quoteConvertedInvoiceId: row.quote_converted_invoice_id ?? undefined,
+		quoteStatus: row.quote_status ?? undefined,
+		quoteSentAt: epoch(row.quote_sent_at),
+		quoteAcceptedAt: epoch(row.quote_accepted_at),
 		shipmentDetails: (row.shipment_details as ShipmentDetails) ?? undefined,
 		depositRequest: (lifecycle.depositRequest as DepositRequest) ?? undefined,
 		invoiceNumber: row.invoice_number,
@@ -794,7 +817,12 @@ export function mapInvoice(invoice: any): Invoice {
 		tokenRevokedAt: invoice.tokenRevokedAt,
 		documentType: invoice.documentType ?? "standard",
 		correctsInvoiceId: invoice.correctsInvoiceId,
-		convertedToInvoiceId: invoice.convertedToInvoiceId,
+		convertedToInvoiceId:
+			invoice.quoteConvertedInvoiceId ?? invoice.convertedToInvoiceId,
+		quoteConvertedInvoiceId: invoice.quoteConvertedInvoiceId,
+		quoteStatus: invoice.quoteStatus,
+		quoteSentAt: invoice.quoteSentAt,
+		quoteAcceptedAt: invoice.quoteAcceptedAt,
 		shipmentDetails: invoice.shipmentDetails,
 		depositRequest: invoice.depositRequest,
 		invoiceNumber: invoice.invoiceNumber,
@@ -915,6 +943,9 @@ export function mapPublicInvoice(invoice: Parameters<typeof mapInvoice>[0]) {
 		paidAt: mapped.paidAt,
 		deliveredAt: mapped.deliveredAt,
 		canceledAt: mapped.canceledAt,
+		quoteStatus: mapped.quoteStatus,
+		quoteSentAt: mapped.quoteSentAt,
+		quoteAcceptedAt: mapped.quoteAcceptedAt,
 		notes: mapped.notes,
 		lineItems: mapped.lineItems,
 		compliance: publicCompliance,
@@ -3097,6 +3128,275 @@ export async function duplicate(
 	return { id: data.id };
 }
 
+/**
+ * WP-D: may this pro-forma quote be accepted right now?
+ *
+ * Pure predicate shared by the public accept gate, the seller UI and their
+ * tests. Returns the reason it is NOT acceptable, or `null` when a client may
+ * accept it:
+ *
+ *   * `not_quote` — not a pro-forma (standard invoice, correction note, …);
+ *   * `already_accepted` — a conversion link already exists (the first-class
+ *     column, or the legacy `lifecycle.convertedToInvoiceId`), so an accept is
+ *     a no-op that returns the existing invoice;
+ *   * `not_open` — the quote is still a Draft (never sent), or it has left the
+ *     open issued family (paid / canceled / scheduled).
+ */
+export function quoteAcceptanceIssue(
+	invoice: any,
+): "not_quote" | "already_accepted" | "not_open" | null {
+	if ((invoice?.documentType ?? "standard") !== "proforma") return "not_quote";
+	if (invoice.quoteConvertedInvoiceId || invoice.convertedToInvoiceId) {
+		return "already_accepted";
+	}
+	const status = getDerivedInvoiceStatus(invoice);
+	if (
+		status === "unpaid" ||
+		status === "overdue" ||
+		status === "partially-paid"
+	) {
+		return null;
+	}
+	return "not_open";
+}
+
+export type QuoteConversionResult = {
+	/** The id of the ONE invoice this quote links to. */
+	id: string;
+	/** False when a concurrent accept had already converted the quote. */
+	created: boolean;
+};
+
+/**
+ * WP-D: convert an accepted pro-forma quote into exactly ONE issued standard
+ * invoice.
+ *
+ * This is the PUBLIC accept path, so it does not resolve a session: the
+ * caller passes the workspace id it derived from the bearer token (never from
+ * the request body) and the quote it loaded through a token-scoped read. It:
+ *
+ *   1. allocates the new number through the database allocator;
+ *   2. builds an ISSUED standard invoice (delivered_at + finalized_at, so it
+ *      derives payable) carrying the quote's lines, buyer, payment details and
+ *      any deposit already received;
+ *   3. inserts it, then links the quote with a conditional update
+ *      (`.is("quote_converted_invoice_id", null)`). The partial unique index
+ *      `invoices_quote_converted_invoice_unique` is the database backstop, so
+ *      even a racing service-role or buggy writer cannot create a second link;
+ *   4. on a lost race, soft-cancels the orphan it just created (issued
+ *      invoices are cancelled, never deleted) and returns the winner's id.
+ *
+ * The quote row is never turned into an invoice and is never deleted
+ * (`AGENTS.md` §9 immutability). A repeat accept returns the existing link
+ * with `created: false`.
+ */
+export async function convertQuoteToInvoice(
+	client: Supabase,
+	workspaceId: string,
+	quote: Invoice,
+	options: {
+		writer?: InvoiceAuditWriter;
+		actor?: { type: "user" | "system"; id: string };
+		/** Quote owner; the new invoice is attributed here (user_id is nullable). */
+		ownerUserId?: string | null;
+	} = {},
+): Promise<QuoteConversionResult> {
+	const alreadyConverted =
+		quote.quoteConvertedInvoiceId ?? quote.convertedToInvoiceId;
+	if (alreadyConverted) return { id: alreadyConverted, created: false };
+	if ((quote.documentType ?? "standard") !== "proforma") {
+		throw new Error("Only pro-forma quotes can be accepted.");
+	}
+
+	const actor = options.actor ?? {
+		type: "system" as const,
+		id: "public-accept",
+	};
+	const write = options.writer ?? recordInvoiceAudit;
+
+	// WP8/C1: the converted invoice's number is allocated by the database.
+	const plan = await planInvoiceNumber(client, { workspaceId });
+	const invoiceNumber = await commitInvoiceNumber(
+		client,
+		plan,
+		candidateInvoiceNumber(plan),
+	);
+	const now = Date.now();
+	const total = invoiceAmount(quote);
+	const carriedPaymentAmount = Math.min(
+		legacyPaymentAmount(quote, total),
+		total,
+	);
+
+	const doc: DraftDoc = {
+		token: `pub-${crypto.randomUUID()}`,
+		documentType: "standard",
+		invoiceNumber,
+		customerId: quote.customerId,
+		customerName: quote.customerName,
+		logoUrl: quote.logoUrl,
+		customerPoNumber: quote.customerPoNumber,
+		currency: quote.currency,
+		type: quote.type ?? "one-time",
+		invoiceSize: quote.invoiceSize ?? "A4",
+		dateFormat: quote.dateFormat ?? "ng",
+		paymentTermsDays: quote.paymentTermsDays ?? 14,
+		template: quote.template ?? "Default",
+		issueDate: new Date(now).toISOString().slice(0, 10),
+		dueDate: quote.dueDate,
+		paymentAmount: carriedPaymentAmount,
+		// The quote was already sent and the client accepted it, so the new
+		// invoice is issued on creation (delivered + finalized) and derives a
+		// payable status.
+		deliveredAt: now,
+		finalizedAt: now,
+		paymentDetails: quote.paymentDetails,
+		paymentLink: quote.paymentLink,
+		paymentProvider: quote.paymentProvider,
+		paidAt: carriedPaymentAmount >= total && total > 0 ? now : undefined,
+		paymentReference: quote.paymentReference,
+		notes: quote.notes,
+		internalNotes: quote.internalNotes,
+		lineItems: quote.lineItems,
+		compliance: stripClientFiscalization(
+			(quote.compliance as Record<string, unknown>) ?? defaultCompliance(quote),
+		),
+		fiscalization: { status: "not_configured" },
+		reminder:
+			carriedPaymentAmount >= total && total > 0
+				? {
+						...(quote.reminder ?? defaultReminder()),
+						paidAt: now,
+						nextReminderAt: undefined,
+					}
+				: defaultReminder(),
+		sync: defaultSync(),
+		lifecycle: {
+			sentAt: now,
+			...(carriedPaymentAmount > 0 ? { paymentReceivedAt: now } : {}),
+		},
+		createdAt: now,
+		updatedAt: now,
+	};
+	const status = getDerivedInvoiceStatus(doc);
+	// B2: leaving Draft requires a linked, fully-classified customer, exactly
+	// like `convertProformaToInvoice`.
+	await assertCustomerForIssueTransition(
+		client,
+		workspaceId,
+		doc,
+		"draft",
+		status,
+	);
+
+	const { data, error } = await client
+		.from("invoices")
+		.insert({
+			workspace_id: workspaceId,
+			user_id: options.ownerUserId ?? null,
+			status,
+			...docToInvoiceColumns(doc),
+		})
+		.select("id")
+		.single();
+	if (error) throw error;
+	const convertedId = data.id;
+
+	// Exactly-once link. The `.is(... null)` guard + partial unique index make
+	// a second conversion impossible; here `null` means we lost the race.
+	const { data: linked, error: linkError } = await client
+		.from("invoices")
+		.update(
+			toUpdate({
+				quote_status: "accepted",
+				quote_accepted_at: iso(now),
+				quote_converted_invoice_id: convertedId,
+				lifecycle: json({
+					...(quote.lifecycle ?? {}),
+					convertedToInvoiceId: convertedId,
+				}),
+				updated_at: iso(now),
+			}),
+		)
+		.eq("id", quote.id)
+		.eq("workspace_id", workspaceId)
+		.is("quote_converted_invoice_id", null)
+		.select("id")
+		.maybeSingle();
+	if (linkError) throw linkError;
+
+	if (!linked) {
+		// A concurrent accept won. Cancel the orphan we created (issued rows are
+		// cancelled, never deleted) and return the winner's invoice.
+		await client
+			.from("invoices")
+			.update(
+				toUpdate({
+					status: "canceled",
+					canceled_at: iso(now),
+					updated_at: iso(now),
+				}),
+			)
+			.eq("id", convertedId)
+			.eq("workspace_id", workspaceId);
+		await write(client, actor.id, {
+			action: "invoice.cancel",
+			resourceId: convertedId,
+			before: null,
+			after: { canceled: true, reason: "quote_accept_race_lost" },
+			message: "Canceled a duplicate invoice created by a racing quote accept.",
+			actor,
+		});
+		const { data: winner } = await client
+			.from("invoices")
+			.select("quote_converted_invoice_id")
+			.eq("id", quote.id)
+			.eq("workspace_id", workspaceId)
+			.maybeSingle();
+		const winnerId = (winner as { quote_converted_invoice_id?: string } | null)
+			?.quote_converted_invoice_id;
+		return { id: winnerId ?? convertedId, created: false };
+	}
+
+	// Record the carried quote deposit only now that the link is ours. If a
+	// concurrent accept had won, we returned above and this row was never
+	// written, so a race-loser leaves no stray deposit pointing at the canceled
+	// orphan.
+	if (carriedPaymentAmount > 0) {
+		const { error: txError } = await client
+			.from("payment_transactions")
+			.insert({
+				workspace_id: workspaceId,
+				owner_id: options.ownerUserId ?? null,
+				invoice_id: convertedId,
+				source: "manual",
+				reference: `quote-deposit-from-${quote.id}`,
+				amount: carriedPaymentAmount,
+				currency: quote.currency,
+				recorded_by: options.ownerUserId ?? null,
+			});
+		if (txError) throw txError;
+	}
+
+	await write(client, actor.id, {
+		action: "invoice.create",
+		resourceId: convertedId,
+		// Create event for the converted invoice: no prior state of THIS
+		// resource exists, so `before` is null; the quote source id travels in
+		// `after` / the message.
+		before: null,
+		after: {
+			invoiceNumber,
+			documentType: "standard",
+			convertedFromQuoteId: quote.id,
+		},
+		message: "Client accepted a quote; created a standard invoice.",
+		actor,
+	});
+
+	return { id: convertedId, created: true };
+}
+
 export async function convertProformaToInvoice(
 	client: Supabase,
 	userId: string,
@@ -3735,12 +4035,24 @@ export async function markInvoiceSent(
 
 	const now = Date.now();
 	const currentLifecycle = invoice.lifecycle ?? {};
+	const isQuote = (invoice.documentType ?? "standard") === "proforma";
+	// A quote the client already accepted (or one already linked to an invoice)
+	// keeps its terminal state: a later "mark as sent" must not regress it back
+	// to `sent`, so only an unaccepted, unlinked quote is stamped.
+	const markQuoteSent =
+		isQuote &&
+		invoice.quoteStatus !== "accepted" &&
+		!invoice.quoteConvertedInvoiceId &&
+		!invoice.convertedToInvoiceId;
 	const patch = patchWithDerivedStatus(invoice, {
 		deliveredAt: invoice.deliveredAt ?? now,
 		lifecycle: {
 			...currentLifecycle,
 			sentAt: currentLifecycle.sentAt ?? now,
 		},
+		// WP-D: sending a pro-forma marks the quote Sent (unless a later state
+		// already won, which the public accept writes).
+		...(markQuoteSent ? { quoteStatus: "sent", quoteSentAt: now } : {}),
 		updatedAt: now,
 	});
 
@@ -3751,6 +4063,12 @@ export async function markInvoiceSent(
 				delivered_at: iso(patch.deliveredAt as number),
 				lifecycle: json(patch.lifecycle),
 				status: patch.status,
+				...(markQuoteSent
+					? {
+							quote_status: "sent",
+							quote_sent_at: iso(now),
+						}
+					: {}),
 				updated_at: iso(patch.updatedAt as number),
 			}),
 		)

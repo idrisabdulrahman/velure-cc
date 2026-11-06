@@ -1,6 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useLocation } from "@tanstack/react-router";
-import { Banknote, Check, Copy, Download, ReceiptText } from "lucide-react";
+import {
+	BadgeCheck,
+	Banknote,
+	Check,
+	Copy,
+	Download,
+	ReceiptText,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { FaWhatsapp } from "react-icons/fa6";
 import { useResizeObserver } from "#/components/hooks/use-resize-observer";
@@ -77,6 +84,8 @@ function PublicInvoicePage() {
 	const [claimNote, setClaimNote] = useState("");
 	const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
 	const [claimSubmitted, setClaimSubmitted] = useState(false);
+	const [isAcceptingQuote, setIsAcceptingQuote] = useState(false);
+	const [quoteAccepted, setQuoteAccepted] = useState(false);
 
 	useEffect(() => {
 		if (invoice && invoice.status !== "canceled") {
@@ -223,6 +232,17 @@ function PublicInvoicePage() {
 		invoice.status !== "paid" &&
 		invoice.status !== "canceled" &&
 		invoice.balance > 0;
+	// WP-D: a pro-forma quote can be accepted while it is an open offer.
+	const isQuote = (invoice.documentType ?? "standard") === "proforma";
+	const quoteAcceptedView = quoteAccepted || invoice.quoteStatus === "accepted";
+	const canAcceptQuote =
+		isQuote &&
+		!quoteAcceptedView &&
+		invoice.quoteStatus !== "declined" &&
+		invoice.quoteStatus !== "expired" &&
+		(invoice.status === "unpaid" ||
+			invoice.status === "overdue" ||
+			invoice.status === "partially-paid");
 
 	const openClaimForm = () => {
 		setClaimAmount(invoice.balance > 0 ? String(invoice.balance) : "");
@@ -276,6 +296,39 @@ function PublicInvoicePage() {
 			});
 		} finally {
 			setIsSubmittingClaim(false);
+		}
+	};
+
+	const submitQuoteAcceptance = async () => {
+		setIsAcceptingQuote(true);
+		try {
+			const response = await fetch("/api/invoice/public/quote-accept", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ token: invoice.token }),
+			});
+			const payload = (await response.json().catch(() => null)) as {
+				ok?: boolean;
+				error?: string;
+			} | null;
+			if (!response.ok || !payload?.ok) {
+				throw new Error(payload?.error ?? "Could not accept the quote.");
+			}
+			setQuoteAccepted(true);
+			toast({
+				title: "Quote accepted",
+				description: `${sellerName} will issue your invoice.`,
+				variant: "success",
+			});
+			void refetch();
+		} catch (error) {
+			toast({
+				title: "Could not accept the quote",
+				description: error instanceof Error ? error.message : "Try again.",
+				variant: "error",
+			});
+		} finally {
+			setIsAcceptingQuote(false);
 		}
 	};
 
@@ -455,6 +508,50 @@ function PublicInvoicePage() {
 								</div>
 							)}
 						</div>
+					) : null}
+					{isQuote && (canAcceptQuote || quoteAcceptedView) ? (
+						<section className="mt-4 w-full rounded-md border border-[#242426] bg-[#101011] p-4">
+							{quoteAcceptedView ? (
+								<p
+									role="status"
+									aria-live="polite"
+									className="flex items-center gap-2 text-sm text-ink-2"
+								>
+									<Check className="h-4 w-4 shrink-0 text-brand" />
+									<span>
+										Quote accepted — {sellerName} will issue your invoice.
+									</span>
+								</p>
+							) : (
+								<>
+									<div className="flex items-start justify-between gap-4">
+										<div>
+											<p className="text-sm font-medium text-ink">
+												Ready to proceed?
+											</p>
+											<p className="mt-1 text-xs text-ink-3">
+												Accept this quote and {sellerName} will issue an invoice
+												for {formatMoney(invoice.total, invoice.currency)}.
+											</p>
+										</div>
+										<BadgeCheck className="h-5 w-5 text-brand" />
+									</div>
+									<button
+										type="button"
+										onClick={() => void submitQuoteAcceptance()}
+										disabled={isAcceptingQuote}
+										className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand px-4 text-[13px] font-medium text-brand-ink transition-colors hover:bg-brand-hi disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+									>
+										{isAcceptingQuote ? (
+											<Spinner size={16} />
+										) : (
+											<BadgeCheck className="h-4 w-4" />
+										)}
+										<span>Accept quote</span>
+									</button>
+								</>
+							)}
+						</section>
 					) : null}
 					{canClaimPayment ? (
 						<section className="mt-4 w-full rounded-md border border-[#242426] bg-[#101011] p-4">

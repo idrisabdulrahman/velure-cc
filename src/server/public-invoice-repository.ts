@@ -2,7 +2,14 @@ import type { InvoiceRecord } from "#/features/invoices/types";
 import { consumeFixedWindowRateLimit } from "#/server/http-security";
 import { emitActivation } from "#/server/observability";
 import { getSupabaseAdminClient } from "#/server/supabase";
-import { mapPublicInvoice, rowToInvoiceDoc } from "./data/invoices";
+import { recordInvoiceAudit } from "./data/audit";
+import {
+	convertQuoteToInvoice,
+	mapInvoice,
+	mapPublicInvoice,
+	quoteAcceptanceIssue,
+	rowToInvoiceDoc,
+} from "./data/invoices";
 import { insertPaymentClaim } from "./data/payment-claims";
 import {
 	getPublicPaymentContextForInvoice,
@@ -197,4 +204,100 @@ export async function submitPublicPaymentClaim(
 		duplicate: inserted.duplicate,
 	});
 	return { ok: true, duplicate: inserted.duplicate };
+}
+
+export type PublicQuoteAcceptanceResult =
+	| { ok: true; invoiceId: string; alreadyAccepted: boolean }
+	| {
+			ok: false;
+			reason: "not_found" | "rate_limited" | "not_quote" | "not_open";
+	  };
+
+/**
+ * Public "Accept quote" submission (WP-D). Token-scoped and rate-limited, like
+ * `submitPublicPaymentClaim`. It derives the workspace and the quote from the
+ * bearer token only — never from the request body — and asks
+ * `convertQuoteToInvoice` to create exactly ONE payable invoice. The quote row
+ * is never mutated into an invoice and is never deleted; a repeat accept
+ * returns the existing invoice with `alreadyAccepted: true`.
+ *
+ * The shared `public_invoice_by_token` RPC is deliberately NOT used here: it
+ * hides the private ids (owner, customer, internal notes) the conversion needs
+ * and exposes only the public projection. This read keeps that projection out
+ * of the response — the function returns an id and a status only.
+ */
+export async function submitPublicQuoteAcceptance(
+	token: string,
+	options: { clientIp?: string | null } = {},
+): Promise<PublicQuoteAcceptanceResult> {
+	const client = getSupabaseAdminClient();
+
+	const tokenAllowed = await consumeFixedWindowRateLimit(
+		client,
+		"quote-accept-token",
+		token,
+		5,
+		600,
+	);
+	const ip = options.clientIp?.trim();
+	const ipAllowed =
+		tokenAllowed && ip
+			? await consumeFixedWindowRateLimit(
+					client,
+					"quote-accept-ip",
+					ip,
+					20,
+					600,
+				)
+			: true;
+	if (!tokenAllowed || !ipAllowed) return { ok: false, reason: "rate_limited" };
+
+	// Token-scoped direct read: identity comes from the bearer token, never the
+	// request body. The full row is needed to rebuild the mapped quote the
+	// conversion carries forward.
+	const { data: row, error } = await client
+		.from("invoices")
+		.select("*")
+		.eq("token", token)
+		.is("token_revoked_at", null)
+		.maybeSingle();
+	if (error) throw error;
+	if (!row || row.deleted_at || row.canceled_at || row.status === "canceled") {
+		return { ok: false, reason: "not_found" };
+	}
+	const workspaceId =
+		typeof row.workspace_id === "string" ? row.workspace_id : null;
+	if (!workspaceId) return { ok: false, reason: "not_found" };
+
+	const quote = mapInvoice(rowToInvoiceDoc(row as never));
+	const issue = quoteAcceptanceIssue(quote);
+	if (issue === "not_quote") return { ok: false, reason: "not_quote" };
+	if (issue === "already_accepted") {
+		return {
+			ok: true,
+			invoiceId:
+				quote.quoteConvertedInvoiceId ?? quote.convertedToInvoiceId ?? "",
+			alreadyAccepted: true,
+		};
+	}
+	if (issue === "not_open") return { ok: false, reason: "not_open" };
+
+	const result = await convertQuoteToInvoice(client, workspaceId, quote, {
+		actor: { type: "system", id: "public-accept" },
+		ownerUserId: typeof row.user_id === "string" ? row.user_id : null,
+		// The audit row is server-only; the workspace is the one resolved from
+		// the token above, never an input.
+		writer: (writeClient, userId, entry) =>
+			recordInvoiceAudit(writeClient, userId, entry, { workspaceId }),
+	});
+	emitActivation("quote.accepted", {
+		invoiceId: result.id,
+		workspaceId,
+		created: result.created,
+	});
+	return {
+		ok: true,
+		invoiceId: result.id,
+		alreadyAccepted: !result.created,
+	};
 }

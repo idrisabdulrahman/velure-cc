@@ -339,6 +339,32 @@ describe("markInvoiceSent draft gate", () => {
 		expect(row("inv-a-draft-linked")?.delivered_at).toBeTruthy();
 		expect(row("inv-a-draft-linked")?.status).toBe("unpaid");
 	});
+
+	it("does not regress an already-accepted quote back to sent", async () => {
+		// A quote whose client already accepted it keeps its terminal state; a
+		// later "mark as sent" must not overwrite quote_status/quote_accepted_at.
+		(tables.invoices as Array<Record<string, unknown>>).push(
+			invoiceRow("inv-a-quote-accepted", WS_A, {
+				document_type: "proforma",
+				customer_id: CLIENT_A,
+				customer_name: "Client A",
+				status: "unpaid",
+				delivered_at: "2026-01-05T00:00:00.000Z",
+				finalized_at: "2026-01-05T00:00:00.000Z",
+				quote_status: "accepted",
+				quote_sent_at: "2026-01-04T00:00:00.000Z",
+				quote_accepted_at: "2026-01-05T00:00:00.000Z",
+				quote_converted_invoice_id: "inv-a-issued-linked",
+			}),
+		);
+
+		await markInvoiceSent(client, USER_A, "inv-a-quote-accepted");
+
+		expect(row("inv-a-quote-accepted")?.quote_status).toBe("accepted");
+		expect(row("inv-a-quote-accepted")?.quote_accepted_at).toBe(
+			"2026-01-05T00:00:00.000Z",
+		);
+	});
 });
 
 describe("createDraft finalize gate", () => {

@@ -57,6 +57,7 @@ import { Route as ApiInvoiceClaimsIdRouteImport } from './routes/api/invoice/cla
 import { Route as ApiInvoiceDownloadIdRouteImport } from './routes/api/invoice/download/$id'
 import { Route as ApiInvoicePublicTokenRouteImport } from './routes/api/invoice/public/$token'
 import { Route as ApiInvoicePublicClaimRouteImport } from './routes/api/invoice/public/claim'
+import { Route as ApiInvoicePublicQuoteAcceptRouteImport } from './routes/api/invoice/public/quote-accept'
 import { Route as ApiInvoiceSendIdRouteImport } from './routes/api/invoice/send/$id'
 import { Route as ApiInvoiceSubmissionIdRouteImport } from './routes/api/invoice/submission/$id'
 import { Route as ApiInvoiceSubmissionsScheduledRouteImport } from './routes/api/invoice/submissions/scheduled'
@@ -313,6 +314,12 @@ const ApiInvoicePublicClaimRoute = ApiInvoicePublicClaimRouteImport.update({
   path: '/api/invoice/public/claim',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiInvoicePublicQuoteAcceptRoute =
+  ApiInvoicePublicQuoteAcceptRouteImport.update({
+    id: '/api/invoice/public/quote-accept',
+    path: '/api/invoice/public/quote-accept',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiInvoiceSendIdRoute = ApiInvoiceSendIdRouteImport.update({
   id: '/api/invoice/send/$id',
   path: '/api/invoice/send/$id',
@@ -414,6 +421,7 @@ export interface FileRoutesByFullPath {
   '/api/invoice/download/$id': typeof ApiInvoiceDownloadIdRoute
   '/api/invoice/public/$token': typeof ApiInvoicePublicTokenRoute
   '/api/invoice/public/claim': typeof ApiInvoicePublicClaimRoute
+  '/api/invoice/public/quote-accept': typeof ApiInvoicePublicQuoteAcceptRoute
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
   '/api/invoice/submission/$id': typeof ApiInvoiceSubmissionIdRoute
   '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
@@ -469,6 +477,7 @@ export interface FileRoutesByTo {
   '/api/invoice/download/$id': typeof ApiInvoiceDownloadIdRoute
   '/api/invoice/public/$token': typeof ApiInvoicePublicTokenRoute
   '/api/invoice/public/claim': typeof ApiInvoicePublicClaimRoute
+  '/api/invoice/public/quote-accept': typeof ApiInvoicePublicQuoteAcceptRoute
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
   '/api/invoice/submission/$id': typeof ApiInvoiceSubmissionIdRoute
   '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
@@ -529,6 +538,7 @@ export interface FileRoutesById {
   '/api/invoice/download/$id': typeof ApiInvoiceDownloadIdRoute
   '/api/invoice/public/$token': typeof ApiInvoicePublicTokenRoute
   '/api/invoice/public/claim': typeof ApiInvoicePublicClaimRoute
+  '/api/invoice/public/quote-accept': typeof ApiInvoicePublicQuoteAcceptRoute
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
   '/api/invoice/submission/$id': typeof ApiInvoiceSubmissionIdRoute
   '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
@@ -590,6 +600,7 @@ export interface FileRouteTypes {
     | '/api/invoice/download/$id'
     | '/api/invoice/public/$token'
     | '/api/invoice/public/claim'
+    | '/api/invoice/public/quote-accept'
     | '/api/invoice/send/$id'
     | '/api/invoice/submission/$id'
     | '/api/invoice/submissions/scheduled'
@@ -645,6 +656,7 @@ export interface FileRouteTypes {
     | '/api/invoice/download/$id'
     | '/api/invoice/public/$token'
     | '/api/invoice/public/claim'
+    | '/api/invoice/public/quote-accept'
     | '/api/invoice/send/$id'
     | '/api/invoice/submission/$id'
     | '/api/invoice/submissions/scheduled'
@@ -704,6 +716,7 @@ export interface FileRouteTypes {
     | '/api/invoice/download/$id'
     | '/api/invoice/public/$token'
     | '/api/invoice/public/claim'
+    | '/api/invoice/public/quote-accept'
     | '/api/invoice/send/$id'
     | '/api/invoice/submission/$id'
     | '/api/invoice/submissions/scheduled'
@@ -750,6 +763,7 @@ export interface RootRouteChildren {
   ApiInvoiceDownloadIdRoute: typeof ApiInvoiceDownloadIdRoute
   ApiInvoicePublicTokenRoute: typeof ApiInvoicePublicTokenRoute
   ApiInvoicePublicClaimRoute: typeof ApiInvoicePublicClaimRoute
+  ApiInvoicePublicQuoteAcceptRoute: typeof ApiInvoicePublicQuoteAcceptRoute
   ApiInvoiceSendIdRoute: typeof ApiInvoiceSendIdRoute
   ApiInvoiceSubmissionIdRoute: typeof ApiInvoiceSubmissionIdRoute
   ApiInvoiceSubmissionsScheduledRoute: typeof ApiInvoiceSubmissionsScheduledRoute
@@ -1100,6 +1114,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiInvoicePublicClaimRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/invoice/public/quote-accept': {
+      id: '/api/invoice/public/quote-accept'
+      path: '/api/invoice/public/quote-accept'
+      fullPath: '/api/invoice/public/quote-accept'
+      preLoaderRoute: typeof ApiInvoicePublicQuoteAcceptRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/invoice/send/$id': {
       id: '/api/invoice/send/$id'
       path: '/api/invoice/send/$id'
@@ -1276,6 +1297,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInvoiceDownloadIdRoute: ApiInvoiceDownloadIdRoute,
   ApiInvoicePublicTokenRoute: ApiInvoicePublicTokenRoute,
   ApiInvoicePublicClaimRoute: ApiInvoicePublicClaimRoute,
+  ApiInvoicePublicQuoteAcceptRoute: ApiInvoicePublicQuoteAcceptRoute,
   ApiInvoiceSendIdRoute: ApiInvoiceSendIdRoute,
   ApiInvoiceSubmissionIdRoute: ApiInvoiceSubmissionIdRoute,
   ApiInvoiceSubmissionsScheduledRoute: ApiInvoiceSubmissionsScheduledRoute,
