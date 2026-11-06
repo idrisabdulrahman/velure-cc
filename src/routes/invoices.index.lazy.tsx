@@ -104,6 +104,7 @@ import {
 import { useUnifiedAuth } from "#/lib/auth-hook";
 import { assertImportFileSize } from "#/lib/import-limits";
 import { useSupabaseSession } from "#/lib/supabase-session";
+import { canMutateWorkspace, useWorkspaceRole } from "#/lib/workspace-role";
 import {
 	bulkDeleteOrArchive,
 	convertProformaToInvoice,
@@ -288,6 +289,9 @@ function InvoicesIndex() {
 	const authState = useUnifiedAuth();
 	const userId = authState.data?.user?.id;
 	const { client: supabaseClient } = useSupabaseSession(userId);
+	// WP-E: viewers get the read/export affordances only; Postgres RLS refuses
+	// their writes regardless, so this is purely a UX floor.
+	const canMutate = canMutateWorkspace(useWorkspaceRole());
 	const requireSupabase = () => {
 		if (!supabaseClient || !userId)
 			throw new Error("Supabase session unavailable.");
@@ -833,13 +837,23 @@ function InvoicesIndex() {
 			render: (invoice) => (
 				<button
 					type="button"
-					onClick={() => setActiveInvoiceId(invoice.id as Id<"invoices">)}
+					onClick={() => {
+						if (canMutate) {
+							setActiveInvoiceId(invoice.id as Id<"invoices">);
+							return;
+						}
+						// WP-E: viewers get the public read-only view instead of
+						// mounting the editor sheet.
+						window.open(`/i/${invoice.token}`, "_blank", "noopener,noreferrer");
+					}}
 					className="block min-w-0 max-w-full text-left"
 				>
 					{/* A visually-hidden prefix keeps "Edit invoice" in the
 					    computed name while every visible span (number, customer,
 					    duplicate badge) stays part of it — WCAG 2.5.3. */}
-					<span className="sr-only">Edit invoice </span>
+					<span className="sr-only">
+						{canMutate ? "Edit invoice " : "View invoice "}
+					</span>
 					<span className="block truncate font-mono text-[13px] font-medium text-ink">
 						{invoice.invoiceNumber}
 					</span>
@@ -963,13 +977,15 @@ function InvoicesIndex() {
 				align="end"
 				className="min-w-47 border-rule bg-paper-2 p-1 text-ink"
 			>
-				<DropdownMenuItem
-					onClick={() => setActiveInvoiceId(invoice.id as Id<"invoices">)}
-					className="focus:bg-brand-soft"
-				>
-					<FileEdit className="mr-2 h-4 w-4" />
-					Edit invoice
-				</DropdownMenuItem>
+				{canMutate ? (
+					<DropdownMenuItem
+						onClick={() => setActiveInvoiceId(invoice.id as Id<"invoices">)}
+						className="focus:bg-brand-soft"
+					>
+						<FileEdit className="mr-2 h-4 w-4" />
+						Edit invoice
+					</DropdownMenuItem>
+				) : null}
 				<DropdownMenuItem
 					onClick={() =>
 						window.open(`/i/${invoice.token}`, "_blank", "noopener,noreferrer")
@@ -997,89 +1013,96 @@ function InvoicesIndex() {
 						Preview download
 					</a>
 				</DropdownMenuItem>
-				<DropdownMenuItem
-					onClick={() => void onDuplicate(invoice.id)}
-					className="focus:bg-brand-soft"
-				>
-					<Repeat2 className="mr-2 h-4 w-4" />
-					Duplicate
-				</DropdownMenuItem>
-				{duplicateInvoiceNumbers.has(invoice.invoiceNumber) ? (
-					<DropdownMenuItem
-						onClick={() =>
-							void onRenumberInvoices([invoice.id as Id<"invoices">])
-						}
-						className="focus:bg-brand-soft"
-					>
-						<Wrench className="mr-2 h-4 w-4" />
-						Fix duplicate number
-					</DropdownMenuItem>
-				) : null}
-				{invoice.status === "draft" ? (
-					<DropdownMenuItem
-						onClick={() =>
-							void openCleanupConfirmation([invoice.id as Id<"invoices">])
-						}
-						className="text-danger focus:bg-danger-soft focus:text-danger"
-					>
-						<Trash2 className="mr-2 h-4 w-4" />
-						Delete
-					</DropdownMenuItem>
-				) : null}
-				{invoice.documentType === "proforma" &&
-				!invoice.convertedToInvoiceId ? (
-					<DropdownMenuItem
-						onClick={() => void onConvertProforma(invoice.id)}
-						className="focus:bg-brand-soft"
-					>
-						<ReceiptText className="mr-2 h-4 w-4" />
-						Convert to invoice
-					</DropdownMenuItem>
-				) : null}
-				{invoice.documentType === "proforma" && invoice.status === "draft" ? (
-					<DropdownMenuItem
-						onClick={() => void onMarkQuoteSent(invoice.id)}
-						className="focus:bg-brand-soft"
-					>
-						<Send className="mr-2 h-4 w-4" />
-						Mark as sent
-					</DropdownMenuItem>
-				) : null}
-				<DropdownMenuSub>
-					<DropdownMenuSubTrigger className="focus:bg-brand-soft">
-						<CalendarDays className="mr-2 h-4 w-4" />
-						Mark as paid
-					</DropdownMenuSubTrigger>
-					<DropdownMenuSubContent className="min-w-62 border-rule bg-paper-2 p-2 text-ink">
-						<button
-							type="button"
-							onClick={() => void onRecordFullPayment(invoice)}
-							className="mb-2 flex h-8 w-full items-center justify-center border border-rule bg-paper-3 px-3 text-xs text-ink-2 transition-colors hover:bg-brand-soft"
+				{canMutate ? (
+					<>
+						<DropdownMenuItem
+							onClick={() => void onDuplicate(invoice.id)}
+							className="focus:bg-brand-soft"
 						>
-							Mark paid today
-						</button>
-						<Calendar
-							mode="single"
-							selected={new Date()}
-							onSelect={(date) => {
-								if (!date) return;
-								void onRecordFullPayment(invoice);
+							<Repeat2 className="mr-2 h-4 w-4" />
+							Duplicate
+						</DropdownMenuItem>
+						{duplicateInvoiceNumbers.has(invoice.invoiceNumber) ? (
+							<DropdownMenuItem
+								onClick={() =>
+									void onRenumberInvoices([invoice.id as Id<"invoices">])
+								}
+								className="focus:bg-brand-soft"
+							>
+								<Wrench className="mr-2 h-4 w-4" />
+								Fix duplicate number
+							</DropdownMenuItem>
+						) : null}
+						{invoice.status === "draft" ? (
+							<DropdownMenuItem
+								onClick={() =>
+									void openCleanupConfirmation([invoice.id as Id<"invoices">])
+								}
+								className="text-danger focus:bg-danger-soft focus:text-danger"
+							>
+								<Trash2 className="mr-2 h-4 w-4" />
+								Delete
+							</DropdownMenuItem>
+						) : null}
+						{invoice.documentType === "proforma" &&
+						!invoice.convertedToInvoiceId ? (
+							<DropdownMenuItem
+								onClick={() => void onConvertProforma(invoice.id)}
+								className="focus:bg-brand-soft"
+							>
+								<ReceiptText className="mr-2 h-4 w-4" />
+								Convert to invoice
+							</DropdownMenuItem>
+						) : null}
+						{invoice.documentType === "proforma" &&
+						invoice.status === "draft" ? (
+							<DropdownMenuItem
+								onClick={() => void onMarkQuoteSent(invoice.id)}
+								className="focus:bg-brand-soft"
+							>
+								<Send className="mr-2 h-4 w-4" />
+								Mark as sent
+							</DropdownMenuItem>
+						) : null}
+						<DropdownMenuSub>
+							<DropdownMenuSubTrigger className="focus:bg-brand-soft">
+								<CalendarDays className="mr-2 h-4 w-4" />
+								Mark as paid
+							</DropdownMenuSubTrigger>
+							<DropdownMenuSubContent className="min-w-62 border-rule bg-paper-2 p-2 text-ink">
+								<button
+									type="button"
+									onClick={() => void onRecordFullPayment(invoice)}
+									className="mb-2 flex h-8 w-full items-center justify-center border border-rule bg-paper-3 px-3 text-xs text-ink-2 transition-colors hover:bg-brand-soft"
+								>
+									Mark paid today
+								</button>
+								<Calendar
+									mode="single"
+									selected={new Date()}
+									onSelect={(date) => {
+										if (!date) return;
+										void onRecordFullPayment(invoice);
+									}}
+								/>
+							</DropdownMenuSubContent>
+						</DropdownMenuSub>
+						<DropdownMenuItem
+							onClick={() => {
+								// `onStatusChange` rethrows after toasting; swallow here
+								// so the fire-and-forget menu item has no unhandled
+								// rejection (the sheet keeps its own guard).
+								void onStatusChange(invoice.id, "canceled").catch(
+									() => undefined,
+								);
 							}}
-						/>
-					</DropdownMenuSubContent>
-				</DropdownMenuSub>
-				<DropdownMenuItem
-					onClick={() => {
-						// `onStatusChange` rethrows after toasting; swallow here
-						// so the fire-and-forget menu item has no unhandled
-						// rejection (the sheet keeps its own guard).
-						void onStatusChange(invoice.id, "canceled").catch(() => undefined);
-					}}
-					className="text-danger focus:bg-danger-soft focus:text-danger"
-				>
-					<XCircle className="mr-2 h-4 w-4" />
-					Cancel
-				</DropdownMenuItem>
+							className="text-danger focus:bg-danger-soft focus:text-danger"
+						>
+							<XCircle className="mr-2 h-4 w-4" />
+							Cancel
+						</DropdownMenuItem>
+					</>
+				) : null}
 			</DropdownMenuContent>
 		</DropdownMenu>
 	);
@@ -1188,16 +1211,22 @@ function InvoicesIndex() {
 		<EmptyState
 			icon={<ReceiptText className="h-4 w-4" />}
 			title="No invoices yet."
-			copy="Create an invoice, add a client email, then share the Paystack-enabled public link."
+			copy={
+				canMutate
+					? "Create an invoice, add a client email, then share the Paystack-enabled public link."
+					: "No invoices have been created in this workspace yet."
+			}
 			action={
-				<Button
-					type="button"
-					size="sm"
-					onClick={openNewInvoiceSheet}
-					className="h-9 rounded-md bg-brand px-3 text-sm font-medium text-brand-ink hover:bg-brand-hi"
-				>
-					New invoice
-				</Button>
+				canMutate ? (
+					<Button
+						type="button"
+						size="sm"
+						onClick={openNewInvoiceSheet}
+						className="h-9 rounded-md bg-brand px-3 text-sm font-medium text-brand-ink hover:bg-brand-hi"
+					>
+						New invoice
+					</Button>
+				) : undefined
 			}
 		/>
 	);
@@ -1397,34 +1426,38 @@ function InvoicesIndex() {
 				</div>
 
 				<div className="flex flex-wrap items-center gap-3">
-					<label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-rule bg-paper-2 px-3 text-sm font-medium text-ink-2 transition-colors hover:bg-paper-3">
-						<Upload className="h-4 w-4 text-brand" />
-						Import CSV
-						<input
-							type="file"
-							accept=".csv,text/csv,.xlsx"
-							className="hidden"
-							onChange={(event) => {
-								void onInvoiceImport(event.target.files?.[0]);
-								event.target.value = "";
-							}}
-						/>
-					</label>
-					<Button
-						type="button"
-						onClick={() => {
-							// Mounting the editor is heavy (line items, tiptap notes);
-							// keep it concurrent so the sheet slide-in keeps compositing.
-							startTransition(() => {
-								setImportedDraft(null);
-								setCreateDocumentType("standard");
-								setCreateOpen(true);
-							});
-						}}
-						className="h-10 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi"
-					>
-						New invoice
-					</Button>
+					{canMutate ? (
+						<>
+							<label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-rule bg-paper-2 px-3 text-sm font-medium text-ink-2 transition-colors hover:bg-paper-3">
+								<Upload className="h-4 w-4 text-brand" />
+								Import CSV
+								<input
+									type="file"
+									accept=".csv,text/csv,.xlsx"
+									className="hidden"
+									onChange={(event) => {
+										void onInvoiceImport(event.target.files?.[0]);
+										event.target.value = "";
+									}}
+								/>
+							</label>
+							<Button
+								type="button"
+								onClick={() => {
+									// Mounting the editor is heavy (line items, tiptap notes);
+									// keep it concurrent so the sheet slide-in keeps compositing.
+									startTransition(() => {
+										setImportedDraft(null);
+										setCreateDocumentType("standard");
+										setCreateOpen(true);
+									});
+								}}
+								className="h-10 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi"
+							>
+								New invoice
+							</Button>
+						</>
+					) : null}
 				</div>
 			</div>
 
@@ -1519,7 +1552,7 @@ function InvoicesIndex() {
 				/>
 			</KpiStrip>
 
-			{emptyDrafts.length > 0 && !allEmptyDraftsSelected ? (
+			{canMutate && emptyDrafts.length > 0 && !allEmptyDraftsSelected ? (
 				<Callout
 					tone="warn"
 					title={`${emptyDrafts.length} empty draft${emptyDrafts.length === 1 ? "" : "s"}`}
@@ -1600,42 +1633,46 @@ function InvoicesIndex() {
 									</strong>
 									<span className="flex-1" />
 									<div className="flex items-center gap-1">
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon"
-											className="h-8 w-8"
-											title="Renumber selected"
-											aria-label="Renumber selected invoices"
-											onClick={() =>
-												void onRenumberInvoices(
-													selectedRows.map(
-														(invoice) => invoice.id as Id<"invoices">,
-													),
-												)
-											}
-											disabled={bulkActionPending}
-										>
-											<Wrench className="h-4 w-4" />
-										</Button>
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon"
-											className="h-8 w-8 text-ink-2 hover:bg-danger-soft hover:text-danger"
-											title="Delete selected"
-											aria-label="Delete selected invoices"
-											onClick={() =>
-												void openCleanupConfirmation(
-													selectedRows.map(
-														(invoice) => invoice.id as Id<"invoices">,
-													),
-												)
-											}
-											disabled={bulkActionPending}
-										>
-											<Trash2 className="h-4 w-4" />
-										</Button>
+										{canMutate ? (
+											<>
+												<Button
+													type="button"
+													variant="ghost"
+													size="icon"
+													className="h-8 w-8"
+													title="Renumber selected"
+													aria-label="Renumber selected invoices"
+													onClick={() =>
+														void onRenumberInvoices(
+															selectedRows.map(
+																(invoice) => invoice.id as Id<"invoices">,
+															),
+														)
+													}
+													disabled={bulkActionPending}
+												>
+													<Wrench className="h-4 w-4" />
+												</Button>
+												<Button
+													type="button"
+													variant="ghost"
+													size="icon"
+													className="h-8 w-8 text-ink-2 hover:bg-danger-soft hover:text-danger"
+													title="Delete selected"
+													aria-label="Delete selected invoices"
+													onClick={() =>
+														void openCleanupConfirmation(
+															selectedRows.map(
+																(invoice) => invoice.id as Id<"invoices">,
+															),
+														)
+													}
+													disabled={bulkActionPending}
+												>
+													<Trash2 className="h-4 w-4" />
+												</Button>
+											</>
+										) : null}
 										<Button
 											type="button"
 											variant="ghost"
@@ -1659,7 +1696,7 @@ function InvoicesIndex() {
 			)}
 
 			<InvoiceDetailsSheet
-				open={activeInvoiceId !== null}
+				open={activeInvoiceId !== null && canMutate}
 				onOpenChange={(open) => {
 					if (!open) setActiveInvoiceId(null);
 				}}
@@ -1707,7 +1744,7 @@ function InvoicesIndex() {
 			/>
 
 			<CreateInvoiceSheet
-				open={createOpen}
+				open={createOpen && canMutate}
 				onOpenChange={setCreateOpen}
 				initialDraft={importedDraft}
 				initialDocumentType={createDocumentType}

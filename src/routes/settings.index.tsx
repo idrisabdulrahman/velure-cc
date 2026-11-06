@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { FormField } from "#/components/redesign/form-field";
 import { Panel } from "#/components/redesign/panel";
 import { StatusPill } from "#/components/redesign/status-pill";
+import { MembersPanel } from "#/components/settings/members-panel";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -36,6 +37,7 @@ import {
 } from "#/features/compliance/supplier-profile";
 import { authClient } from "#/lib/auth-client";
 import { useSupabaseSession } from "#/lib/supabase-session";
+import { isWorkspaceViewer } from "#/lib/workspace-role";
 import {
 	getWorkspaceSettings,
 	SUPPLIER_PROFILE_REJECTION_PREFIX,
@@ -445,6 +447,7 @@ function SettingsPage() {
 		!form.addressState.trim() ||
 		!form.country.trim();
 	const loaded = Boolean(workspace);
+	const isViewer = isWorkspaceViewer(workspace?.role);
 	const nameError =
 		errors.name ??
 		(loaded && !form.name.trim() ? "Business name is required." : undefined);
@@ -482,6 +485,19 @@ function SettingsPage() {
 					The preview on the right shows how it lands on an invoice.
 				</p>
 			</div>
+
+			{isViewer ? (
+				<div
+					role="status"
+					className="rounded-md border border-rule bg-paper-2 px-4 py-3"
+				>
+					<p className="text-sm font-medium text-ink">Read-only access</p>
+					<p className="mt-1 text-sm text-ink-3">
+						You are a viewer in this workspace. You can read everything and run
+						exports, but only the owner can change settings.
+					</p>
+				</div>
+			) : null}
 
 			{settingsPending ? <PanelLoader label="Loading settings" /> : null}
 			{!settingsPending && settingsError ? (
@@ -1003,6 +1019,8 @@ function SettingsPage() {
 				</div>
 			</div>
 
+			<MembersPanel canInvite={workspace?.role === "owner"} />
+
 			<Panel title="Account info">
 				<div className="grid gap-3 sm:grid-cols-2">
 					<ReadOnlyItem label="Member Since" value={memberSince} />
@@ -1124,36 +1142,41 @@ function SettingsPage() {
 				</div>
 			</Panel>
 
-			<div
-				className={`pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-5 transition-transform duration-200 ${
-					dirty ? "translate-y-0" : "translate-y-[120%]"
-				}`}
-			>
-				<div className="pointer-events-auto flex items-center gap-4 rounded-lg border border-rule bg-paper-2 py-2.5 pr-2.5 pl-4 shadow-lg">
-					<span className="flex items-center gap-2.5 text-[13px] text-ink">
-						<span aria-hidden="true" className="h-2 w-2 rounded-full bg-warn" />
-						Unsaved changes
-					</span>
-					<Button
-						type="button"
-						variant="outline"
-						onClick={resetForm}
-						className="h-9 rounded-md border-rule bg-transparent px-3 text-sm text-ink-2 hover:bg-paper-3"
-					>
-						Discard
-					</Button>
-					<Button
-						type="button"
-						disabled={saving || requiredInvalid}
-						onClick={() => {
-							void saveChanges();
-						}}
-						className="h-9 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi disabled:opacity-50"
-					>
-						{saving ? "Saving..." : "Save changes"}
-					</Button>
+			{!isViewer ? (
+				<div
+					className={`pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-5 transition-transform duration-200 ${
+						dirty ? "translate-y-0" : "translate-y-[120%]"
+					}`}
+				>
+					<div className="pointer-events-auto flex items-center gap-4 rounded-lg border border-rule bg-paper-2 py-2.5 pr-2.5 pl-4 shadow-lg">
+						<span className="flex items-center gap-2.5 text-[13px] text-ink">
+							<span
+								aria-hidden="true"
+								className="h-2 w-2 rounded-full bg-warn"
+							/>
+							Unsaved changes
+						</span>
+						<Button
+							type="button"
+							variant="outline"
+							onClick={resetForm}
+							className="h-9 rounded-md border-rule bg-transparent px-3 text-sm text-ink-2 hover:bg-paper-3"
+						>
+							Discard
+						</Button>
+						<Button
+							type="button"
+							disabled={saving || requiredInvalid}
+							onClick={() => {
+								void saveChanges();
+							}}
+							className="h-9 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi disabled:opacity-50"
+						>
+							{saving ? "Saving..." : "Save changes"}
+						</Button>
+					</div>
 				</div>
-			</div>
+			) : null}
 		</div>
 	);
 }

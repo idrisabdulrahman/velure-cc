@@ -21,6 +21,7 @@ import {
 } from "#/features/products/product-form-utils";
 import { useUnifiedAuth } from "#/lib/auth-hook";
 import { useSupabaseSession } from "#/lib/supabase-session";
+import { canMutateWorkspace, useWorkspaceRole } from "#/lib/workspace-role";
 import { createProduct } from "#/server/data/products";
 
 export const Route = createFileRoute("/invoices/products/new")({
@@ -68,6 +69,8 @@ function NewProductPage() {
 	const authState = useUnifiedAuth();
 	const userId = authState.data?.user?.id;
 	const { client: supabaseClient } = useSupabaseSession(userId);
+	// WP-E: viewers cannot create catalog items.
+	const canMutate = canMutateWorkspace(useWorkspaceRole());
 	const [state, setState] = useState<FormState>(initialState);
 	const [submitting, setSubmitting] = useState(false);
 	const [attemptedSubmit, setAttemptedSubmit] = useState(false);
@@ -88,6 +91,27 @@ function NewProductPage() {
 
 	const inputClass =
 		"h-10 rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-brand-line focus-visible:ring-0";
+
+	if (!canMutate) {
+		return (
+			<div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">
+				<p className="text-sm font-medium text-ink">
+					Read-only access to this workspace
+				</p>
+				<p className="max-w-sm text-sm text-ink-3">
+					Only the workspace owner can add catalog items.
+				</p>
+				<Button
+					type="button"
+					variant="outline"
+					onClick={() => navigate({ to: "/invoices/products" })}
+					className="h-10 rounded-md border-rule bg-transparent text-sm font-medium text-ink-2 hover:bg-paper-3 hover:text-ink"
+				>
+					Back to products
+				</Button>
+			</div>
+		);
+	}
 
 	const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();

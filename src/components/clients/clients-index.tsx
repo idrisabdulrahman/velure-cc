@@ -52,6 +52,7 @@ import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import { useUnifiedAuth } from "#/lib/auth-hook";
 import { assertImportFileSize } from "#/lib/import-limits";
 import { useSupabaseSession } from "#/lib/supabase-session";
+import { canMutateWorkspace, useWorkspaceRole } from "#/lib/workspace-role";
 import {
 	archiveClient,
 	getClientIntelligence,
@@ -259,6 +260,9 @@ export function ClientsIndex() {
 	const userId = authState.data?.user?.id;
 	const { client: supabaseClient } = useSupabaseSession(userId);
 	const canRead = Boolean(supabaseClient && userId);
+	// WP-E: viewers read/export only. RLS is the real boundary; this hides the
+	// affordances that would only end in a refused write.
+	const canMutate = canMutateWorkspace(useWorkspaceRole());
 	const context =
 		supabaseClient && userId ? { client: supabaseClient, userId } : null;
 	const selectedClientPanelRef = useRef<HTMLElement | null>(null);
@@ -719,25 +723,29 @@ export function ClientsIndex() {
 						</p>
 					</div>
 					<div className="flex flex-wrap items-center gap-3">
-						<label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-rule bg-paper-2 px-3 text-sm text-ink-2 hover:bg-paper-3">
-							<Upload className="h-4 w-4" />
-							Import CSV
-							<input
-								type="file"
-								accept=".csv,text/csv"
-								className="hidden"
-								onChange={(event) => {
-									void onCsvImport(event.target.files?.[0]);
-									event.target.value = "";
-								}}
-							/>
-						</label>
-						<Button
-							asChild
-							className="h-10 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi"
-						>
-							<Link to="/clients/new">New client</Link>
-						</Button>
+						{canMutate ? (
+							<>
+								<label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-rule bg-paper-2 px-3 text-sm text-ink-2 hover:bg-paper-3">
+									<Upload className="h-4 w-4" />
+									Import CSV
+									<input
+										type="file"
+										accept=".csv,text/csv"
+										className="hidden"
+										onChange={(event) => {
+											void onCsvImport(event.target.files?.[0]);
+											event.target.value = "";
+										}}
+									/>
+								</label>
+								<Button
+									asChild
+									className="h-10 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi"
+								>
+									<Link to="/clients/new">New client</Link>
+								</Button>
+							</>
+						) : null}
 					</div>
 				</div>
 
@@ -895,61 +903,63 @@ export function ClientsIndex() {
 											</span>
 										</div>
 										<div className="flex-none">
-											<DropdownMenu>
-												<DropdownMenuTrigger asChild>
-													<Button
-														type="button"
-														variant="ghost"
-														size="icon"
-														onClick={(event) => {
-															event.stopPropagation();
-															openClientMenu(client.id);
-														}}
-														onKeyDown={(event) => event.stopPropagation()}
-														aria-label={`Actions for ${client.name}`}
-														className="h-9 w-9 rounded-md border border-rule bg-paper-2 hover:bg-brand-soft"
-													>
-														<MoreHorizontal className="h-4 w-4 text-ink-2" />
-													</Button>
-												</DropdownMenuTrigger>
-												<DropdownMenuContent className="border-rule bg-paper-2 text-ink">
-													<DropdownMenuItem
-														className="gap-2 focus:bg-brand-soft"
-														onClick={() => editClient(client.id)}
-													>
-														<Pencil className="h-4 w-4" />
-														Edit
-													</DropdownMenuItem>
-													<DropdownMenuItem
-														className="gap-2 focus:bg-brand-soft"
-														disabled={busyAction !== null}
-														onClick={() =>
-															void setClientArchiveStatus(
-																client,
-																client.status === "archived"
-																	? "active"
-																	: "archived",
-															)
-														}
-													>
-														{client.status === "archived" ? (
-															<RotateCcw className="h-4 w-4" />
-														) : (
-															<Archive className="h-4 w-4" />
-														)}
-														{client.status === "archived"
-															? "Restore"
-															: "Archive"}
-													</DropdownMenuItem>
-													<DropdownMenuItem
-														className="gap-2 text-danger focus:bg-danger-soft focus:text-danger"
-														onClick={() => setDeleteTargetId(client.id)}
-													>
-														<Trash2 className="h-4 w-4" />
-														Delete
-													</DropdownMenuItem>
-												</DropdownMenuContent>
-											</DropdownMenu>
+											{canMutate ? (
+												<DropdownMenu>
+													<DropdownMenuTrigger asChild>
+														<Button
+															type="button"
+															variant="ghost"
+															size="icon"
+															onClick={(event) => {
+																event.stopPropagation();
+																openClientMenu(client.id);
+															}}
+															onKeyDown={(event) => event.stopPropagation()}
+															aria-label={`Actions for ${client.name}`}
+															className="h-9 w-9 rounded-md border border-rule bg-paper-2 hover:bg-brand-soft"
+														>
+															<MoreHorizontal className="h-4 w-4 text-ink-2" />
+														</Button>
+													</DropdownMenuTrigger>
+													<DropdownMenuContent className="border-rule bg-paper-2 text-ink">
+														<DropdownMenuItem
+															className="gap-2 focus:bg-brand-soft"
+															onClick={() => editClient(client.id)}
+														>
+															<Pencil className="h-4 w-4" />
+															Edit
+														</DropdownMenuItem>
+														<DropdownMenuItem
+															className="gap-2 focus:bg-brand-soft"
+															disabled={busyAction !== null}
+															onClick={() =>
+																void setClientArchiveStatus(
+																	client,
+																	client.status === "archived"
+																		? "active"
+																		: "archived",
+																)
+															}
+														>
+															{client.status === "archived" ? (
+																<RotateCcw className="h-4 w-4" />
+															) : (
+																<Archive className="h-4 w-4" />
+															)}
+															{client.status === "archived"
+																? "Restore"
+																: "Archive"}
+														</DropdownMenuItem>
+														<DropdownMenuItem
+															className="gap-2 text-danger focus:bg-danger-soft focus:text-danger"
+															onClick={() => setDeleteTargetId(client.id)}
+														>
+															<Trash2 className="h-4 w-4" />
+															Delete
+														</DropdownMenuItem>
+													</DropdownMenuContent>
+												</DropdownMenu>
+											) : null}
 										</div>
 									</div>
 								);
@@ -977,7 +987,7 @@ export function ClientsIndex() {
 											: "Try a different search or clear the filter."}
 									</p>
 								</div>
-								{clients.length === 0 ? (
+								{clients.length === 0 && canMutate ? (
 									<Button
 										asChild
 										className="h-9 rounded-md bg-brand px-3 text-sm font-medium text-brand-ink hover:bg-brand-hi"
@@ -1426,6 +1436,7 @@ export function ClientsIndex() {
 												<FormField label="Name">
 													<Input
 														value={editState.name}
+														readOnly={!canMutate}
 														onChange={(event) =>
 															setEditState((prev) => ({
 																...prev,
@@ -1439,6 +1450,7 @@ export function ClientsIndex() {
 													<Input
 														type="email"
 														value={editState.email}
+														readOnly={!canMutate}
 														onChange={(event) =>
 															setEditState((prev) => ({
 																...prev,
@@ -1452,6 +1464,7 @@ export function ClientsIndex() {
 													<Input
 														value={editState.company}
 														placeholder="Add a company name"
+														readOnly={!canMutate}
 														onChange={(event) =>
 															setEditState((prev) => ({
 																...prev,
@@ -1467,6 +1480,7 @@ export function ClientsIndex() {
 												>
 													<Select
 														value={editState.paymentTerms}
+														disabled={!canMutate}
 														onValueChange={(value) =>
 															setEditState((prev) => ({
 																...prev,
@@ -1489,6 +1503,7 @@ export function ClientsIndex() {
 												<FormField label="Status">
 													<Select
 														value={editState.status}
+														disabled={!canMutate}
 														onValueChange={(value) =>
 															setEditState((prev) => ({
 																...prev,
@@ -1509,72 +1524,92 @@ export function ClientsIndex() {
 												</FormField>
 											</form>
 
-											<div className="px-4 pb-2">
-												<button
-													type="button"
-													onClick={() => void onArchiveStatusChange()}
-													disabled={busyAction !== null}
-													className="text-sm text-ink-3 hover:text-ink hover:underline disabled:opacity-50"
-												>
-													{busyAction === "archive"
-														? "Archiving..."
-														: busyAction === "restore"
-															? "Restoring..."
-															: selected.status === "archived"
-																? "Restore client"
-																: "Archive client"}
-												</button>
-											</div>
-
-											<div className="px-4 pb-4">
-												<div className="rounded-md border border-danger-line bg-danger-soft p-3">
-													<p className="text-xs font-medium uppercase tracking-[0.12em] text-danger">
-														Danger zone
-													</p>
-													<p className="mt-1 text-xs leading-5 text-ink-3">
-														Delete only when this client should no longer appear
-														in invoice workflows.
-													</p>
-													<Button
-														type="button"
-														variant="outline"
-														onClick={() => setDeleteTargetId(selected.id)}
-														disabled={busyAction !== null}
-														className="mt-3 h-10 w-full rounded-md border-danger-line bg-transparent text-sm font-medium text-danger hover:bg-danger-soft"
+											{!canMutate ? (
+												<div className="px-4 pb-4">
+													<p
+														role="status"
+														className="rounded-md border border-rule bg-paper-3 px-3 py-2 text-xs text-ink-3"
 													>
-														Delete client
-													</Button>
+														Read-only: only the workspace owner can edit or
+														delete clients.
+													</p>
 												</div>
-											</div>
+											) : null}
 
-											<div className="sticky bottom-0 mt-auto flex items-center justify-between gap-3 border-t border-rule bg-paper-2 px-4 py-3">
-												<span className="text-xs text-ink-3">
-													{isDirty ? "Unsaved changes" : "All changes saved"}
-												</span>
-												<span className="flex items-center gap-2">
-													<Button
+											{canMutate ? (
+												<div className="px-4 pb-2">
+													<button
 														type="button"
-														variant="outline"
-														onClick={onDiscard}
-														disabled={!isDirty || busyAction !== null}
-														className="h-9 rounded-md border-rule bg-transparent px-3 text-sm text-ink-2 hover:bg-paper-3"
+														onClick={() => void onArchiveStatusChange()}
+														disabled={busyAction !== null}
+														className="text-sm text-ink-3 hover:text-ink hover:underline disabled:opacity-50"
 													>
-														Discard
-													</Button>
-													<Button
-														type="button"
-														onClick={() => void onUpdate()}
-														disabled={
-															!isDirty || updateDisabled || busyAction !== null
-														}
-														className="h-9 rounded-md bg-brand px-3 text-sm font-medium text-brand-ink hover:bg-brand-hi disabled:bg-brand-line disabled:text-brand-ink"
-													>
-														{busyAction === "update"
-															? "Saving..."
-															: "Save changes"}
-													</Button>
-												</span>
-											</div>
+														{busyAction === "archive"
+															? "Archiving..."
+															: busyAction === "restore"
+																? "Restoring..."
+																: selected.status === "archived"
+																	? "Restore client"
+																	: "Archive client"}
+													</button>
+												</div>
+											) : null}
+
+											{canMutate ? (
+												<div className="px-4 pb-4">
+													<div className="rounded-md border border-danger-line bg-danger-soft p-3">
+														<p className="text-xs font-medium uppercase tracking-[0.12em] text-danger">
+															Danger zone
+														</p>
+														<p className="mt-1 text-xs leading-5 text-ink-3">
+															Delete only when this client should no longer
+															appear in invoice workflows.
+														</p>
+														<Button
+															type="button"
+															variant="outline"
+															onClick={() => setDeleteTargetId(selected.id)}
+															disabled={busyAction !== null}
+															className="mt-3 h-10 w-full rounded-md border-danger-line bg-transparent text-sm font-medium text-danger hover:bg-danger-soft"
+														>
+															Delete client
+														</Button>
+													</div>
+												</div>
+											) : null}
+
+											{canMutate ? (
+												<div className="sticky bottom-0 mt-auto flex items-center justify-between gap-3 border-t border-rule bg-paper-2 px-4 py-3">
+													<span className="text-xs text-ink-3">
+														{isDirty ? "Unsaved changes" : "All changes saved"}
+													</span>
+													<span className="flex items-center gap-2">
+														<Button
+															type="button"
+															variant="outline"
+															onClick={onDiscard}
+															disabled={!isDirty || busyAction !== null}
+															className="h-9 rounded-md border-rule bg-transparent px-3 text-sm text-ink-2 hover:bg-paper-3"
+														>
+															Discard
+														</Button>
+														<Button
+															type="button"
+															onClick={() => void onUpdate()}
+															disabled={
+																!isDirty ||
+																updateDisabled ||
+																busyAction !== null
+															}
+															className="h-9 rounded-md bg-brand px-3 text-sm font-medium text-brand-ink hover:bg-brand-hi disabled:bg-brand-line disabled:text-brand-ink"
+														>
+															{busyAction === "update"
+																? "Saving..."
+																: "Save changes"}
+														</Button>
+													</span>
+												</div>
+											) : null}
 										</div>
 									) : null}
 								</div>
