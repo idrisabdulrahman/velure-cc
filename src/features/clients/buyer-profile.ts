@@ -30,7 +30,7 @@ export const BUYER_TYPES = ["b2b", "b2c"] as const;
 export type BuyerType = (typeof BUYER_TYPES)[number];
 
 /**
- * New clients without an explicit type default to B2B: Velure's core motion
+ * New clients without an explicit type default to B2B: Invoicly's core motion
  * is business invoicing, and the migration backfills every pre-existing row
  * as B2B for the same reason (a flagged missing TIN drives the fix).
  */

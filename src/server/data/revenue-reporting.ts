@@ -6,6 +6,7 @@ type InvoiceLike = {
 	currency: string;
 	issueDate: string;
 	dueDate: string;
+	documentType?: string;
 	status?: string;
 	paymentAmount?: number;
 	paidAt?: number;
@@ -442,6 +443,21 @@ export function buildRevenueCashFlowReport({
 	for (const invoice of invoices) {
 		const status = deriveInvoiceStatus(invoice, now);
 		if (status === "canceled") continue;
+		// Drafts are not issued, so they are not "billed": an unsent draft must
+		// not inflate billed revenue, outstanding balances, or product sales.
+		if (status === "draft") continue;
+
+		const documentType = invoice.documentType ?? "standard";
+		// A pro-forma is a quote, not a bill, so it never enters the report.
+		if (documentType === "proforma") continue;
+
+		// Credit notes are corrections that reduce billed revenue; debit notes
+		// add to it. Only standard invoices and debit notes create a receivable
+		// balance to collect here (a credit note is applied against its source
+		// invoice rather than opening its own balance).
+		const isCreditNote = documentType === "credit_note";
+		const sign = isCreditNote ? -1 : 1;
+		const contributesReceivable = !isCreditNote;
 
 		const id = invoiceIdFor(invoice);
 		const total = invoiceTotal(invoice);
@@ -462,10 +478,10 @@ export function buildRevenueCashFlowReport({
 		const customer = getCustomerBucket(customerBuckets, customerName, currency);
 
 		if (issueInWindow) {
-			currencyBucket.billedAmount += total;
+			currencyBucket.billedAmount += total * sign;
 			currencyBucket.invoiceCount += 1;
 			if (isPaid) currencyBucket.paidInvoiceCount += 1;
-			customer.billedAmount += total;
+			customer.billedAmount += total * sign;
 			customer.invoiceCount += 1;
 
 			const month = monthKeyFromIsoDay(invoice.issueDate);
@@ -474,7 +490,7 @@ export function buildRevenueCashFlowReport({
 				month,
 				currency,
 			);
-			timelineBucket.billedAmount += total;
+			timelineBucket.billedAmount += total * sign;
 			timelineBucket.invoiceCount += 1;
 
 			for (const item of invoice.lineItems) {
@@ -488,13 +504,15 @@ export function buildRevenueCashFlowReport({
 					type: product?.type ?? "unknown",
 					currency,
 				});
-				productBucket.revenue += lineRevenue;
-				productBucket.quantitySold += item.quantity;
-				productBucket._invoiceIds.add(id);
+				productBucket.revenue += lineRevenue * sign;
+				productBucket.quantitySold += item.quantity * sign;
+				// A credit note returns goods; it is not a sale, so it must not
+				// add to the product's invoice count.
+				if (sign > 0) productBucket._invoiceIds.add(id);
 			}
 		}
 
-		if (balance > 0) {
+		if (contributesReceivable && balance > 0) {
 			currencyBucket.outstandingAmount += balance;
 			currencyBucket.openInvoiceCount += 1;
 			customer.outstandingAmount += balance;
@@ -511,7 +529,7 @@ export function buildRevenueCashFlowReport({
 			});
 		}
 
-		if (isOverdue) {
+		if (contributesReceivable && isOverdue) {
 			currencyBucket.overdueAmount += balance;
 			currencyBucket.overdueInvoiceCount += 1;
 			customer.overdueAmount += balance;

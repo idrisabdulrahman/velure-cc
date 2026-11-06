@@ -898,7 +898,7 @@ export function buildQboInvoicesExport(
  * Zoho Books maps imported columns to fields in its wizard, so this profile
  * ships a readable provisional header set rather than a rigid template. One
  * row per line; the invoice number repeats so Zoho groups the lines. Auto-
- * generate Invoice Numbers must stay OFF so Velure numbers survive.
+ * generate Invoice Numbers must stay OFF so Invoicly numbers survive.
  *
  * `Tax Name` is a blank-default config table (never invented) and
  * `Tax Amount` carries the line VAT. Exclusions mirror QuickBooks; the file
@@ -1043,7 +1043,7 @@ async function buildAccountantLinesXlsx(
  *
  * Rev360 VAT is a **schedule-based Excel template**: NRS expects the official
  * workbook filled in, and guides warn that editing its return-form sheet breaks
- * the upload. Velure therefore does NOT generate an uploadable replacement.
+ * the upload. Invoicly therefore does NOT generate an uploadable replacement.
  * It exports **paste-ready Sales-sheet rows** for the official template, one
  * row per invoice LINE, with invoice number/date appended for the accountant's
  * cross-check.
@@ -1117,7 +1117,7 @@ function rev360LinesOf(row: ComplianceExportInvoiceRow): StoredExportLine[] {
 /**
  * The nine cells of one scheduled line. `item_cost` is the line's extended
  * amount (quantity × unit price) in naira, negated for a credit note; the
- * paste-ready layout has no discount or VAT-amount column. Velure stores a
+ * paste-ready layout has no discount or VAT-amount column. Invoicly stores a
  * single line label, so both `item` and `item_description` carry it.
  * `product_code` is blank unless the user has configured it.
  */

@@ -16,7 +16,7 @@ import {
  * T10 step 2 correction (2026-11-02 addendum) — Rev360 VAT sales data
  * (docs/EXPORT-FORMATS.md).
  *
- * Rev360 VAT is a schedule-based official workbook, so Velure exports
+ * Rev360 VAT is a schedule-based official workbook, so Invoicly exports
  * **paste-ready Sales-sheet rows**, not an uploadable replacement. One row per
  * invoice LINE:
  *   beneficiary_name, beneficiary_tax_id, item, item_cost, item_description,

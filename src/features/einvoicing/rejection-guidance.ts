@@ -5,7 +5,7 @@ export type RejectionGuidance = Readonly<{
 
 /**
  * Guidance for the MOCK provider's submission codes. Every key here is a
- * Velure-invented code, so each carries a `MOCK_` prefix to prevent it being
+ * Invoicly-invented code, so each carries a `MOCK_` prefix to prevent it being
  * mistaken for a real NRS or provider code. The real rejection-code catalogue
  * is UNKNOWN and must come from the NITDA guideline or a provider contract
  * (see docs/EINVOICE-GAP-ANALYSIS.md §6). A real code that arrives with no

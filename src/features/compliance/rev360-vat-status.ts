@@ -30,7 +30,7 @@ export function rev360VatStatusFor(category: VatCategory): string {
  * The Rev360 Sales sheet reportedly uses "product codes" that the public
  * sources do not explain. This map is **empty by default**: the resolver
  * returns `""` for every line rather than inventing a code. Edit this table
- * once a real template or code list is supplied. Keys are Velure line
+ * once a real template or code list is supplied. Keys are Invoicly line
  * classification codes (`invoices.line_items[].classificationCode`).
  */
 export const REV360_PRODUCT_CODE_CONFIG: Readonly<Record<string, string>> = {};

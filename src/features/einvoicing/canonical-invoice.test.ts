@@ -34,8 +34,8 @@ function invoice(overrides: Partial<InvoiceRecord> = {}): InvoiceRecord {
 		],
 		compliance: {
 			seller: {
-				legalName: "Velure Ltd",
-				tradingName: "Velure",
+				legalName: "Invoicly Ltd",
+				tradingName: "Invoicly",
 				countryCode: "NG",
 				address: "1 Seller Road",
 				taxId: "TIN-SELLER",
@@ -114,7 +114,7 @@ describe("toCanonicalInvoice", () => {
 			documentType: "standard",
 			currency: "NGN",
 			seller: {
-				legalName: "Velure Ltd",
+				legalName: "Invoicly Ltd",
 				jurisdiction: {
 					scheme: "source.jurisdictionCode",
 					value: "NG",

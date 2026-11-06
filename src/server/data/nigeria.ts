@@ -103,7 +103,7 @@ export const NIGERIA_TAX_RULE_SETS: readonly NigeriaTaxRuleSet[] = [
 ];
 
 /**
- * Rule-set ids earlier Velure versions wrote into workspaces before rule sets
+ * Rule-set ids earlier Invoicly versions wrote into workspaces before rule sets
  * were versioned. They all represented the same Nigeria rules; the read path
  * resolves them and the write path normalizes them to the canonical id.
  */
@@ -153,7 +153,7 @@ export function isKnownNigeriaRuleSetVersion(
 
 /**
  * Classifies a stored version string for display. `legacy_alias` means an old
- * Velure default id that resolves to the current rules; `superseded` means a
+ * Invoicly default id that resolves to the current rules; `superseded` means a
  * known rule set that is no longer current; `unknown` needs review.
  */
 export function classifyNigeriaRuleSetVersion(

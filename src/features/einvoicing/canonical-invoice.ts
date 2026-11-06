@@ -20,7 +20,7 @@ export type CanonicalParty = Readonly<{
 	 * Structured postal address, carried through unchanged from the snapshot so
 	 * a provider/UBL adapter never has to parse the printable `address` string.
 	 * `countryCode` is the party jurisdiction. `city` and `postalZone` are not
-	 * collected by Velure yet and stay absent (docs/EINVOICE-GAP-ANALYSIS.md §5.2).
+	 * collected by Invoicly yet and stay absent (docs/EINVOICE-GAP-ANALYSIS.md §5.2).
 	 */
 	postalAddress?: Readonly<{
 		street?: string;

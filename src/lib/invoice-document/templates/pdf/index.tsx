@@ -44,7 +44,9 @@ export async function PdfTemplate({
 
 	if (template.includeQr) {
 		const origin =
-			process.env.SITE_URL ?? process.env.VITE_SITE_URL ?? "https://velure.app";
+			process.env.SITE_URL ??
+			process.env.VITE_SITE_URL ??
+			"https://invoicly.cv";
 		qrCode = await QRCodeUtil.toDataURL(
 			`${origin.replace(/\/$/, "")}/i/${token}`,
 			{

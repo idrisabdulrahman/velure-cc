@@ -214,3 +214,164 @@ describe("revenue cash flow reporting", () => {
 		expect(report.primaryCurrency.currency).toBe("NGN");
 	});
 });
+
+type TestInvoice = Parameters<
+	typeof buildRevenueCashFlowReport
+>[0]["invoices"][number];
+
+function testInvoice(
+	overrides: Partial<TestInvoice> & { _id: string },
+): TestInvoice {
+	return {
+		invoiceNumber: overrides._id,
+		customerName: "Acme Ltd",
+		currency: "NGN",
+		issueDate: "2026-06-05",
+		dueDate: "2026-06-30",
+		paymentAmount: 0,
+		// A delivered invoice is "issued"; drafts must pass `deliveredAt:
+		// undefined` and `status: "draft"`.
+		deliveredAt: Date.parse("2026-06-05T00:00:00.000Z"),
+		lineItems: [{ name: "Item", quantity: 1, price: 1_000, productId: "p1" }],
+		...overrides,
+	};
+}
+
+describe("revenue reporting excludes unbilled documents", () => {
+	const now = new Date("2026-06-23T12:00:00.000Z");
+	const window = { from: "2026-06-01", to: "2026-06-30" };
+
+	it("does not count drafts as billed, outstanding, or sold", () => {
+		const report = buildRevenueCashFlowReport({
+			baseCurrency: "NGN",
+			now,
+			window,
+			invoices: [
+				testInvoice({ _id: "issued" }),
+				testInvoice({
+					_id: "draft",
+					status: "draft",
+					deliveredAt: undefined,
+					lineItems: [
+						{ name: "Item", quantity: 5, price: 1_000, productId: "p1" },
+					],
+				}),
+			],
+			payments: [],
+		});
+
+		expect(report.primaryCurrency).toMatchObject({
+			billedAmount: 1_000,
+			outstandingAmount: 1_000,
+			invoiceCount: 1,
+			openInvoiceCount: 1,
+		});
+		expect(report.topProducts[0]).toMatchObject({
+			productId: "p1",
+			revenue: 1_000,
+			quantitySold: 1,
+			invoiceCount: 1,
+		});
+		expect(report.timeline).toHaveLength(1);
+		expect(report.timeline[0]).toMatchObject({ billedAmount: 1_000 });
+		expect(report.openInvoices.map((invoice) => invoice.id)).toEqual([
+			"issued",
+		]);
+	});
+
+	it("does not count a pro-forma as billed or outstanding", () => {
+		const report = buildRevenueCashFlowReport({
+			baseCurrency: "NGN",
+			now,
+			window,
+			invoices: [
+				testInvoice({ _id: "issued" }),
+				testInvoice({
+					_id: "quote",
+					documentType: "proforma",
+					lineItems: [
+						{ name: "Item", quantity: 9, price: 1_000, productId: "p1" },
+					],
+				}),
+			],
+			payments: [],
+		});
+
+		expect(report.primaryCurrency).toMatchObject({
+			billedAmount: 1_000,
+			outstandingAmount: 1_000,
+			invoiceCount: 1,
+		});
+		expect(report.timeline[0]).toMatchObject({ billedAmount: 1_000 });
+	});
+
+	it("nets a credit note out of billed revenue without opening a receivable", () => {
+		const report = buildRevenueCashFlowReport({
+			baseCurrency: "NGN",
+			now,
+			window,
+			invoices: [
+				testInvoice({ _id: "issued" }),
+				testInvoice({
+					_id: "credit",
+					documentType: "credit_note",
+					lineItems: [
+						{ name: "Item", quantity: 1, price: 300, productId: "p1" },
+					],
+				}),
+			],
+			payments: [],
+		});
+
+		expect(report.primaryCurrency).toMatchObject({
+			billedAmount: 700,
+			// The credit note does not reduce the collectable balance on its own.
+			outstandingAmount: 1_000,
+			invoiceCount: 2,
+			openInvoiceCount: 1,
+		});
+		expect(report.topProducts[0]).toMatchObject({
+			productId: "p1",
+			// 1000 - 300 of revenue; the returned unit nets quantity to zero.
+			revenue: 700,
+			quantitySold: 0,
+			// A credit note is not a sale, so it must not add to the count.
+			invoiceCount: 1,
+		});
+		expect(report.openInvoices.map((invoice) => invoice.id)).toEqual([
+			"issued",
+		]);
+	});
+
+	it("adds a debit note to billed revenue and its receivable balance", () => {
+		const report = buildRevenueCashFlowReport({
+			baseCurrency: "NGN",
+			now,
+			window,
+			invoices: [
+				testInvoice({ _id: "issued" }),
+				testInvoice({
+					_id: "debit",
+					documentType: "debit_note",
+					lineItems: [
+						{ name: "Item", quantity: 1, price: 500, productId: "p1" },
+					],
+				}),
+			],
+			payments: [],
+		});
+
+		expect(report.primaryCurrency).toMatchObject({
+			billedAmount: 1_500,
+			outstandingAmount: 1_500,
+			invoiceCount: 2,
+			openInvoiceCount: 2,
+		});
+		expect(report.topProducts[0]).toMatchObject({
+			productId: "p1",
+			revenue: 1_500,
+			quantitySold: 2,
+			invoiceCount: 2,
+		});
+	});
+});

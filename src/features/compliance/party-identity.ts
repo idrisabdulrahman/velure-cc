@@ -35,7 +35,7 @@ function text(value: string | null | undefined): string | undefined {
 }
 
 /**
- * Builds the structured postal address from the parts Velure actually stores.
+ * Builds the structured postal address from the parts Invoicly actually stores.
  * Returns `undefined` when every part is empty, so a profile with no structured
  * address never emits an empty object into the snapshot.
  */

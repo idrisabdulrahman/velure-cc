@@ -87,7 +87,7 @@ export const QBO_MAX_INVOICES = 100;
  * QuickBooks **item tax codes** are company-specific (the user's own tax
  * agency/code list). The table is **empty by default**: every line emits a
  * blank `Item Tax Code` rather than an invented code. Fill it from the user's
- * QuickBooks company once their codes are known. Keys are Velure line VAT
+ * QuickBooks company once their codes are known. Keys are Invoicly line VAT
  * categories.
  */
 export const QBO_ITEM_TAX_CODE_CONFIG: Readonly<Record<VatCategory, string>> = {
@@ -132,7 +132,7 @@ export const ZOHO_MAX_FILE_BYTES = 10 * 1024 * 1024;
  * table is **empty by default**: every line emits a blank `Tax Name` rather
  * than an invented tax. Fill it from the user's Zoho Books organisation; a
  * taxable line with a blank name is warned about, never guessed. Keys are
- * Velure line VAT categories.
+ * Invoicly line VAT categories.
  */
 export const ZOHO_TAX_NAME_CONFIG: Readonly<Record<VatCategory, string>> = {
 	standard: "",

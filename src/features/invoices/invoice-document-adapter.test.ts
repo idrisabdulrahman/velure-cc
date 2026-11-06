@@ -31,7 +31,7 @@ function buildInvoice(overrides: Partial<InvoiceRecord> = {}): InvoiceRecord {
 			{ id: "line-1", name: "Consulting", quantity: 1, price: 100_000 },
 		],
 		compliance: {
-			seller: { legalName: "Velure Ltd", countryCode: "NG" },
+			seller: { legalName: "Invoicly Ltd", countryCode: "NG" },
 			buyer: { legalName: "Acme Services Ltd", countryCode: "NG" },
 			sellerTaxStatus: "vat_registered",
 			placeOfSupply: "NG",

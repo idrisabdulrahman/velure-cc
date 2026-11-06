@@ -12,8 +12,8 @@ vi.mock("./env", () => ({
 	getServerEnv: (name: string) =>
 		({
 			RESEND_API_KEY: "key",
-			RESEND_FROM_EMAIL: "Velure <billing@example.com>",
-			SITE_URL: "https://velure.app",
+			RESEND_FROM_EMAIL: "Invoicly <billing@example.com>",
+			SITE_URL: "https://invoicly.cv",
 		})[name],
 }));
 vi.mock("./pdf", () => ({
@@ -73,7 +73,7 @@ describe("invoice email body has no mock clearance artifacts", () => {
 			"invoice_share",
 		);
 		const message = send.mock.calls[0]?.[0] as { html: string; text: string };
-		expect(message.html).toContain("https://velure.app/i/public-token");
-		expect(message.text).toContain("https://velure.app/i/public-token");
+		expect(message.html).toContain("https://invoicly.cv/i/public-token");
+		expect(message.text).toContain("https://invoicly.cv/i/public-token");
 	});
 });

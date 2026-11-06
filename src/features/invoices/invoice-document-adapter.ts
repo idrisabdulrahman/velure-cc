@@ -12,11 +12,11 @@ import type { InvoiceRecord } from "./types";
 import { INVOICE_DOCUMENT_TYPE_LABELS } from "./types";
 
 /**
- * Velure invoice-document mapper.
+ * Invoicly invoice-document mapper.
  *
  * Translates a stored `InvoiceRecord` into the flat, presentation-only shape
  * that the HTML and PDF document renderers consume. It owns the mapping
- * between Velure's domain model (compliance totals, fiscalization snapshot,
+ * between Invoicly's domain model (compliance totals, fiscalization snapshot,
  * document type, template settings) and the renderer's fields, so the
  * renderers stay free of domain logic. All money values are handled as major
  * units for display only; stored values remain integer minor units.
@@ -115,7 +115,7 @@ function resolveCompliance(invoice: InvoiceRecord) {
 	if (invoice.compliance) return invoice.compliance;
 	const settings = invoice.templateSettings ?? {};
 	return calculateInvoiceCompliance({
-		seller: { legalName: "Velure", countryCode: "NG" },
+		seller: { legalName: "Invoicly", countryCode: "NG" },
 		buyer: {
 			legalName: invoice.customerName,
 			countryCode: "NG",
@@ -173,7 +173,9 @@ function buildTemplate(invoice: InvoiceRecord): Template {
 		currency,
 		paymentDetails: toEditorDoc(invoice.paymentDetails),
 		fromDetails: buildIdentityDoc([
-			compliance.seller.legalName ?? compliance.seller.tradingName ?? "Velure",
+			compliance.seller.legalName ??
+				compliance.seller.tradingName ??
+				"Invoicly",
 			compliance.seller.address,
 			compliance.seller.email,
 			compliance.seller.phone,
@@ -337,7 +339,7 @@ export function toInvoiceDocument(invoice: InvoiceRecord): InvoiceDocument {
 		},
 		customerId: null,
 		team: {
-			name: "Velure",
+			name: "Invoicly",
 		},
 		...(mockClearance ? { mockClearance } : {}),
 	};

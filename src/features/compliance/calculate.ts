@@ -422,7 +422,7 @@ export function calculateInvoiceCompliance(
 
 export function defaultComplianceSnapshot(): InvoiceComplianceSnapshot {
 	return calculateInvoiceCompliance({
-		seller: { legalName: "Velure", countryCode: "NG" },
+		seller: { legalName: "Invoicly", countryCode: "NG" },
 		buyer: { countryCode: "NG" },
 		sellerTaxStatus: "vat_registered",
 		placeOfSupply: "NG",

@@ -107,7 +107,7 @@ export function isDiscountMode(value: unknown): value is DiscountMode {
  * (and forcing a future provider/UBL adapter to parse it back) was a needless
  * lossy step. The components are now carried through the snapshot and the
  * canonical model unchanged. `city` and `postalZone` are **not** collected by
- * Velure yet and stay absent — do not invent them
+ * Invoicly yet and stay absent — do not invent them
  * (docs/EINVOICE-GAP-ANALYSIS.md §5.2). Buyer records only store a single
  * free-text billing address, so a buyer postal address is normally absent too.
  */

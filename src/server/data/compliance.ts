@@ -462,13 +462,13 @@ export async function createInvoiceExport(
 		.select("id, name, legal_name, base_currency")
 		.eq("id", workspaceId)
 		.single();
-	const source = workspace?.legal_name || workspace?.name || "VELURE";
+	const source = workspace?.legal_name || workspace?.name || "INVOICLY";
 	const prefix =
 		(source.match(/[A-Za-z0-9]+/g) ?? [])
 			.map((x) => x[0])
 			.join("")
 			.slice(0, 12)
-			.toUpperCase() || "VELURE";
+			.toUpperCase() || "INVOICLY";
 	const rows = await loadAllExportInvoices(client, workspaceId, kind);
 	const now = Date.now();
 	const built =

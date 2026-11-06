@@ -13,7 +13,7 @@ export const NIGERIA_DEFAULT_CURRENCY = "NGN";
 export const NIGERIA_AUTHORITY_LABEL = "Nigeria Revenue Service (NRS)";
 /**
  * Standard disclaimer for the Compliance surface and every generated
- * tax/compliance export (e-invoicing SPEC A2). Velure has no NRS clearance
+ * tax/compliance export (e-invoicing SPEC A2). Invoicly has no NRS clearance
  * integration, so no compliance output may imply one exists.
  */
 export const NRS_INFORMATIONAL_DISCLAIMER =
@@ -25,7 +25,7 @@ export const NRS_INFORMATIONAL_DISCLAIMER =
  * clearance, certification, or partnership with the NRS.
  */
 export const NRS_OFFICIAL_SOURCES_INTRO =
-	"These are the official references behind the informational copy on this page. Velure is not connected to or endorsed by the NRS.";
+	"These are the official references behind the informational copy on this page. Invoicly is not connected to or endorsed by the NRS.";
 
 export type NrsOfficialSource = {
 	title: string;
@@ -34,7 +34,7 @@ export type NrsOfficialSource = {
 };
 
 /** Verified official NRS references. The URLs and https scheme are pinned by
- * `nrs-claims.test.ts`; each entry describes the source, never Velure. */
+ * `nrs-claims.test.ts`; each entry describes the source, never Invoicly. */
 export const NRS_OFFICIAL_SOURCES: readonly NrsOfficialSource[] = [
 	{
 		title: "What is the MBS E-Invoicing System?",
@@ -221,7 +221,7 @@ export const NIGERIA_TAX_RULE_SETS: readonly NigeriaTaxRuleSet[] = [
 ];
 
 /**
- * Rule-set ids earlier Velure versions wrote into workspaces before rule sets
+ * Rule-set ids earlier Invoicly versions wrote into workspaces before rule sets
  * were versioned. They all represented the same Nigeria rules; the read path
  * resolves them and the write path normalizes them to the canonical id.
  */
@@ -271,7 +271,7 @@ export function isKnownNigeriaRuleSetVersion(
 
 /**
  * Classifies a stored version string for display. `legacy_alias` means an old
- * Velure default id that resolves to the current rules; `superseded` means a
+ * Invoicly default id that resolves to the current rules; `superseded` means a
  * known rule set that is no longer current; `unknown` needs review.
  */
 export function classifyNigeriaRuleSetVersion(
