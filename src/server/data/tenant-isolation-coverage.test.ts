@@ -313,6 +313,14 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	resolveActiveWorkspaceId: "session",
 	listWorkspaces: "app-scoped",
 	setActiveWorkspace: "session",
+	// workspace-members.ts (WP-E) — server-only invite directory. The listing
+	// joins better_auth."user" for the email (PostgREST cannot reach that
+	// schema), and the insert runs on the service-role client because RLS only
+	// admits a user's OWN membership. Every caller passes a workspace id
+	// resolved from the verified session, never from the request body.
+	findUserIdByEmail: "server-admin",
+	listWorkspaceMembers: "server-admin",
+	addWorkspaceMember: "server-admin",
 	// invoice-repository.ts (src/server — third query surface)
 	// identity client is minted from the verified request session
 	getInvoiceUserContext: "session",
@@ -539,6 +547,9 @@ const ROUTE_CLASSIFICATIONS: Record<string, Classification> = {
 	"security/link-stepup/status.ts": "session",
 	"security/link-stepup/verify.ts": "session",
 	"test/fixtures.ts": "test-only",
+	// WP-E: identity + active workspace + caller role come from the verified
+	// session; the owner-only invite writes through the service-role client.
+	"workspace/members.ts": "session",
 };
 
 function routeFiles(dir: string, prefix = ""): string[] {

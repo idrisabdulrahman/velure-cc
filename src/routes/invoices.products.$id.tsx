@@ -24,6 +24,7 @@ import {
 } from "#/features/products/product-form-utils";
 import { useUnifiedAuth } from "#/lib/auth-hook";
 import { useSupabaseSession } from "#/lib/supabase-session";
+import { canMutateWorkspace, useWorkspaceRole } from "#/lib/workspace-role";
 import { getProductById, updateProduct } from "#/server/data/products";
 
 export const Route = createFileRoute("/invoices/products/$id")({
@@ -36,6 +37,8 @@ function ProductDetailPage() {
 	const authState = useUnifiedAuth();
 	const userId = authState.data?.user?.id;
 	const { client: supabaseClient } = useSupabaseSession(userId);
+	// WP-E: viewers can open the detail page but not save changes.
+	const canMutate = canMutateWorkspace(useWorkspaceRole());
 	const { data: product, isPending } = useQuery({
 		queryKey: ["supabase-product", userId ?? "none", id],
 		queryFn: () => {
@@ -107,6 +110,7 @@ function ProductDetailPage() {
 
 	const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
+		if (!canMutate) return;
 		setAttemptedSubmit(true);
 		if (!isValid || submitting || !supabaseClient || !userId) return;
 
@@ -158,7 +162,9 @@ function ProductDetailPage() {
 						{product.name}
 					</h1>
 					<p className="mt-1 text-sm text-ink-3">
-						Edit catalog details used on future invoices.
+						{canMutate
+							? "Edit catalog details used on future invoices."
+							: "Read-only view. Only the workspace owner can change the catalog."}
 					</p>
 				</div>
 				<span
@@ -187,6 +193,7 @@ function ProductDetailPage() {
 							<Field label="Product type" htmlFor="product-type">
 								<Select
 									value={state.type}
+									disabled={!canMutate}
 									onValueChange={(value) =>
 										setState((prev) =>
 											prev
@@ -210,6 +217,7 @@ function ProductDetailPage() {
 							<Field label="Unit name" htmlFor="product-unit-name">
 								<Select
 									value={state.unitName}
+									disabled={!canMutate}
 									onValueChange={(value) =>
 										setState((prev) =>
 											prev ? { ...prev, unitName: value } : prev,
@@ -236,6 +244,7 @@ function ProductDetailPage() {
 						<Field label="Product name *" error={visibleNameError}>
 							<Input
 								value={state.name}
+								readOnly={!canMutate}
 								onChange={(event) =>
 									setState((prev) =>
 										prev ? { ...prev, name: event.target.value } : prev,
@@ -250,6 +259,7 @@ function ProductDetailPage() {
 							<Textarea
 								rows={3}
 								value={state.description}
+								readOnly={!canMutate}
 								onChange={(event) =>
 									setState((prev) =>
 										prev ? { ...prev, description: event.target.value } : prev,
@@ -264,6 +274,7 @@ function ProductDetailPage() {
 							<Field label="SKU">
 								<Input
 									value={state.sku}
+									readOnly={!canMutate}
 									onChange={(event) =>
 										setState((prev) =>
 											prev ? { ...prev, sku: event.target.value } : prev,
@@ -278,6 +289,7 @@ function ProductDetailPage() {
 									type="text"
 									inputMode="decimal"
 									value={state.defaultUnitPrice}
+									readOnly={!canMutate}
 									onChange={(event) =>
 										setState((prev) =>
 											prev
@@ -294,6 +306,7 @@ function ProductDetailPage() {
 						<Field label="Default tax ID">
 							<Input
 								value={state.defaultTaxId}
+								readOnly={!canMutate}
 								onChange={(event) =>
 									setState((prev) =>
 										prev ? { ...prev, defaultTaxId: event.target.value } : prev,
@@ -312,6 +325,7 @@ function ProductDetailPage() {
 							>
 								<Select
 									value={state.defaultVatCategory || undefined}
+									disabled={!canMutate}
 									onValueChange={(value) =>
 										setState((prev) =>
 											prev
@@ -347,6 +361,7 @@ function ProductDetailPage() {
 								<Input
 									id="product-classification-code"
 									value={state.defaultClassificationCode}
+									readOnly={!canMutate}
 									onChange={(event) =>
 										setState((prev) =>
 											prev
@@ -366,6 +381,7 @@ function ProductDetailPage() {
 						<div className="inline-flex items-center gap-2 text-sm text-ink-2">
 							<Switch
 								checked={state.isActive}
+								disabled={!canMutate}
 								onCheckedChange={(checked) =>
 									setState((prev) =>
 										prev ? { ...prev, isActive: checked } : prev,
@@ -383,17 +399,21 @@ function ProductDetailPage() {
 								onClick={() => navigate({ to: "/invoices/products" })}
 								className="h-10 rounded-md border-rule bg-transparent text-sm font-medium text-ink-2 hover:bg-paper-3 hover:text-ink"
 							>
-								Cancel
+								{canMutate ? "Cancel" : "Back to products"}
 							</Button>
-							<Button
-								type="submit"
-								disabled={!isValid || submitting}
-								className="h-10 rounded-md bg-brand text-sm font-medium text-brand-ink hover:bg-brand-hi disabled:bg-brand-line disabled:text-ink-3"
-							>
-								{submitting ? "Saving..." : "Save product"}
-							</Button>
+							{canMutate ? (
+								<Button
+									type="submit"
+									disabled={!isValid || submitting}
+									className="h-10 rounded-md bg-brand text-sm font-medium text-brand-ink hover:bg-brand-hi disabled:bg-brand-line disabled:text-ink-3"
+								>
+									{submitting ? "Saving..." : "Save product"}
+								</Button>
+							) : null}
 						</div>
-						<p className="text-xs text-ink-3">* Required fields</p>
+						<p className="text-xs text-ink-3">
+							{canMutate ? "* Required fields" : "Read-only access"}
+						</p>
 					</form>
 				</div>
 

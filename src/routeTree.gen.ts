@@ -44,6 +44,7 @@ import { Route as ApiInvoiceAuditRouteImport } from './routes/api/invoice/audit'
 import { Route as ApiInvoiceScheduledRouteImport } from './routes/api/invoice/scheduled'
 import { Route as ApiRemindersSendQueueRouteImport } from './routes/api/reminders/send-queue'
 import { Route as ApiTestFixturesRouteImport } from './routes/api/test/fixtures'
+import { Route as ApiWorkspaceMembersRouteImport } from './routes/api/workspace/members'
 import { Route as InvoicesProductsIdRouteImport } from './routes/invoices.products.$id'
 import { Route as InvoicesProductsNewRouteImport } from './routes/invoices.products.new'
 import { Route as ApiAuthFirstSecondRouteImport } from './routes/api/auth/$first/$second'
@@ -244,6 +245,11 @@ const ApiTestFixturesRoute = ApiTestFixturesRouteImport.update({
   path: '/api/test/fixtures',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiWorkspaceMembersRoute = ApiWorkspaceMembersRouteImport.update({
+  id: '/api/workspace/members',
+  path: '/api/workspace/members',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InvoicesProductsIdRoute = InvoicesProductsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -402,6 +408,7 @@ export interface FileRoutesByFullPath {
   '/api/invoice/scheduled': typeof ApiInvoiceScheduledRoute
   '/api/reminders/send-queue': typeof ApiRemindersSendQueueRoute
   '/api/test/fixtures': typeof ApiTestFixturesRoute
+  '/api/workspace/members': typeof ApiWorkspaceMembersRoute
   '/invoices/products/$id': typeof InvoicesProductsIdRoute
   '/invoices/products/new': typeof InvoicesProductsNewRoute
   '/api/auth/$first/$second': typeof ApiAuthFirstSecondRoute
@@ -457,6 +464,7 @@ export interface FileRoutesByTo {
   '/api/invoice/scheduled': typeof ApiInvoiceScheduledRoute
   '/api/reminders/send-queue': typeof ApiRemindersSendQueueRoute
   '/api/test/fixtures': typeof ApiTestFixturesRoute
+  '/api/workspace/members': typeof ApiWorkspaceMembersRoute
   '/invoices/products/$id': typeof InvoicesProductsIdRoute
   '/invoices/products/new': typeof InvoicesProductsNewRoute
   '/api/auth/$first/$second': typeof ApiAuthFirstSecondRoute
@@ -517,6 +525,7 @@ export interface FileRoutesById {
   '/api/invoice/scheduled': typeof ApiInvoiceScheduledRoute
   '/api/reminders/send-queue': typeof ApiRemindersSendQueueRoute
   '/api/test/fixtures': typeof ApiTestFixturesRoute
+  '/api/workspace/members': typeof ApiWorkspaceMembersRoute
   '/invoices/products/$id': typeof InvoicesProductsIdRoute
   '/invoices/products/new': typeof InvoicesProductsNewRoute
   '/api/auth/$first/$second': typeof ApiAuthFirstSecondRoute
@@ -578,6 +587,7 @@ export interface FileRouteTypes {
     | '/api/invoice/scheduled'
     | '/api/reminders/send-queue'
     | '/api/test/fixtures'
+    | '/api/workspace/members'
     | '/invoices/products/$id'
     | '/invoices/products/new'
     | '/api/auth/$first/$second'
@@ -633,6 +643,7 @@ export interface FileRouteTypes {
     | '/api/invoice/scheduled'
     | '/api/reminders/send-queue'
     | '/api/test/fixtures'
+    | '/api/workspace/members'
     | '/invoices/products/$id'
     | '/invoices/products/new'
     | '/api/auth/$first/$second'
@@ -692,6 +703,7 @@ export interface FileRouteTypes {
     | '/api/invoice/scheduled'
     | '/api/reminders/send-queue'
     | '/api/test/fixtures'
+    | '/api/workspace/members'
     | '/invoices/products/$id'
     | '/invoices/products/new'
     | '/api/auth/$first/$second'
@@ -740,6 +752,7 @@ export interface RootRouteChildren {
   ApiInvoiceScheduledRoute: typeof ApiInvoiceScheduledRoute
   ApiRemindersSendQueueRoute: typeof ApiRemindersSendQueueRoute
   ApiTestFixturesRoute: typeof ApiTestFixturesRoute
+  ApiWorkspaceMembersRoute: typeof ApiWorkspaceMembersRoute
   ApiAuthFirstSecondRoute: typeof ApiAuthFirstSecondRoute
   ApiEmailResendWebhookRoute: typeof ApiEmailResendWebhookRoute
   ApiIntegrationsQuickbooksCallbackRoute: typeof ApiIntegrationsQuickbooksCallbackRoute
@@ -1009,6 +1022,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTestFixturesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/workspace/members': {
+      id: '/api/workspace/members'
+      path: '/api/workspace/members'
+      fullPath: '/api/workspace/members'
+      preLoaderRoute: typeof ApiWorkspaceMembersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/invoices/products/$id': {
       id: '/invoices/products/$id'
       path: '/$id'
@@ -1265,6 +1285,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInvoiceScheduledRoute: ApiInvoiceScheduledRoute,
   ApiRemindersSendQueueRoute: ApiRemindersSendQueueRoute,
   ApiTestFixturesRoute: ApiTestFixturesRoute,
+  ApiWorkspaceMembersRoute: ApiWorkspaceMembersRoute,
   ApiAuthFirstSecondRoute: ApiAuthFirstSecondRoute,
   ApiEmailResendWebhookRoute: ApiEmailResendWebhookRoute,
   ApiIntegrationsQuickbooksCallbackRoute:
