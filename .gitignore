@@ -86,7 +86,13 @@ Task List.md
 
 # Development-only material (kept on disk, never published)
 # Design sources/briefs, demo artifacts and workspace notes.
-design/
+# Exception: the Invoicly brand-kit masters in design/brand/invoicly/ are read
+# by a committed test (src/components/brand/invoicly-symbol.test.tsx), so they
+# are tracked to keep a fresh clone green. The rest of design/ stays local.
+design/*
+!design/brand/
+design/brand/*
+!design/brand/invoicly/
 design.md
 artifacts/
 docs/internal/
