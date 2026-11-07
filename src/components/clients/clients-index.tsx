@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import {
 	Archive,
 	Copy,
+	FileText,
 	MoreHorizontal,
 	Pencil,
 	Plus,
@@ -1078,6 +1079,19 @@ export function ClientsIndex() {
 											<Link to="/invoices/new">
 												<Plus className="h-4 w-4" />
 												New invoice
+											</Link>
+										</Button>
+										<Button
+											asChild
+											variant="outline"
+											className="h-9 rounded-md border-rule bg-transparent px-3 text-sm text-ink-2 hover:bg-paper-3 hover:text-ink"
+										>
+											<Link
+												to="/statements/$clientId"
+												params={{ clientId: selected.id }}
+											>
+												<FileText className="h-4 w-4" />
+												Statement
 											</Link>
 										</Button>
 										<Button
