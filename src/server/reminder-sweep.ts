@@ -1,4 +1,5 @@
-import { runReminderBatch, sendQueuedEmails } from "./data/reminders";
+import { runReminderBatch } from "./data/reminders";
+import { sendQueuedEmails } from "./data/reminders-send-queue";
 import type { Supabase } from "./data/workspaces";
 import { formatErrorMessage } from "./error-message";
 import { getSupabaseAdminClient } from "./supabase";

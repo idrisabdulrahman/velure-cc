@@ -1,9 +1,5 @@
-import { Resend } from "resend";
-import { getServerEnv } from "../env";
 import { getById as getInvoiceById } from "./invoices";
 import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
-
-const RESEND_FREE_TIER_DAILY_LIMIT = 100;
 
 /**
  * A10 — reminders domain, ported to Supabase.
@@ -205,7 +201,7 @@ function toReminderEvent(row: ReminderEventRow): ReminderEvent {
 	};
 }
 
-function buyerEmailForInvoice(invoice: { compliance?: unknown }) {
+export function buyerEmailForInvoice(invoice: { compliance?: unknown }) {
 	const compliance = (invoice.compliance ?? {}) as {
 		buyer?: { email?: string };
 	};
@@ -812,74 +808,6 @@ export async function runReminderBatch(
 		queuedCount,
 		escalatedCount,
 	};
-}
-
-export async function sendQueuedEmails(client: Supabase, userId: string) {
-	const workspaceId = await resolveActiveWorkspaceId(client, userId);
-	if (!workspaceId)
-		return { sent: 0, skipped: 0, reason: "No active workspace." };
-	const { data: events, error } = await client
-		.from("reminder_events")
-		.select("*")
-		.eq("owner_id", userId)
-		.eq("channel", "email")
-		.eq("status", "queued")
-		.order("created_at");
-	if (error) throw error;
-	const resendKey = getServerEnv("RESEND_API_KEY");
-	if (!resendKey)
-		return {
-			sent: 0,
-			skipped: events?.length ?? 0,
-			reason: "RESEND_API_KEY missing",
-		};
-	const resend = new Resend(resendKey);
-	const today = new Date();
-	today.setUTCHours(0, 0, 0, 0);
-	const { count: sentToday, error: countError } = await client
-		.from("reminder_events")
-		.select("id", { count: "exact", head: true })
-		.eq("owner_id", userId)
-		.eq("channel", "email")
-		.eq("status", "sent")
-		.gte("sent_at", today.toISOString());
-	if (countError) throw countError;
-	const remainingCapacity = Math.max(
-		0,
-		RESEND_FREE_TIER_DAILY_LIMIT - (sentToday ?? 0),
-	);
-	let sent = 0;
-	let skipped = 0;
-	for (const event of events ?? []) {
-		const invoice = await getInvoiceById(client, userId, event.invoice_id);
-		const recipient = invoice ? buyerEmailForInvoice(invoice) : "";
-		if (!invoice || !recipient || sent >= remainingCapacity) {
-			skipped++;
-			await markReminderEventStatus(client, {
-				eventId: event.id,
-				status: "failed",
-				error: !recipient
-					? "Buyer email is missing on this invoice."
-					: "Resend free-tier daily limit reached.",
-			});
-			continue;
-		}
-		const result = await resend.emails.send({
-			from:
-				getServerEnv("RESEND_FROM_EMAIL") ?? "Invoicly <onboarding@resend.dev>",
-			to: recipient,
-			subject: `Reminder: ${invoice.invoiceNumber}`,
-			text: `Invoice ${invoice.invoiceNumber} for ${invoice.customerName} is currently ${invoice.status}. View it here: ${getServerEnv("SITE_URL") ?? ""}/i/${invoice.token}`,
-		});
-		await markReminderEventStatus(client, {
-			eventId: event.id,
-			status: result.error ? "failed" : "sent",
-			error: result.error?.message,
-		});
-		if (result.error) skipped++;
-		else sent++;
-	}
-	return { sent, skipped };
 }
 
 export type ReminderRun = {

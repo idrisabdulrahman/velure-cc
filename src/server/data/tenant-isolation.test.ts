@@ -118,8 +118,8 @@ import {
 	queueReminderEvent,
 	resumeInvoiceReminders,
 	runReminderBatch,
-	sendQueuedEmails,
 } from "./reminders";
+import { sendQueuedEmails } from "./reminders-send-queue";
 import { getRevenueCashFlow } from "./reports";
 import { createFakeSupabase, type FakeTables } from "./testing/fake-db";
 import {

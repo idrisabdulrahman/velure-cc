@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { sendQueuedEmails } from "#/server/data/reminders";
+import { sendQueuedEmails } from "#/server/data/reminders-send-queue";
 import { getServerEnv } from "#/server/env";
 import { safeErrorDetails } from "#/server/http-security";
 import { getInvoiceUserContext } from "#/server/invoice-repository";
