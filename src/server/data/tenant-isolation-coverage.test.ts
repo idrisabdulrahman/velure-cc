@@ -315,10 +315,16 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	markReminderEventStatus: "rls-only",
 	// resolves the caller's active workspace, then filters invoices by it
 	runReminderBatch: "app-scoped",
-	// resolves the caller's active workspace and filters events by owner_id
-	sendQueuedEmails: "app-scoped",
 	// filters reminder_runs by owner_id (the scheduler writes owner_id too)
 	listReminderRuns: "app-scoped",
+	// pure projection of an already-loaded invoice's buyer email; no reads
+	buyerEmailForInvoice: "pure",
+	// reminders-send-queue.ts — resolves the caller's active workspace and
+	// filters events by owner_id. The daily Resend cap is account-wide, so the
+	// count deliberately reads cross-tenant on the service-role client
+	// (countAccountEmailsSentToday); the listing and every write stay on the
+	// caller's client. Server-only module (not browser-reachable).
+	sendQueuedEmails: "app-scoped",
 	// reports.ts
 	getRevenueCashFlow: "app-scoped",
 	// revenue-reporting.ts

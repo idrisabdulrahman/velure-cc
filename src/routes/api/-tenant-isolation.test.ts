@@ -64,7 +64,7 @@ vi.mock("#/server/data/payment-claims", () => ({
 vi.mock("#/server/data/paystack-server", () => ({
 	ensurePaystackTransferCharge: ensurePaystackTransferChargeMock,
 }));
-vi.mock("#/server/data/reminders", () => ({
+vi.mock("#/server/data/reminders-send-queue", () => ({
 	sendQueuedEmails: sendQueuedEmailsMock,
 }));
 vi.mock("#/server/env", () => ({
