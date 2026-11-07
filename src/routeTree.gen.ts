@@ -39,6 +39,7 @@ import { Route as SettingsRecurringRouteImport } from './routes/settings.recurri
 import { Route as SettingsSecurityRouteImport } from './routes/settings.security'
 import { Route as SolutionsEnterpriseRouteImport } from './routes/solutions.enterprise'
 import { Route as SolutionsSmallBusinessRouteImport } from './routes/solutions.small-business'
+import { Route as StatementsClientIdRouteImport } from './routes/statements.$clientId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiAuthSupabaseSessionRouteImport } from './routes/api/auth/supabase-session'
 import { Route as ApiCronTickRouteImport } from './routes/api/cron/tick'
@@ -225,6 +226,13 @@ const SolutionsSmallBusinessRoute = SolutionsSmallBusinessRouteImport.update({
   path: '/solutions/small-business',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StatementsClientIdRoute = StatementsClientIdRouteImport.update({
+  id: '/statements/$clientId',
+  path: '/statements/$clientId',
+  getParentRoute: () => rootRouteImport,
+} as any).lazy(() =>
+  import('./routes/statements.$clientId.lazy').then((d) => d.Route),
+)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -419,6 +427,7 @@ export interface FileRoutesByFullPath {
   '/settings/security': typeof SettingsSecurityRoute
   '/solutions/enterprise': typeof SolutionsEnterpriseRoute
   '/solutions/small-business': typeof SolutionsSmallBusinessRoute
+  '/statements/$clientId': typeof StatementsClientIdRoute
   '/clients/': typeof ClientsIndexRoute
   '/expenses/': typeof ExpensesIndexRoute
   '/invoices/': typeof InvoicesIndexRoute
@@ -477,6 +486,7 @@ export interface FileRoutesByTo {
   '/settings/security': typeof SettingsSecurityRoute
   '/solutions/enterprise': typeof SolutionsEnterpriseRoute
   '/solutions/small-business': typeof SolutionsSmallBusinessRoute
+  '/statements/$clientId': typeof StatementsClientIdRoute
   '/clients': typeof ClientsIndexRoute
   '/expenses': typeof ExpensesIndexRoute
   '/invoices': typeof InvoicesIndexRoute
@@ -541,6 +551,7 @@ export interface FileRoutesById {
   '/settings/security': typeof SettingsSecurityRoute
   '/solutions/enterprise': typeof SolutionsEnterpriseRoute
   '/solutions/small-business': typeof SolutionsSmallBusinessRoute
+  '/statements/$clientId': typeof StatementsClientIdRoute
   '/clients/': typeof ClientsIndexRoute
   '/expenses/': typeof ExpensesIndexRoute
   '/invoices/': typeof InvoicesIndexRoute
@@ -606,6 +617,7 @@ export interface FileRouteTypes {
     | '/settings/security'
     | '/solutions/enterprise'
     | '/solutions/small-business'
+    | '/statements/$clientId'
     | '/clients/'
     | '/expenses/'
     | '/invoices/'
@@ -664,6 +676,7 @@ export interface FileRouteTypes {
     | '/settings/security'
     | '/solutions/enterprise'
     | '/solutions/small-business'
+    | '/statements/$clientId'
     | '/clients'
     | '/expenses'
     | '/invoices'
@@ -727,6 +740,7 @@ export interface FileRouteTypes {
     | '/settings/security'
     | '/solutions/enterprise'
     | '/solutions/small-business'
+    | '/statements/$clientId'
     | '/clients/'
     | '/expenses/'
     | '/invoices/'
@@ -783,6 +797,7 @@ export interface RootRouteChildren {
   ITokenRoute: typeof ITokenRoute
   SolutionsEnterpriseRoute: typeof SolutionsEnterpriseRoute
   SolutionsSmallBusinessRoute: typeof SolutionsSmallBusinessRoute
+  StatementsClientIdRoute: typeof StatementsClientIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiAuthSupabaseSessionRoute: typeof ApiAuthSupabaseSessionRoute
   ApiCronTickRoute: typeof ApiCronTickRoute
@@ -1024,6 +1039,13 @@ declare module '@tanstack/react-router' {
       path: '/solutions/small-business'
       fullPath: '/solutions/small-business'
       preLoaderRoute: typeof SolutionsSmallBusinessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/statements/$clientId': {
+      id: '/statements/$clientId'
+      path: '/statements/$clientId'
+      fullPath: '/statements/$clientId'
+      preLoaderRoute: typeof StatementsClientIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -1351,6 +1373,7 @@ const rootRouteChildren: RootRouteChildren = {
   ITokenRoute: ITokenRoute,
   SolutionsEnterpriseRoute: SolutionsEnterpriseRoute,
   SolutionsSmallBusinessRoute: SolutionsSmallBusinessRoute,
+  StatementsClientIdRoute: StatementsClientIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiAuthSupabaseSessionRoute: ApiAuthSupabaseSessionRoute,
   ApiCronTickRoute: ApiCronTickRoute,

@@ -2,10 +2,15 @@ import {
 	type BuyerType,
 	validateBuyerProfile,
 } from "#/features/clients/buyer-profile";
-import { buildClientIntelligence } from "./client-intelligence";
+import type { Database } from "#/types/database.types";
+import {
+	buildClientIntelligence,
+	buildCustomerStatement,
+} from "./client-intelligence";
 import { normalizeNigeriaPhone } from "./nigeria";
 import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
 
+export type { CustomerStatementLine } from "./client-intelligence";
 export type { Supabase } from "./workspaces";
 
 /**
@@ -277,6 +282,56 @@ type IntelligenceLineItem = {
 	productId?: string;
 };
 
+const INVOICE_INTELLIGENCE_COLUMNS =
+	"id, invoice_number, customer_name, currency, issue_date, due_date, status, payment_amount, paid_at, delivered_at, canceled_at, updated_at, lifecycle, compliance, line_items";
+
+/** Exactly the columns `INVOICE_INTELLIGENCE_COLUMNS` selects from `invoices`. */
+type IntelligenceInvoiceRow = Pick<
+	Database["public"]["Tables"]["invoices"]["Row"],
+	| "id"
+	| "invoice_number"
+	| "customer_name"
+	| "currency"
+	| "issue_date"
+	| "due_date"
+	| "status"
+	| "payment_amount"
+	| "paid_at"
+	| "delivered_at"
+	| "canceled_at"
+	| "updated_at"
+	| "lifecycle"
+	| "compliance"
+	| "line_items"
+>;
+
+/** One invoice row → the `InvoiceLike` shape the pure builders consume. */
+function toIntelligenceInvoice(row: IntelligenceInvoiceRow) {
+	return {
+		id: row.id,
+		invoiceNumber: row.invoice_number,
+		customerName: row.customer_name,
+		currency: row.currency,
+		issueDate: row.issue_date,
+		dueDate: row.due_date,
+		status: row.status,
+		paymentAmount: row.payment_amount ?? 0,
+		paidAt: row.paid_at ? new Date(row.paid_at).getTime() : undefined,
+		deliveredAt: row.delivered_at
+			? new Date(row.delivered_at).getTime()
+			: undefined,
+		canceledAt: row.canceled_at
+			? new Date(row.canceled_at).getTime()
+			: undefined,
+		updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : undefined,
+		lifecycle: (row.lifecycle ?? undefined) as IntelligenceInvoice | undefined,
+		compliance: (row.compliance ?? undefined) as
+			| IntelligenceCompliance
+			| undefined,
+		lineItems: (row.line_items ?? []) as IntelligenceLineItem[],
+	};
+}
+
 function toClientRecord(row: ClientRow): ClientRecord {
 	return {
 		id: row.id,
@@ -396,9 +451,7 @@ export async function getClientIntelligence(
 	if (!workspaceId) return null;
 	const { data, error } = await client
 		.from("invoices")
-		.select(
-			"id, invoice_number, customer_name, currency, issue_date, due_date, status, payment_amount, paid_at, delivered_at, canceled_at, updated_at, lifecycle, compliance, line_items",
-		)
+		.select(INVOICE_INTELLIGENCE_COLUMNS)
 		.eq("workspace_id", workspaceId);
 	if (error) throw error;
 
@@ -408,33 +461,46 @@ export async function getClientIntelligence(
 			email: selected.email,
 			currency: selected.currency,
 		},
-		invoices: (data ?? []).map((row) => ({
-			id: row.id,
-			invoiceNumber: row.invoice_number,
-			customerName: row.customer_name,
-			currency: row.currency,
-			issueDate: row.issue_date,
-			dueDate: row.due_date,
-			status: row.status,
-			paymentAmount: row.payment_amount ?? 0,
-			paidAt: row.paid_at ? new Date(row.paid_at).getTime() : undefined,
-			deliveredAt: row.delivered_at
-				? new Date(row.delivered_at).getTime()
-				: undefined,
-			canceledAt: row.canceled_at
-				? new Date(row.canceled_at).getTime()
-				: undefined,
-			updatedAt: row.updated_at
-				? new Date(row.updated_at).getTime()
-				: undefined,
-			lifecycle: (row.lifecycle ?? undefined) as
-				| IntelligenceInvoice
-				| undefined,
-			compliance: (row.compliance ?? undefined) as
-				| IntelligenceCompliance
-				| undefined,
-			lineItems: (row.line_items ?? []) as IntelligenceLineItem[],
-		})),
+		invoices: (data ?? []).map(toIntelligenceInvoice),
+	});
+}
+
+/**
+ * Customer statement of account (EGM next gap): a derived, per-client render
+ * over the same invoices `getClientIntelligence` reads. Scoped to the caller's
+ * active workspace; returns `null` when the client is outside it, so a
+ * cross-tenant id can never render a statement.
+ */
+export async function getCustomerStatement(
+	client: Supabase,
+	userId: string,
+	clientId: string,
+	args: { from?: string; to?: string } = {},
+) {
+	const selected = await getClientById(client, userId, clientId);
+	if (!selected) return null;
+
+	// `getClientById` already resolved the active workspace and scoped this row
+	// to it, so its `workspaceId` is that same active workspace — no second
+	// `resolveActiveWorkspaceId` round-trip.
+	const workspaceId = selected.workspaceId;
+	if (!workspaceId) return null;
+
+	const { data, error } = await client
+		.from("invoices")
+		.select(INVOICE_INTELLIGENCE_COLUMNS)
+		.eq("workspace_id", workspaceId);
+	if (error) throw error;
+
+	return buildCustomerStatement({
+		client: {
+			name: selected.name,
+			email: selected.email,
+			currency: selected.currency,
+		},
+		invoices: (data ?? []).map(toIntelligenceInvoice),
+		from: args.from,
+		to: args.to,
 	});
 }
 

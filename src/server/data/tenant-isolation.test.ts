@@ -31,6 +31,7 @@ import {
 	createClient,
 	getClientById,
 	getClientIntelligence,
+	getCustomerStatement,
 	importClientsCsv,
 	listClients,
 	removeClient,
@@ -861,6 +862,27 @@ describe("clients", () => {
 		const own = await getClientIntelligence(clientB, USER_B, "client-b");
 		expect(own).not.toBeNull();
 		expect(JSON.stringify(own)).not.toContain("INV-2026-A");
+	});
+
+	it("reads only B's invoices on a client statement", async () => {
+		expect(await getCustomerStatement(clientB, USER_B, "client-a")).toBeNull();
+
+		// Make B's own invoice match its client by name, and plant an
+		// A-workspace invoice that would *also* match "Client B". Only the
+		// workspace filter on `invoices` keeps the A invoice off the statement.
+		const ownInvoice = row("invoices", INV_B);
+		if (ownInvoice) ownInvoice.customer_name = "Client B";
+		(tables.invoices as Array<Record<string, unknown>>).push(
+			invoiceRow("inv-a2", WS_A, USER_A, "A2"),
+		);
+		const planted = row("invoices", "inv-a2");
+		if (planted) planted.customer_name = "Client B";
+
+		const own = await getCustomerStatement(clientB, USER_B, "client-b");
+		expect(own?.lines.map((line) => line.invoiceNumber)).toEqual([
+			"INV-2026-B",
+		]);
+		expect(JSON.stringify(own)).not.toContain("INV-2026-A2");
 	});
 
 	it("imports CSV clients into B's workspace with B as owner", async () => {

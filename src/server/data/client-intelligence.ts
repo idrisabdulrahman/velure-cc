@@ -275,3 +275,159 @@ export function buildClientIntelligence({
 			}),
 	};
 }
+
+export type CustomerStatementLine = {
+	id: string;
+	invoiceNumber: string;
+	issueDate: string;
+	dueDate: string;
+	currency: string;
+	status: string;
+	total: number;
+	paid: number;
+	balance: number;
+	overdue: boolean;
+};
+
+export type CustomerStatementTotals = {
+	currency: string;
+	billed: number;
+	paid: number;
+	outstanding: number;
+	overdue: number;
+	invoiceCount: number;
+};
+
+export type CustomerStatement = {
+	clientName: string;
+	clientEmail: string;
+	currency: string;
+	from: string | null;
+	to: string | null;
+	generatedAt: string;
+	invoiceCount: number;
+	lines: CustomerStatementLine[];
+	totalsByCurrency: CustomerStatementTotals[];
+	primaryTotals: CustomerStatementTotals;
+};
+
+/**
+ * A statement is the payer-facing payable history, so documents the payer never
+ * received are left out: a `draft` was never delivered and a `canceled` invoice
+ * is void. `buildClientIntelligence` keeps both (its totals are an internal
+ * view); a statement must not bill either.
+ */
+const STATEMENT_EXCLUDED_STATUSES = new Set(["draft", "canceled"]);
+
+function emptyStatementTotals(currency: string): CustomerStatementTotals {
+	return {
+		currency,
+		billed: 0,
+		paid: 0,
+		outstanding: 0,
+		overdue: 0,
+		invoiceCount: 0,
+	};
+}
+
+/**
+ * Customer statement of account — a pure render over the invoices already
+ * fetched for one client. Reuses the same matcher, money and status helpers as
+ * `buildClientIntelligence`, so "amount due" cannot drift between the client
+ * panel and the statement. Optional `from`/`to` bound the issue date
+ * (inclusive, `YYYY-MM-DD`).
+ */
+export function buildCustomerStatement({
+	client,
+	invoices,
+	now,
+	from,
+	to,
+}: {
+	client: ClientLike;
+	invoices: InvoiceLike[];
+	now?: Date;
+	from?: string;
+	to?: string;
+}): CustomerStatement {
+	const clientEmail = normalizeText(client.email);
+	const clientName = normalizeText(client.name);
+	const clientCurrency = client.currency;
+	const lines: CustomerStatementLine[] = [];
+	const totalsByCurrency = new Map<string, CustomerStatementTotals>();
+
+	for (const invoice of invoices) {
+		const buyerEmail = normalizeText(invoice.compliance?.buyer?.email);
+		const customerName = normalizeText(invoice.customerName);
+		const matchesClient =
+			(clientEmail.length > 0 && buyerEmail === clientEmail) ||
+			(clientName.length > 0 && customerName === clientName);
+		if (!matchesClient) continue;
+		if (from && invoice.issueDate < from) continue;
+		if (to && invoice.issueDate > to) continue;
+
+		const status = deriveInvoiceStatus(invoice, now);
+		if (STATEMENT_EXCLUDED_STATUSES.has(status)) continue;
+
+		const total = invoiceTotal(invoice);
+		const paid = Math.max(0, Math.min(invoice.paymentAmount ?? 0, total));
+		const balance = Math.max(0, total - paid);
+		const overdue = hasOverdueBalance(invoice, balance, now);
+		const currency = invoice.currency.trim().toUpperCase() || clientCurrency;
+
+		lines.push({
+			id: invoice._id ?? invoice.id ?? "",
+			invoiceNumber: invoice.invoiceNumber,
+			issueDate: invoice.issueDate,
+			dueDate: invoice.dueDate,
+			currency,
+			status,
+			total,
+			paid,
+			balance,
+			overdue,
+		});
+
+		const bucket =
+			totalsByCurrency.get(currency) ?? emptyStatementTotals(currency);
+		bucket.billed += total;
+		bucket.paid += paid;
+		bucket.outstanding += balance;
+		if (overdue) bucket.overdue += balance;
+		bucket.invoiceCount += 1;
+		totalsByCurrency.set(currency, bucket);
+	}
+
+	lines.sort((a, b) => {
+		const byDate = a.issueDate.localeCompare(b.issueDate);
+		return byDate !== 0
+			? byDate
+			: a.invoiceNumber.localeCompare(b.invoiceNumber);
+	});
+
+	const currencySummaries = Array.from(totalsByCurrency.values()).sort(
+		(a, b) => {
+			if (a.currency === clientCurrency) return -1;
+			if (b.currency === clientCurrency) return 1;
+			return b.outstanding - a.outstanding;
+		},
+	);
+
+	return {
+		clientName: client.name,
+		clientEmail: client.email,
+		currency: clientCurrency,
+		from: from ?? null,
+		to: to ?? null,
+		generatedAt: (now ?? new Date()).toISOString(),
+		invoiceCount: lines.length,
+		lines,
+		totalsByCurrency: currencySummaries,
+		primaryTotals:
+			currencySummaries.find(
+				(summary) => summary.currency === clientCurrency,
+			) ??
+			currencySummaries[0] ??
+			emptyStatementTotals(clientCurrency),
+	};
+}

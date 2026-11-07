@@ -65,10 +65,12 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	// audit.ts recordInvoiceAudit dedupes with audit-client above
 	// client-intelligence.ts
 	buildClientIntelligence: "pure",
+	buildCustomerStatement: "pure",
 	// clients.ts
 	listClients: "app-scoped",
 	getClientById: "app-scoped",
 	getClientIntelligence: "app-scoped",
+	getCustomerStatement: "app-scoped",
 	createClient: "app-scoped",
 	updateClient: "app-scoped",
 	archiveClient: "app-scoped",
