@@ -1,14 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useLocation } from "@tanstack/react-router";
-import {
-	BadgeCheck,
-	Banknote,
-	Check,
-	Copy,
-	Download,
-	ReceiptText,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { BadgeCheck, Banknote, Check, Copy, Download } from "lucide-react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { FaWhatsapp } from "react-icons/fa6";
 import { useResizeObserver } from "#/components/hooks/use-resize-observer";
 import { AppLoader } from "#/components/ui/app-loader";
@@ -42,6 +35,22 @@ function searchStringValue(search: unknown, key: string) {
 	const value = (search as Record<string, unknown>)[key];
 	return typeof value === "string" ? value : null;
 }
+
+/* Instrument micro-caps (design.md · Typography). The `[class*="uppercase"]`
+ * guard that re-voices ad-hoc caps only matches inside `.hm` / `.hm-app`, and
+ * this public surface is in neither scope — so the legal instrument role is
+ * simply written out here. Used for board captions and field labels only. */
+const MICRO_CAPS =
+	"font-label text-[0.625rem] font-medium uppercase tracking-[0.18em] text-ink-3";
+
+const PRIMARY_ACTION =
+	"inline-flex h-11 items-center justify-center gap-2 rounded-md bg-brand px-4 text-[13px] font-medium text-brand-ink transition-colors hover:bg-brand-hi focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60";
+
+const GHOST_ACTION =
+	"inline-flex h-11 items-center justify-center gap-2 rounded-md border border-rule bg-paper-2 px-4 text-[13px] font-medium text-ink-2 transition-colors hover:bg-paper-3 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60";
+
+const FIELD =
+	"mt-1 h-10 w-full rounded-md border border-rule bg-paper-2 px-3 font-num text-sm text-ink outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
 
 function PublicInvoicePage() {
 	const { token } = Route.useParams();
@@ -97,7 +106,7 @@ function PublicInvoicePage() {
 
 	if (invoice === undefined) {
 		return (
-			<section className="flex min-h-[100dvh] items-center justify-center bg-paper">
+			<section className="dark flex min-h-[100dvh] items-center justify-center bg-paper">
 				<AppLoader label="Loading invoice" />
 			</section>
 		);
@@ -105,7 +114,7 @@ function PublicInvoicePage() {
 
 	if (!invoice) {
 		return (
-			<section className="flex min-h-[100dvh] items-center justify-center bg-paper p-4">
+			<section className="dark flex min-h-[100dvh] items-center justify-center bg-paper p-4">
 				<div className="w-full max-w-md rounded-md border border-rule bg-paper-2 p-6 text-center">
 					<h2 className="text-base font-medium text-ink">Invoice not found</h2>
 					<p className="mt-2 text-sm text-ink-3">
@@ -153,18 +162,17 @@ function PublicInvoicePage() {
 					: invoice.status === "draft" || invoice.status === "canceled"
 						? "is-paper"
 						: "is-info";
+	// The sheet is measured against its own column, so the scale is driven by
+	// width alone: a height term would be self-referential, since a taller sheet
+	// grows the very column being measured and would collapse it. The cap keeps
+	// the sheet from being blown up past its natural print size.
 	const stageWidth = stageEntry?.contentRect.width ?? width;
-	const stageHeight = stageEntry?.contentRect.height ?? height;
-	const paperScale = (() => {
-		if (isEmbedded) return 1;
-
-		const horizontalPadding = stageWidth > 900 ? 12 : 8;
-		const verticalPadding = stageHeight > 900 ? 20 : 10;
-		const availableWidth = Math.max(stageWidth - horizontalPadding, 1);
-		const availableHeight = Math.max(stageHeight - verticalPadding, 1);
-
-		return Math.min(availableWidth / width, availableHeight / height, 1.08);
-	})();
+	const paperScale = isEmbedded
+		? 1
+		: Math.min(
+				Math.max(stageWidth - (stageWidth > 900 ? 12 : 8), 1) / width,
+				1.08,
+			);
 
 	const copyPublicLink = async () => {
 		try {
@@ -352,6 +360,11 @@ function PublicInvoicePage() {
 				description: "Use the temporary account before it expires.",
 				variant: "success",
 			});
+			// The charge is created server-side, but the account number lives on
+			// `paymentContext.charge`. Without this the payer keeps seeing the
+			// "Pay by transfer" button, retries, and burns the per-token rate
+			// limit until the endpoint answers 429.
+			await refetch();
 		} catch (error) {
 			toast({
 				title: "Could not prepare transfer",
@@ -363,6 +376,33 @@ function PublicInvoicePage() {
 			setIsCreatingCharge(false);
 		}
 	};
+
+	// ── Presentation values ──────────────────────────────────────────────────
+	// The page mirrors the sheet's convention (`NGN 519,400.00`) rather than the
+	// locale symbol, so the figure beside the sheet reads the same as the figure
+	// on it. All values below are real stored amounts.
+	const money = (value: number) =>
+		formatMoney(value, invoice.currency, { currencyDisplay: "code" });
+	const settled = invoice.status === "paid";
+	const dueDateLabel = formatInvoiceDate(invoice.dueDate, invoice.dateFormat);
+	const invoiceFacts = [
+		{ label: "Invoice no", value: invoice.invoiceNumber },
+		{
+			label: "Issued",
+			value: formatInvoiceDate(invoice.issueDate, invoice.dateFormat),
+		},
+		{ label: "Due", value: dueDateLabel },
+		settled
+			? { label: "Amount paid", value: money(invoice.paymentAmount) }
+			: { label: "Amount due", value: money(invoice.balance) },
+	];
+	const collectionTitle = paymentContext?.depositRequest
+		? "Deposit collection"
+		: "Payment collection";
+	// With no online collection the manual claim *is* the primary action; with
+	// one, "I've paid" steps back so the panel keeps a single accent.
+	const claimIsPrimary = !showCollectionPanel;
+	const revealStyle = (index: number) => ({ "--hm-i": index }) as CSSProperties;
 
 	if (isEmbedded) {
 		return (
@@ -378,385 +418,466 @@ function PublicInvoicePage() {
 	}
 
 	return (
-		<section className="dotted-bg min-h-[100dvh] bg-[#0b0b0c] text-[#f2ede6]">
-			<div
-				className="mx-auto flex w-full max-w-full flex-col px-4 py-6 sm:px-6 md:px-0"
-				style={{ maxWidth: width }}
-			>
-				<header className="mb-4 flex items-center justify-between">
-					<div className="flex min-w-0 items-center gap-3">
-						{invoice.logoUrl?.trim() ? (
-							<img
-								src={invoice.logoUrl}
-								alt={sellerName}
-								className="h-5 w-5 rounded-full border border-[#242426] object-cover"
-							/>
-						) : (
-							<div className="flex h-5 w-5 items-center justify-center rounded-full border border-[#242426] bg-[#1a1a1b] text-[9px] font-medium">
-								{sellerName.charAt(0).toUpperCase()}
-							</div>
-						)}
-						<div className="truncate text-sm">{sellerName}</div>
-					</div>
-					<div className={`hm-ts-stamp ${badgeModifier}`}>{statusLabel}</div>
-				</header>
-
-				<main
-					ref={stageRef}
-					className="flex flex-col items-center pb-24 md:pb-16"
-				>
-					<div
-						style={{
-							width: width * paperScale,
-							height: height * paperScale,
-						}}
-					>
-						<div
-							className="shadow-[0_24px_48px_-12px_rgba(0,0,0,0.6)]"
-							style={{
-								width,
-								height,
-								transform: `scale(${paperScale})`,
-								transformOrigin: "top left",
-							}}
-						>
-							<HtmlTemplate
-								data={invoiceDocument}
-								width={width}
-								height={height}
-								appearance="public"
-							/>
-						</div>
-					</div>
-					{showCollectionPanel ? (
-						<div className="mt-8 w-full rounded-md border border-[#242426] bg-[#101011] p-4">
-							<div className="flex items-start justify-between gap-4">
-								<div>
-									<p className="text-sm font-medium text-ink">
-										{paymentContext?.depositRequest
-											? "Deposit collection"
-											: "Payment collection"}
-									</p>
-									<p className="mt-1 text-xs text-ink-3">
-										{collectionStatusLabel}
-										{paymentContext?.depositRequest && collectionAmountLabel
-											? ` - ${collectionAmountLabel} requested`
-											: ""}
-									</p>
+		<section className="dark">
+			<div className="dotted-bg min-h-[100dvh] bg-paper-2 text-ink">
+				<div className="mx-auto w-full max-w-6xl px-4 pt-3 sm:px-6 lg:px-8">
+					<header className="hm-reveal flex items-center justify-between gap-4 py-2">
+						<div className="flex min-w-0 items-center gap-3">
+							{invoice.logoUrl?.trim() ? (
+								<img
+									src={invoice.logoUrl}
+									alt={sellerName}
+									className="h-8 w-8 shrink-0 rounded-lg border border-rule object-cover"
+								/>
+							) : (
+								<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-rule bg-paper-3 font-label text-[11px] font-medium text-ink-2">
+									{sellerName.charAt(0).toUpperCase()}
 								</div>
-								<Banknote className="h-5 w-5 text-brand" />
+							)}
+							<div className="min-w-0">
+								<p className="truncate text-sm font-medium text-ink">
+									{sellerName}
+								</p>
+								<p className="truncate text-[11px] text-ink-3">
+									For {invoice.customerName || "you"}
+								</p>
 							</div>
-							{charge?.accountNumber ? (
-								<div className="mt-4 grid gap-3 sm:grid-cols-3">
-									<div className="rounded-md border border-rule bg-paper p-3">
-										<div className="text-[11px] text-ink-3">Bank</div>
-										<div className="mt-1 text-sm font-medium text-ink">
-											{charge.bankName ?? "Paystack transfer"}
-										</div>
+						</div>
+						<div className={`hm-ts-stamp ${badgeModifier}`}>{statusLabel}</div>
+					</header>
+				</div>
+
+				{/* Departure-board fact strip. Wraps into a 2x2 grid on phones —
+				 * never a horizontal scroller, because every element must stay
+				 * inside the viewport (see e2e/public-invoice-responsive). */}
+				<div className="border-b border-rule bg-paper">
+					<div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
+						<dl className="grid grid-cols-2 border-l border-rule lg:grid-cols-4">
+							{invoiceFacts.map((fact) => (
+								<div
+									key={fact.label}
+									className="min-w-0 border-r border-t border-rule px-4 py-3 sm:px-6"
+								>
+									<dt className={MICRO_CAPS}>{fact.label}</dt>
+									<dd className="mt-1.5 font-num text-[13px] break-words text-ink sm:text-sm">
+										{fact.value}
+									</dd>
+								</div>
+							))}
+						</dl>
+					</div>
+				</div>
+
+				<div className="mx-auto w-full max-w-6xl px-4 pb-28 sm:px-6 md:pb-20 lg:px-8">
+					<div className="mt-6 flex flex-col gap-5 lg:mt-8 lg:grid lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-start lg:gap-8">
+						<div
+							ref={stageRef}
+							className="hm-reveal flex justify-center"
+							style={revealStyle(1)}
+						>
+							<div
+								style={{
+									width: width * paperScale,
+									height: height * paperScale,
+								}}
+							>
+								<div
+									className="shadow-[0_34px_84px_-34px_rgba(0,0,0,0.92)]"
+									style={{
+										width,
+										height,
+										transform: `scale(${paperScale})`,
+										transformOrigin: "top left",
+									}}
+								>
+									<HtmlTemplate
+										data={invoiceDocument}
+										width={width}
+										height={height}
+										appearance="public"
+									/>
+								</div>
+							</div>
+						</div>
+
+						<aside className="flex w-full flex-col gap-4">
+							<div
+								className="hm-reveal overflow-hidden rounded-lg border border-rule bg-paper"
+								style={revealStyle(2)}
+							>
+								<div className="px-5 py-5">
+									<div className="flex items-baseline justify-between gap-4">
+										<span className={MICRO_CAPS}>
+											{settled ? "Amount paid" : "Amount due"}
+										</span>
+										<span className="font-num text-[11px] text-ink-3">
+											{documentLabel}
+										</span>
 									</div>
-									<div className="rounded-md border border-rule bg-paper p-3">
-										<div className="text-[11px] text-ink-3">Account number</div>
-										<div className="mt-1 flex items-center justify-between gap-2">
-											<div className="select-all font-mono text-sm font-medium text-ink">
-												{charge.accountNumber}
+									<p className="mt-2.5 font-num text-[1.75rem] leading-none font-medium tracking-tight text-ink">
+										{money(settled ? invoice.paymentAmount : invoice.balance)}
+									</p>
+									<dl className="mt-5 grid gap-2 border-t border-rule pt-4">
+										<div className="flex items-baseline justify-between gap-4">
+											<dt className="text-xs text-ink-3">Total</dt>
+											<dd className="font-num text-xs text-ink-2">
+												{money(invoice.total)}
+											</dd>
+										</div>
+										{invoice.paymentAmount > 0 ? (
+											<div className="flex items-baseline justify-between gap-4">
+												<dt className="text-xs text-ink-3">Already paid</dt>
+												<dd className="font-num text-xs text-ink-2">
+													−{money(invoice.paymentAmount)}
+												</dd>
 											</div>
+										) : null}
+										<div className="flex items-baseline justify-between gap-4">
+											<dt className="text-xs text-ink-3">Due</dt>
+											<dd className="font-num text-xs text-ink-2">
+												{dueDateLabel}
+											</dd>
+										</div>
+									</dl>
+								</div>
+
+								{isQuote && (canAcceptQuote || quoteAcceptedView) ? (
+									<div className="border-t border-rule px-5 py-5">
+										{quoteAcceptedView ? (
+											<p
+												role="status"
+												aria-live="polite"
+												className="flex items-start gap-2 text-xs text-ink-2"
+											>
+												<Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+												<span>
+													Quote accepted — {sellerName} will issue your invoice.
+												</span>
+											</p>
+										) : (
+											<>
+												<p className="text-xs font-medium text-ink">
+													Ready to proceed?
+												</p>
+												<p className="mt-1 text-xs text-ink-3">
+													Accept this quote and {sellerName} will issue an
+													invoice for {money(invoice.total)}.
+												</p>
+												<button
+													type="button"
+													onClick={() => void submitQuoteAcceptance()}
+													disabled={isAcceptingQuote}
+													className={`${PRIMARY_ACTION} mt-3 w-full`}
+												>
+													{isAcceptingQuote ? (
+														<Spinner size={16} />
+													) : (
+														<BadgeCheck className="h-4 w-4" />
+													)}
+													<span>Accept quote</span>
+												</button>
+											</>
+										)}
+									</div>
+								) : null}
+
+								{showCollectionPanel ? (
+									<div className="border-t border-rule px-5 py-5">
+										<div className="flex items-baseline justify-between gap-4">
+											<p className="text-xs font-medium text-ink">
+												{collectionTitle}
+											</p>
+											{paymentContext?.depositRequest &&
+											collectionAmountLabel ? (
+												<span className="font-num text-[11px] text-ink-3">
+													{collectionAmountLabel} requested
+												</span>
+											) : null}
+										</div>
+
+										{charge?.accountNumber ? (
+											<dl className="mt-3 overflow-hidden rounded-md border border-rule bg-paper-2">
+												<div className="flex items-center justify-between gap-4 border-b border-rule px-3.5 py-2.5">
+													<dt className="text-[11px] text-ink-3">Bank</dt>
+													<dd className="font-num text-sm text-ink">
+														{charge.bankName ?? "Paystack transfer"}
+													</dd>
+												</div>
+												<div className="flex items-center justify-between gap-3 border-b border-rule px-3.5 py-2.5">
+													<dt className="text-[11px] text-ink-3">
+														Account number
+													</dt>
+													<dd className="flex min-w-0 items-center gap-1">
+														<span className="select-all truncate font-num text-sm font-medium text-ink">
+															{charge.accountNumber}
+														</span>
+														<button
+															type="button"
+															onClick={() =>
+																void copyAccountNumber(
+																	charge.accountNumber ?? "",
+																)
+															}
+															className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-paper-3 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+															aria-label="Copy account number"
+															title="Copy account number"
+														>
+															{isAccountCopied ? (
+																<Check className="h-4 w-4 shrink-0" />
+															) : (
+																<Copy className="h-4 w-4 shrink-0" />
+															)}
+														</button>
+													</dd>
+												</div>
+												<div className="flex items-center justify-between gap-4 px-3.5 py-2.5">
+													<dt className="text-[11px] text-ink-3">Expires</dt>
+													<dd className="font-num text-sm text-ink">
+														{new Date(charge.expiresAt).toLocaleTimeString([], {
+															hour: "2-digit",
+															minute: "2-digit",
+														})}
+													</dd>
+												</div>
+											</dl>
+										) : canUsePaystackTransfer ? (
 											<button
 												type="button"
-												onClick={() =>
-													void copyAccountNumber(charge.accountNumber ?? "")
-												}
-												className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-white/10 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-												aria-label="Copy account number"
-												title="Copy account number"
+												onClick={() => void createTransferCharge()}
+												disabled={isCreatingCharge}
+												className={`${PRIMARY_ACTION} mt-3 w-full`}
 											>
-												{isAccountCopied ? (
-													<Check className="h-4 w-4 shrink-0" />
+												{isCreatingCharge ? (
+													<Spinner size={16} />
 												) : (
-													<Copy className="h-4 w-4 shrink-0" />
+													<Banknote className="h-4 w-4" />
 												)}
+												<span>Pay by transfer</span>
 											</button>
-										</div>
-									</div>
-									<div className="rounded-md border border-rule bg-paper p-3">
-										<div className="text-[11px] text-ink-3">Expires</div>
-										<div className="mt-1 text-sm font-medium text-ink">
-											{new Date(charge.expiresAt).toLocaleTimeString([], {
-												hour: "2-digit",
-												minute: "2-digit",
-											})}
-										</div>
-									</div>
-								</div>
-							) : canUsePaystackTransfer ? (
-								<button
-									type="button"
-									onClick={() => void createTransferCharge()}
-									disabled={isCreatingCharge}
-									className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand px-4 text-[13px] font-medium text-brand-ink transition-colors hover:bg-brand-hi disabled:cursor-not-allowed disabled:opacity-60"
-								>
-									{isCreatingCharge ? (
-										<Spinner size={16} />
-									) : (
-										<Banknote className="h-4 w-4" />
-									)}
-									<span>Pay by transfer</span>
-								</button>
-							) : (
-								<div className="mt-4 rounded-md border border-rule bg-paper p-3 text-sm text-ink-3">
-									{paymentContext?.payableIssue ??
-										`Online collection is not available for this ${documentLabel.toLowerCase()}.`}
-								</div>
-							)}
-						</div>
-					) : null}
-					{isQuote && (canAcceptQuote || quoteAcceptedView) ? (
-						<section className="mt-4 w-full rounded-md border border-[#242426] bg-[#101011] p-4">
-							{quoteAcceptedView ? (
-								<p
-									role="status"
-									aria-live="polite"
-									className="flex items-center gap-2 text-sm text-ink-2"
-								>
-									<Check className="h-4 w-4 shrink-0 text-brand" />
-									<span>
-										Quote accepted — {sellerName} will issue your invoice.
-									</span>
-								</p>
-							) : (
-								<>
-									<div className="flex items-start justify-between gap-4">
-										<div>
-											<p className="text-sm font-medium text-ink">
-												Ready to proceed?
-											</p>
-											<p className="mt-1 text-xs text-ink-3">
-												Accept this quote and {sellerName} will issue an invoice
-												for {formatMoney(invoice.total, invoice.currency)}.
-											</p>
-										</div>
-										<BadgeCheck className="h-5 w-5 text-brand" />
-									</div>
-									<button
-										type="button"
-										onClick={() => void submitQuoteAcceptance()}
-										disabled={isAcceptingQuote}
-										className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand px-4 text-[13px] font-medium text-brand-ink transition-colors hover:bg-brand-hi disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-									>
-										{isAcceptingQuote ? (
-											<Spinner size={16} />
 										) : (
-											<BadgeCheck className="h-4 w-4" />
+											<p className="mt-2 text-xs text-ink-3">
+												{paymentContext?.payableIssue ??
+													`Online collection is not available for this ${documentLabel.toLowerCase()}.`}
+											</p>
 										)}
-										<span>Accept quote</span>
-									</button>
-								</>
-							)}
-						</section>
-					) : null}
-					{canClaimPayment ? (
-						<section className="mt-4 w-full rounded-md border border-[#242426] bg-[#101011] p-4">
-							<div className="flex items-start justify-between gap-4">
-								<div>
-									<p className="text-sm font-medium text-ink">
-										Paying by bank transfer?
-									</p>
-									<p className="mt-1 text-xs text-ink-3">
-										Pay {formatMoney(invoice.balance, invoice.currency)} with
-										the details below, then let {sellerName} know.
-									</p>
-								</div>
-								<Banknote className="h-5 w-5 text-brand" />
-							</div>
 
-							{invoice.paymentDetails?.trim() ? (
-								<div className="mt-4 whitespace-pre-wrap rounded-md border border-rule bg-paper p-3 text-sm text-ink-2">
-									{invoice.paymentDetails}
-								</div>
-							) : null}
-
-							{paymentReference ? (
-								<div className="mt-3 flex items-center justify-between gap-4 rounded-md border border-rule bg-paper p-3">
-									<div className="text-[11px] text-ink-3">
-										{paymentReference.label}
+										{charge?.accountNumber || canUsePaystackTransfer ? (
+											<p className="mt-2.5 text-[11px] text-ink-3">
+												{collectionStatusLabel}
+											</p>
+										) : null}
 									</div>
-									<div className="select-all font-mono text-sm font-medium text-ink">
-										{paymentReference.value}
-									</div>
-								</div>
-							) : null}
+								) : null}
 
-							{claimSubmitted ? (
-								<p
-									role="status"
-									aria-live="polite"
-									className="mt-4 flex items-center gap-2 text-sm text-ink-2"
-								>
-									<Check className="h-4 w-4 shrink-0 text-brand" />
-									<span>
-										Thanks — we&apos;ve told {sellerName} you paid. They&apos;ll
-										confirm it shortly.
-									</span>
-								</p>
-							) : showClaimForm ? (
-								<div className="mt-4 grid gap-3">
-									<label className="text-xs text-ink-3">
-										Amount you paid
-										<input
-											type="number"
-											inputMode="decimal"
-											min="0"
-											step="0.01"
-											value={claimAmount}
-											onChange={(event) => setClaimAmount(event.target.value)}
-											className="mt-1 h-10 w-full rounded-md border border-rule bg-paper px-3 text-sm text-ink outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-										/>
-									</label>
-									<label className="text-xs text-ink-3">
-										Reference (optional)
-										<input
-											type="text"
-											value={claimReference}
-											onChange={(event) =>
-												setClaimReference(event.target.value)
-											}
-											className="mt-1 h-10 w-full rounded-md border border-rule bg-paper px-3 text-sm text-ink outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-										/>
-									</label>
-									<label className="text-xs text-ink-3">
-										Note (optional)
-										<textarea
-											rows={2}
-											value={claimNote}
-											onChange={(event) => setClaimNote(event.target.value)}
-											className="mt-1 w-full rounded-md border border-rule bg-paper px-3 py-2 text-sm text-ink outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-										/>
-									</label>
-									<div className="flex flex-wrap gap-2">
-										<button
-											type="button"
-											onClick={() => void submitPaymentClaim()}
-											disabled={isSubmittingClaim}
-											className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand px-4 text-[13px] font-medium text-brand-ink transition-colors hover:bg-brand-hi disabled:cursor-not-allowed disabled:opacity-60"
-										>
-											{isSubmittingClaim ? (
-												<Spinner size={16} />
-											) : (
+								{canClaimPayment ? (
+									<div className="border-t border-rule px-5 py-5">
+										<p className="text-xs font-medium text-ink">
+											Paying by bank transfer?
+										</p>
+										<p className="mt-1 text-xs text-ink-3">
+											Pay {money(invoice.balance)} with the details below, then
+											let {sellerName} know.
+										</p>
+
+										{invoice.paymentDetails?.trim() ? (
+											<div className="mt-3 rounded-md border border-rule bg-paper-2 px-3.5 py-3 text-xs whitespace-pre-wrap text-ink-2">
+												{invoice.paymentDetails}
+											</div>
+										) : null}
+
+										{paymentReference ? (
+											<div className="mt-3 flex items-center justify-between gap-4 rounded-md border border-rule bg-paper-2 px-3.5 py-2.5">
+												<span className="text-[11px] text-ink-3">
+													{paymentReference.label}
+												</span>
+												<span className="select-all font-num text-sm font-medium text-ink">
+													{paymentReference.value}
+												</span>
+											</div>
+										) : null}
+
+										{claimSubmitted ? (
+											<p
+												role="status"
+												aria-live="polite"
+												className="mt-4 flex items-start gap-2 text-xs text-ink-2"
+											>
+												<Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+												<span>
+													Thanks — we&apos;ve told {sellerName} you paid.
+													They&apos;ll confirm it shortly.
+												</span>
+											</p>
+										) : showClaimForm ? (
+											<div className="mt-4 grid gap-3">
+												<label className="text-[11px] text-ink-3">
+													Amount you paid
+													<input
+														type="number"
+														inputMode="decimal"
+														min="0"
+														step="0.01"
+														value={claimAmount}
+														onChange={(event) =>
+															setClaimAmount(event.target.value)
+														}
+														className={FIELD}
+													/>
+												</label>
+												<label className="text-[11px] text-ink-3">
+													Reference (optional)
+													<input
+														type="text"
+														value={claimReference}
+														onChange={(event) =>
+															setClaimReference(event.target.value)
+														}
+														className={FIELD}
+													/>
+												</label>
+												<label className="text-[11px] text-ink-3">
+													Note (optional)
+													<textarea
+														rows={2}
+														value={claimNote}
+														onChange={(event) =>
+															setClaimNote(event.target.value)
+														}
+														className="mt-1 w-full rounded-md border border-rule bg-paper-2 px-3 py-2 text-sm text-ink outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+													/>
+												</label>
+												<div className="flex flex-wrap gap-2">
+													<button
+														type="button"
+														onClick={() => void submitPaymentClaim()}
+														disabled={isSubmittingClaim}
+														className={PRIMARY_ACTION}
+													>
+														{isSubmittingClaim ? (
+															<Spinner size={16} />
+														) : (
+															<Check className="h-4 w-4" />
+														)}
+														<span>Send payment notice</span>
+													</button>
+													<button
+														type="button"
+														onClick={() => setShowClaimForm(false)}
+														className={GHOST_ACTION}
+													>
+														Cancel
+													</button>
+												</div>
+											</div>
+										) : (
+											<button
+												type="button"
+												onClick={openClaimForm}
+												className={`${claimIsPrimary ? PRIMARY_ACTION : GHOST_ACTION} mt-4`}
+											>
 												<Check className="h-4 w-4" />
-											)}
-											<span>Send payment notice</span>
-										</button>
-										<button
-											type="button"
-											onClick={() => setShowClaimForm(false)}
-											className="inline-flex h-10 items-center justify-center rounded-md border border-rule px-4 text-[13px] font-medium text-ink-2 transition-colors hover:bg-white/10 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-										>
-											Cancel
-										</button>
+												<span>I&apos;ve paid</span>
+											</button>
+										)}
 									</div>
+								) : null}
+							</div>
+
+							<div className="hm-reveal" style={revealStyle(3)}>
+								<div className="flex items-baseline justify-between gap-4 border-b border-rule pb-2.5">
+									<span className={MICRO_CAPS}>Payment history</span>
+									<span className="font-num text-[11px] text-ink-3">
+										{paymentHistory === undefined
+											? "—"
+											: payments.length > 0
+												? `${payments.length} recorded`
+												: "None"}
+									</span>
 								</div>
-							) : (
-								<button
-									type="button"
-									onClick={openClaimForm}
-									className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand px-4 text-[13px] font-medium text-brand-ink transition-colors hover:bg-brand-hi focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-								>
-									<Check className="h-4 w-4" />
-									<span>I&apos;ve paid</span>
-								</button>
-							)}
-						</section>
-					) : null}
-					<section className="mt-4 w-full rounded-md border border-[#242426] bg-[#101011] p-4">
-						<div className="flex items-start justify-between gap-4">
-							<div>
-								<p className="text-sm font-medium text-ink">Payment history</p>
-								<p className="mt-1 text-xs text-ink-3">
-									Confirmed payments linked to this{" "}
-									{documentLabel.toLowerCase()}.
-								</p>
-							</div>
-							<ReceiptText className="h-5 w-5 text-ink-2" />
-						</div>
-						{paymentHistory === undefined ? (
-							<div
-								role="status"
-								aria-label="Loading payment history"
-								className="mt-4 flex justify-center py-3"
-							>
-								<Spinner className="text-brand !stroke-brand" />
-							</div>
-						) : payments.length > 0 ? (
-							<div className="mt-4 divide-y divide-rule">
-								{payments.map((payment) => (
+								{paymentHistory === undefined ? (
 									<div
-										key={payment.id}
-										className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"
+										role="status"
+										aria-label="Loading payment history"
+										className="flex justify-center py-5"
 									>
-										<div className="min-w-0">
-											<p className="truncate text-sm font-medium text-ink">
-												{payment.provider === "paystack"
-													? "Paystack transfer"
-													: "Manual payment"}
-											</p>
-											<p className="mt-1 text-xs text-ink-3">
-												{formatInvoiceDate(payment.createdAt, "ng")}
-												{payment.reference ? ` - ${payment.reference}` : ""}
-											</p>
-										</div>
-										<div className="shrink-0 text-sm font-medium text-brand">
-											{formatMoney(payment.amount, payment.currency)}
-										</div>
+										<Spinner className="text-brand !stroke-brand" />
 									</div>
-								))}
+								) : payments.length > 0 ? (
+									<ul className="divide-y divide-rule">
+										{payments.map((payment) => (
+											<li
+												key={payment.id}
+												className="flex items-center justify-between gap-4 py-3"
+											>
+												<div className="min-w-0">
+													<p className="truncate text-xs font-medium text-ink">
+														{payment.provider === "paystack"
+															? "Paystack transfer"
+															: "Manual payment"}
+													</p>
+													<p className="mt-0.5 truncate text-[11px] text-ink-3">
+														{formatInvoiceDate(payment.createdAt, "ng")}
+														{payment.reference ? ` · ${payment.reference}` : ""}
+													</p>
+												</div>
+												<span className="shrink-0 font-num text-sm text-ok">
+													{formatMoney(payment.amount, payment.currency, {
+														currencyDisplay: "code",
+													})}
+												</span>
+											</li>
+										))}
+									</ul>
+								) : (
+									<p className="py-4 text-xs text-ink-3">
+										No confirmed payments have been recorded for this{" "}
+										{documentLabel.toLowerCase()}.
+									</p>
+								)}
 							</div>
-						) : (
-							<div className="mt-4 rounded-md border border-rule bg-paper p-3 text-sm text-ink-3">
-								No confirmed payments have been recorded for this{" "}
-								{documentLabel.toLowerCase()}.
-							</div>
-						)}
-					</section>
-				</main>
-			</div>
-
-			<div className="fixed inset-x-0 bottom-5 z-20 flex justify-center">
-				<div className="flex h-12 items-center gap-1 rounded-full border border-[#303033] bg-[#1a1a1a]/80 px-2 backdrop-blur-lg">
-					<a
-						href={downloadUrl}
-						className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[#d7d3cc] transition-colors hover:bg-white/10 hover:text-white"
-						aria-label="Download invoice PDF"
-						title="Download invoice PDF"
-					>
-						<Download className="h-5 w-5 shrink-0" />
-					</a>
-					<button
-						type="button"
-						onClick={() => void copyPublicLink()}
-						className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[#d7d3cc] transition-colors hover:bg-white/10 hover:text-white"
-						aria-label="Copy public invoice link"
-						title="Copy public invoice link"
-					>
-						{isLinkCopied ? (
-							<Check className="h-5 w-5 shrink-0" />
-						) : (
-							<Copy className="h-5 w-5 shrink-0" />
-						)}
-					</button>
-					<a
-						href={shareLinks?.whatsappHref}
-						target="_blank"
-						rel="noreferrer"
-						className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[#d7d3cc] transition-colors hover:bg-white/10 hover:text-white"
-						aria-label="Share invoice on WhatsApp"
-						title="Share invoice on WhatsApp"
-					>
-						<FaWhatsapp className="h-5 w-5 shrink-0" />
-					</a>
+						</aside>
+					</div>
 				</div>
-			</div>
 
-			<div className="fixed bottom-4 right-4 hidden text-[9px] text-[#878787] md:block">
-				Powered by <span className="text-[#d7d3cc]">Invoicly</span>
+				<div className="fixed inset-x-0 bottom-5 z-20 flex justify-center">
+					<div className="flex h-12 items-center gap-1 rounded-full border border-[#303033] bg-[#1a1a1a]/80 px-2 backdrop-blur-lg">
+						<a
+							href={downloadUrl}
+							className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[#d7d3cc] transition-colors hover:bg-white/10 hover:text-white"
+							aria-label="Download invoice PDF"
+							title="Download invoice PDF"
+						>
+							<Download className="h-5 w-5 shrink-0" />
+						</a>
+						<button
+							type="button"
+							onClick={() => void copyPublicLink()}
+							className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[#d7d3cc] transition-colors hover:bg-white/10 hover:text-white"
+							aria-label="Copy public invoice link"
+							title="Copy public invoice link"
+						>
+							{isLinkCopied ? (
+								<Check className="h-5 w-5 shrink-0" />
+							) : (
+								<Copy className="h-5 w-5 shrink-0" />
+							)}
+						</button>
+						<a
+							href={shareLinks?.whatsappHref}
+							target="_blank"
+							rel="noreferrer"
+							className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[#d7d3cc] transition-colors hover:bg-white/10 hover:text-white"
+							aria-label="Share invoice on WhatsApp"
+							title="Share invoice on WhatsApp"
+						>
+							<FaWhatsapp className="h-5 w-5 shrink-0" />
+						</a>
+					</div>
+				</div>
+
+				<div className="fixed bottom-4 right-4 hidden text-[9px] text-[#878787] md:block">
+					Powered by <span className="text-[#d7d3cc]">Invoicly</span>
+				</div>
 			</div>
 		</section>
 	);
