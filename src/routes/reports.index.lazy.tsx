@@ -257,7 +257,10 @@ function ReportsIndex() {
 							startTransition(() => setPeriod(value as PeriodPreset))
 						}
 					>
-						<SelectTrigger className="h-10 w-full rounded-md border-rule bg-paper-2 text-ink sm:w-[170px]">
+						<SelectTrigger
+							aria-label="Period"
+							className="h-10 w-full rounded-md border-rule bg-paper-2 text-ink sm:w-[170px]"
+						>
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent className="border-rule bg-paper-2 text-ink">
@@ -273,7 +276,10 @@ function ReportsIndex() {
 						onValueChange={(value) => setSelectedCurrency(value)}
 						disabled={currencies.length <= 1}
 					>
-						<SelectTrigger className="h-10 w-full rounded-md border-rule bg-paper-2 text-ink sm:w-[120px]">
+						<SelectTrigger
+							aria-label="Currency"
+							className="h-10 w-full rounded-md border-rule bg-paper-2 text-ink sm:w-[120px]"
+						>
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent className="border-rule bg-paper-2 text-ink">

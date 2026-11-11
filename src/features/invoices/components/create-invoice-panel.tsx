@@ -105,6 +105,7 @@ import {
 import {
 	NIGERIA_TIN_MAX_DIGITS,
 	NIGERIA_TIN_MIN_DIGITS,
+	storedTinOrUndefined,
 } from "#/features/compliance/supplier-profile";
 import {
 	DISCOUNT_MODE_OPTIONS,
@@ -119,6 +120,7 @@ import {
 	type WithholdingRecipientResidency,
 } from "#/features/compliance/types";
 import { isCorrectionSource } from "#/features/invoices/correction-sources";
+import { lineMissingClassification } from "#/features/invoices/customer-gate";
 import { formatMoney } from "#/features/invoices/format";
 import type { ImportedInvoiceDraft } from "#/features/invoices/import-spreadsheet";
 import { toEditorDoc } from "#/features/invoices/invoice-document-adapter";
@@ -158,6 +160,7 @@ import { cn } from "#/utils/cn";
 
 import { NotesEditor } from "./editor/notes-editor";
 import { InlineLabelInput } from "./inline-label-input";
+import { InvoiceQrCode } from "./invoice-qr-code";
 
 type LineItem = InvoiceLineItem;
 
@@ -821,12 +824,17 @@ export function CreateInvoicePanel({
 	useEffect(() => {
 		if (!workspace) return;
 
+		// A legacy placeholder TIN stored on the workspace is not a real tax
+		// id: treat it as absent so the editor opens in Freelancer mode with an
+		// empty TIN field instead of defaulting to Registered business and
+		// prefilling the placeholder (2026-11-10).
+		const workspaceSellerTin = storedTinOrUndefined(workspace.taxId) ?? "";
 		const nextSellerTaxStatus =
 			(workspace.sellerTaxStatus as SellerTaxStatus | undefined) ??
 			"below_threshold_not_charging_vat";
 		setSellerProfileType(
 			nextSellerTaxStatus === "vat_registered" ||
-				workspace.taxId ||
+				workspaceSellerTin ||
 				workspace.rcNumber
 				? "business"
 				: "freelancer",
@@ -850,8 +858,8 @@ export function CreateInvoicePanel({
 		setDueDate(
 			buildDueDate(workspace.defaultPaymentTermsDays ?? 14, issueDate),
 		);
-		setSellerTin(workspace.taxId ?? "");
-		setShowSellerTin(!!workspace.taxId);
+		setSellerTin(workspaceSellerTin);
+		setShowSellerTin(!!workspaceSellerTin);
 		setSellerRcNumber(workspace.rcNumber ?? "");
 		setShowSellerRc(!!workspace.rcNumber);
 	}, [workspace]);
@@ -1131,14 +1139,21 @@ export function CreateInvoicePanel({
 	const hasPricedLineItem = lineItems.some(
 		(item) => item.name.trim().length > 0 && item.price > 0,
 	);
-	const firstMissingTaxLine = isVatEnabled
-		? lineItems.find(
-				(item) =>
-					item.name.trim() &&
-					item.price > 0 &&
-					(!item.unit?.trim() || !item.classificationCode?.trim()),
-			)
-		: undefined;
+	// The server's leave-Draft gate (assertCustomerForIssueTransition) requires
+	// a unit, a supported VAT category and a goods/service code on every line it
+	// finalizes - not only when the invoice charges VAT. The Create button asks
+	// `lineMissingClassification`, the same predicate the gate uses, so the panel
+	// can never let through a submit the server then rejects for fields a non-VAT
+	// invoice did not show.
+	const firstMissingTaxLine = lineItems.find(
+		(item) =>
+			item.name.trim().length > 0 &&
+			lineMissingClassification({
+				...item,
+				// The payload persists this fallback, so validate what is sent.
+				vatCategory: item.vatCategory ?? defaultVatCategory,
+			}),
+	);
 	const dueDateInvalid = Boolean(issueDate && dueDate && dueDate < issueDate);
 	const canSubmit =
 		customerName.trim().length > 1 &&
@@ -1189,7 +1204,7 @@ export function CreateInvoicePanel({
 		const defaultFromEmail = workspace?.email ?? "hello@invoicly.cv";
 		const defaultLogoUrl = workspace?.logoUrl ?? "";
 		const defaultPaymentDetails = workspace?.paymentDetails ?? "";
-		const defaultSellerTin = workspace?.taxId ?? "";
+		const defaultSellerTin = storedTinOrUndefined(workspace?.taxId) ?? "";
 		const defaultSellerRc = workspace?.rcNumber ?? "";
 		const defaultPaymentTermsDays = workspace?.defaultPaymentTermsDays ?? 14;
 		const defaultDueDate = buildDueDate(defaultPaymentTermsDays, issueDate);
@@ -1773,6 +1788,9 @@ export function CreateInvoicePanel({
 	const resetDraft = () => {
 		const nextIssueDate = buildIssueDate();
 		const nextTermDays = 14;
+		// Same placeholder rule as the workspace effect: a legacy placeholder
+		// TIN is not a real tax id.
+		const workspaceSellerTin = storedTinOrUndefined(workspace?.taxId) ?? "";
 
 		setComposerStage("editor");
 		setCreatedInvoice(null);
@@ -1821,7 +1839,7 @@ export function CreateInvoicePanel({
 		setTemplateName("Default NG");
 		setSellerProfileType(
 			workspace?.sellerTaxStatus === "vat_registered" ||
-				workspace?.taxId ||
+				workspaceSellerTin ||
 				workspace?.rcNumber
 				? "business"
 				: "freelancer",
@@ -1839,8 +1857,8 @@ export function CreateInvoicePanel({
 		setWithholdingCategory("none");
 		setWithholdingRecipientEntityType("corporate");
 		setWithholdingRecipientResidency("resident");
-		setSellerTin(workspace?.taxId ?? "");
-		setShowSellerTin(!!workspace?.taxId);
+		setSellerTin(workspaceSellerTin);
+		setShowSellerTin(!!workspaceSellerTin);
 		setSellerRcNumber(workspace?.rcNumber ?? "");
 		setShowSellerRc(!!workspace?.rcNumber);
 		setSettingsOpen(false);
@@ -2064,26 +2082,26 @@ export function CreateInvoicePanel({
 					<div className="mx-auto flex h-full min-h-0 w-full max-w-[720px] flex-col border border-rule bg-paper">
 						<div className="flex min-h-0 flex-1 flex-col px-6 py-6">
 							<div>
-								<h2 className="text-[34px] font-medium tracking-[-0.03em] text-ink">
+								<h2 className="text-[30px] font-medium tracking-[-0.03em] text-ink">
 									Created
 								</h2>
-								<p className="mt-2 text-sm text-ink-3">
+								<p className="mt-1.5 text-[13px] text-ink-3">
 									Your{" "}
 									{INVOICE_DOCUMENT_TYPE_LABELS[createdInvoice.documentType]}{" "}
 									was created successfully.
 								</p>
 							</div>
 
-							<div className="relative my-auto border border-rule bg-paper-2 p-5 pb-7">
-								<div className="flex items-start justify-between gap-4 text-sm text-ink-3">
-									<div className="text-[13px]">
+							<div className="relative mx-auto my-auto w-full max-w-[430px] border border-rule bg-paper-2 p-4 pb-6">
+								<div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 text-[12px] text-ink-3">
+									<div className="whitespace-nowrap">
 										{INVOICE_DOCUMENT_TYPE_LABELS[createdInvoice.documentType]}{" "}
 										No:{" "}
 										<span className="font-medium text-ink">
 											{createdInvoice.invoiceNumber}
 										</span>
 									</div>
-									<div className="text-[13px]">
+									<div className="whitespace-nowrap">
 										{createdInvoice.documentType === "proforma"
 											? "Valid Until"
 											: "Due Date"}
@@ -2094,20 +2112,20 @@ export function CreateInvoicePanel({
 									</div>
 								</div>
 
-								<div className="mt-8">
-									<div className="text-[18px] font-medium text-ink">
+								<div className="mt-6">
+									<div className="text-[16px] font-medium text-ink">
 										{createdInvoice.customerName}
 									</div>
 									{createdInvoice.customerEmail ? (
-										<div className="mt-3 text-[13px] text-ink-3 underline underline-offset-2">
+										<div className="mt-2 text-[12px] text-ink-3 underline underline-offset-2">
 											{createdInvoice.customerEmail}
 										</div>
 									) : null}
 								</div>
 
-								<div className="mt-10 flex items-end justify-between gap-4 border-b border-rule pb-5">
-									<div className="text-[13px] text-ink-3">Total</div>
-									<div className="text-[18px] text-ink">
+								<div className="mt-8 flex items-end justify-between gap-4 border-b border-rule pb-4">
+									<div className="text-[12px] text-ink-3">Total</div>
+									<div className="text-[16px] text-ink">
 										{formatMoney(
 											createdInvoice.total,
 											normalizeCurrency(currency),
@@ -2118,78 +2136,99 @@ export function CreateInvoicePanel({
 									</div>
 								</div>
 
-								<div className="mt-10">
-									<div className="text-[28px] font-medium tracking-[-0.03em] text-ink">
+								<div className="mt-8">
+									<div className="text-[22px] font-medium tracking-[-0.03em] text-ink">
 										Details
 									</div>
-									<div className="mt-10">
+									<div className="mt-6">
 										<div className="mb-2 text-[12px] text-ink-3">
 											Share link
 										</div>
-										<div className="flex flex-wrap items-center gap-2">
-											<div className="flex h-10 min-w-0 flex-1 items-center border border-rule bg-paper px-3 text-[13px] text-ink-3">
+										<div className="flex flex-col gap-2">
+											<div className="flex h-10 min-w-0 items-center border border-rule bg-paper px-3 text-[13px] text-ink-3">
 												<span className="truncate">{shareLinks.publicUrl}</span>
 											</div>
-											<a
-												href={shareLinks.telegramHref}
-												target="_blank"
-												rel="noreferrer"
-												className={footerIconButtonClass}
-												aria-label="Share on Telegram"
-												title="Share on Telegram"
-											>
-												<FaTelegram className="h-4 w-4" />
-											</a>
-											<a
-												href={shareLinks.whatsappHref}
-												target="_blank"
-												rel="noreferrer"
-												className={footerIconButtonClass}
-												aria-label="Share on WhatsApp"
-												title="Share on WhatsApp"
-											>
-												<FaWhatsapp className="h-4 w-4" />
-											</a>
-											<button
-												type="button"
-												onClick={async () => {
-													if (navigator.share) {
-														await navigator.share({
-															title: `${INVOICE_DOCUMENT_TYPE_LABELS[createdInvoice.documentType]} ${createdInvoice.invoiceNumber}`,
-															text: shareLinks.text,
-															url: shareLinks.publicUrl,
-														});
-														return;
+											<div className="flex flex-wrap items-center gap-2">
+												<a
+													href={shareLinks.telegramHref}
+													target="_blank"
+													rel="noreferrer"
+													className={footerIconButtonClass}
+													aria-label="Share on Telegram"
+													title="Share on Telegram"
+												>
+													<FaTelegram className="h-4 w-4" />
+												</a>
+												<a
+													href={shareLinks.whatsappHref}
+													target="_blank"
+													rel="noreferrer"
+													className={footerIconButtonClass}
+													aria-label="Share on WhatsApp"
+													title="Share on WhatsApp"
+												>
+													<FaWhatsapp className="h-4 w-4" />
+												</a>
+												<button
+													type="button"
+													onClick={async () => {
+														if (navigator.share) {
+															await navigator.share({
+																title: `${INVOICE_DOCUMENT_TYPE_LABELS[createdInvoice.documentType]} ${createdInvoice.invoiceNumber}`,
+																text: shareLinks.text,
+																url: shareLinks.publicUrl,
+															});
+															return;
+														}
+														await navigator.clipboard.writeText(
+															shareLinks.publicUrl,
+														);
+													}}
+													className={footerIconButtonClass}
+													aria-label="Share link"
+													title="Share link"
+												>
+													<Share2 className="h-4 w-4" />
+												</button>
+												<button
+													type="button"
+													onClick={() =>
+														void copyInvoiceLink(createdInvoice.token)
 													}
-													await navigator.clipboard.writeText(
-														shareLinks.publicUrl,
-													);
-												}}
-												className={footerIconButtonClass}
-												aria-label="Share link"
-												title="Share link"
-											>
-												<Share2 className="h-4 w-4" />
-											</button>
-											<button
-												type="button"
-												onClick={() =>
-													void copyInvoiceLink(createdInvoice.token)
-												}
-												className={footerIconButtonClass}
-												aria-label="Copy share link"
-											>
-												<Copy className="h-4 w-4" />
-											</button>
-											<a
-												href={shareLinks.publicUrl}
-												target="_blank"
-												rel="noreferrer"
-												className={footerIconButtonClass}
-												aria-label="Preview before download"
-											>
-												<Download className="h-4 w-4" />
-											</a>
+													className={footerIconButtonClass}
+													aria-label="Copy share link"
+												>
+													<Copy className="h-4 w-4" />
+												</button>
+												<a
+													href={shareLinks.publicUrl}
+													target="_blank"
+													rel="noreferrer"
+													className={footerIconButtonClass}
+													aria-label="Preview before download"
+												>
+													<Download className="h-4 w-4" />
+												</a>
+											</div>
+										</div>
+									</div>
+								</div>
+								<div className="mt-5 flex items-center gap-3 border-t border-rule pt-5">
+									<InvoiceQrCode
+										value={shareLinks.publicUrl}
+										size={76}
+										label={`QR code for ${INVOICE_DOCUMENT_TYPE_LABELS[createdInvoice.documentType]} ${createdInvoice.invoiceNumber}`}
+									/>
+									<div className="min-w-0">
+										<div className="text-[12px] font-medium text-ink">
+											Scan to open
+										</div>
+										<div className="mt-1 text-[11px] leading-[1.45] text-ink-3">
+											Unique to this{" "}
+											{INVOICE_DOCUMENT_TYPE_LABELS[
+												createdInvoice.documentType
+											].toLowerCase()}{" "}
+											— it opens the public link above.
 										</div>
 									</div>
 								</div>
@@ -2740,6 +2779,7 @@ export function CreateInvoicePanel({
 									onChange={(content) =>
 										setTopBlock(content as EditorDoc | null)
 									}
+									ariaLabel="Invoice introduction"
 									placeholder="Optional introduction or terms above line items"
 									className="mb-4 min-h-14 border-y border-dashed border-rule bg-paper px-1 py-3"
 								/>
@@ -3192,7 +3232,7 @@ export function CreateInvoicePanel({
 																}}
 																className={cn(
 																	"mt-2 flex max-w-full flex-wrap items-center gap-1.5 text-left text-[11px] text-ink-2 hover:text-brand",
-																	(!isVatEnabled || isEmptyLine) && "hidden",
+																	isEmptyLine && "hidden",
 																)}
 															>
 																<span className="rounded-full bg-paper-2 px-2 py-1">
@@ -3210,8 +3250,7 @@ export function CreateInvoicePanel({
 																</span>
 																{taxDetailsOpen ? "▾" : "▸"}
 															</button>
-															{isVatEnabled &&
-															missingTaxDetails &&
+															{missingTaxDetails &&
 															blurredTaxLineIds.includes(item.id) &&
 															(item.name.trim() || item.price > 0) ? (
 																<p
@@ -3222,7 +3261,7 @@ export function CreateInvoicePanel({
 																	this line.
 																</p>
 															) : null}
-															{isVatEnabled && taxDetailsOpen ? (
+															{taxDetailsOpen ? (
 																<div className="mt-2 grid gap-2 @md:grid-cols-3">
 																	<div className="min-w-0">
 																		<label
@@ -3321,6 +3360,12 @@ export function CreateInvoicePanel({
 																			placeholder="Enter code"
 																		/>
 																	</div>
+																	<p className="@md:col-span-3 text-[11px] leading-[1.45] text-ink-3">
+																		Unit, VAT category and goods/service code
+																		are the structured line fields used by tax
+																		summaries and e-invoice data exports. Your
+																		buyer does not see the code on the invoice.
+																	</p>
 																</div>
 															) : null}
 														</CreateSortableLineItem>
@@ -3472,6 +3517,7 @@ export function CreateInvoicePanel({
 													onChange={(content) =>
 														setNotes(content as EditorDoc | null)
 													}
+													ariaLabel="Invoice notes"
 													placeholder={NOTE_PLACEHOLDER}
 													className="min-h-20 w-full border-0 bg-transparent px-0 py-1"
 												/>
@@ -3483,6 +3529,7 @@ export function CreateInvoicePanel({
 											onChange={(content) =>
 												setBottomBlock(content as EditorDoc | null)
 											}
+											ariaLabel="Invoice footer"
 											placeholder="Optional footer or legal text"
 											className="mt-4 min-h-14 border-y border-dashed border-rule bg-paper px-1 py-3"
 										/>

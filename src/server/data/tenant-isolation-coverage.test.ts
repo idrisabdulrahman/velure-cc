@@ -276,6 +276,9 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	// signature or the scheduler secret, never a tenant-supplied id.
 	logPaymentAnomaly: "server-admin",
 	reconcilePendingPaystackCharges: "server-admin",
+	// Pure marker class: tags a provider error message as safe to show a payer.
+	// No data, session, or query surface of any kind.
+	PublicPaymentError: "pure",
 	// money.ts — pure integer minor-unit conversion, no query surface
 	nairaToKobo: "pure",
 	koboToNaira: "pure",
@@ -370,6 +373,9 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	// the route suite.
 	getPublicInvoicePage: "public-token",
 	getInvoiceByToken: "public-token",
+	// Pure token-shape regex: no client, no query, no tenant id. It only
+	// rejects a malformed share token before the RPC is reached.
+	isWellFormedPublicInvoiceToken: "pure",
 	// Admin client UPDATE on invoices: the target id comes from the RPC result
 	// for the caller's own share token, never from input, so the write stays
 	// on that one invoice.

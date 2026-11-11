@@ -13,6 +13,7 @@ import {
 	hashPasswordWithBinding,
 	verifyPasswordWithBinding,
 } from "#/server/password-hasher-binding";
+import { sendPasswordResetEmail } from "#/server/password-reset-mailer";
 import {
 	createRateLimitStore,
 	SHARED_RATE_LIMIT_CUSTOM_RULES,
@@ -77,6 +78,17 @@ export const auth = betterAuth({
 		requireEmailVerification: true,
 		// Resetting a password must invalidate every other session.
 		revokeSessionsOnPasswordReset: true,
+		// Delivering the reset link. Better Auth refuses
+		// `/request-password-reset` with "Reset password isn't enabled" unless
+		// this callback exists, so it is the switch that turns the flow on.
+		// `url` is Better Auth's `/api/auth/reset-password/<token>?callbackURL=`
+		// link; the callbackURL is `/auth?mode=reset`, which then redirects to
+		// the token-bearing reset form. Delivery mirrors the verification
+		// mailer: failures are logged and swallowed so the anonymous response
+		// stays identical whether or not the address exists.
+		sendResetPassword: async ({ user, url }) => {
+			await sendPasswordResetEmail({ user, url });
+		},
 		// A completed reset proves control of the inbox, so it also counts as
 		// verification. Better Auth 1.4.9 does not set `emailVerified` itself on
 		// this path; without this a reset user stays locked out by

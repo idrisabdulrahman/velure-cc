@@ -10,6 +10,7 @@ import {
 	CUSTOMER_LINK_CLEARED_ON_ISSUED_MESSAGE,
 	CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE,
 	INVOICE_LINE_CLASSIFICATION_REQUIRED_MESSAGE,
+	lineMissingClassification,
 	transitionLeavesDraft,
 } from "#/features/invoices/customer-gate";
 import {
@@ -96,8 +97,6 @@ export type LineItem = {
 	/** Line-level discount in major units; only used by the `line` mode. */
 	discount?: number;
 };
-
-const VAT_CATEGORIES = new Set(["standard", "zero_rated", "exempt"]);
 
 export type ShipmentDetails = {
 	weight?: string;
@@ -1586,14 +1585,7 @@ export async function assertCustomerForIssueTransition(
 	if (!invoice.customerId) {
 		throw new Error(CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE);
 	}
-	if (
-		invoice.lineItems.some(
-			(item) =>
-				!item.unit?.trim() ||
-				!VAT_CATEGORIES.has(item.vatCategory ?? "") ||
-				!item.classificationCode?.trim(),
-		)
-	) {
+	if (invoice.lineItems.some(lineMissingClassification)) {
 		throw new Error(INVOICE_LINE_CLASSIFICATION_REQUIRED_MESSAGE);
 	}
 	await assertWorkspaceCustomer(client, workspaceId, invoice.customerId);
@@ -3822,10 +3814,7 @@ export async function importCsv(
 		const issuedFamily =
 			group.status !== "draft" && group.status !== "canceled";
 		const hasCompleteClassification = group.lineItems.every(
-			(item) =>
-				Boolean(item.unit?.trim()) &&
-				VAT_CATEGORIES.has(item.vatCategory ?? "") &&
-				Boolean(item.classificationCode?.trim()),
+			(item) => !lineMissingClassification(item),
 		);
 		// B2/B3: import must NOT exempt itself from the same buyer and line
 		// classification rules applied at every Draft exit.

@@ -86,6 +86,10 @@ export const SHARED_RATE_LIMIT_PATHS: ReadonlyArray<{
 	// Email-sending paths: a far longer window, matching the credentials that
 	// would otherwise let a reset-email flood through.
 	{ match: "/send-verification-email", window: 3600 },
+	{ match: "/request-password-reset", window: 3600 },
+	// `/forget-password` is the retired name for the same endpoint; kept so an
+	// older client still reaches the shared budget. Better Auth 1.4.9 serves
+	// `/request-password-reset`, which the entry above now covers.
 	{ match: "/forget-password", window: 3600 },
 	{ match: "/reset-password", window: 3600 },
 ];
@@ -107,7 +111,10 @@ export const SHARED_RATE_LIMIT_CUSTOM_RULES: Record<
 	"/sign-in/email": { window: 10, max: 3 },
 	"/sign-up/email": { window: 10, max: 3 },
 	// Password reset is not covered by the strict built-in rule (it would
-	// otherwise allow 100 per 10 s) and each call can send an email.
+	// otherwise allow 100 per 10 s) and each call can send an email. The
+	// request path is `/request-password-reset` in Better Auth 1.4.9;
+	// `/forget-password` is kept as the retired alias.
+	"/request-password-reset*": { window: 3600, max: 5 },
 	"/forget-password*": { window: 3600, max: 5 },
 	"/reset-password*": { window: 3600, max: 5 },
 	// Every call can send an email, and sign-in resends automatically, so the

@@ -1,9 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
+import {
+	Outlet,
+	useLinkProps,
+	useLocation,
+	useNavigate,
+} from "@tanstack/react-router";
 import { useReducedMotion } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
 import {
 	BellRing,
+	Blocks,
 	Building2,
 	ChartNoAxesCombined,
 	Check,
@@ -16,9 +22,10 @@ import {
 	Scale,
 	Search,
 	Settings,
+	ShieldCheck,
 	Users,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { InvoiclySymbol } from "#/components/brand/invoicly-symbol";
 import { ProfileDropdown } from "#/components/dashboard/profile-dropdown";
 import { CommandPalette } from "#/components/global-search/command-palette";
@@ -149,6 +156,22 @@ const settingsItems = [
 		label: "General",
 		description: "Business profile and account plan",
 	},
+	{
+		to: "/settings/security",
+		icon: ShieldCheck,
+		match: (pathname: string) =>
+			matchesPathSegment(pathname, "/settings/security"),
+		label: "Security",
+		description: "Sessions, password, and linked sign-in providers",
+	},
+	{
+		to: "/settings/integrations",
+		icon: Blocks,
+		match: (pathname: string) =>
+			matchesPathSegment(pathname, "/settings/integrations"),
+		label: "Integrations",
+		description: "Planned connections to payment and accounting tools",
+	},
 ] as const;
 
 function CountBadge({ count }: { count: number | undefined }) {
@@ -173,6 +196,50 @@ function ReminderBadge({ count }: { count: number | undefined }) {
 		<span className="ml-auto shrink-0 rounded-full bg-warn-soft px-2 py-0.5 font-num text-[11px] tabular-nums text-warn">
 			{count}
 		</span>
+	);
+}
+
+/**
+ * A shell link whose `aria-current` follows the layout's own `match`
+ * predicate, not TanStack Router's prefix rule.
+ *
+ * `<Link>` writes `aria-current="page"` from its default prefix matching and
+ * spreads it last, so a passed attribute cannot override it: on a nested route
+ * it marks both the parent and the child current (e.g. `/invoices` *and*
+ * `/invoices/products`), which breaks the WAI-ARIA rule that exactly one item
+ * is current. `useLinkProps` gives the same `href`, preloading and navigation
+ * handlers without that attribute, so the attribute is set here from `active`.
+ */
+function SidebarNavLink({
+	to,
+	active,
+	className,
+	title,
+	onNavigate,
+	children,
+}: {
+	to: string;
+	active: boolean;
+	className?: string;
+	title?: string;
+	onNavigate: () => void;
+	children: ReactNode;
+}) {
+	const linkProps = useLinkProps({ to, onClick: onNavigate });
+	// Drop the router's own `aria-current` (spread last by `<Link>`, so a prop
+	// cannot override it) and set it from `active` instead. Any `data-status`
+	// the router also emits is harmless and left in place.
+	const { "aria-current": _routerAriaCurrent, ...anchorProps } = linkProps;
+
+	return (
+		<a
+			{...anchorProps}
+			title={title}
+			className={className}
+			aria-current={active ? "page" : undefined}
+		>
+			{children}
+		</a>
 	);
 }
 
@@ -592,9 +659,10 @@ export function DashboardLayout() {
 				}`}
 			>
 				<div className="border-b border-rule px-5 py-5">
-					<Link
+					<SidebarNavLink
 						to="/invoices"
-						onClick={() => setNavOpen(false)}
+						active={false}
+						onNavigate={() => setNavOpen(false)}
 						className="flex items-center gap-3"
 					>
 						<InvoiclySymbol className="h-7 w-auto" />
@@ -604,7 +672,7 @@ export function DashboardLayout() {
 							</p>
 							<p className="text-xs text-ink-3">Operations workspace</p>
 						</div>
-					</Link>
+					</SidebarNavLink>
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
 							<button
@@ -662,9 +730,10 @@ export function DashboardLayout() {
 								Workspace
 							</p>
 							<div className="space-y-0.5">
-								<Link
+								<SidebarNavLink
 									to="/invoices"
-									onClick={() => setNavOpen(false)}
+									active={invoicesActive}
+									onNavigate={() => setNavOpen(false)}
 									className={navLinkClass(invoicesActive)}
 								>
 									<LayoutGrid
@@ -680,17 +749,18 @@ export function DashboardLayout() {
 										Invoices
 									</span>
 									<CountBadge count={counts["/invoices"]} />
-								</Link>
+								</SidebarNavLink>
 
 								{navItems.map((item) => {
 									const Icon = item.icon;
 									const active = item.match(location.pathname);
 
 									return (
-										<Link
+										<SidebarNavLink
 											key={item.to}
 											to={item.to}
-											onClick={() => setNavOpen(false)}
+											active={active}
+											onNavigate={() => setNavOpen(false)}
 											className={navLinkClass(active)}
 										>
 											<Icon
@@ -710,7 +780,7 @@ export function DashboardLayout() {
 											) : item.to === "/invoices/products" ? (
 												<CountBadge count={counts["/invoices/products"]} />
 											) : null}
-										</Link>
+										</SidebarNavLink>
 									);
 								})}
 							</div>
@@ -750,11 +820,12 @@ export function DashboardLayout() {
 									}
 
 									return (
-										<Link
+										<SidebarNavLink
 											key={item.to}
 											to={item.to}
+											active={active}
 											title={item.description}
-											onClick={() => setNavOpen(false)}
+											onNavigate={() => setNavOpen(false)}
 											className={navLinkClass(active)}
 										>
 											<Icon
@@ -774,7 +845,7 @@ export function DashboardLayout() {
 													count={counts["/settings/collections"]}
 												/>
 											) : null}
-										</Link>
+										</SidebarNavLink>
 									);
 								})}
 							</div>

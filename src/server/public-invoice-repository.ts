@@ -20,10 +20,28 @@ import {
 
 export type Invoice = InvoiceRecord;
 
+/**
+ * Public invoice tokens are generated as `pub-<uuid>` (see
+ * `data/invoices.ts`), so a real token is URL-safe. Any other value — a null
+ * byte, a path separator, an empty string — is rejected here, before the RPC.
+ * Without this, a malformed share link (`GET /api/invoice/public/%00`) makes
+ * Postgres throw and the route answers a 500; with it, the route keeps its
+ * "404 when not found" contract. The bound also caps the work one request can
+ * force.
+ */
+const PUBLIC_INVOICE_TOKEN_PATTERN = /^[A-Za-z0-9._~-]{1,128}$/;
+
+export function isWellFormedPublicInvoiceToken(token: string): boolean {
+	return PUBLIC_INVOICE_TOKEN_PATTERN.test(token);
+}
+
 async function getInvoiceByTokenWithClient(
 	client: ReturnType<typeof getSupabaseAdminClient>,
 	token: string,
 ) {
+	// Defense in depth: every public entry point also checks, but this keeps
+	// the invariant even if a future caller forgets.
+	if (!isWellFormedPublicInvoiceToken(token)) return null;
 	const { data, error } = await client.rpc("public_invoice_by_token", {
 		input_token: token,
 	});
@@ -77,6 +95,7 @@ async function getInvoiceByTokenWithClient(
 }
 
 export async function getPublicInvoicePage(token: string) {
+	if (!isWellFormedPublicInvoiceToken(token)) return null;
 	const client = getSupabaseAdminClient();
 	const result = await getInvoiceByTokenWithClient(client, token);
 	if (!result) return null;
@@ -90,6 +109,7 @@ export async function getPublicInvoicePage(token: string) {
 }
 
 export async function getInvoiceByToken(token: string) {
+	if (!isWellFormedPublicInvoiceToken(token)) return null;
 	return (
 		(await getInvoiceByTokenWithClient(getSupabaseAdminClient(), token))
 			?.invoice ?? null
@@ -97,6 +117,9 @@ export async function getInvoiceByToken(token: string) {
 }
 
 export async function recordPublicInvoiceView(token: string) {
+	if (!isWellFormedPublicInvoiceToken(token)) {
+		return { ok: false, alreadyTracked: false };
+	}
 	const client = getSupabaseAdminClient();
 	const result = await getInvoiceByTokenWithClient(client, token);
 	if (!result) return { ok: false, alreadyTracked: false };

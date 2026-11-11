@@ -6,10 +6,12 @@ import { describe, expect, it } from "vitest";
  * Exports-tab structure contract.
  *
  * This repo has no component-test harness (node test environment, no
- * testing-library), so the densified Exports tab is pinned against the route
- * source: the two labelled card groups, every export offering, and the
- * recent-exports table. The guard stops a future edit from silently dropping
- * an export action or flattening the table back into an unlabelled list.
+ * testing-library), so the Exports tab is pinned against the route source: the
+ * two labelled card groups, every export offering, the unverified-layout
+ * warning, the import-notes disclosure, and the recent-exports table. The
+ * guard stops a future edit from silently dropping an export action,
+ * re-hiding a compliance caveat, or flattening the table back into an
+ * unlabelled list.
  */
 
 const source = readFileSync(
@@ -35,7 +37,23 @@ describe("compliance exports tab", () => {
 
 	it("groups the offerings under labelled sections", () => {
 		expect(source).toMatch(/>\s*Reports\s*</);
-		expect(source).toMatch(/>\s*Accounting &amp; tax files\s*</);
+		expect(source).toMatch(/>\s*For importing into\s*</);
+	});
+
+	it("surfaces the unverified Rev360 layout as a visible warning", () => {
+		expect(source).toContain('warning="Layout not verified"');
+		expect(source).not.toContain(
+			"Layout not verified against the live template",
+		);
+	});
+
+	it("moves long caveats behind an Import notes disclosure", () => {
+		expect(source).toContain("Import notes");
+		expect(source).toContain("<details");
+	});
+
+	it("hides Retry on an already-ready export row", () => {
+		expect(source).toContain("isExportReady(record.status) ? null : (");
 	});
 
 	it("keeps every export offering", () => {

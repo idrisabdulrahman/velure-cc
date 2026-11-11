@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ensurePaystackTransferCharge } from "#/server/data/paystack-server";
+import {
+	ensurePaystackTransferCharge,
+	PublicPaymentError,
+} from "#/server/data/paystack-server";
 import {
 	consumeFixedWindowRateLimit,
 	getClientIp,
@@ -71,8 +74,18 @@ export async function handle({ request }: { request: Request }) {
 			"Public payment initialization failed",
 			safeErrorDetails(error),
 		);
+		// A PublicPaymentError carries a message the payer can act on (missing
+		// client email, non-NGN invoice, nothing left to collect). Everything
+		// else stays generic so provider/config internals never reach the
+		// browser.
 		return Response.json(
-			{ ok: false, error: "Could not prepare transfer account." },
+			{
+				ok: false,
+				error:
+					error instanceof PublicPaymentError
+						? error.message
+						: "Could not prepare transfer account.",
+			},
 			{ status: 400 },
 		);
 	}

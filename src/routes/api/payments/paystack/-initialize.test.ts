@@ -9,6 +9,9 @@ import { handle, handlers } from "./initialize";
 
 vi.mock("#/server/data/paystack-server", () => ({
 	ensurePaystackTransferCharge: vi.fn(),
+	// Kept as the real class: the route uses `instanceof` to decide whether a
+	// message is safe to show the payer, so a stub would not exercise that path.
+	PublicPaymentError: class PublicPaymentError extends Error {},
 }));
 vi.mock("#/server/http-security", () => ({
 	consumeFixedWindowRateLimit: vi.fn(),
@@ -116,5 +119,38 @@ describe("Paystack initialization route", () => {
 			ok: false,
 			error: "Could not prepare transfer account.",
 		});
+	});
+
+	it("surfaces an actionable message for a public payment error", async () => {
+		vi.mocked(getSupabaseAdminClient).mockReturnValue({} as never);
+		vi.mocked(consumeFixedWindowRateLimit).mockResolvedValue(true);
+		vi.mocked(getClientIp).mockReturnValue(null);
+		const { PublicPaymentError } = await import(
+			"#/server/data/paystack-server"
+		);
+		vi.mocked(ensurePaystackTransferCharge).mockRejectedValue(
+			new PublicPaymentError(
+				"Invoice needs a valid client email before Paystack transfer.",
+			),
+		);
+
+		const response = await handle({ request: request() });
+
+		expect(response.status).toBe(400);
+		await expect(response.json()).resolves.toEqual({
+			ok: false,
+			error: "Invoice needs a valid client email before Paystack transfer.",
+		});
+	});
+
+	it("rate-limits before reaching the provider", async () => {
+		vi.mocked(getSupabaseAdminClient).mockReturnValue({} as never);
+		vi.mocked(consumeFixedWindowRateLimit).mockResolvedValue(false);
+		vi.mocked(getClientIp).mockReturnValue(null);
+
+		const response = await handle({ request: request() });
+
+		expect(response.status).toBe(429);
+		expect(ensurePaystackTransferCharge).not.toHaveBeenCalled();
 	});
 });

@@ -387,6 +387,7 @@ function NewClient() {
 
 							<div className="inline-flex items-center gap-2 text-sm text-ink-2">
 								<Switch
+									aria-label="Save as favorite client"
 									checked={state.favorite}
 									onCheckedChange={(checked) =>
 										setState((prev) => ({ ...prev, favorite: checked }))

@@ -29,6 +29,11 @@ export const Route = createLazyFileRoute("/auth")({
 type Mode = "sign-in" | "sign-up" | "forgot" | "reset";
 const pendingBusinessNameKey = "velure.pending-business-name";
 const authSubmitRetryDelaysMs = [350, 900, 1800] as const;
+// Kept in step with `emailAndPassword.minPasswordLength` in `src/lib/auth.ts`:
+// the server rejects anything shorter when a password is *set* (sign-up, reset).
+// Sign-in deliberately stays permissive, because the policy only applies when a
+// password is set and a legacy credential may be shorter than this.
+const MIN_PASSWORD_LENGTH = 12;
 
 type AuthResultWithError = {
 	error?: unknown;
@@ -291,7 +296,7 @@ function AuthPage() {
 		if (mode === "reset") {
 			return (
 				Boolean(search.token) &&
-				password.length >= 8 &&
+				password.length >= MIN_PASSWORD_LENGTH &&
 				password === confirmPassword
 			);
 		}
@@ -300,6 +305,7 @@ function AuthPage() {
 		if (mode === "sign-up") {
 			if (name.trim().length < 2) return false;
 			if (businessName.trim().length < 2) return false;
+			if (password.length < MIN_PASSWORD_LENGTH) return false;
 			if (password !== confirmPassword) return false;
 		}
 		return true;
@@ -313,6 +319,25 @@ function AuthPage() {
 		search.token,
 	]);
 
+	// The reset (and sign-up) button is disabled until the password meets the
+	// server's minimum. Without a visible reason the disabled button reads as a
+	// broken control - the reported "Update password is not clickable" - so the
+	// requirement is stated inline and counts up as the user types.
+	const passwordHint =
+		mode === "reset" || mode === "sign-up"
+			? password.length < MIN_PASSWORD_LENGTH
+				? `Use at least ${MIN_PASSWORD_LENGTH} characters (${password.length}/${MIN_PASSWORD_LENGTH}).`
+				: `At least ${MIN_PASSWORD_LENGTH} characters.`
+			: undefined;
+
+	const confirmPasswordHint =
+		(mode === "reset" || mode === "sign-up") &&
+		password.length > 0 &&
+		confirmPassword.length > 0 &&
+		password !== confirmPassword
+			? "Passwords do not match."
+			: undefined;
+
 	const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		if (!canSubmit || submitting) return;
@@ -325,7 +350,12 @@ function AuthPage() {
 			if (mode === "forgot") {
 				const result = await authClient.requestPasswordReset({
 					email: email.trim().toLowerCase(),
-					redirectTo: "/auth",
+					// The link Better Auth emails is
+					// `<baseURL>/reset-password/<token>?callbackURL=...`, and that
+					// handler redirects to the callback with only `token` added. The
+					// page opens the reset form only when `mode=reset` is also
+					// present, so it is carried on the callback itself.
+					redirectTo: "/auth?mode=reset",
 				});
 
 				if (result.error) {
@@ -806,11 +836,16 @@ function AuthPage() {
 														active={capsLockOn && capsField === "password"}
 													/>
 												}
+												description={passwordHint}
+												descriptionId="password-description"
 											>
 												<Input
 													id="password"
 													type="password"
 													value={password}
+													aria-describedby={
+														passwordHint ? "password-description" : undefined
+													}
 													onChange={(event) => setPassword(event.target.value)}
 													onKeyDown={readCapsLock}
 													onKeyUp={readCapsLock}
@@ -838,11 +873,19 @@ function AuthPage() {
 														}
 													/>
 												}
+												description={confirmPasswordHint}
+												descriptionId="confirm-password-description"
+												descriptionTone="danger"
 											>
 												<Input
 													id="confirmPassword"
 													type="password"
 													value={confirmPassword}
+													aria-describedby={
+														confirmPasswordHint
+															? "confirm-password-description"
+															: undefined
+													}
 													onChange={(event) =>
 														setConfirmPassword(event.target.value)
 													}
@@ -1003,11 +1046,17 @@ function Field({
 	htmlFor,
 	children,
 	hint,
+	description,
+	descriptionId,
+	descriptionTone = "muted",
 }: {
 	label: string;
 	htmlFor?: string;
 	children: React.ReactNode;
 	hint?: React.ReactNode;
+	description?: React.ReactNode;
+	descriptionId?: string;
+	descriptionTone?: "muted" | "danger";
 }) {
 	return (
 		<div className="block">
@@ -1018,6 +1067,18 @@ function Field({
 				{hint}
 			</div>
 			{children}
+			{description ? (
+				<p
+					id={descriptionId}
+					className={
+						descriptionTone === "danger"
+							? "mt-1.5 text-xs text-danger"
+							: "mt-1.5 text-xs text-ink-3"
+					}
+				>
+					{description}
+				</p>
+			) : null}
 		</div>
 	);
 }

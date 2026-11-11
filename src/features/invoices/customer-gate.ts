@@ -15,13 +15,49 @@
  * the gate: only a saved client record does.
  */
 
-import type { InvoiceStatus } from "./types";
+import type { InvoiceStatus, VatCategory } from "./types";
 
 export const CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE =
 	"A customer is required before an invoice can leave Draft. Select or create a client first.";
 
 export const INVOICE_LINE_CLASSIFICATION_REQUIRED_MESSAGE =
 	"Each invoice line needs a unit, VAT category, and goods/service code before leaving Draft.";
+
+/**
+ * VAT categories the persisted line snapshot accepts (SPEC §5.B B3).
+ *
+ * Shared with the composer: the fields this gate demands have to be reachable
+ * in the form that triggers it. They were not for a seller whose tax treatment
+ * applies no VAT (the composer hid the row behind `isVatEnabled`) while the
+ * server demanded them for every line, which left the user with a rejection
+ * they could not act on.
+ */
+export const LINE_VAT_CATEGORIES: ReadonlySet<string> = new Set([
+	"standard",
+	"zero_rated",
+	"exempt",
+]);
+
+type LineClassificationFields = {
+	unit?: string;
+	vatCategory?: VatCategory | string;
+	classificationCode?: string;
+};
+
+/**
+ * True when a line is missing the structured classification the leave-Draft
+ * gate requires, whatever the invoice's tax treatment. Single source of truth
+ * for the composer's Submit blocker and the server's gate.
+ */
+export function lineMissingClassification(
+	item: LineClassificationFields,
+): boolean {
+	return (
+		!item.unit?.trim() ||
+		!LINE_VAT_CATEGORIES.has(item.vatCategory ?? "") ||
+		!item.classificationCode?.trim()
+	);
+}
 
 /**
  * B2 companion rule (audit round-2): the gate makes the buyer link load

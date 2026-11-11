@@ -1479,7 +1479,10 @@ function InvoicesIndex() {
 								value={summaryCurrency}
 								onValueChange={setSelectedSummaryCurrency}
 							>
-								<SelectTrigger className="h-9 min-w-32 rounded-md border-warn-line bg-paper text-ink">
+								<SelectTrigger
+									aria-label="Summary currency"
+									className="h-9 min-w-32 rounded-md border-warn-line bg-paper text-ink"
+								>
 									<SelectValue placeholder="Currency" />
 								</SelectTrigger>
 								<SelectContent className="border-rule bg-paper-2 text-ink">
@@ -2037,7 +2040,10 @@ function AdvancedInvoiceFilters({
 								)
 							}
 						>
-							<SelectTrigger className="h-10 w-full rounded-md border-rule bg-paper text-ink">
+							<SelectTrigger
+								aria-label="Schedule"
+								className="h-10 w-full rounded-md border-rule bg-paper text-ink"
+							>
 								<SelectValue placeholder="All schedules" />
 							</SelectTrigger>
 							<SelectContent className="border-rule bg-paper-2 text-ink">
@@ -2057,7 +2063,10 @@ function AdvancedInvoiceFilters({
 								)
 							}
 						>
-							<SelectTrigger className="h-10 w-full rounded-md border-rule bg-paper text-ink">
+							<SelectTrigger
+								aria-label="Document kind"
+								className="h-10 w-full rounded-md border-rule bg-paper text-ink"
+							>
 								<SelectValue placeholder="All document kinds" />
 							</SelectTrigger>
 							<SelectContent className="border-rule bg-paper-2 text-ink">
@@ -2079,7 +2088,10 @@ function AdvancedInvoiceFilters({
 								)
 							}
 						>
-							<SelectTrigger className="h-10 w-full rounded-md border-rule bg-paper text-ink">
+							<SelectTrigger
+								aria-label="Due"
+								className="h-10 w-full rounded-md border-rule bg-paper text-ink"
+							>
 								<SelectValue placeholder="Any due date" />
 							</SelectTrigger>
 							<SelectContent className="border-rule bg-paper-2 text-ink">

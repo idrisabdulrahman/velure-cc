@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import {
 	AlertTriangle,
+	ChevronRight,
 	Download,
 	FileSpreadsheet,
 	FileText,
@@ -49,6 +50,7 @@ import { MockSandboxNotice } from "#/features/einvoicing/mock-sandbox-notice";
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import { useUnifiedAuth } from "#/lib/auth-hook";
 import { useSupabaseSession } from "#/lib/supabase-session";
+import { cn } from "#/lib/utils.ts";
 import {
 	createInvoiceExport,
 	getComplianceDashboard,
@@ -99,6 +101,12 @@ function exportStatusTone(status: string): "ok" | "warn" | "bad" | "mute" {
 	)
 		return "warn";
 	return "mute";
+}
+
+/** A ready/completed export is downloadable, so it has nothing to retry. */
+function isExportReady(status: string) {
+	const normalized = status.toLowerCase();
+	return normalized === "ready" || normalized === "completed";
 }
 
 function formatCount(value: number) {
@@ -169,33 +177,65 @@ function downloadExportContent(record: { fileName: string; content: string }) {
 /**
  * One export offering on the Exports tab. The icon tile and footer keep every
  * card in a row the same height, so the generate buttons line up; the format
- * badges make the CSV/Excel split readable at a glance.
+ * badges make the CSV/Excel split readable at a glance. Integration cards use
+ * the `info` tone and a visible warning pill, and long caveats live behind the
+ * "Import notes" disclosure so the default card reads in one line.
  */
 function ExportCard({
 	icon: Icon,
 	title,
 	description,
 	formats,
+	tone = "default",
+	warning,
+	note,
 	children,
 }: {
 	icon: LucideIcon;
 	title: string;
 	description: string;
 	formats: string[];
+	tone?: "default" | "info";
+	warning?: string;
+	note?: ReactNode;
 	children: ReactNode;
 }) {
 	return (
-		<div className="flex h-full flex-col rounded-md border border-rule bg-paper-2 px-4 py-3">
+		<div className="flex h-full flex-col rounded-lg border border-rule bg-paper-2 p-5">
 			<div className="flex items-start gap-3">
-				<span className="mt-0.5 inline-flex h-8 w-8 flex-none items-center justify-center rounded-md bg-brand-soft text-brand">
+				<span
+					className={cn(
+						"mt-0.5 inline-flex h-9 w-9 flex-none items-center justify-center rounded-md",
+						tone === "info"
+							? "bg-info-soft text-info"
+							: "bg-brand-soft text-brand",
+					)}
+				>
 					<Icon aria-hidden="true" className="h-4 w-4" />
 				</span>
 				<div className="min-w-0 flex-1">
 					<p className="text-sm font-medium text-ink">{title}</p>
-					<p className="mt-1 text-xs leading-5 text-ink-3">{description}</p>
+					<p className="mt-1 text-xs leading-5 text-ink-2">{description}</p>
+					{warning ? (
+						<StatusPill tone="warn" className="mt-2.5">
+							{warning}
+						</StatusPill>
+					) : null}
 				</div>
 			</div>
-			<div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-rule/60 pt-3">
+			{note ? (
+				<details className="group mt-3">
+					<summary className="flex w-fit cursor-pointer list-none items-center gap-1 text-xs font-medium text-ink-2 transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
+						<ChevronRight
+							aria-hidden="true"
+							className="size-3.5 flex-none transition-transform group-open:rotate-90"
+						/>
+						Import notes
+					</summary>
+					<div className="mt-2 text-xs leading-5 text-ink-2">{note}</div>
+				</details>
+			) : null}
+			<div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-rule/60 pt-4">
 				<div className="flex flex-wrap gap-1.5">
 					{formats.map((format) => (
 						<Badge
@@ -486,32 +526,42 @@ function ComplianceSettingsPage() {
 			<MockSandboxNotice />
 
 			<section aria-label="Official sources">
-				<h2 className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-3">
-					Official sources
-				</h2>
-				<p className="mt-2 max-w-2xl text-xs leading-5 text-ink-3">
-					{NRS_OFFICIAL_SOURCES_INTRO}
-				</p>
-				<ul className="mt-3 grid gap-3 md:grid-cols-2">
-					{NRS_OFFICIAL_SOURCES.map((source) => (
-						<li
-							key={source.url}
-							className="rounded-md border border-rule bg-paper px-4 py-3"
-						>
-							<a
-								href={source.url}
-								target="_blank"
-								rel="noopener noreferrer"
-								className="text-sm font-medium text-brand underline underline-offset-2 hover:text-brand-hi"
-							>
-								{source.title}
-							</a>
-							<p className="mt-1 text-xs leading-5 text-ink-3">
-								{source.description}
-							</p>
-						</li>
-					))}
-				</ul>
+				<details className="group rounded-md border border-rule bg-paper">
+					<summary className="flex cursor-pointer list-none items-center gap-2.5 px-4 py-3 [&::-webkit-details-marker]:hidden">
+						<ChevronRight
+							aria-hidden="true"
+							className="size-4 flex-none text-ink-3 transition-transform group-open:rotate-90"
+						/>
+						<span className="text-sm font-medium text-ink">
+							Official sources
+						</span>
+						<span className="min-w-0 truncate text-xs text-ink-3">
+							Nigerian tax and e-invoicing references
+						</span>
+					</summary>
+					<div className="border-t border-rule/60 px-4 py-3">
+						<p className="max-w-2xl text-xs leading-5 text-ink-3">
+							{NRS_OFFICIAL_SOURCES_INTRO}
+						</p>
+						<ul className="mt-3 grid gap-2 md:grid-cols-2">
+							{NRS_OFFICIAL_SOURCES.map((source) => (
+								<li key={source.url}>
+									<a
+										href={source.url}
+										target="_blank"
+										rel="noopener noreferrer"
+										className="text-sm font-medium text-brand underline underline-offset-2 hover:text-brand-hi"
+									>
+										{source.title}
+									</a>
+									<p className="mt-0.5 text-xs leading-5 text-ink-3">
+										{source.description}
+									</p>
+								</li>
+							))}
+						</ul>
+					</div>
+				</details>
 			</section>
 
 			{isDashboardLoading ? (
@@ -1173,16 +1223,20 @@ function ComplianceSettingsPage() {
 			) : null}
 
 			{activeTab === "exports" ? (
-				<section aria-label="Exports" className="space-y-4">
+				<section aria-label="Exports" className="space-y-8">
 					<Panel
 						title="Exports"
 						sub="Your data is yours. Export invoices as PDF or CSV/Excel anytime. Downloadable reports cover invoicing, customer balances, tax review, and a per-line accounting export."
 					>
 						<div>
-							<h3 className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-3">
-								Reports
-							</h3>
-							<div className="mt-3 grid gap-3 md:grid-cols-3">
+							<div className="flex items-center gap-3">
+								<h3 className="text-sm font-semibold text-ink">Reports</h3>
+								<span aria-hidden="true" className="h-px flex-1 bg-rule" />
+							</div>
+							<p className="mt-1.5 text-xs text-ink-3">
+								Download-ready files for your records and your accountant.
+							</p>
+							<div className="mt-4 grid gap-4 md:grid-cols-2">
 								<ExportCard
 									icon={ReceiptText}
 									title="Invoice report"
@@ -1264,18 +1318,11 @@ function ComplianceSettingsPage() {
 										Generate CSV
 									</Button>
 								</ExportCard>
-							</div>
-						</div>
-						<div className="mt-5">
-							<h3 className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-3">
-								Accounting &amp; tax files
-							</h3>
-							<div className="mt-3 grid gap-3 md:grid-cols-2">
 								<ExportCard
 									icon={Table2}
 									title="Accountant line export"
 									formats={["CSV", "Excel"]}
-									description="One row per invoice line for ledger posting; totals group by invoice."
+									description="One row per invoice line, grouped by invoice."
 								>
 									<Button
 										type="button"
@@ -1318,11 +1365,28 @@ function ComplianceSettingsPage() {
 										Generate Excel
 									</Button>
 								</ExportCard>
+							</div>
+						</div>
+						<div className="mt-8">
+							<div className="flex items-center gap-3">
+								<h3 className="text-sm font-semibold text-ink">
+									For importing into
+								</h3>
+								<span aria-hidden="true" className="h-px flex-1 bg-rule" />
+							</div>
+							<p className="mt-1.5 text-xs text-ink-3">
+								Files shaped for another system&apos;s import wizard. Check the
+								import notes before you upload.
+							</p>
+							<div className="mt-4 grid gap-4 md:grid-cols-3">
 								<ExportCard
 									icon={Landmark}
 									title="VAT sales data (Rev360)"
 									formats={["Excel"]}
-									description="Paste-ready rows for the official Rev360 Sales sheet; buyer Tax ID is 0 when unknown. Layout not verified against the live template."
+									tone="info"
+									description="Rows for the official Rev360 Sales sheet."
+									warning="Layout not verified"
+									note="Buyer Tax ID is 0 when unknown. The column layout has not been verified against the live Rev360 template, so check the first rows after you paste."
 								>
 									<Button
 										type="button"
@@ -1349,8 +1413,16 @@ function ComplianceSettingsPage() {
 									icon={FileSpreadsheet}
 									title="QuickBooks invoices (CSV)"
 									formats={["CSV"]}
-									description={
-										'One row per invoice line, dates DD/MM/YYYY. Custom invoice numbers survive only with "Custom transaction numbers" on in QuickBooks. Credit notes, discounted invoices, other currencies and rows without a customer are left out with a warning; at most 100 invoices / 1,000 rows per file.'
+									tone="info"
+									description="QuickBooks-ready invoice lines."
+									note={
+										<>
+											Dates are DD/MM/YYYY. Custom invoice numbers survive only
+											with &quot;Custom transaction numbers&quot; turned on in
+											QuickBooks. Credit notes, discounted invoices, other
+											currencies, and rows without a customer are skipped with a
+											warning. At most 100 invoices / 1,000 rows per file.
+										</>
 									}
 								>
 									<Button
@@ -1392,8 +1464,16 @@ function ComplianceSettingsPage() {
 									icon={FileSpreadsheet}
 									title="Zoho Books invoices (CSV)"
 									formats={["CSV"]}
-									description={
-										'One row per invoice line, dates DD/MM/YYYY. Leave "Auto-generate Invoice Numbers" off in the Zoho import wizard so Invoicly numbers survive. Credit notes, discounted invoices, other currencies and rows without a customer are left out with a warning; files over 10 MB are refused.'
+									tone="info"
+									description="Zoho Books-ready invoice lines."
+									note={
+										<>
+											Dates are DD/MM/YYYY. Leave &quot;Auto-generate Invoice
+											Numbers&quot; off in the Zoho import wizard so Invoicly
+											numbers survive. Credit notes, discounted invoices, other
+											currencies, and rows without a customer are skipped with a
+											warning. Files over 10 MB are refused.
+										</>
 									}
 								>
 									<Button
@@ -1451,38 +1531,38 @@ function ComplianceSettingsPage() {
 								role="region"
 								aria-label="Recent exports table"
 							>
-								<table className="w-full min-w-[680px] text-left text-sm">
+								<table className="w-full min-w-[720px] text-left text-sm">
 									<thead className="border-b border-rule text-xs uppercase tracking-[0.08em] text-ink-3">
 										<tr>
-											<th className="py-2.5 pr-4 font-medium">Export</th>
-											<th className="py-2.5 pr-4 font-medium">File</th>
-											<th className="py-2.5 pr-4 font-medium">Status</th>
-											<th className="py-2.5 pr-4 text-right font-medium">
+											<th className="py-3 pr-4 font-medium">Export</th>
+											<th className="py-3 pr-4 font-medium">File</th>
+											<th className="py-3 pr-4 font-medium">Status</th>
+											<th className="py-3 pr-4 text-right font-medium">
 												Created
 											</th>
-											<th className="py-2.5 text-right font-medium">Actions</th>
+											<th className="py-3 text-right font-medium">Actions</th>
 										</tr>
 									</thead>
 									<tbody className="divide-y divide-rule">
 										{visibleExports.map((record) => (
 											<tr key={record._id} className="text-ink-2">
-												<td className="py-2.5 pr-4 font-medium text-ink">
+												<td className="py-3.5 pr-4 font-medium text-ink">
 													{formatExportKind(record.kind)}
 												</td>
-												<td className="py-2.5 pr-4">
-													<span className="block max-w-[220px] truncate text-xs text-ink-3">
+												<td className="py-3.5 pr-4">
+													<span className="block max-w-[280px] truncate text-xs text-ink-2">
 														{record.fileName}
 													</span>
 												</td>
-												<td className="py-2.5 pr-4">
+												<td className="py-3.5 pr-4">
 													<StatusPill tone={exportStatusTone(record.status)}>
 														{record.status}
 													</StatusPill>
 												</td>
-												<td className="py-2.5 pr-4 text-right font-num text-xs tabular-nums">
+												<td className="py-3.5 pr-4 text-right font-num text-xs tabular-nums">
 													{formatExportDate(record.createdAt)}
 												</td>
-												<td className="py-2.5">
+												<td className="py-3.5">
 													<div className="flex justify-end gap-2">
 														<Button
 															type="button"
@@ -1493,21 +1573,23 @@ function ComplianceSettingsPage() {
 														>
 															Download
 														</Button>
-														<Button
-															type="button"
-															variant="outline"
-															size="sm"
-															className="border-rule bg-transparent"
-															onClick={async () => {
-																await retryExport({ id: record._id });
-																toast({
-																	title: "Export marked ready",
-																	variant: "success",
-																});
-															}}
-														>
-															Retry
-														</Button>
+														{isExportReady(record.status) ? null : (
+															<Button
+																type="button"
+																variant="outline"
+																size="sm"
+																className="border-rule bg-transparent"
+																onClick={async () => {
+																	await retryExport({ id: record._id });
+																	toast({
+																		title: "Export marked ready",
+																		variant: "success",
+																	});
+																}}
+															>
+																Retry
+															</Button>
+														)}
 													</div>
 												</td>
 											</tr>

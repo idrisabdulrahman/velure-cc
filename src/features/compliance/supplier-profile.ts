@@ -129,6 +129,32 @@ export function validateSupplierTin(value?: string | null): TinValidation {
 	return { ok: true, tin };
 }
 
+/**
+ * A stored TIN as a usable value: the trimmed identifier, or `undefined` when
+ * the stored string is blank or a BLOCKING placeholder (`tin_placeholder`).
+ *
+ * The profile save paths still REJECT placeholders. This helper exists for the
+ * invoice write boundary: the seller/buyer identity is server-derived from the
+ * stored workspace supplier profile / client row, so a legacy placeholder TIN
+ * already stored there would otherwise be written into the snapshot and then
+ * refused by `assertValidTin` — blocking every create with an error the user
+ * cannot fix from the invoice editor (e.g. a freelancer, whose TIN field is
+ * off). Treating a placeholder as "no TIN" lets the invoice be created; the
+ * profile stays flagged `needs_review` with `tin_placeholder`.
+ *
+ * A `tin_format` warning value (unconfirmed shape, SPEC 6.2 item 4) is kept —
+ * the write path already accepts it.
+ */
+export function storedTinOrUndefined(
+	value?: string | null,
+): string | undefined {
+	const tin = compact(value).replace(/\s+/g, "");
+	if (!tin) return undefined;
+	const result = validateSupplierTin(tin);
+	if (!result.ok && result.severity === "blocking") return undefined;
+	return result.ok ? result.tin : tin;
+}
+
 export type RcValidation =
 	| { ok: true; rcNumber: string }
 	| {

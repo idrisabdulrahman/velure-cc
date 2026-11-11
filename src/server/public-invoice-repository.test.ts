@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { getSupabaseAdminClient } from "#/server/supabase";
 import {
 	getInvoiceByToken,
+	isWellFormedPublicInvoiceToken,
 	recordPublicInvoiceView,
 } from "./public-invoice-repository";
 
@@ -232,5 +233,51 @@ describe("public invoice repository", () => {
 		expect(result).toEqual({ ok: true, alreadyTracked: true });
 		expect(from).not.toHaveBeenCalled();
 		expect(log).not.toHaveBeenCalled();
+	});
+
+	describe("isWellFormedPublicInvoiceToken", () => {
+		it("accepts the generated token shape and same-class values", () => {
+			for (const token of [
+				"pub-1b4e28ba-2fa1-11d2-883f-0016d3cca427",
+				"public-token",
+				"e2e-bogus-token-2b7d",
+			]) {
+				expect(isWellFormedPublicInvoiceToken(token), token).toBe(true);
+			}
+		});
+
+		it("rejects a null byte, path characters and an over-long value", () => {
+			for (const token of [
+				"",
+				"\0",
+				"pub-1/../x",
+				"a b",
+				"a?b",
+				"x".repeat(129),
+			]) {
+				expect(
+					isWellFormedPublicInvoiceToken(token),
+					JSON.stringify(token),
+				).toBe(false);
+			}
+		});
+	});
+
+	it("treats a malformed token as not-found without touching Supabase", async () => {
+		// Regression: a null byte made the RPC throw, so the route answered 500.
+		// The guard rejects it before the client is ever built.
+		const rpc = vi.fn(() => {
+			throw new Error("a malformed token must not reach the RPC");
+		});
+		vi.mocked(getSupabaseAdminClient).mockClear();
+		vi.mocked(getSupabaseAdminClient).mockReturnValue({ rpc } as never);
+
+		await expect(getInvoiceByToken("pub-1/../%00")).resolves.toBeNull();
+		await expect(recordPublicInvoiceView("\0")).resolves.toEqual({
+			ok: false,
+			alreadyTracked: false,
+		});
+		expect(rpc).not.toHaveBeenCalled();
+		expect(getSupabaseAdminClient).not.toHaveBeenCalled();
 	});
 });

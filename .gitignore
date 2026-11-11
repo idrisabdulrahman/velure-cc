@@ -22,6 +22,8 @@ __unconfig*
 tests/
 test-results/
 playwright-report/
+# Captured Playwright session (real cookie) - never commit.
+e2e/.auth/
 coverage/
 
 # Environment and secrets
@@ -77,6 +79,7 @@ GEMINI.md
 
 # AI workflows, prompts, generated contracts and analysis
 prompts/
+.bachs-research/
 EGM.md
 2026-11-05_DRIFT_REPORT.md
 build_plan.md

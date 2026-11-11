@@ -1,4 +1,7 @@
-import { composeSupplierAddress } from "./supplier-profile";
+import {
+	composeSupplierAddress,
+	storedTinOrUndefined,
+} from "./supplier-profile";
 import type { StructuredPostalAddress } from "./types";
 
 /**
@@ -58,7 +61,9 @@ function structuredPostalAddress(input: {
 /**
  * Seller identity from the workspace supplier profile. Composes the structured
  * address (street, LGA, state) and falls back to the legacy free-text address
- * only when every structured part is empty.
+ * only when every structured part is empty. A stored placeholder TIN is
+ * dropped (`storedTinOrUndefined`) so a legacy placeholder never becomes
+ * invoice identity and blocks creation.
  */
 export function supplierIdentityFromProfile(input: {
 	address?: string | null;
@@ -81,20 +86,23 @@ export function supplierIdentityFromProfile(input: {
 			lga: input.addressLga,
 			state: input.addressState,
 		}),
-		taxId: text(input.taxId),
+		taxId: storedTinOrUndefined(input.taxId),
 		rcNumber: text(input.rcNumber),
 		countryCode: text(input.countryCode),
 	};
 }
 
-/** Buyer identity from the workspace-scoped `clients` row. */
+/**
+ * Buyer identity from the workspace-scoped `clients` row. A stored placeholder
+ * TIN is dropped (`storedTinOrUndefined`) — same rule as the seller side.
+ */
 export function buyerIdentityFromClient(input: {
 	billingAddress?: string | null;
 	taxId?: string | null;
 }): DerivedPartyIdentity {
 	return {
 		address: text(input.billingAddress),
-		taxId: text(input.taxId),
+		taxId: storedTinOrUndefined(input.taxId),
 	};
 }
 

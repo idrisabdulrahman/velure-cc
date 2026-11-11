@@ -41,6 +41,7 @@ type ProductionOptions = {
 	emailAndPassword?: {
 		requireEmailVerification?: boolean;
 		onPasswordReset?: unknown;
+		sendResetPassword?: unknown;
 	};
 	emailVerification?: {
 		expiresIn?: number;
@@ -167,6 +168,15 @@ describe("production configuration", () => {
 
 	it("treats a completed password reset as proof of address ownership", () => {
 		expect(typeof production.emailAndPassword?.onPasswordReset).toBe(
+			"function",
+		);
+	});
+
+	it("exposes the reset-password callback /request-password-reset requires", () => {
+		// Without this callback Better Auth answers /request-password-reset with
+		// 400 "Reset password isn't enabled" instead of sending the mail - the
+		// production bug this assertion would have caught.
+		expect(typeof production.emailAndPassword?.sendResetPassword).toBe(
 			"function",
 		);
 	});

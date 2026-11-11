@@ -340,6 +340,7 @@ function NewProductPage() {
 
 							<div className="inline-flex items-center gap-2 text-sm text-ink-2">
 								<Switch
+									aria-label="Active"
 									checked={state.isActive}
 									onCheckedChange={(checked) =>
 										setState((prev) => ({ ...prev, isActive: checked }))

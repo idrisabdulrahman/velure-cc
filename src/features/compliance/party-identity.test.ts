@@ -62,6 +62,18 @@ describe("supplierIdentityFromProfile", () => {
 		expect(identity.countryCode).toBeUndefined();
 	});
 
+	it("drops a stored placeholder seller TIN (legacy data must not block creation)", () => {
+		// Live 2026-11-10: workspace "Fr35No Inc." stored tax_id = 1234567890,
+		// which the create path rejected with "placeholder TIN" even for a
+		// freelancer whose TIN field was off.
+		const identity = supplierIdentityFromProfile({ taxId: "1234567890" });
+		expect(identity.taxId).toBeUndefined();
+	});
+
+	it("keeps a format-warning seller TIN (unconfirmed shape is accepted)", () => {
+		expect(supplierIdentityFromProfile({ taxId: "12345" }).taxId).toBe("12345");
+	});
+
 	it("carries only the structured parts that exist (no city/postalZone invented)", () => {
 		expect(
 			supplierIdentityFromProfile({
@@ -77,15 +89,27 @@ describe("buyerIdentityFromClient", () => {
 		expect(
 			buyerIdentityFromClient({
 				billingAddress: "  2 Buyer Road  ",
-				taxId: " 9876543210 ",
+				taxId: " 8129473650 ",
 			}),
-		).toEqual({ address: "2 Buyer Road", taxId: "9876543210" });
+		).toEqual({ address: "2 Buyer Road", taxId: "8129473650" });
 	});
 
 	it("omits a blank address or tax id", () => {
 		expect(
 			buyerIdentityFromClient({ billingAddress: "", taxId: null }),
 		).toEqual({ address: undefined, taxId: undefined });
+	});
+
+	it("drops a stored placeholder TIN instead of carrying it into the invoice", () => {
+		expect(
+			buyerIdentityFromClient({
+				billingAddress: "2 Buyer Road",
+				taxId: "1234567890",
+			}),
+		).toEqual({ address: "2 Buyer Road", taxId: undefined });
+		expect(
+			buyerIdentityFromClient({ taxId: "0000000000" }).taxId,
+		).toBeUndefined();
 	});
 });
 

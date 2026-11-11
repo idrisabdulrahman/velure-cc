@@ -182,6 +182,25 @@ describe("rate limit store", () => {
 		expect(sharedRateLimitWindow("203.0.113.7/get-session")).toBe(10);
 	});
 
+	it("covers the reset-request endpoint Better Auth actually serves", async () => {
+		const { calls, pool } = stubPool({ rows: [] });
+		const store = createRateLimitStore({ pool, secret: SECRET });
+
+		// 1.4.9 exposes `/request-password-reset`; `/forget-password` never
+		// matches it, so without this entry the flood guard fell back to the
+		// per-isolate map and the DB-backed budget did not apply.
+		await store.get("203.0.113.7/request-password-reset");
+
+		expect(calls[0].values[2]).toBe(3600 * 1000);
+		expect(sharedRateLimitWindow("203.0.113.7/request-password-reset")).toBe(
+			3600,
+		);
+		expect(SHARED_RATE_LIMIT_CUSTOM_RULES["/request-password-reset*"]).toEqual({
+			window: 3600,
+			max: 5,
+		});
+	});
+
 	it("reads a credentialed entry back and coerces driver strings to numbers", async () => {
 		// `pg` returns int8 (bigint) as a string; the limiter needs a number.
 		const { pool } = stubPool({

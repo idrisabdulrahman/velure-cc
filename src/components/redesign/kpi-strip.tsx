@@ -42,7 +42,7 @@ export function Kpi({
 				{value}
 			</span>
 			{sub ? (
-				<span className="mt-[7px] block text-xs text-ink-3">{sub}</span>
+				<span className="mt-[7px] block text-xs text-ink-2">{sub}</span>
 			) : null}
 			{selected ? (
 				<span

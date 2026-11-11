@@ -7,9 +7,13 @@ import { expect, test } from "@playwright/test";
  *
  *   E2E_EMAIL=... E2E_PASSWORD=... pnpm test:e2e
  *
- * The spec is read-only. It signs in through the auth API (so the browser
- * context gets the session cookie), opens pages, measures, and never submits a
- * form or mutates data. The invoice builder is left unsaved.
+ * The session itself comes from `e2e/auth.setup.ts` (this file's `legacy-auth`
+ * project depends on `setup` and inherits its storage state). It used to sign
+ * in per test, which tripped Better Auth's 3-per-10s sign-in cap as soon as the
+ * whole suite ran together.
+ *
+ * The spec is read-only. It opens pages, measures, and never submits a form or
+ * mutates data. The invoice builder is left unsaved.
  */
 
 const EMAIL = process.env.E2E_EMAIL;
@@ -20,22 +24,21 @@ test.skip(
 	"Set E2E_EMAIL and E2E_PASSWORD to run the authenticated layout checks.",
 );
 
-async function signIn(page: import("@playwright/test").Page) {
-	const response = await page.context().request.post("/api/auth/sign-in/email", {
-		data: { email: EMAIL, password: PASSWORD },
-	});
-
-	expect(response.ok(), `sign-in failed: ${response.status()}`).toBe(true);
-}
-
-/** Signs in, then opens `path` with a session already in the cookie jar. */
+/** Opens `path` with the session already in the cookie jar. */
 async function openSignedIn(
 	page: import("@playwright/test").Page,
 	path: string,
 ) {
-	await page.goto("/auth", { waitUntil: "domcontentloaded" });
-	await signIn(page);
-	await page.goto(path, { waitUntil: "networkidle" });
+	// A transient session-lookup failure on the dev server can bounce an
+	// authenticated route to /auth; retry rather than fail the layout check.
+	for (let attempt = 0; attempt < 3; attempt++) {
+		await page.goto(path, { waitUntil: "networkidle" });
+		if (new URL(page.url()).pathname !== "/auth") return;
+		await page.waitForTimeout(2_000);
+	}
+	expect(new URL(page.url()).pathname, `kept landing on /auth`).not.toBe(
+		"/auth",
+	);
 }
 
 const PHONE_WIDTHS = [320, 375, 414] as const;

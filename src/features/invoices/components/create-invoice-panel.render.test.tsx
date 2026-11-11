@@ -150,3 +150,54 @@ describe("invoice editor rows", () => {
 		await act(async () => root.unmount());
 	});
 });
+
+/**
+ * The panel opens with `taxTreatment: "none"`, the same state a seller whose
+ * tax status charges no VAT lands in. The server still requires a unit, VAT
+ * category and goods/service code on every finalized line
+ * (`assertCustomerForIssueTransition` → `lineMissingClassification`), so the
+ * row must stay reachable in that state. It used to be hidden behind
+ * `isVatEnabled`, which made the server's rejection impossible to act on.
+ */
+describe("line classification on a no-VAT invoice", () => {
+	const oneLine = {
+		lineItems: [
+			{
+				name: "Solar panel",
+				quantity: 1,
+				price: 155,
+				unit: undefined,
+				classificationCode: undefined,
+			},
+		],
+	};
+
+	it("keeps the unit / VAT category / code controls reachable", async () => {
+		const container = document.createElement("div");
+		document.body.append(container);
+		const root = createRoot(container);
+		await act(async () => {
+			root.render(
+				<QueryClientProvider client={new QueryClient()}>
+					<CreateInvoicePanel initialDraft={oneLine} />
+				</QueryClientProvider>,
+			);
+		});
+
+		const toggle = [...container.querySelectorAll("button")].find((button) =>
+			button.textContent?.includes("Unit · Choose unit"),
+		);
+		expect(toggle).toBeDefined();
+		expect(toggle?.textContent).toContain("Code · Add code");
+		// The row used to carry `hidden` whenever the invoice charged no VAT.
+		expect(toggle?.className).not.toContain("hidden");
+
+		await act(async () => toggle?.click());
+
+		expect(container.textContent).toContain("Unit of measure");
+		expect(container.textContent).toContain("VAT category");
+		expect(container.textContent).toContain("Goods/service code");
+
+		await act(async () => root.unmount());
+	});
+});

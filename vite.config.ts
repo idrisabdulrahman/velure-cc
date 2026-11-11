@@ -1,7 +1,9 @@
+import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
+import type { Plugin } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
 
@@ -35,6 +37,31 @@ const workerOnlyAliases = isCloudflareWorker
 				"./src/server/pdf-stack.worker-stub.ts",
 		}
 	: undefined;
+
+/**
+ * The success-panel QR (`InvoiceQrCode`) is generated in the browser. The
+ * Node entry of `qrcode` evaluates `fs` and `pngjs` at module scope, so it must
+ * not be pulled into the Worker's server build.
+ *
+ * This has to be a plugin rather than a `resolve.alias` entry: an alias would
+ * also rewrite the **client** build of the same Worker build, shipping the
+ * throwing stub to the browser and silently breaking every QR.
+ */
+function qrCodeServerStub(): Plugin {
+	return {
+		name: "velure-qrcode-server-stub",
+		enforce: "pre",
+		resolveId(source) {
+			if (this.environment?.name === "client") return null;
+			if (source === "qrcode") {
+				return fileURLToPath(
+					new URL("./src/server/qr-code.worker-stub.ts", import.meta.url),
+				);
+			}
+			return null;
+		},
+	};
+}
 
 const config = defineConfig({
 	resolve: workerOnlyAliases ? { alias: workerOnlyAliases } : {},
@@ -91,6 +118,7 @@ const config = defineConfig({
 					rollupConfig: { external: [/^@sentry\//] },
 				})
 			: null,
+		isCloudflareWorker ? qrCodeServerStub() : null,
 		tsconfigPaths({ projects: ["./tsconfig.json"] }),
 		tailwindcss(),
 		!isTest ? tanstackStart() : null,
