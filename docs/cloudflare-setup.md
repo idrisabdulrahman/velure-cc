@@ -360,22 +360,35 @@ URL. R2 is greenfield, not a migration.
 7. Enabling R2 may require a payment method even for the free tier. If prompted,
    stop and tell the user.
 
-### PDF generation is a blocker (see §12 item 4)
+### PDF generation — resolved (2026-11-12)
 
-`src/server/pdf.ts` renders with `@react-pdf/renderer` (yoga WASM) and falls
-back to a hand-rolled plain-text PDF. Yoga WASM **fails on the Cloudflare
-runtime**; every PDF served today is the fallback. Options, to be decided with
-the user:
+The former blocker is closed. `src/server/pdf.ts` now renders a **native vector
+PDF with `pdf-lib`** (pure JavaScript, the built-in Helvetica faces, no WASM, no
+font files, no filesystem). It is drawn in `src/server/pdf-layout.ts` and mirrors
+the customer-facing HTML preview's `print` appearance one-for-one. The
+`@react-pdf/renderer` tree (yoga WASM, fontkit, pdfkit, brotli), its Worker
+alias/stub, and the hand-rolled plain-text fallback PDF were **deleted**: the
+fallback silently substituted a plain-text document, which is exactly the defect
+issue #4 reported.
 
-- accept the plain-text fallback (current behaviour, poor customer quality);
-- find a pure-JS PDF path that fits the size and CPU budgets;
-- generate client-side and upload through an authenticated function — the
-  browser pays the CPU, the server validates and stores once. Does not cover
-  server-initiated paths (recurring generation, scheduled send);
-- escalate.
+- Cost: one in-process render, no new external calls, ~+0.6 MiB uncompressed in
+  the Worker bundle (`pdf-lib` + `pako`) against ~2.6 MiB of removed react-pdf
+  chunks.
+- CPU (measured in Node, A4, 2-decimal NGN): ~3.3 ms for 1-3 line items, ~4.1 ms
+  for 5, ~7.2 ms for 12. Typical invoices sit inside the 10 ms free-plan CPU
+  budget; ~20 line items (~11 ms) do not. The follow-up that keeps large invoices
+  safe is the one AGENTS §9 already requires: **generate the PDF once at issue
+  time and store it in R2**, then serve the stored object.
+- No silent substitution: `renderInvoicePdf` throws on failure. The download
+  route returns a retryable `503 text/html`; the send path reports the failure
+  and keeps the invoice.
+- The mock/sandbox fiscalization marker printed only by the old fallback is gone
+  because the customer-facing preview does not show it either (parity), and
+  AGENTS §9 forbids implying NRS clearance.
 
-Whatever is chosen must preserve AGENTS §9: an issued invoice's PDF is generated
-once at issue and stored, mock/sandbox fiscalization stays labelled as mock.
+Whatever storage is added later must preserve AGENTS §9: an issued invoice's PDF
+is generated once at issue and stored; mock/sandbox fiscalization stays labelled
+as mock.
 
 ---
 
@@ -481,7 +494,9 @@ production `BETTER_AUTH_SECRET` locally; rotating it logs every user out.
 2. Sign-in or SSR CPU still over budget after the Durable Object work.
 3. The Supabase connection only works pooled (already the case here; confirm
    session mode behaves before Phase 2 is called done).
-4. PDF rendering cannot reach acceptable output on Workers free.
+4. PDF rendering cannot reach acceptable output on Workers free (resolved
+   2026-11-12 with `pdf-lib` — see §7; re-open only if typical invoices breach
+   the CPU budget).
 5. A destructive or irreversible action: deleting the Pages project, rotating a
    secret, touching production data, rewriting git history.
 6. The migration phase cannot be verified from evidence.
@@ -500,7 +515,7 @@ Recorded so the next agent does not re-derive them:
 | Build the DB client and auth instance per request | Already done, differently and better; see §5.2. Do not regress it. |
 | Fix sign-in CPU with lighter PBKDF2 hashing | Already tested with native scrypt: ~142 ms, 9/15. Use the Durable Object (§6.3). |
 | R2 migrates existing uploads | There are none; R2 is greenfield (§7). |
-| Module-scope imports are harmless | They are not. `@react-pdf/renderer` -> `@react-pdf/pdfkit` evaluates `new URL("./data/sRGB_IEC61966_2_1.icc", import.meta.url)` while its module initialises, and `import.meta.url` is not a URL in the Workers bundle. Because `src/server/pdf.ts` was imported statically by the invoice routes, that threw during server startup and **every route** returned `500 {"message":"HTTPError"}` - including `/api/auth/ok`. Fixed by loading the renderer lazily inside `renderInvoicePdf` (`getPdfRenderer`), so the failure stays on the PDF path where `renderFallbackPdf` already handles it. Any Node-only library reached from a route must be imported lazily. |
+| Module-scope imports are harmless | They are not. `@react-pdf/renderer` -> `@react-pdf/pdfkit` evaluates `new URL("./data/sRGB_IEC61966_2_1.icc", import.meta.url)` while its module initialises, and `import.meta.url` is not a URL in the Workers bundle. Because `src/server/pdf.ts` was imported statically by the invoice routes, that threw during server startup and **every route** returned `500 {"message":"HTTPError"}` - including `/api/auth/ok`. Fixed at the time by loading the renderer lazily inside `renderInvoicePdf` (`getPdfRenderer`), so the failure stayed on the PDF path where `renderFallbackPdf` handled it. (2026-11-12: that whole react-pdf stack was deleted — see §7 — so the lazy loader and fallback no longer exist. The rule stands: any Node-only library reached from a route must be imported lazily.) |
 
 ---
 
