@@ -162,6 +162,16 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	commitInvoiceNumber: "app-scoped",
 	workspaceNumberingLocked: "app-scoped",
 	assertSequenceCounterChangeAllowed: "app-scoped",
+	// invoice-balance.ts (WS3) — pure projection over an already-loaded invoice:
+	// derived status, net payable, collectible balance and overdue rule. No
+	// client, no query, no session.
+	COLLECTIBLE_STATUSES: "pure",
+	isCollectibleStatus: "pure",
+	invoiceNetPayable: "pure",
+	deliveredAtForInvoice: "pure",
+	deriveInvoiceStatus: "pure",
+	collectibleBalance: "pure",
+	isOverdueInvoice: "pure",
 	// invoices.ts
 	INVOICE_LIST_PAGE_SIZE: "pure",
 	getDerivedInvoiceStatus: "pure",

@@ -1,10 +1,10 @@
 import { emitActivation } from "#/server/observability";
 import type { Database, Json } from "#/types/database.types";
 import { recordInvoiceAudit } from "./audit-client";
+import { deriveInvoiceStatus, invoiceNetPayable } from "./invoice-balance";
 import { isInvoiceIssued } from "./invoice-numbering";
 import {
 	assertCustomerForIssueTransition,
-	getDerivedInvoiceStatus,
 	getById as getInvoiceById,
 } from "./invoices";
 import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
@@ -198,23 +198,7 @@ export function roundMoney(amount: number) {
 }
 
 export function invoiceAmount(invoice: InvoicePaymentState) {
-	if (invoice.compliance?.netPayable !== undefined) {
-		return Math.max(0, invoice.compliance.netPayable);
-	}
-	if (invoice.compliance?.grandTotal !== undefined) {
-		return Math.max(
-			0,
-			invoice.compliance.grandTotal -
-				(invoice.compliance.withholdingTaxAmount ?? 0),
-		);
-	}
-	return Math.max(
-		0,
-		(invoice.lineItems ?? []).reduce(
-			(sum, item) => sum + item.quantity * item.price,
-			0,
-		),
-	);
+	return invoiceNetPayable(invoice);
 }
 
 function currentPaymentAmount(invoice: InvoicePaymentState, total: number) {
@@ -224,39 +208,11 @@ function currentPaymentAmount(invoice: InvoicePaymentState, total: number) {
 	return invoice.status === "paid" ? total : 0;
 }
 
-function deliveredAtForInvoice(invoice: InvoicePaymentState) {
-	return (
-		invoice.deliveredAt ??
-		invoice.lifecycle?.emailDeliveredAt ??
-		invoice.lifecycle?.sentAt ??
-		(invoice.status && invoice.status !== "draft"
-			? invoice.updatedAt
-			: undefined)
-	);
-}
-
 export function derivedPaymentStatus(
 	invoice: InvoicePaymentState,
 	now = Date.now(),
 ) {
-	const total = invoiceAmount(invoice);
-	const paid = currentPaymentAmount(invoice, total);
-
-	if (invoice.canceledAt || invoice.status === "canceled") return "canceled";
-	if (total > 0 && paid >= total) return "paid";
-	if (paid > 0 && paid < total) return "partially-paid";
-	if (!deliveredAtForInvoice(invoice)) return "draft";
-
-	const dueDate = invoice.dueDate
-		? new Date(`${invoice.dueDate}T00:00:00`)
-		: null;
-	if (dueDate && !Number.isNaN(dueDate.getTime())) {
-		const today = new Date(now);
-		today.setHours(0, 0, 0, 0);
-		if (dueDate.getTime() < today.getTime()) return "overdue";
-	}
-
-	return "unpaid";
+	return deriveInvoiceStatus(invoice, new Date(now));
 }
 
 export function getInvoicePaymentSnapshot(
@@ -494,7 +450,7 @@ export async function recordPayment(
 		client,
 		workspaceId,
 		invoice,
-		getDerivedInvoiceStatus(invoice),
+		deriveInvoiceStatus(invoice),
 		payment.isPaid ? "paid" : "partially-paid",
 	);
 

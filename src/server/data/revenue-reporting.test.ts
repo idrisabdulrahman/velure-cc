@@ -343,6 +343,53 @@ describe("revenue reporting excludes unbilled documents", () => {
 		]);
 	});
 
+	it("groups invoices without a customer under Unknown customer and counts their open balance", () => {
+		const report = buildRevenueCashFlowReport({
+			baseCurrency: "NGN",
+			now,
+			window,
+			invoices: [
+				testInvoice({ _id: "unassigned", customerName: "" }),
+				testInvoice({ _id: "assigned", customerName: "Acme Ltd" }),
+			],
+			payments: [],
+		});
+
+		const unknown = report.topCustomers.find(
+			(customer) => customer.customerName === "Unknown customer",
+		);
+		expect(unknown).toMatchObject({
+			invoiceCount: 1,
+			openInvoiceCount: 1,
+			outstandingAmount: 1_000,
+		});
+	});
+
+	it("reports a paid-up customer with zero open invoices", () => {
+		const report = buildRevenueCashFlowReport({
+			baseCurrency: "NGN",
+			now,
+			window,
+			invoices: [
+				testInvoice({
+					_id: "settled",
+					customerName: "Settled Ltd",
+					paymentAmount: 1_000,
+					paidAt: Date.parse("2026-06-10T00:00:00.000Z"),
+				}),
+			],
+			payments: [],
+		});
+
+		const settled = report.topCustomers.find(
+			(customer) => customer.customerName === "Settled Ltd",
+		);
+		expect(settled).toMatchObject({
+			outstandingAmount: 0,
+			openInvoiceCount: 0,
+		});
+	});
+
 	it("adds a debit note to billed revenue and its receivable balance", () => {
 		const report = buildRevenueCashFlowReport({
 			baseCurrency: "NGN",

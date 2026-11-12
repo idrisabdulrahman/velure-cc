@@ -1,3 +1,11 @@
+import {
+	collectibleBalance,
+	deliveredAtForInvoice,
+	deriveInvoiceStatus,
+	invoiceNetPayable,
+	isCollectibleStatus,
+	isOverdueInvoice,
+} from "./invoice-balance";
 import { getById as getInvoiceById } from "./invoices";
 import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
 
@@ -208,30 +216,23 @@ export function buyerEmailForInvoice(invoice: { compliance?: unknown }) {
 	return compliance.buyer?.email?.trim().toLowerCase() ?? "";
 }
 
-function isReminderInvoiceOverdue(invoice: {
-	status?: string;
-	dueDate?: string;
-}) {
-	if (invoice.status === "paid" || invoice.status === "canceled") return false;
-	const dueDate = new Date(`${invoice.dueDate}T00:00:00`);
-	if (Number.isNaN(dueDate.getTime())) return invoice.status === "overdue";
-	const today = new Date();
-	today.setHours(0, 0, 0, 0);
-	return invoice.status === "overdue" || dueDate < today;
-}
-
 function isInReminderWindow(
 	invoice: {
 		status?: string;
 		dueDate?: string;
 		reminder?: { paused?: boolean };
-		lifecycle?: { sentAt?: number };
+		lifecycle?: { sentAt?: number; emailDeliveredAt?: number } | null;
+		deliveredAt?: number;
+		finalizedAt?: number;
+		updatedAt?: number;
 	},
 	daysBeforeDue: number,
 ) {
-	if (invoice.status === "paid" || invoice.status === "canceled") return false;
+	if (!isCollectibleStatus(invoice.status)) return false;
 	if (invoice.reminder?.paused) return false;
-	if (!invoice.lifecycle?.sentAt) return false;
+	// Delivery evidence, not just `lifecycle.sentAt`: an invoice stamped
+	// delivered through `delivered_at` / `finalized_at` is remindable too.
+	if (deliveredAtForInvoice(invoice) === undefined) return false;
 	const dueDate = new Date(`${invoice.dueDate}T00:00:00`);
 	if (Number.isNaN(dueDate.getTime())) return false;
 	const today = new Date();
@@ -344,11 +345,12 @@ export async function getCollectionOverview(
 
 	const daysBeforeDue = Math.max(0, Math.floor(args.daysBeforeDue ?? 3));
 	const limit = Math.min(Math.max(Math.floor(args.limit ?? 100), 10), 200);
+	const now = new Date();
 
 	const { data, error } = await client
 		.from("invoices")
 		.select(
-			"id, invoice_number, customer_name, due_date, status, reminder, lifecycle, compliance, workspace_id",
+			"id, invoice_number, customer_name, due_date, status, payment_amount, delivered_at, finalized_at, canceled_at, updated_at, reminder, lifecycle, compliance, line_items, workspace_id",
 		)
 		.eq("workspace_id", workspaceId)
 		.order("created_at", { ascending: false });
@@ -366,6 +368,16 @@ export async function getCollectionOverview(
 		customerName: string;
 		dueDate: string | null;
 		status: string;
+		netPayable: number;
+		balance: number;
+		overdue: boolean;
+		missingEmail: boolean;
+		pausedOrManual: boolean;
+		paymentAmount: number;
+		deliveredAt: number | undefined;
+		finalizedAt: number | undefined;
+		canceledAt: number | undefined;
+		updatedAt: number | undefined;
 		reminder: unknown;
 		lifecycle: unknown;
 		compliance: unknown;
@@ -374,40 +386,75 @@ export async function getCollectionOverview(
 	for (const row of data ?? []) {
 		const invoice = {
 			status: row.status,
-			dueDate: row.due_date,
+			dueDate: row.due_date ?? undefined,
+			paymentAmount: Number(row.payment_amount ?? 0),
+			deliveredAt: epoch(row.delivered_at),
+			finalizedAt: epoch(row.finalized_at),
+			canceledAt: epoch(row.canceled_at),
+			updatedAt: epoch(row.updated_at),
 			reminder: (row.reminder ?? undefined) as
 				| { paused?: boolean; escalationStatus?: string }
 				| undefined,
 			lifecycle: (row.lifecycle ?? undefined) as
-				| { sentAt?: number }
+				| { sentAt?: number; emailDeliveredAt?: number }
 				| undefined,
 			compliance: row.compliance ?? undefined,
+			lineItems: Array.isArray(row.line_items)
+				? (row.line_items as Array<{ quantity: number; price: number }>)
+				: undefined,
 		};
-		const isActiveInvoice =
-			invoice.status !== "paid" && invoice.status !== "canceled";
-		const missingBuyerEmail = isActiveInvoice && !buyerEmailForInvoice(invoice);
-		const pausedOrManual =
-			invoice.reminder?.paused ||
-			invoice.reminder?.escalationStatus === "manual_review";
 
-		if (isReminderInvoiceOverdue(invoice)) stats.overdueCount += 1;
+		// The row is reconciled against the live invoice: status, amount and
+		// overdue all come from the one WS3 authority, so the queue can never
+		// show a stale "Draft" or the gross grandTotal.
+		const derivedStatus = deriveInvoiceStatus(invoice, now);
+		const netPayable = invoiceNetPayable(invoice);
+		const balance = collectibleBalance(invoice);
+		const overdue = isOverdueInvoice(invoice, now);
+		const collectible = isCollectibleStatus(derivedStatus);
+		const missingBuyerEmail = collectible && !buyerEmailForInvoice(invoice);
+		const pausedOrManual =
+			collectible &&
+			Boolean(
+				invoice.reminder?.paused ||
+					invoice.reminder?.escalationStatus === "manual_review",
+			);
+
+		if (overdue) stats.overdueCount += 1;
 		if (missingBuyerEmail) stats.missingEmailCount += 1;
 		if (pausedOrManual) stats.pausedOrManualCount += 1;
 		if (
-			isInReminderWindow(invoice, daysBeforeDue) &&
+			isInReminderWindow(
+				{ ...invoice, status: derivedStatus },
+				daysBeforeDue,
+			) &&
 			!missingBuyerEmail &&
 			!pausedOrManual
 		) {
 			stats.actionableCount += 1;
 		}
 
-		if (isActiveInvoice && activeInvoices.length < limit) {
+		// The list keeps drafts (so the "Draft" pill and its explanation stay
+		// useful) but drops paid and canceled rows, which are not a collection
+		// concern. `scheduled` (an issued-but-deferred invoice) is kept.
+		const isListable = derivedStatus !== "paid" && derivedStatus !== "canceled";
+		if (isListable && activeInvoices.length < limit) {
 			activeInvoices.push({
 				id: row.id,
 				invoiceNumber: row.invoice_number,
 				customerName: row.customer_name,
 				dueDate: row.due_date,
-				status: row.status,
+				status: derivedStatus,
+				netPayable,
+				balance,
+				overdue,
+				missingEmail: missingBuyerEmail,
+				pausedOrManual,
+				paymentAmount: invoice.paymentAmount,
+				deliveredAt: invoice.deliveredAt,
+				finalizedAt: invoice.finalizedAt,
+				canceledAt: invoice.canceledAt,
+				updatedAt: invoice.updatedAt,
 				reminder: row.reminder,
 				lifecycle: row.lifecycle,
 				compliance: row.compliance,
@@ -755,29 +802,44 @@ export async function runReminderBatch(
 	const rule = (await currentRule(client, userId)) ?? defaultRule(userId);
 	const { data, error } = await client
 		.from("invoices")
-		.select("id, status, due_date, reminder, lifecycle, compliance")
+		.select(
+			"id, status, due_date, payment_amount, delivered_at, finalized_at, canceled_at, updated_at, reminder, lifecycle, compliance, line_items",
+		)
 		.eq("workspace_id", workspaceId);
 	if (error) throw error;
 	let queuedCount = 0;
 	const escalatedCount = 0;
+	const now = new Date();
 	for (const row of data ?? []) {
 		const invoice = {
 			id: row.id,
 			status: row.status,
 			dueDate: row.due_date ?? "",
+			paymentAmount: Number(row.payment_amount ?? 0),
+			deliveredAt: epoch(row.delivered_at),
+			finalizedAt: epoch(row.finalized_at),
+			canceledAt: epoch(row.canceled_at),
+			updatedAt: epoch(row.updated_at),
 			reminder: row.reminder as { paused?: boolean } | null,
-			lifecycle: row.lifecycle as { sentAt?: number } | null,
+			lifecycle: row.lifecycle as {
+				sentAt?: number;
+				emailDeliveredAt?: number;
+			} | null,
 			compliance: row.compliance,
+			lineItems: Array.isArray(row.line_items)
+				? (row.line_items as Array<{ quantity: number; price: number }>)
+				: undefined,
 		};
+		// Shared rule: only collectible, delivered invoices are reminded. A draft
+		// (never delivered) and a paid/canceled/scheduled row are skipped.
 		if (
 			!rule.enabled ||
 			invoice.reminder?.paused ||
-			invoice.status === "paid" ||
-			invoice.status === "canceled" ||
-			!invoice.lifecycle?.sentAt ||
-			!buyerEmailForInvoice(invoice)
+			!isCollectibleStatus(deriveInvoiceStatus(invoice, now)) ||
+			!deliveredAtForInvoice(invoice)
 		)
 			continue;
+		if (!buyerEmailForInvoice(invoice)) continue;
 		const dueAt = Date.parse(`${invoice.dueDate}T00:00:00Z`);
 		const diffDays = Math.floor(
 			(dueAt - Date.parse(`${today}T00:00:00Z`)) / 86400000,
