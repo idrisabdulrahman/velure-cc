@@ -115,6 +115,11 @@ type InvoicePaymentState = {
 	paymentAmount?: number;
 	status?: string;
 	deliveredAt?: number;
+	// A scheduled send is not yet issued: `deriveInvoiceStatus` reports the
+	// `scheduled` state while both columns are present, and any payment path
+	// must refuse it (P0).
+	scheduledAt?: number;
+	scheduleVersion?: string;
 	lifecycle?: {
 		emailDeliveredAt?: number;
 		sentAt?: number;
@@ -237,6 +242,13 @@ export function payableInvoiceIssue(
 		return "Payments are not enabled for credit or debit notes.";
 	}
 	const { status, balance } = getInvoicePaymentSnapshot(invoice);
+	// P0 — a scheduled invoice has deferred its send, so it is not issued and
+	// nothing may be collected or recorded against it. Check both the derived
+	// snapshot status and the projected/stored status, because a public
+	// projection may carry the `scheduled` status without the schedule columns
+	// that the snapshot deriver needs.
+	if (status === "scheduled" || invoice.status === "scheduled")
+		return "Scheduled invoices are not payable until they are issued.";
 	// `allowDraft` is for the owner's manual "Mark as paid" only — an unsent
 	// draft can still be settled offline. Public payment context and the
 	// Paystack transfer-charge path keep blocking drafts: nobody should be
@@ -700,6 +712,11 @@ export function rawRowToInvoiceState(
 					: undefined,
 		status: typeof row.status === "string" ? (row.status as string) : undefined,
 		deliveredAt: epoch(row.delivered_at as string | null | undefined),
+		scheduledAt: epoch(row.scheduled_at as string | null | undefined),
+		scheduleVersion:
+			typeof row.schedule_version === "string"
+				? (row.schedule_version as string)
+				: undefined,
 		lifecycle: (row.lifecycle as InvoicePaymentState["lifecycle"]) ?? {},
 		canceledAt: epoch(row.canceled_at as string | null | undefined),
 		dueDate:

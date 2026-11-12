@@ -18,6 +18,8 @@ type InvoiceLike = {
 	paymentAmount?: number;
 	paidAt?: number;
 	deliveredAt?: number;
+	scheduledAt?: number;
+	scheduleVersion?: string;
 	canceledAt?: number;
 	updatedAt?: number;
 	lifecycle?: {
@@ -404,6 +406,9 @@ export function buildRevenueCashFlowReport({
 		// Drafts are not issued, so they are not "billed": an unsent draft must
 		// not inflate billed revenue, outstanding balances, or product sales.
 		if (status === "draft") continue;
+		// A scheduled invoice is issued-but-deferred: it is not billed until its
+		// scheduled send runs and clears `scheduledAt`/`scheduleVersion`.
+		if (status === "scheduled") continue;
 
 		const documentType = invoice.documentType ?? "standard";
 		// A pro-forma is a quote, not a bill, so it never enters the report.

@@ -167,6 +167,8 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	// client, no query, no session.
 	COLLECTIBLE_STATUSES: "pure",
 	isCollectibleStatus: "pure",
+	isCollectibleDocument: "pure",
+	isCollectibleInvoice: "pure",
 	invoiceNetPayable: "pure",
 	deliveredAtForInvoice: "pure",
 	deriveInvoiceStatus: "pure",

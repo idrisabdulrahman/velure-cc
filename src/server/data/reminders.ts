@@ -3,6 +3,8 @@ import {
 	deliveredAtForInvoice,
 	deriveInvoiceStatus,
 	invoiceNetPayable,
+	isCollectibleDocument,
+	isCollectibleInvoice,
 	isCollectibleStatus,
 	isOverdueInvoice,
 } from "./invoice-balance";
@@ -219,6 +221,7 @@ export function buyerEmailForInvoice(invoice: { compliance?: unknown }) {
 function isInReminderWindow(
 	invoice: {
 		status?: string;
+		documentType?: string;
 		dueDate?: string;
 		reminder?: { paused?: boolean };
 		lifecycle?: { sentAt?: number; emailDeliveredAt?: number } | null;
@@ -228,6 +231,9 @@ function isInReminderWindow(
 	},
 	daysBeforeDue: number,
 ) {
+	// A pro-forma or correction document is never a bill, so it is never
+	// reminded; the same document-type gate the balances use.
+	if (!isCollectibleDocument(invoice)) return false;
 	if (!isCollectibleStatus(invoice.status)) return false;
 	if (invoice.reminder?.paused) return false;
 	// Delivery evidence, not just `lifecycle.sentAt`: an invoice stamped
@@ -350,7 +356,7 @@ export async function getCollectionOverview(
 	const { data, error } = await client
 		.from("invoices")
 		.select(
-			"id, invoice_number, customer_name, due_date, status, payment_amount, delivered_at, finalized_at, canceled_at, updated_at, reminder, lifecycle, compliance, line_items, workspace_id",
+			"id, invoice_number, customer_name, due_date, status, document_type, payment_amount, scheduled_at, schedule_version, delivered_at, finalized_at, canceled_at, updated_at, reminder, lifecycle, compliance, line_items, workspace_id",
 		)
 		.eq("workspace_id", workspaceId)
 		.order("created_at", { ascending: false });
@@ -386,8 +392,15 @@ export async function getCollectionOverview(
 	for (const row of data ?? []) {
 		const invoice = {
 			status: row.status,
+			documentType:
+				typeof row.document_type === "string" ? row.document_type : undefined,
 			dueDate: row.due_date ?? undefined,
 			paymentAmount: Number(row.payment_amount ?? 0),
+			scheduledAt: epoch(row.scheduled_at),
+			scheduleVersion:
+				typeof row.schedule_version === "string"
+					? row.schedule_version
+					: undefined,
 			deliveredAt: epoch(row.delivered_at),
 			finalizedAt: epoch(row.finalized_at),
 			canceledAt: epoch(row.canceled_at),
@@ -411,7 +424,7 @@ export async function getCollectionOverview(
 		const netPayable = invoiceNetPayable(invoice);
 		const balance = collectibleBalance(invoice);
 		const overdue = isOverdueInvoice(invoice, now);
-		const collectible = isCollectibleStatus(derivedStatus);
+		const collectible = isCollectibleInvoice(invoice, now);
 		const missingBuyerEmail = collectible && !buyerEmailForInvoice(invoice);
 		const pausedOrManual =
 			collectible &&
@@ -803,7 +816,7 @@ export async function runReminderBatch(
 	const { data, error } = await client
 		.from("invoices")
 		.select(
-			"id, status, due_date, payment_amount, delivered_at, finalized_at, canceled_at, updated_at, reminder, lifecycle, compliance, line_items",
+			"id, status, document_type, due_date, payment_amount, scheduled_at, schedule_version, delivered_at, finalized_at, canceled_at, updated_at, reminder, lifecycle, compliance, line_items",
 		)
 		.eq("workspace_id", workspaceId);
 	if (error) throw error;
@@ -814,8 +827,15 @@ export async function runReminderBatch(
 		const invoice = {
 			id: row.id,
 			status: row.status,
+			documentType:
+				typeof row.document_type === "string" ? row.document_type : undefined,
 			dueDate: row.due_date ?? "",
 			paymentAmount: Number(row.payment_amount ?? 0),
+			scheduledAt: epoch(row.scheduled_at),
+			scheduleVersion:
+				typeof row.schedule_version === "string"
+					? row.schedule_version
+					: undefined,
 			deliveredAt: epoch(row.delivered_at),
 			finalizedAt: epoch(row.finalized_at),
 			canceledAt: epoch(row.canceled_at),
@@ -831,11 +851,12 @@ export async function runReminderBatch(
 				: undefined,
 		};
 		// Shared rule: only collectible, delivered invoices are reminded. A draft
-		// (never delivered) and a paid/canceled/scheduled row are skipped.
+		// (never delivered), a pro-forma/correction document and a
+		// paid/canceled/scheduled row are skipped.
 		if (
 			!rule.enabled ||
 			invoice.reminder?.paused ||
-			!isCollectibleStatus(deriveInvoiceStatus(invoice, now)) ||
+			!isCollectibleInvoice(invoice, now) ||
 			!deliveredAtForInvoice(invoice)
 		)
 			continue;

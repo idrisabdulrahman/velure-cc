@@ -8,9 +8,10 @@ import type { InvoiceStatus } from "#/features/invoices/types";
  *
  * - **Collectible/open balance** = `netPayable − paymentAmount`, floored at 0,
  *   and only for derived statuses in `COLLECTIBLE_STATUSES`
- *   (`unpaid`, `partially-paid`, `overdue`). Drafts, scheduled, canceled,
- *   pro-formas and correction documents are never open. Drafts are reported as
- *   a separate figure by each surface.
+ *   (`unpaid`, `partially-paid`, `overdue`) **and** for collectible document
+ *   types (`standard` only). Drafts, scheduled, canceled, pro-formas and
+ *   correction documents (credit/debit notes) are never open. Drafts are
+ *   reported as a separate figure by each surface.
  * - **Overdue** = collectible balance > 0 AND the due date is past AND there is
  *   delivery evidence (`deliveredAt` / `lifecycle.emailDeliveredAt` /
  *   `lifecycle.sentAt` / `finalizedAt`, plus the guarded `updatedAt` fallback
@@ -25,6 +26,11 @@ import type { InvoiceStatus } from "#/features/invoices/types";
 
 export type CollectibleInvoice = {
 	status?: string;
+	/**
+	 * `documentType` decides whether a document can ever open a collectible
+	 * balance. Undefined is treated as `"standard"`.
+	 */
+	documentType?: string;
 	canceledAt?: number;
 	scheduledAt?: number;
 	scheduleVersion?: unknown;
@@ -150,6 +156,32 @@ export function isCollectibleStatus(status: string | undefined): boolean {
 	return status !== undefined && COLLECTIBLE_STATUSES.has(status);
 }
 
+/**
+ * Only a standard invoice can open a collectible balance. A pro-forma is a
+ * quote (a "sold pro-forma" becomes a standard invoice on acceptance), and a
+ * credit/debit note is a correction against another document rather than a
+ * bill of its own. An undefined type is treated as `"standard"`.
+ */
+export function isCollectibleDocument(invoice: {
+	documentType?: string;
+}): boolean {
+	return (invoice.documentType ?? "standard") === "standard";
+}
+
+/**
+ * True when an invoice both is a collectible document type AND derives a
+ * collectible status. This is the single gate every surface shares.
+ */
+export function isCollectibleInvoice(
+	invoice: CollectibleInvoice,
+	now: Date = new Date(),
+): boolean {
+	return (
+		isCollectibleDocument(invoice) &&
+		isCollectibleStatus(deriveInvoiceStatus(invoice, now))
+	);
+}
+
 export function deriveInvoiceStatus(
 	invoice: CollectibleInvoice,
 	now: Date = new Date(),
@@ -167,12 +199,13 @@ export function deriveInvoiceStatus(
 }
 
 /**
- * `netPayable − paymentAmount`, floored at 0. Zero unless the derived status is
- * collectible, so a draft, scheduled, canceled, pro-forma or correction
- * document can never contribute an open balance.
+ * `netPayable − paymentAmount`, floored at 0. Zero unless the document is a
+ * collectible type (a standard invoice) AND the derived status is collectible,
+ * so a draft, scheduled, canceled, pro-forma or correction document can never
+ * contribute an open balance.
  */
 export function collectibleBalance(invoice: CollectibleInvoice): number {
-	if (!isCollectibleStatus(deriveInvoiceStatus(invoice))) return 0;
+	if (!isCollectibleInvoice(invoice)) return 0;
 	return Math.max(
 		0,
 		invoiceNetPayable(invoice) - paymentAmountForInvoice(invoice),
@@ -187,7 +220,7 @@ export function isOverdueInvoice(
 	invoice: CollectibleInvoice,
 	now: Date = new Date(),
 ): boolean {
-	if (!isCollectibleStatus(deriveInvoiceStatus(invoice, now))) return false;
+	if (!isCollectibleInvoice(invoice, now)) return false;
 	if (collectibleBalance(invoice) <= 0) return false;
 	return (
 		isPastDue(invoice, now) && deliveredAtForInvoice(invoice) !== undefined

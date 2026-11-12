@@ -390,7 +390,7 @@ describe("revenue reporting excludes unbilled documents", () => {
 		});
 	});
 
-	it("adds a debit note to billed revenue and its receivable balance", () => {
+	it("adds a debit note to billed revenue without opening its own receivable", () => {
 		const report = buildRevenueCashFlowReport({
 			baseCurrency: "NGN",
 			now,
@@ -410,15 +410,65 @@ describe("revenue reporting excludes unbilled documents", () => {
 
 		expect(report.primaryCurrency).toMatchObject({
 			billedAmount: 1_500,
-			outstandingAmount: 1_500,
+			// A debit note is a correction document: it adjusts billed revenue but,
+			// per the shared collectible rule, opens no receivable of its own.
+			outstandingAmount: 1_000,
 			invoiceCount: 2,
-			openInvoiceCount: 2,
+			openInvoiceCount: 1,
 		});
 		expect(report.topProducts[0]).toMatchObject({
 			productId: "p1",
 			revenue: 1_500,
 			quantitySold: 2,
 			invoiceCount: 2,
+		});
+	});
+
+	it("does not bill a scheduled invoice until its send runs", () => {
+		const scheduled = testInvoice({
+			_id: "scheduled",
+			scheduledAt: Date.parse("2026-07-01T00:00:00.000Z"),
+			scheduleVersion: "v1",
+			deliveredAt: undefined,
+			lineItems: [{ name: "Item", quantity: 1, price: 1_000, productId: "p1" }],
+		});
+
+		const before = buildRevenueCashFlowReport({
+			baseCurrency: "NGN",
+			now,
+			window,
+			invoices: [scheduled],
+			payments: [],
+		});
+		expect(before.primaryCurrency).toMatchObject({
+			billedAmount: 0,
+			outstandingAmount: 0,
+			invoiceCount: 0,
+		});
+		expect(before.timeline).toHaveLength(0);
+		expect(before.topProducts).toHaveLength(0);
+
+		// Issuance clears the schedule columns and stamps delivery, so the same
+		// invoice now contributes billed revenue and an open balance.
+		const after = buildRevenueCashFlowReport({
+			baseCurrency: "NGN",
+			now,
+			window,
+			invoices: [
+				testInvoice({
+					_id: "scheduled",
+					deliveredAt: Date.parse("2026-06-05T00:00:00.000Z"),
+					lineItems: [
+						{ name: "Item", quantity: 1, price: 1_000, productId: "p1" },
+					],
+				}),
+			],
+			payments: [],
+		});
+		expect(after.primaryCurrency).toMatchObject({
+			billedAmount: 1_000,
+			outstandingAmount: 1_000,
+			invoiceCount: 1,
 		});
 	});
 });

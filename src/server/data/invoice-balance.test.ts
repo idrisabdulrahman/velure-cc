@@ -4,6 +4,8 @@ import {
 	deliveredAtForInvoice,
 	deriveInvoiceStatus,
 	invoiceNetPayable,
+	isCollectibleDocument,
+	isCollectibleInvoice,
 	isCollectibleStatus,
 	isOverdueInvoice,
 } from "./invoice-balance";
@@ -207,6 +209,68 @@ describe("collectibleBalance", () => {
 				compliance: { netPayable: 1_000 },
 			}),
 		).toBe(0);
+	});
+
+	it("is zero for an issued pro-forma and for credit/debit notes", () => {
+		const issued = {
+			status: "unpaid",
+			dueDate: "2026-06-01",
+			deliveredAt: delivered,
+			paymentAmount: 0,
+			compliance: { netPayable: 1_000 },
+		};
+		// The standard invoice of the same shape is collectible, proving the
+		// document type — not the amount — is what zeroes the others.
+		expect(collectibleBalance({ ...issued })).toBe(1_000);
+		for (const documentType of [
+			"proforma",
+			"credit_note",
+			"debit_note",
+		] as const) {
+			expect(collectibleBalance({ ...issued, documentType })).toBe(0);
+		}
+	});
+
+	it("is zero for a scheduled invoice even when it derives an open status", () => {
+		expect(
+			collectibleBalance({
+				scheduledAt: delivered,
+				scheduleVersion: "v1",
+				paymentAmount: 0,
+				compliance: { netPayable: 1_000 },
+			}),
+		).toBe(0);
+	});
+});
+
+describe("isCollectibleDocument / isCollectibleInvoice", () => {
+	const issued = {
+		status: "unpaid",
+		dueDate: "2026-06-01",
+		deliveredAt: delivered,
+		paymentAmount: 0,
+		compliance: { netPayable: 1_000 },
+	};
+
+	it("treats a missing type as standard and only standard as collectible", () => {
+		expect(isCollectibleDocument({})).toBe(true);
+		expect(isCollectibleDocument({ documentType: "standard" })).toBe(true);
+		for (const documentType of ["proforma", "credit_note", "debit_note"]) {
+			expect(isCollectibleDocument({ documentType })).toBe(false);
+		}
+	});
+
+	it("requires both a collectible type and a collectible status", () => {
+		expect(isCollectibleInvoice(issued, now)).toBe(true);
+		expect(
+			isCollectibleInvoice({ ...issued, documentType: "credit_note" }, now),
+		).toBe(false);
+		expect(
+			isCollectibleInvoice(
+				{ ...issued, status: "draft", deliveredAt: undefined },
+				now,
+			),
+		).toBe(false);
 	});
 });
 

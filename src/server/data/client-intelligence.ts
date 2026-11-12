@@ -3,7 +3,7 @@ import {
 	deliveredAtForInvoice,
 	deriveInvoiceStatus,
 	invoiceNetPayable,
-	isCollectibleStatus,
+	isCollectibleInvoice,
 } from "./invoice-balance";
 
 type ClientLike = {
@@ -21,6 +21,7 @@ type InvoiceLike = {
 	issueDate: string;
 	dueDate: string;
 	status?: string;
+	documentType?: string;
 	paymentAmount?: number;
 	paidAt?: number;
 	deliveredAt?: number;
@@ -152,10 +153,11 @@ export function buildClientIntelligence({
 		bucket.paidRevenue += Math.min(paymentAmount, total);
 		bucket.invoiceCount += 1;
 		if (status === "paid") bucket.paidInvoiceCount += 1;
-		if (isCollectibleStatus(status)) {
-			// Only collectible statuses (unpaid / partially-paid / overdue)
-			// contribute to the client's outstanding balance. Drafts, scheduled
-			// and canceled documents are never owed.
+		if (isCollectibleInvoice(invoice, now)) {
+			// Only collectible documents (a standard invoice deriving unpaid /
+			// partially-paid / overdue) contribute to the client's outstanding
+			// balance. Drafts, scheduled, canceled, pro-formas and correction
+			// documents are never owed.
 			bucket.outstandingBalance += balance;
 			if (hasOverdueBalance(invoice, balance, now))
 				bucket.overdueInvoiceCount += 1;
@@ -347,7 +349,9 @@ export function buildCustomerStatement({
 
 		const total = invoiceTotal(invoice);
 		const paid = Math.max(0, Math.min(invoice.paymentAmount ?? 0, total));
-		const balance = Math.max(0, total - paid);
+		// Shared authority: a pro-forma or correction document never opens an
+		// "amount due", so the statement must not show one either.
+		const balance = collectibleBalance(invoice);
 		const overdue = hasOverdueBalance(invoice, balance, now);
 		const currency = invoice.currency.trim().toUpperCase() || clientCurrency;
 

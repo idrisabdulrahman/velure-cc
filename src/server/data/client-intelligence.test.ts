@@ -260,4 +260,35 @@ describe("buildClientIntelligence balances", () => {
 			draftInvoiceCount: 0,
 		});
 	});
+
+	it("keeps pro-formas and correction notes out of the outstanding balance", () => {
+		const intelligence = buildClientIntelligence({
+			client: CLIENT,
+			now,
+			invoices: [
+				invoice({ id: "open", invoiceNumber: "INV-100" }),
+				invoice({
+					id: "quote",
+					invoiceNumber: "INV-103",
+					documentType: "proforma",
+				}),
+				invoice({
+					id: "credit",
+					invoiceNumber: "INV-104",
+					documentType: "credit_note",
+				}),
+				invoice({
+					id: "debit",
+					invoiceNumber: "INV-105",
+					documentType: "debit_note",
+				}),
+			],
+		});
+		// Only the standard invoice is collectible and past due; the quote and
+		// both corrections are documents, not bills.
+		expect(intelligence.primaryCurrency).toMatchObject({
+			outstandingBalance: 1_000,
+		});
+		expect(intelligence.primaryCurrency.overdueInvoiceCount).toBe(1);
+	});
 });
