@@ -23,22 +23,6 @@ const isCloudflareWorker = process.env.NITRO_PRESET === "cloudflare_module";
 const workerOutputDir = "dist-worker";
 
 /**
- * The Node PDF stack (`@react-pdf/renderer`, fontkit, brotli, yoga, pdfkit) is
- * `reject` on Workers, so shipping it there is 2.6 MiB of chunks that can only
- * fail. Aliasing it to a stub for the Worker build removes the dead weight and
- * makes the PDF path deterministically use `renderFallbackPdf`; the Node/VPS
- * build and the tests keep the real renderer. See
- * `src/server/pdf-stack.worker-stub.ts`.
- */
-const workerOnlyAliases = isCloudflareWorker
-	? {
-			"@react-pdf/renderer": "./src/server/pdf-stack.worker-stub.ts",
-			"#/lib/invoice-document/templates/pdf":
-				"./src/server/pdf-stack.worker-stub.ts",
-		}
-	: undefined;
-
-/**
  * The success-panel QR (`InvoiceQrCode`) is generated in the browser. The
  * Node entry of `qrcode` evaluates `fs` and `pngjs` at module scope, so it must
  * not be pulled into the Worker's server build.
@@ -64,7 +48,6 @@ function qrCodeServerStub(): Plugin {
 }
 
 const config = defineConfig({
-	resolve: workerOnlyAliases ? { alias: workerOnlyAliases } : {},
 	build: {
 		chunkSizeWarningLimit: 1000, // raises the warning threshold to 1MB
 		rollupOptions: {
@@ -79,12 +62,7 @@ const config = defineConfig({
 							return "react-vendor";
 						}
 
-						if (
-							id.includes("@react-pdf/") ||
-							id.includes("/qrcode") ||
-							id.includes("/fontkit") ||
-							id.includes("/pdfkit")
-						) {
+						if (id.includes("/pdf-lib/") || id.includes("/qrcode")) {
 							return "pdf-vendor";
 						}
 
