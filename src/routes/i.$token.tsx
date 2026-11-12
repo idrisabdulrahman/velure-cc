@@ -12,6 +12,10 @@ import {
 	getInvoiceTemplateSize,
 	toInvoiceDocument,
 } from "#/features/invoices/invoice-document-adapter";
+import {
+	getPublicPaymentAffordances,
+	PUBLIC_DRAFT_PAYMENT_NOTICE,
+} from "#/features/invoices/public-payment-affordances";
 import { buildInvoiceShareLinks } from "#/features/invoices/share-links";
 import type { InvoiceRecord } from "#/features/invoices/types";
 import { INVOICE_DOCUMENT_TYPE_LABELS } from "#/features/invoices/types";
@@ -215,13 +219,19 @@ function PublicInvoicePage() {
 	};
 
 	const payments = paymentHistory ?? [];
-	const canUsePaystackTransfer =
-		paymentContext?.capabilities.automaticBankTransfer &&
-		paymentContext.payable !== false &&
-		invoice.status !== "paid";
-	const showCollectionPanel =
-		paymentContext?.capabilities.automaticBankTransfer &&
-		invoice.status !== "paid";
+	// A draft (and its `scheduled` alias) is not payable, so its page shows no
+	// collection panel, no bank-transfer instructions and no "I've paid" action.
+	const {
+		isDraft: isDraftState,
+		canUsePaystackTransfer,
+		showCollectionPanel,
+		canClaimPayment,
+	} = getPublicPaymentAffordances({
+		status: invoice.status,
+		balance: invoice.balance,
+		automaticBankTransfer: paymentContext?.capabilities.automaticBankTransfer,
+		payable: paymentContext?.payable,
+	});
 	const collectionStatusLabel = charge?.accountNumber
 		? "Active collection session"
 		: canUsePaystackTransfer
@@ -236,10 +246,6 @@ function PublicInvoicePage() {
 		invoiceNumber: invoice.invoiceNumber,
 		status: invoice.status === "scheduled" ? "draft" : invoice.status,
 	});
-	const canClaimPayment =
-		invoice.status !== "paid" &&
-		invoice.status !== "canceled" &&
-		invoice.balance > 0;
 	// WP-D: a pro-forma quote can be accepted while it is an open offer.
 	const isQuote = (invoice.documentType ?? "standard") === "proforma";
 	const quoteAcceptedView = quoteAccepted || invoice.quoteStatus === "accepted";
@@ -578,6 +584,17 @@ function PublicInvoicePage() {
 												</button>
 											</>
 										)}
+									</div>
+								) : null}
+
+								{isDraftState ? (
+									<div className="border-t border-rule px-5 py-5">
+										<p role="status" className="text-xs font-medium text-ink">
+											{PUBLIC_DRAFT_PAYMENT_NOTICE}
+										</p>
+										<p className="mt-1 text-xs text-ink-3">
+											Payment instructions appear once {sellerName} issues it.
+										</p>
 									</div>
 								) : null}
 

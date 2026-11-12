@@ -22,7 +22,10 @@ describe("getInvoicePaymentReference", () => {
 	it("still shows a reference for partially-paid and overdue invoices", () => {
 		expect(reference("INV-2", "partially-paid")?.value).toBe("INV-2");
 		expect(reference("INV-3", "overdue")?.value).toBe("INV-3");
-		expect(reference("INV-4", "draft")?.value).toBe("INV-4");
+	});
+
+	it("hides the reference on a draft, which nobody can pay yet", () => {
+		expect(reference("INV-4", "draft")).toBeNull();
 	});
 
 	it("hides the reference once the invoice is settled", () => {

@@ -120,9 +120,10 @@ function renderFallbackPdf(invoice: Invoice): Uint8Array {
 	rows.push(`Net payable: ${netPayable.toFixed(2)} ${invoice.currency}`);
 
 	// Same reference convention the HTML renderer prints, so a payer can use it
-	// in a transfer narration.
+	// in a transfer narration. `scheduled` prints as `draft` (the adapters map
+	// it that way), so a scheduled draft does not print a reference either.
 	const referenceStatus =
-		invoice.status === "scheduled" ? "unpaid" : invoice.status;
+		invoice.status === "scheduled" ? "draft" : invoice.status;
 	const paymentReference = getInvoicePaymentReference({
 		invoiceNumber: invoice.invoiceNumber,
 		status: referenceStatus,
