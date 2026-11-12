@@ -48,7 +48,7 @@ function SampleNote() {
 const checkpoints = [
 	"Create the invoice from business defaults",
 	"Show VAT and WHT before sending",
-	"Collect with Paystack from the public page",
+	"Share a public invoice link the customer can open",
 	"Export clean records when accounts ask",
 ];
 
@@ -64,7 +64,7 @@ const flowSteps = [
 		step: "02",
 		title: "Send invoice",
 		detail:
-			"Client, line items, VAT/WHT, public page, PDF, and Paystack checkout.",
+			"Client, line items, VAT/WHT, a customer-safe public page, and a PDF.",
 		owner: "Ops",
 	},
 	{
@@ -106,7 +106,7 @@ const bentoTiles = [
 		className: "lg:col-span-4",
 		title: "Invoices that collect",
 		description:
-			"Public invoice links, Paystack checkout, PDF generation, and customer-safe views in one flow.",
+			"Public invoice links, PDF generation, and customer-safe views in one flow.",
 	},
 	{
 		className: "lg:col-span-2",
@@ -224,10 +224,11 @@ function LandingPage() {
 								<div className="mt-[34px] flex flex-wrap justify-center gap-3">
 									<Link
 										to="/auth"
+										search={{ mode: "sign-up" }}
 										data-magnetic
 										className="hm-btn hm-btn--primary hm-btn--xl"
 									>
-										Open workspace
+										Create your workspace
 										<ArrowRight className="h-4 w-4" />
 									</Link>
 									<a
@@ -543,6 +544,7 @@ function LandingPage() {
 									<div>
 										<Link
 											to="/auth"
+											search={{ mode: "sign-up" }}
 											data-magnetic
 											className="hm-btn hm-btn--primary w-fit"
 										>

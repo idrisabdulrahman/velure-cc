@@ -35,9 +35,9 @@ function FeaturesPage() {
 							"Search, filter, duplicate, and update statuses from one ledger-style workspace built for weekly finance work.",
 					},
 					{
-						title: "Send payment reminders automatically.",
+						title: "Queue payment reminders, send them yourself.",
 						description:
-							"Queue pre-due, due-date, and overdue reminders. Escalate stubborn invoices to your team through Slack.",
+							"Queue pre-due, due-date, and overdue reminders from one place, then send each one manually. Automatic sending is not enabled yet.",
 					},
 					{
 						title: "Nigeria-ready VAT and WHT support.",
