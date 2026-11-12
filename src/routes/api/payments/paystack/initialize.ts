@@ -5,9 +5,19 @@ import {
 	getClientIp,
 	safeErrorDetails,
 } from "#/server/http-security";
+import { isPaystackCollectionEnabled } from "#/server/paystack-flag";
 import { getSupabaseAdminClient } from "#/server/supabase";
 
 export async function handle({ request }: { request: Request }) {
+	// Closed by default: no body parsing, rate-limit write or DB access while
+	// collection is disabled (see #/server/paystack-flag).
+	if (!isPaystackCollectionEnabled()) {
+		return Response.json(
+			{ ok: false, error: "Online payment is not available." },
+			{ status: 404 },
+		);
+	}
+
 	let payload: { token?: unknown };
 	try {
 		payload = (await request.json()) as { token?: unknown };

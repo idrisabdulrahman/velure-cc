@@ -15,6 +15,7 @@ import {
 	type InvoiceUserContext,
 	recordInvoiceDeliveryEvent,
 } from "#/server/invoice-repository";
+import { isPaystackCollectionEnabled } from "#/server/paystack-flag";
 import { renderInvoicePdf } from "#/server/pdf";
 
 function isValidEmail(value: string) {
@@ -300,10 +301,15 @@ async function sendInvoiceEmail({
 		);
 	});
 
+	// Pre-warm only when Paystack collection is explicitly enabled; otherwise
+	// sending an invoice must not open a charge on the shared Paystack account.
 	// F9: only NGN invoices can use Paystack transfer, so do not pre-warm a
 	// charge for a currency the initialize path will refuse (this avoids a
 	// false "failed to prepare" error on every non-NGN send).
-	if (invoice.currency?.trim().toUpperCase() === "NGN") {
+	if (
+		isPaystackCollectionEnabled() &&
+		invoice.currency?.trim().toUpperCase() === "NGN"
+	) {
 		ensurePaystackTransferCharge(invoice.token).catch((error: unknown) => {
 			console.error(
 				"Failed to prepare Paystack transfer charge",

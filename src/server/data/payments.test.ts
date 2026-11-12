@@ -1,5 +1,41 @@
-import { describe, expect, it } from "vitest";
-import { payableInvoiceIssue } from "./payments";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { getPaymentCapabilities, payableInvoiceIssue } from "./payments";
+
+afterEach(() => vi.unstubAllEnvs());
+
+describe("getPaymentCapabilities (Paystack collection flag)", () => {
+	const off = { automaticBankTransfer: false, provider: null };
+	const on = { automaticBankTransfer: true, provider: "paystack" };
+
+	it("is off for a Nigerian workspace by default", () => {
+		vi.stubEnv("PAYSTACK_COLLECTION_ENABLED", "");
+		expect(getPaymentCapabilities({ countryCode: "NG" })).toEqual(off);
+	});
+
+	it("turns on for Nigeria only when the env flag is true", () => {
+		vi.stubEnv("PAYSTACK_COLLECTION_ENABLED", "true");
+		expect(getPaymentCapabilities({ countryCode: "ng" })).toEqual(on);
+		expect(getPaymentCapabilities({ countryCode: "GH" })).toEqual(off);
+		expect(getPaymentCapabilities(null)).toEqual(off);
+	});
+
+	it("lets an explicit option override the env flag", () => {
+		vi.stubEnv("PAYSTACK_COLLECTION_ENABLED", "true");
+		expect(
+			getPaymentCapabilities(
+				{ countryCode: "NG" },
+				{ paystackCollectionEnabled: false },
+			),
+		).toEqual(off);
+		vi.stubEnv("PAYSTACK_COLLECTION_ENABLED", "");
+		expect(
+			getPaymentCapabilities(
+				{ countryCode: "NG" },
+				{ paystackCollectionEnabled: true },
+			),
+		).toEqual(on);
+	});
+});
 
 const lineItems = [{ quantity: 1, price: 1000 }];
 

@@ -1164,7 +1164,7 @@ function InvoicesIndex() {
 		<EmptyState
 			icon={<ReceiptText className="h-4 w-4" />}
 			title="No invoices yet."
-			copy="Create an invoice, add a client email, then share the Paystack-enabled public link."
+			copy="Create an invoice, add a client email, then share the public link."
 			action={
 				<Button
 					type="button"

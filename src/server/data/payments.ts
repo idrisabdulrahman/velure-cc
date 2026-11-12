@@ -1,4 +1,5 @@
 import type { Database, Json } from "#/types/database.types";
+import { isPaystackCollectionEnabled } from "../paystack-flag";
 import { recordInvoiceAudit } from "./audit-client";
 import { isInvoiceIssued } from "./invoice-numbering";
 import {
@@ -181,11 +182,18 @@ export function getPaymentCapabilities(
 		| Pick<{ countryCode?: string | null }, "countryCode">
 		| null
 		| undefined,
+	options: { paystackCollectionEnabled?: boolean } = {},
 ): PaymentCapabilities {
 	const countryCode = workspace?.countryCode?.toUpperCase();
-	const supportsPaystackPwt = PAYSTACK_PWT_COUNTRIES.includes(
-		countryCode as (typeof PAYSTACK_PWT_COUNTRIES)[number],
-	);
+	// Off unless PAYSTACK_COLLECTION_ENABLED=true: country support alone must
+	// never expose the shared-key collection path (see ../paystack-flag).
+	const collectionEnabled =
+		options.paystackCollectionEnabled ?? isPaystackCollectionEnabled();
+	const supportsPaystackPwt =
+		collectionEnabled &&
+		PAYSTACK_PWT_COUNTRIES.includes(
+			countryCode as (typeof PAYSTACK_PWT_COUNTRIES)[number],
+		);
 	return {
 		automaticBankTransfer: supportsPaystackPwt,
 		provider: supportsPaystackPwt ? "paystack" : null,

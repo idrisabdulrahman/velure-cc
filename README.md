@@ -25,7 +25,7 @@ Velure keeps the everyday work around an invoice together:
 - Create standard, pro-forma, credit, and debit documents with customer and product details.
 - Review line items, tax categories, totals, payment terms, and due dates before delivery.
 - Share a customer-safe invoice page, download a PDF, or send an invoice by email.
-- Record payments, collect through Paystack when configured, and see what remains outstanding.
+- Record payments and see what remains outstanding. Paystack collection from public invoice pages is off by default (`PAYSTACK_COLLECTION_ENABLED`) until settlement goes to each seller's own account.
 - Schedule reminders and recurring invoices, then review the history from the workspace.
 - Export invoice and tax summaries for your accountant.
 

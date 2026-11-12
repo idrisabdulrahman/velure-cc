@@ -15,6 +15,7 @@
  */
 
 import type { Json } from "#/types/database.types";
+import { isPaystackCollectionEnabled } from "../paystack-flag";
 import { getSupabaseAdminClient } from "../supabase";
 import { koboToNaira, nairaToKobo } from "./money";
 import {
@@ -111,6 +112,12 @@ async function findReusableCharge(
 }
 
 export async function ensurePaystackTransferCharge(token: string) {
+	// Creating a charge uses the single environment key, so settlement lands in
+	// our Paystack account, not the seller's. Refuse unless explicitly enabled,
+	// before any read. Webhook and reconcile stay active for charges that are
+	// already issued.
+	if (!isPaystackCollectionEnabled())
+		throw new Error("Paystack collection is not enabled.");
 	const client = getSupabaseAdminClient();
 	const row = await invoiceByToken(client, token);
 	if (!row) throw new Error("Invoice not found.");

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { resendSendSpy } = vi.hoisted(() => ({
 	resendSendSpy: vi.fn(
@@ -44,7 +44,11 @@ vi.mock("resend", () => ({
 	},
 }));
 
-import { getInvoiceUserContext } from "#/server/invoice-repository";
+import { ensurePaystackTransferCharge } from "#/server/data/paystack-server";
+import {
+	getAuthenticatedInvoiceById,
+	getInvoiceUserContext,
+} from "#/server/invoice-repository";
 import { handle, providerErrorMessage } from "./$id";
 
 describe("invoice email errors", () => {
@@ -120,5 +124,63 @@ describe("POST /api/invoice/send/$id (G1 audit non-atomicity)", () => {
 		};
 		expect(payload.subject).toContain("Debit note DN-2026-0001");
 		expect(payload.text).toContain("debit note DN-2026-0001");
+	});
+});
+
+describe("POST /api/invoice/send/$id (Paystack pre-warm)", () => {
+	afterEach(() => vi.unstubAllEnvs());
+
+	function nairaInvoice() {
+		return {
+			id: "inv-1",
+			token: "share-token",
+			invoiceNumber: "INV-2026-0001",
+			customerName: "Acme Ltd",
+			documentType: "standard",
+			currency: "NGN",
+			updatedAt: 1_700_000_000_000,
+			lineItems: [{ id: "li-1", name: "Service", quantity: 1, price: 100 }],
+			deliveredAt: 1_700_000_000_000,
+		};
+	}
+
+	function sendRequest() {
+		return new Request("http://velure.test/api/invoice/send/inv-1", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ to: "client@example.com" }),
+		});
+	}
+
+	it("does not open a Paystack charge when collection is disabled (default)", async () => {
+		vi.stubEnv("PAYSTACK_COLLECTION_ENABLED", "");
+		vi.mocked(ensurePaystackTransferCharge).mockClear();
+		vi.mocked(getAuthenticatedInvoiceById).mockResolvedValueOnce(
+			nairaInvoice() as never,
+		);
+
+		const response = await handle({
+			params: { id: "inv-1" },
+			request: sendRequest(),
+		});
+
+		expect(response.status).toBe(200);
+		expect(ensurePaystackTransferCharge).not.toHaveBeenCalled();
+	});
+
+	it("pre-warms an NGN invoice only when collection is explicitly enabled", async () => {
+		vi.stubEnv("PAYSTACK_COLLECTION_ENABLED", "true");
+		vi.mocked(ensurePaystackTransferCharge).mockClear();
+		vi.mocked(getAuthenticatedInvoiceById).mockResolvedValueOnce(
+			nairaInvoice() as never,
+		);
+
+		const response = await handle({
+			params: { id: "inv-1" },
+			request: sendRequest(),
+		});
+
+		expect(response.status).toBe(200);
+		expect(ensurePaystackTransferCharge).toHaveBeenCalledWith("share-token");
 	});
 });

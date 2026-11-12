@@ -595,7 +595,15 @@ describe.skipIf(!LIVE)("A10 payments domain (live velure-cc)", () => {
 		expect(context).not.toBeNull();
 		expect(context!.payable).toBe(false);
 		expect(context!.collectionAmount).toBe(0);
-		expect(context!.capabilities.automaticBankTransfer).toBe(true);
+		// Closed by default; open only when the flag is on.
+		expect(context!.capabilities.automaticBankTransfer).toBe(false);
+		vi.stubEnv("PAYSTACK_COLLECTION_ENABLED", "true");
+		try {
+			const enabled = await getPublicPaymentContext(clientA, invoiceAToken);
+			expect(enabled!.capabilities.automaticBankTransfer).toBe(true);
+		} finally {
+			vi.unstubAllEnvs();
+		}
 
 		const history = await listPublicInvoicePayments(clientA, invoiceAToken);
 		expect(history).toHaveLength(2);

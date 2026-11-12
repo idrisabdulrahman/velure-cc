@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ensurePaystackTransferCharge } from "#/server/data/paystack-server";
 import {
 	consumeFixedWindowRateLimit,
@@ -21,7 +21,12 @@ vi.mock("#/server/supabase", () => ({
 	getSupabaseAdminClient: vi.fn(),
 }));
 
-afterEach(() => vi.clearAllMocks());
+// Collection is closed by default; these tests exercise the enabled route.
+beforeEach(() => vi.stubEnv("PAYSTACK_COLLECTION_ENABLED", "true"));
+afterEach(() => {
+	vi.clearAllMocks();
+	vi.unstubAllEnvs();
+});
 
 function request(token = "invoice-token") {
 	return new Request(
@@ -39,6 +44,24 @@ describe("Paystack initialization route", () => {
 		expect(handlers).toHaveProperty("POST");
 		expect(handlers).not.toHaveProperty("GET");
 	});
+
+	it.each(["", "false", "1"])(
+		"is closed (404) before any limiter, DB or charge work when the flag is %j",
+		async (value) => {
+			vi.stubEnv("PAYSTACK_COLLECTION_ENABLED", value);
+
+			const response = await handle({ request: request() });
+
+			expect(response.status).toBe(404);
+			await expect(response.json()).resolves.toEqual({
+				ok: false,
+				error: "Online payment is not available.",
+			});
+			expect(getSupabaseAdminClient).not.toHaveBeenCalled();
+			expect(consumeFixedWindowRateLimit).not.toHaveBeenCalled();
+			expect(ensurePaystackTransferCharge).not.toHaveBeenCalled();
+		},
+	);
 
 	it("returns 429 before charge creation when the token limit is exhausted", async () => {
 		vi.mocked(getSupabaseAdminClient).mockReturnValue({} as never);

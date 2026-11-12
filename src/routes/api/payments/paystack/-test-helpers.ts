@@ -94,6 +94,8 @@ export function paystackTestConfig(): PaystackTestConfig | null {
 	// VITE_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY. Point all of them at the
 	// local test stack before the first call.
 	process.env.PAYSTACK_SECRET_KEY = paystackSecret;
+	// Charge creation is closed by default; these suites exercise it directly.
+	process.env.PAYSTACK_COLLECTION_ENABLED = "true";
 	process.env.VITE_SUPABASE_URL = supabaseUrl;
 	process.env.SUPABASE_SERVICE_ROLE_KEY = serviceRoleKey;
 

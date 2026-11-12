@@ -48,7 +48,7 @@ function SampleNote() {
 const checkpoints = [
 	"Create the invoice from business defaults",
 	"Show VAT and WHT before sending",
-	"Collect with Paystack from the public page",
+	"Share a customer-safe public invoice page",
 	"Export clean records when accounts ask",
 ];
 
@@ -63,8 +63,7 @@ const flowSteps = [
 	{
 		step: "02",
 		title: "Send invoice",
-		detail:
-			"Client, line items, VAT/WHT, public page, PDF, and Paystack checkout.",
+		detail: "Client, line items, VAT/WHT, public page, and PDF.",
 		owner: "Ops",
 	},
 	{
@@ -106,7 +105,7 @@ const bentoTiles = [
 		className: "lg:col-span-4",
 		title: "Invoices that collect",
 		description:
-			"Public invoice links, Paystack checkout, PDF generation, and customer-safe views in one flow.",
+			"Public invoice links, PDF generation, and customer-safe views in one flow.",
 	},
 	{
 		className: "lg:col-span-2",
@@ -683,7 +682,7 @@ function HeroStage() {
 					<Check className="h-4 w-4" />
 				</span>
 				<div>
-					<b className="block font-medium text-[13.5px]">Paid with Paystack</b>
+					<b className="block font-medium text-[13.5px]">Payment recorded</b>
 					<span className="hm-num mt-0.5 block text-xs text-[var(--hm-ink-2)]">
 						₦620,000 · INV-2026-0038 · just now
 					</span>
@@ -890,7 +889,7 @@ function TileVisual({ index }: { index: number }) {
 						₦666,500
 					</div>
 					<div className="grid h-[38px] place-items-center rounded-[9px] bg-[var(--hm-accent)] text-[13px] font-medium text-white">
-						Pay with Paystack
+						Download PDF
 					</div>
 					<div className="flex flex-wrap gap-1.5">
 						<span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-[var(--hm-rule)] px-[9px] text-[11.5px] text-[var(--hm-ink-2)]">
