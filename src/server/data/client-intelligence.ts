@@ -1,3 +1,11 @@
+import {
+	collectibleBalance,
+	deliveredAtForInvoice,
+	deriveInvoiceStatus,
+	invoiceNetPayable,
+	isCollectibleInvoice,
+} from "./invoice-balance";
+
 type ClientLike = {
 	name: string;
 	email: string;
@@ -13,6 +21,7 @@ type InvoiceLike = {
 	issueDate: string;
 	dueDate: string;
 	status?: string;
+	documentType?: string;
 	paymentAmount?: number;
 	paidAt?: number;
 	deliveredAt?: number;
@@ -50,9 +59,11 @@ type CurrencySummary = {
 	currency: string;
 	totalRevenue: number;
 	outstandingBalance: number;
+	draftBalance: number;
 	paidRevenue: number;
 	averageInvoiceValue: number;
 	invoiceCount: number;
+	draftInvoiceCount: number;
 	paidInvoiceCount: number;
 	overdueInvoiceCount: number;
 };
@@ -62,55 +73,7 @@ function normalizeText(value: string | undefined) {
 }
 
 function invoiceTotal(invoice: InvoiceLike) {
-	if (typeof invoice.compliance?.netPayable === "number") {
-		return Math.max(0, invoice.compliance.netPayable);
-	}
-
-	if (typeof invoice.compliance?.grandTotal === "number") {
-		return Math.max(
-			0,
-			invoice.compliance.grandTotal -
-				(invoice.compliance.withholdingTaxAmount ?? 0),
-		);
-	}
-
-	return Math.max(
-		0,
-		invoice.lineItems.reduce(
-			(total, item) => total + item.quantity * item.price,
-			0,
-		),
-	);
-}
-
-function deliveredAtForInvoice(invoice: InvoiceLike) {
-	return (
-		invoice.deliveredAt ??
-		invoice.lifecycle?.emailDeliveredAt ??
-		invoice.lifecycle?.sentAt ??
-		(invoice.status && invoice.status !== "draft"
-			? invoice.updatedAt
-			: undefined)
-	);
-}
-
-function deriveInvoiceStatus(invoice: InvoiceLike, now = new Date()) {
-	const total = invoiceTotal(invoice);
-	const paymentAmount = Math.max(0, invoice.paymentAmount ?? 0);
-
-	if (invoice.canceledAt || invoice.status === "canceled") return "canceled";
-	if (total > 0 && paymentAmount >= total) return "paid";
-	if (paymentAmount > 0 && paymentAmount < total) return "partially-paid";
-	if (!deliveredAtForInvoice(invoice)) return "draft";
-
-	const dueDate = new Date(`${invoice.dueDate}T00:00:00`);
-	if (!Number.isNaN(dueDate.getTime())) {
-		const today = new Date(now);
-		today.setHours(0, 0, 0, 0);
-		if (dueDate.getTime() < today.getTime()) return "overdue";
-	}
-
-	return "unpaid";
+	return invoiceNetPayable(invoice);
 }
 
 function daysBetween(start: string, end: number | undefined) {
@@ -170,27 +133,40 @@ export function buildClientIntelligence({
 	for (const invoice of matchedInvoices) {
 		const total = invoiceTotal(invoice);
 		const paymentAmount = Math.max(0, invoice.paymentAmount ?? 0);
-		const balance = Math.max(0, total - paymentAmount);
+		const balance = collectibleBalance(invoice);
 		const status = deriveInvoiceStatus(invoice, now);
 		const currency = invoice.currency.trim().toUpperCase() || client.currency;
 		const bucket = currencyBuckets.get(currency) ?? {
 			currency,
 			totalRevenue: 0,
 			outstandingBalance: 0,
+			draftBalance: 0,
 			paidRevenue: 0,
 			averageInvoiceValue: 0,
 			invoiceCount: 0,
+			draftInvoiceCount: 0,
 			paidInvoiceCount: 0,
 			overdueInvoiceCount: 0,
 		};
 
 		bucket.totalRevenue += total;
-		bucket.outstandingBalance += balance;
 		bucket.paidRevenue += Math.min(paymentAmount, total);
 		bucket.invoiceCount += 1;
 		if (status === "paid") bucket.paidInvoiceCount += 1;
-		if (hasOverdueBalance(invoice, balance, now))
-			bucket.overdueInvoiceCount += 1;
+		if (isCollectibleInvoice(invoice, now)) {
+			// Only collectible documents (a standard invoice deriving unpaid /
+			// partially-paid / overdue) contribute to the client's outstanding
+			// balance. Drafts, scheduled, canceled, pro-formas and correction
+			// documents are never owed.
+			bucket.outstandingBalance += balance;
+			if (hasOverdueBalance(invoice, balance, now))
+				bucket.overdueInvoiceCount += 1;
+		} else if (status === "draft") {
+			// An unsent draft is not an open balance; surface it on its own so the
+			// "no invoices yet" and balance views stay honest.
+			bucket.draftBalance += Math.max(0, total - paymentAmount);
+			bucket.draftInvoiceCount += 1;
+		}
 		currencyBuckets.set(currency, bucket);
 
 		const paymentReceivedAt =
@@ -232,9 +208,11 @@ export function buildClientIntelligence({
 			currency: client.currency,
 			totalRevenue: 0,
 			outstandingBalance: 0,
+			draftBalance: 0,
 			paidRevenue: 0,
 			averageInvoiceValue: 0,
 			invoiceCount: 0,
+			draftInvoiceCount: 0,
 			paidInvoiceCount: 0,
 			overdueInvoiceCount: 0,
 		};
@@ -371,7 +349,9 @@ export function buildCustomerStatement({
 
 		const total = invoiceTotal(invoice);
 		const paid = Math.max(0, Math.min(invoice.paymentAmount ?? 0, total));
-		const balance = Math.max(0, total - paid);
+		// Shared authority: a pro-forma or correction document never opens an
+		// "amount due", so the statement must not show one either.
+		const balance = collectibleBalance(invoice);
 		const overdue = hasOverdueBalance(invoice, balance, now);
 		const currency = invoice.currency.trim().toUpperCase() || clientCurrency;
 

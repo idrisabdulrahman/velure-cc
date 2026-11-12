@@ -330,6 +330,7 @@ function ReportsIndex() {
 						collectedAmount={summary.collectedAmount}
 						collectionRate={summary.collectionRate}
 						topCustomerName={topCustomer?.customerName}
+						topCustomerAmount={topCustomer?.billedAmount}
 						topShare={topShare}
 					/>
 
@@ -454,7 +455,7 @@ function ReportsIndex() {
 												icon={<Users />}
 												tint="accent"
 												title={customer.customerName}
-												subtitle={`${customer.invoiceCount} invoice${customer.invoiceCount === 1 ? "" : "s"} · all open`}
+												subtitle={`${customer.invoiceCount} invoice${customer.invoiceCount === 1 ? "" : "s"} · ${customer.openInvoiceCount > 0 ? `${customer.openInvoiceCount} open` : "paid up"}`}
 												amount={
 													<span className="block text-right">
 														<span className="block text-ink">
@@ -594,6 +595,7 @@ function InsightCallout({
 	collectedAmount,
 	collectionRate,
 	topCustomerName,
+	topCustomerAmount,
 	topShare,
 }: {
 	currency: string;
@@ -601,6 +603,8 @@ function InsightCallout({
 	collectedAmount: number;
 	collectionRate: number;
 	topCustomerName?: string;
+	/** The top customer's own billed amount, never the workspace summary total. */
+	topCustomerAmount?: number;
 	topShare: number;
 }) {
 	if (billedAmount <= 0) {
@@ -613,12 +617,13 @@ function InsightCallout({
 			</Callout>
 		);
 	}
+	const focusedAmount = topCustomerAmount ?? billedAmount;
 	if (collectedAmount <= 0) {
 		return (
 			<Callout tone="info" title="Nothing has been collected yet.">
 				<p>
 					{topCustomerName
-						? `${topCustomerName} alone is ${formatPercent(topShare)} of what you have billed, with ${formatMoney(billedAmount, currency)} still outstanding.`
+						? `${topCustomerName} alone is ${formatPercent(topShare)} of what you have billed, with ${formatMoney(focusedAmount, currency)} still outstanding.`
 						: `${formatMoney(billedAmount, currency)} is still outstanding across this period.`}
 				</p>
 				<Link
@@ -638,7 +643,7 @@ function InsightCallout({
 		>
 			<p>
 				{topCustomerName
-					? `${topCustomerName} is ${formatPercent(topShare)} of billed revenue at ${formatMoney(billedAmount, currency)}.`
+					? `${topCustomerName} is ${formatPercent(topShare)} of billed revenue at ${formatMoney(focusedAmount, currency)}.`
 					: `${formatMoney(collectedAmount, currency)} of ${formatMoney(billedAmount, currency)} billed has been collected.`}
 			</p>
 			<Link

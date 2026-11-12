@@ -20,6 +20,11 @@ import {
 import type { Database, Json } from "#/types/database.types";
 import { type InvoiceAuditWriter, recordInvoiceAudit } from "./audit-client";
 import {
+	deliveredAtForInvoice,
+	deriveInvoiceStatus,
+	isCollectibleStatus,
+} from "./invoice-balance";
+import {
 	assertInvoiceNumberAvailable,
 	candidateInvoiceNumber,
 	commitInvoiceNumber,
@@ -353,37 +358,13 @@ function legacyPaymentAmount(invoice: any, total: number) {
 	return invoice.status === "paid" ? total : 0;
 }
 
-function deliveredAtForInvoice(invoice: any) {
-	return (
-		invoice.deliveredAt ??
-		invoice.lifecycle?.emailDeliveredAt ??
-		invoice.lifecycle?.sentAt ??
-		(invoice.status && invoice.status !== "draft"
-			? invoice.updatedAt
-			: undefined)
-	);
-}
-
+/**
+ * Delegates to the one WS3 status authority (`./invoice-balance`). Kept
+ * exported so existing callers compile unchanged; the shared deriver is the
+ * single source of truth for "draft/open/overdue".
+ */
 export function getDerivedInvoiceStatus(invoice: any): InvoiceStatus {
-	const total = invoiceAmount(invoice);
-	const paymentAmount = legacyPaymentAmount(invoice, total);
-
-	if (invoice.canceledAt || invoice.status === "canceled") return "canceled";
-	if (invoice.scheduledAt && invoice.scheduleVersion) return "scheduled";
-	if (total > 0 && paymentAmount >= total) return "paid";
-	if (paymentAmount > 0 && paymentAmount < total) return "partially-paid";
-
-	const deliveredAt = deliveredAtForInvoice(invoice);
-	if (!deliveredAt && !invoice.finalizedAt) return "draft";
-
-	const dueDate = new Date(`${invoice.dueDate}T00:00:00`);
-	if (!Number.isNaN(dueDate.getTime())) {
-		const today = new Date();
-		today.setHours(0, 0, 0, 0);
-		if (dueDate.getTime() < today.getTime()) return "overdue";
-	}
-
-	return "unpaid";
+	return deriveInvoiceStatus(invoice);
 }
 
 function patchWithDerivedStatus<T extends Record<string, unknown>>(
@@ -1096,6 +1077,8 @@ function createEmptyCurrencySummary(currency: string) {
 		overdueCount: 0,
 		paidAmount: 0,
 		paidCount: 0,
+		draftAmount: 0,
+		draftCount: 0,
 	};
 }
 
@@ -1194,12 +1177,6 @@ export function buildInvoiceListSummary(rows: any[]) {
 		string,
 		Map<string, ReturnType<typeof createEmptyRevenuePoint>>
 	>();
-	const pendingStatuses = new Set([
-		"draft",
-		"unpaid",
-		"partially-paid",
-		"overdue",
-	]);
 
 	for (const invoice of rows) {
 		const currency = normalizeSummaryCurrency(invoice.currency);
@@ -1214,6 +1191,7 @@ export function buildInvoiceListSummary(rows: any[]) {
 		const paidAmount = Math.max(0, Number(invoice.paymentAmount ?? 0));
 		const receivableTotal = isProforma ? paidAmount : total;
 		const receivableBalance = isProforma ? 0 : balance;
+		const collects = !isCorrection && !isProforma;
 
 		summary.totalCount += 1;
 
@@ -1223,16 +1201,19 @@ export function buildInvoiceListSummary(rows: any[]) {
 		) {
 			summary.paidAmount += receivableTotal;
 			summary.paidCount += 1;
-		} else if (!isCorrection && !isProforma && invoice.status === "overdue") {
+		} else if (collects && invoice.status === "overdue") {
 			summary.overdueAmount += receivableBalance;
 			summary.overdueCount += 1;
-		} else if (
-			!isCorrection &&
-			!isProforma &&
-			pendingStatuses.has(invoice.status)
-		) {
+		} else if (collects && isCollectibleStatus(invoice.status)) {
+			// Open is the collectible balance that is not yet overdue; overdue is
+			// its own KPI above. Drafts never reach here.
 			summary.openAmount += receivableBalance;
 			summary.openCount += 1;
+		} else if (collects && invoice.status === "draft") {
+			// Drafts are not open. Reported as a separate figure so the KPI never
+			// implies an unsent invoice is collectible.
+			summary.draftAmount += receivableBalance;
+			summary.draftCount += 1;
 		}
 
 		currencySummaries.set(currency, summary);
@@ -1251,7 +1232,7 @@ export function buildInvoiceListSummary(rows: any[]) {
 		if (invoice.status === "paid" || (isProforma && paidAmount > 0)) {
 			point.paidRevenue += receivableTotal;
 			point.paidCount += 1;
-		} else if (!isProforma && pendingStatuses.has(invoice.status)) {
+		} else if (!isProforma && isCollectibleStatus(invoice.status)) {
 			point.unpaidRevenue += receivableBalance;
 			point.unpaidCount += 1;
 		}

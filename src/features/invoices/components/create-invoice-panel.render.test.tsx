@@ -201,3 +201,72 @@ describe("line classification on a no-VAT invoice", () => {
 		await act(async () => root.unmount());
 	});
 });
+
+/**
+ * P1 fix: the first invoice used to hide the classification step behind an
+ * undisclosed disclosure and expose a single ambiguous "Create" action, so a
+ * draft could not be saved without it. The outcomes are now explicit - Save
+ * draft, Review and issue, Send - and the missing fields are named at the line.
+ */
+describe("draft and issue actions are explicit", () => {
+	const oneUnclassifiedLine = {
+		lineItems: [{ name: "Solar panel", quantity: 1, price: 155 }],
+	};
+
+	function renderPanel() {
+		const container = document.createElement("div");
+		document.body.append(container);
+		const root = createRoot(container);
+		return { container, root };
+	}
+
+	function issueButton(container: HTMLElement) {
+		return [...container.querySelectorAll("button")].find(
+			(button) => button.textContent?.trim() === "Review and issue",
+		);
+	}
+
+	it("offers Save draft for a priced line with no classification", async () => {
+		const { container, root } = renderPanel();
+		await act(async () => {
+			root.render(
+				<QueryClientProvider client={new QueryClient()}>
+					<CreateInvoicePanel initialDraft={oneUnclassifiedLine} />
+				</QueryClientProvider>,
+			);
+		});
+
+		const saveDraft = container.querySelector<HTMLButtonElement>(
+			'[data-testid="invoice-save-draft"]',
+		);
+		expect(saveDraft).not.toBeNull();
+		expect(saveDraft?.disabled).toBe(false);
+
+		const issue = issueButton(container);
+		expect(issue).toBeDefined();
+		// Issue still leaves Draft, so it stays blocked until classified.
+		expect(issue?.getAttribute("aria-disabled")).toBe("true");
+
+		await act(async () => root.unmount());
+	});
+
+	it("names the missing line fields and links to Tax & compliance when issue is blocked", async () => {
+		const { container, root } = renderPanel();
+		await act(async () => {
+			root.render(
+				<QueryClientProvider client={new QueryClient()}>
+					<CreateInvoicePanel initialDraft={oneUnclassifiedLine} />
+				</QueryClientProvider>,
+			);
+		});
+
+		await act(async () => issueButton(container)?.click());
+
+		expect(container.textContent).toContain(
+			"This line needs unit and goods/service code before",
+		);
+		expect(container.textContent).toContain("Open tax & compliance");
+
+		await act(async () => root.unmount());
+	});
+});

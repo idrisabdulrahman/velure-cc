@@ -120,7 +120,10 @@ import {
 	type WithholdingRecipientResidency,
 } from "#/features/compliance/types";
 import { isCorrectionSource } from "#/features/invoices/correction-sources";
-import { lineMissingClassification } from "#/features/invoices/customer-gate";
+import {
+	LINE_VAT_CATEGORIES,
+	lineMissingClassification,
+} from "#/features/invoices/customer-gate";
 import { formatMoney } from "#/features/invoices/format";
 import type { ImportedInvoiceDraft } from "#/features/invoices/import-spreadsheet";
 import { toEditorDoc } from "#/features/invoices/invoice-document-adapter";
@@ -499,6 +502,49 @@ function createEmptyLineItem(): LineItem {
 		price: 0,
 		unit: "",
 	};
+}
+
+type LineClassificationLike = {
+	id: string;
+	unit?: string;
+	vatCategory?: string;
+	classificationCode?: string;
+};
+
+/**
+ * The classification fields a line still needs before the server will let the
+ * invoice leave Draft, named in the order they appear in the row. The composer
+ * persists `defaultVatCategory` as the fallback, so callers pass the same
+ * effective value the payload sends.
+ */
+function missingLineClassificationFields(
+	item: LineClassificationLike,
+): string[] {
+	const fields: string[] = [];
+	if (!item.unit?.trim()) fields.push("unit");
+	if (!LINE_VAT_CATEGORIES.has(item.vatCategory ?? "")) {
+		fields.push("VAT category");
+	}
+	if (!item.classificationCode?.trim()) fields.push("goods/service code");
+	return fields;
+}
+
+/** "unit", "unit and goods/service code", "a, b, and c". */
+function formatFieldList(fields: string[]): string {
+	if (fields.length <= 1) return fields[0] ?? "";
+	if (fields.length === 2) return `${fields[0]} and ${fields[1]}`;
+	return `${fields.slice(0, -1).join(", ")}, and ${fields.at(-1)}`;
+}
+
+/** Selector for the first field the row still needs, so focus lands on it. */
+function firstMissingClassificationSelector(
+	item: LineClassificationLike,
+): string {
+	if (!item.unit?.trim()) return `#invoice-line-unit-${item.id}`;
+	if (!LINE_VAT_CATEGORIES.has(item.vatCategory ?? "")) {
+		return `#invoice-line-vat-${item.id}`;
+	}
+	return `#invoice-line-code-${item.id}`;
 }
 
 function resolveTemplateVariant(
@@ -1139,9 +1185,16 @@ export function CreateInvoicePanel({
 	const hasPricedLineItem = lineItems.some(
 		(item) => item.name.trim().length > 0 && item.price > 0,
 	);
+	// "Save draft" only needs something worth saving: a customer name or one
+	// priced line. Classification and seller TIN are issue requirements, not
+	// draft requirements - the server enforces them only when an invoice leaves
+	// Draft (`assertCustomerForIssueTransition`), so the draft path must not
+	// demand them.
+	const hasDraftContent = customerName.trim().length > 0 || hasPricedLineItem;
+	const canSaveDraft = hasDraftContent && !submitting;
 	// The server's leave-Draft gate (assertCustomerForIssueTransition) requires
 	// a unit, a supported VAT category and a goods/service code on every line it
-	// finalizes - not only when the invoice charges VAT. The Create button asks
+	// finalizes - not only when the invoice charges VAT. The issue action asks
 	// `lineMissingClassification`, the same predicate the gate uses, so the panel
 	// can never let through a submit the server then rejects for fields a non-VAT
 	// invoice did not show.
@@ -1154,15 +1207,24 @@ export function CreateInvoicePanel({
 				vatCategory: item.vatCategory ?? defaultVatCategory,
 			}),
 	);
+	const firstMissingTaxFields = firstMissingTaxLine
+		? missingLineClassificationFields({
+				...firstMissingTaxLine,
+				vatCategory: firstMissingTaxLine.vatCategory ?? defaultVatCategory,
+			})
+		: [];
 	const dueDateInvalid = Boolean(issueDate && dueDate && dueDate < issueDate);
-	const canSubmit =
+	// Issuing leaves Draft, so a seller TIN is required whenever VAT is charged.
+	const sellerTinBlocked = requiresSellerTin && !sellerTinForSubmission;
+	const canIssue =
 		customerName.trim().length > 1 &&
 		Boolean(customerId) &&
 		hasPricedLineItem &&
 		!firstMissingTaxLine &&
 		!dueDateInvalid &&
+		!sellerTinBlocked &&
 		!submitting;
-	// B2: finalizing requires a saved client record (the server rejects a
+	// B2: issuing requires a saved client record (the server rejects a
 	// customer-less invoice leaving Draft), so the blocker names the picker.
 	const submitBlockerText = dueDateInvalid
 		? "Due date is before issue date."
@@ -1173,11 +1235,14 @@ export function CreateInvoicePanel({
 				: !hasPricedLineItem
 					? "Add at least one priced line item."
 					: firstMissingTaxLine
-						? "Add a unit and goods/service code to each priced item."
-						: "";
+						? `This line needs ${formatFieldList(firstMissingTaxFields)} before you can issue.`
+						: sellerTinBlocked
+							? "Add a seller TIN before charging VAT."
+							: "";
 	const focusSubmitBlocker = () => {
-		if (!canSubmit && !submitting) {
+		if (!canIssue && !submitting) {
 			if (!customerId) setCustomerPickerOpen(true);
+			if (sellerTinBlocked) openComplianceDialog();
 			if (firstMissingTaxLine) {
 				setExpandedTaxLineIds((ids) => [
 					...new Set([...ids, firstMissingTaxLine.id]),
@@ -1193,8 +1258,16 @@ export function CreateInvoicePanel({
 						? 'input[aria-controls="invoice-customer-options"]'
 						: !hasPricedLineItem
 							? 'input[id^="invoice-line-description-"]'
-							: `#invoice-line-code-${firstMissingTaxLine?.id}`;
-				document.querySelector<HTMLElement>(selector)?.focus();
+							: firstMissingTaxLine
+								? firstMissingClassificationSelector({
+										...firstMissingTaxLine,
+										vatCategory:
+											firstMissingTaxLine.vatCategory ?? defaultVatCategory,
+									})
+								: sellerTinBlocked
+									? "#seller-tin"
+									: "";
+				if (selector) document.querySelector<HTMLElement>(selector)?.focus();
 			});
 		}
 	};
@@ -1428,15 +1501,23 @@ export function CreateInvoicePanel({
 		buildArgs: () => buildDraftMutationArgs(autosaveDraftIdRef.current),
 	};
 
-	const persistAutosaveDraft = async () => {
+	const persistAutosaveDraft = async (options?: {
+		force?: boolean;
+	}): Promise<boolean> => {
 		const runtime = autosaveRuntimeRef.current;
-		if (!runtime.canSave) return;
+		// `force` is the explicit "Save draft" action: it still needs a
+		// meaningful draft, but not a well-formed TIN/RC or a classification,
+		// because the server accepts those only as issue requirements.
+		const canSave = options?.force
+			? composerStage === "editor" && hasMeaningfulDraft
+			: runtime.canSave;
+		if (!canSave) return false;
 
 		const signature = runtime.signature;
-		if (autosaveSignatureRef.current === signature) return;
+		if (autosaveSignatureRef.current === signature) return true;
 		if (autosaveInFlightRef.current) {
 			autosavePendingRef.current = true;
-			return;
+			return false;
 		}
 
 		autosaveInFlightRef.current = true;
@@ -1453,17 +1534,54 @@ export function CreateInvoicePanel({
 			setInvoiceNumber(saved.invoiceNumber);
 			autosaveSignatureRef.current = signature;
 			setAutosaveStatus("saved");
+			return true;
 		} catch (_error) {
 			setAutosaveStatus("error");
+			return false;
 		} finally {
 			autosaveInFlightRef.current = false;
 			if (autosavePendingRef.current) {
 				autosavePendingRef.current = false;
 				// Re-read the runtime ref so a change that landed while this
 				// save was in flight is the one that persists.
-				void persistAutosaveDraft();
+				void persistAutosaveDraft(options);
 			}
 		}
+	};
+
+	const saveDraft = async () => {
+		if (!canSaveDraft) return;
+		const saved = await persistAutosaveDraft({ force: true });
+		if (saved) {
+			toast({
+				title: "Draft saved",
+				description:
+					"Not payable until you issue it. Use Review and issue when it is ready.",
+				variant: "success",
+			});
+			return;
+		}
+		// A save may already be in flight; report that instead of a false failure.
+		if (autosaveInFlightRef.current || autosavePendingRef.current) {
+			toast({
+				title: "Saving draft",
+				description: "Your latest changes are still being saved.",
+			});
+			return;
+		}
+		if (!supabaseClient || !userId) {
+			toast({
+				title: "Could not save draft",
+				description: "Your session expired. Sign in again to save.",
+				variant: "error",
+			});
+			return;
+		}
+		toast({
+			title: "Could not save draft",
+			description: "Check your connection and try again.",
+			variant: "error",
+		});
 	};
 
 	autosaveNowRef.current = () => {
@@ -1879,7 +1997,7 @@ export function CreateInvoicePanel({
 	};
 
 	const createInvoice = async (intent: CreateIntent = deliveryType) => {
-		if (!canSubmit) return;
+		if (!canIssue) return;
 		if (!tinIsValid) {
 			toast({
 				title: "Check seller tax ID",
@@ -2857,9 +2975,12 @@ export function CreateInvoicePanel({
 													const isExiting = exitingLineIds.includes(item.id);
 													const isProductSearchOpen =
 														productSearchIndex === index;
-													const missingTaxDetails =
-														!item.unit?.trim() ||
-														!item.classificationCode?.trim();
+													const missingClassification =
+														missingLineClassificationFields({
+															...item,
+															vatCategory:
+																item.vatCategory ?? defaultVatCategory,
+														});
 													const taxDetailsOpen = expandedTaxLineIds.includes(
 														item.id,
 													);
@@ -3250,15 +3371,23 @@ export function CreateInvoicePanel({
 																</span>
 																{taxDetailsOpen ? "▾" : "▸"}
 															</button>
-															{missingTaxDetails &&
+															{missingClassification.length > 0 &&
 															blurredTaxLineIds.includes(item.id) &&
 															(item.name.trim() || item.price > 0) ? (
 																<p
 																	className="text-[12px] text-warn"
 																	role="status"
 																>
-																	Complete the unit and goods/service code for
-																	this line.
+																	This line needs{" "}
+																	{formatFieldList(missingClassification)}{" "}
+																	before you can issue.{" "}
+																	<button
+																		type="button"
+																		onClick={openComplianceDialog}
+																		className="underline underline-offset-2 hover:text-ink"
+																	>
+																		Open tax &amp; compliance
+																	</button>
 																</p>
 															) : null}
 															{taxDetailsOpen ? (
@@ -3923,21 +4052,31 @@ export function CreateInvoicePanel({
 										<ExternalLink className="h-4 w-4" />
 									</Button>
 
+									<Button
+										type="button"
+										variant="ghost"
+										onClick={() => void saveDraft()}
+										disabled={!canSaveDraft}
+										data-testid="invoice-save-draft"
+										className={footerGhostButtonClass}
+										title="Save this invoice as a draft without issuing it"
+									>
+										Save draft
+									</Button>
+
 									<TooltipProvider>
 										<Tooltip>
 											<TooltipTrigger asChild>
 												<div
 													className="flex overflow-hidden rounded-md border border-brand"
-													tabIndex={!canSubmit ? 0 : undefined}
-													aria-label={
-														!canSubmit ? submitBlockerText : undefined
-													}
+													tabIndex={!canIssue ? 0 : undefined}
+													aria-label={!canIssue ? submitBlockerText : undefined}
 												>
 													<button
 														type="button"
-														aria-disabled={!canSubmit}
+														aria-disabled={!canIssue}
 														onClick={() =>
-															canSubmit
+															canIssue
 																? void createInvoice(deliveryType)
 																: focusSubmitBlocker()
 														}
@@ -3948,16 +4087,16 @@ export function CreateInvoicePanel({
 														{submitting
 															? "Working..."
 															: deliveryType === "create_and_send"
-																? "Create & Send"
+																? "Send"
 																: deliveryType === "scheduled"
 																	? "Schedule"
-																	: "Create"}
+																	: "Review and issue"}
 													</button>
 													<DropdownMenu>
 														<DropdownMenuTrigger asChild>
 															<button
 																type="button"
-																disabled={!canSubmit}
+																disabled={!canIssue}
 																aria-label="Choose invoice delivery action"
 																className="inline-flex h-10 w-10 items-center justify-center border-l border-brand-line bg-brand text-brand-ink transition-[background-color,border-color,color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-brand-hi disabled:bg-rule"
 															>
@@ -3971,8 +4110,8 @@ export function CreateInvoicePanel({
 														>
 															{(
 																[
-																	["create", "Create"],
-																	["create_and_send", "Create & Send"],
+																	["create", "Review and issue"],
+																	["create_and_send", "Send"],
 																	["scheduled", "Schedule"],
 																] as const
 															).map(([value, label]) => (
@@ -4008,7 +4147,7 @@ export function CreateInvoicePanel({
 													</DropdownMenu>
 												</div>
 											</TooltipTrigger>
-											{!canSubmit && submitBlockerText ? (
+											{!canIssue && submitBlockerText ? (
 												<TooltipContent
 													side="top"
 													className="border-rule bg-paper text-ink"

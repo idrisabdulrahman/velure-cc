@@ -1,12 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Check } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { ArrowRight, Check } from "lucide-react";
 import { useState } from "react";
 import {
 	MarketingHero,
 	MarketingShell,
 	SplitSection,
 } from "#/components/marketing/MarketingLayout";
-import { Button } from "#/components/ui/button";
 
 export const Route = createFileRoute("/pricing")({
 	component: PricingPage,
@@ -131,9 +130,6 @@ function PricingPage() {
 							<p className="mt-5 min-h-14 text-sm leading-7 text-ink-2">
 								{plan.blurb}
 							</p>
-							<Button className="mt-6 h-11 w-full bg-brand font-black text-brand-ink hover:bg-brand-hi">
-								Start {plan.name}
-							</Button>
 							<div className="mt-6 space-y-3">
 								{plan.features.map((feature) => (
 									<div key={feature} className="flex gap-3 text-sm text-ink-2">
@@ -145,9 +141,23 @@ function PricingPage() {
 						</article>
 					))}
 				</div>
+				<div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-3 px-5 lg:px-8">
+					<Link
+						to="/auth"
+						search={{ mode: "sign-up" }}
+						className="hm-btn hm-btn--primary hm-btn--xl"
+					>
+						Join the pilot
+						<ArrowRight className="h-4 w-4" />
+					</Link>
+					<Link to="/auth" className="hm-btn hm-btn--ghost hm-btn--xl">
+						Sign in
+					</Link>
+				</div>
 				<p className="mx-auto mt-6 max-w-7xl px-5 text-sm leading-6 text-ink-3 lg:px-8">
-					No plan is billed inside Invoicly yet and no limits are enforced.
-					Automated reminders and the accounting connections are not built yet.
+					No plan is billed inside Invoicly yet and no limits are enforced. The
+					tiers above show what each plan is planned to include; automated
+					reminders and the accounting connections are not built yet.
 				</p>
 			</section>
 			<SplitSection

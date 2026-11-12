@@ -14,11 +14,11 @@ import { collectPageErrors, gotoApp } from "./helpers";
  *
  * READ-ONLY against a real account (AGENTS section 13): this spec navigates,
  * filters, types, and drives the composer to its validation edge, then leaves.
- * It never clicks Create / Create & Send / Schedule, never saves, sends, pays,
- * or deletes anything, and never uses the Import CSV file input. The composer's
- * autosave only persists a *meaningful* draft (a customer, a priced line, an
- * edited default, ...); this spec only adds an empty line item, so no autosave
- * write is triggered, not even when navigating away.
+ * It never clicks Review and issue / Send / Schedule / Save draft, never saves,
+ * sends, pays, or deletes anything, and never uses the Import CSV file input.
+ * The composer's autosave only persists a *meaningful* draft (a customer, a
+ * priced line, an edited default, ...); this spec only adds an empty line item,
+ * so no autosave write is triggered, not even when navigating away.
  *
  * Deterministic: assertions check structure/presence, never exact live record
  * counts, so the suite is stable as the account data changes. The `app` project
@@ -440,11 +440,14 @@ test.describe("invoice builder", () => {
 		await expect(page.locator('[data-testid="invoice-line-total"]')).toHaveCount(2);
 
 		// Required-field edge: without a client (and a priced line) the composer
-		// cannot be submitted. The primary action is aria-disabled and exposes
-		// the blocker; assert it and leave without submitting.
-		const create = page.getByRole("button", { name: "Create", exact: true });
-		await expect(create).toBeVisible();
-		await expect(create).toHaveAttribute("aria-disabled", "true");
+		// cannot be issued. The primary action is aria-disabled and exposes the
+		// blocker; assert it and leave without submitting.
+		const issue = page.getByRole("button", {
+			name: "Review and issue",
+			exact: true,
+		});
+		await expect(issue).toBeVisible();
+		await expect(issue).toHaveAttribute("aria-disabled", "true");
 		await expect(page.locator('[aria-label="Choose a customer."]')).toBeVisible();
 
 		// Navigate away. The composer never held a meaningful draft (only an empty

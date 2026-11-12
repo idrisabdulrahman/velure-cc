@@ -106,3 +106,50 @@ describe("public invoice HTML prints the payment reference", () => {
 		expect(html).not.toContain("Payment reference");
 	});
 });
+
+describe("public invoice HTML hides payment instructions on a draft", () => {
+	function renderWithPaymentDetails(
+		status: InvoiceRecord["status"],
+		paymentDetails: string,
+	) {
+		const record = {
+			...mockClearedInvoice,
+			status,
+			invoiceNumber: "INV-2026-1",
+			paymentDetails,
+		} as InvoiceRecord;
+		const invoiceDocument = toInvoiceDocument(record);
+		const { width, height } = getInvoiceTemplateSize(invoiceDocument.template);
+		return renderToStaticMarkup(
+			<HtmlTemplate
+				data={invoiceDocument}
+				width={width}
+				height={height}
+				appearance="public"
+			/>,
+		);
+	}
+
+	it("omits the bank details and the payment reference on a draft", () => {
+		const html = renderWithPaymentDetails("draft", "Bank 0123456789");
+
+		expect(html).not.toContain("Bank 0123456789");
+		expect(html).not.toContain("Payment Details");
+		expect(html).not.toContain("Payment reference");
+	});
+
+	it("omits them on the scheduled alias that prints as draft", () => {
+		const html = renderWithPaymentDetails("scheduled", "Bank 0123456789");
+
+		expect(html).not.toContain("Bank 0123456789");
+		expect(html).not.toContain("Payment reference");
+	});
+
+	it("keeps the bank details and reference on an issued invoice", () => {
+		const html = renderWithPaymentDetails("unpaid", "Bank 0123456789");
+
+		expect(html).toContain("Bank 0123456789");
+		expect(html).toContain("Payment Details");
+		expect(html).toContain("Payment reference");
+	});
+});

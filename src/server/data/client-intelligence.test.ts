@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildCustomerStatement } from "./client-intelligence";
+import {
+	buildClientIntelligence,
+	buildCustomerStatement,
+} from "./client-intelligence";
 
 type InvoiceInput = Parameters<
 	typeof buildCustomerStatement
@@ -208,5 +211,84 @@ describe("buildCustomerStatement", () => {
 			false,
 		);
 		expect(statement.primaryTotals.overdue).toBe(1000);
+	});
+});
+
+describe("buildClientIntelligence balances", () => {
+	const now = new Date("2026-03-01T00:00:00Z");
+
+	it("excludes drafts from outstandingBalance and reports them separately", () => {
+		const intelligence = buildClientIntelligence({
+			client: CLIENT,
+			now,
+			invoices: [
+				invoice({ id: "open", invoiceNumber: "INV-100" }),
+				invoice({
+					id: "draft",
+					invoiceNumber: "INV-101",
+					status: "draft",
+					deliveredAt: undefined,
+				}),
+			],
+		});
+
+		expect(intelligence.primaryCurrency).toMatchObject({
+			outstandingBalance: 1_000,
+			draftBalance: 1_000,
+			draftInvoiceCount: 1,
+		});
+		expect(intelligence.invoiceCount).toBe(2);
+	});
+
+	it("keeps canceled invoices out of both balances", () => {
+		const intelligence = buildClientIntelligence({
+			client: CLIENT,
+			now,
+			invoices: [
+				invoice({ id: "open", invoiceNumber: "INV-100" }),
+				invoice({
+					id: "canceled",
+					invoiceNumber: "INV-102",
+					status: "canceled",
+					canceledAt: Date.parse("2026-02-01T00:00:00Z"),
+				}),
+			],
+		});
+		expect(intelligence.primaryCurrency).toMatchObject({
+			outstandingBalance: 1_000,
+			draftBalance: 0,
+			draftInvoiceCount: 0,
+		});
+	});
+
+	it("keeps pro-formas and correction notes out of the outstanding balance", () => {
+		const intelligence = buildClientIntelligence({
+			client: CLIENT,
+			now,
+			invoices: [
+				invoice({ id: "open", invoiceNumber: "INV-100" }),
+				invoice({
+					id: "quote",
+					invoiceNumber: "INV-103",
+					documentType: "proforma",
+				}),
+				invoice({
+					id: "credit",
+					invoiceNumber: "INV-104",
+					documentType: "credit_note",
+				}),
+				invoice({
+					id: "debit",
+					invoiceNumber: "INV-105",
+					documentType: "debit_note",
+				}),
+			],
+		});
+		// Only the standard invoice is collectible and past due; the quote and
+		// both corrections are documents, not bills.
+		expect(intelligence.primaryCurrency).toMatchObject({
+			outstandingBalance: 1_000,
+		});
+		expect(intelligence.primaryCurrency.overdueInvoiceCount).toBe(1);
 	});
 });

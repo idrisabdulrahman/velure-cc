@@ -1,3 +1,10 @@
+import {
+	collectibleBalance,
+	deliveredAtForInvoice,
+	deriveInvoiceStatus,
+	invoiceNetPayable,
+} from "./invoice-balance";
+
 type InvoiceLike = {
 	_id?: string;
 	id?: string;
@@ -11,6 +18,8 @@ type InvoiceLike = {
 	paymentAmount?: number;
 	paidAt?: number;
 	deliveredAt?: number;
+	scheduledAt?: number;
+	scheduleVersion?: string;
 	canceledAt?: number;
 	updatedAt?: number;
 	lifecycle?: {
@@ -86,6 +95,7 @@ type CustomerBucket = {
 	outstandingAmount: number;
 	overdueAmount: number;
 	invoiceCount: number;
+	openInvoiceCount: number;
 	overdueInvoiceCount: number;
 	averagePaymentDelayDays: number | null;
 };
@@ -143,58 +153,7 @@ function safeMoney(value: number | undefined) {
 }
 
 function invoiceTotal(invoice: InvoiceLike) {
-	if (typeof invoice.compliance?.netPayable === "number") {
-		return safeMoney(invoice.compliance.netPayable);
-	}
-
-	if (typeof invoice.compliance?.grandTotal === "number") {
-		return safeMoney(
-			invoice.compliance.grandTotal -
-				(invoice.compliance.withholdingTaxAmount ?? 0),
-		);
-	}
-
-	return safeMoney(
-		invoice.lineItems.reduce(
-			(total, item) => total + item.quantity * item.price,
-			0,
-		),
-	);
-}
-
-function deliveredAtForInvoice(invoice: InvoiceLike) {
-	return (
-		invoice.deliveredAt ??
-		invoice.lifecycle?.emailDeliveredAt ??
-		invoice.lifecycle?.sentAt ??
-		(invoice.status && invoice.status !== "draft"
-			? invoice.updatedAt
-			: undefined)
-	);
-}
-
-function deriveInvoiceStatus(invoice: InvoiceLike, now = new Date()) {
-	const total = invoiceTotal(invoice);
-	const paymentAmount = safeMoney(invoice.paymentAmount);
-
-	if (invoice.canceledAt || invoice.status === "canceled") return "canceled";
-	if (total > 0 && paymentAmount >= total) return "paid";
-	if (paymentAmount > 0 && paymentAmount < total) return "partially-paid";
-	if (!deliveredAtForInvoice(invoice)) return "draft";
-
-	const dueDate = dateFromIsoDay(invoice.dueDate);
-	if (dueDate) {
-		const today = startOfDay(now);
-		if (dueDate.getTime() < today.getTime()) return "overdue";
-	}
-
-	return "unpaid";
-}
-
-function startOfDay(date: Date) {
-	const next = new Date(date);
-	next.setHours(0, 0, 0, 0);
-	return next;
+	return invoiceNetPayable(invoice);
 }
 
 function dateFromIsoDay(value: string | undefined) {
@@ -335,6 +294,7 @@ function getCustomerBucket(
 		outstandingAmount: 0,
 		overdueAmount: 0,
 		invoiceCount: 0,
+		openInvoiceCount: 0,
 		overdueInvoiceCount: 0,
 		averagePaymentDelayDays: null,
 		_delayDays: [],
@@ -446,6 +406,9 @@ export function buildRevenueCashFlowReport({
 		// Drafts are not issued, so they are not "billed": an unsent draft must
 		// not inflate billed revenue, outstanding balances, or product sales.
 		if (status === "draft") continue;
+		// A scheduled invoice is issued-but-deferred: it is not billed until its
+		// scheduled send runs and clears `scheduledAt`/`scheduleVersion`.
+		if (status === "scheduled") continue;
 
 		const documentType = invoice.documentType ?? "standard";
 		// A pro-forma is a quote, not a bill, so it never enters the report.
@@ -462,7 +425,7 @@ export function buildRevenueCashFlowReport({
 		const id = invoiceIdFor(invoice);
 		const total = invoiceTotal(invoice);
 		const paymentAmount = safeMoney(invoice.paymentAmount);
-		const balance = Math.max(0, total - paymentAmount);
+		const balance = collectibleBalance(invoice);
 		const currency = normalizeCurrency(
 			invoice.currency,
 			normalizedBaseCurrency,
@@ -516,6 +479,7 @@ export function buildRevenueCashFlowReport({
 			currencyBucket.outstandingAmount += balance;
 			currencyBucket.openInvoiceCount += 1;
 			customer.outstandingAmount += balance;
+			customer.openInvoiceCount += 1;
 			openInvoices.push({
 				id,
 				invoiceNumber: invoice.invoiceNumber,

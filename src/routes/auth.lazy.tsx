@@ -21,6 +21,7 @@ import {
 	authRedirectPath,
 	verificationCallbackURL,
 } from "#/lib/auth-redirect";
+import { resolveInitialAuthMode } from "#/lib/auth-search";
 
 export const Route = createLazyFileRoute("/auth")({
 	component: AuthPage,
@@ -182,7 +183,7 @@ function AuthPage() {
 		const rawToken = searchStringValue(location.search, "token");
 		const rawGoogle = searchStringValue(location.search, "google");
 		return {
-			mode: rawMode === "reset" ? rawMode : undefined,
+			mode: rawMode,
 			token: rawToken ?? undefined,
 			google: rawGoogle ?? undefined,
 			redirectTo: authRedirectPath(
@@ -191,8 +192,8 @@ function AuthPage() {
 		};
 	}, [location.search]);
 
-	const [mode, setMode] = useState<Mode>(
-		search.mode === "reset" && search.token ? "reset" : "sign-in",
+	const [mode, setMode] = useState<Mode>(() =>
+		resolveInitialAuthMode(search.mode, search.token),
 	);
 	const [name, setName] = useState("");
 	const [businessName, setBusinessName] = useState("");

@@ -140,8 +140,12 @@ export function MarketingNav() {
 					<Link to="/auth" className="hm-label hidden px-3 py-2 sm:block">
 						Sign in
 					</Link>
-					<Link to="/auth" className="hm-btn hm-btn--primary">
-						Open app
+					<Link
+						to="/auth"
+						search={{ mode: "sign-up" }}
+						className="hm-btn hm-btn--primary"
+					>
+						Get started
 						<ArrowRight className="h-4 w-4" />
 					</Link>
 				</div>
@@ -201,7 +205,11 @@ export function MarketingHero({
 					</h1>
 					<p className="hm-lede mt-5 max-w-xl text-lg">{description}</p>
 					<div className="mt-8 flex flex-wrap gap-3">
-						<Link to="/auth" className="hm-btn hm-btn--primary">
+						<Link
+							to="/auth"
+							search={{ mode: "sign-up" }}
+							className="hm-btn hm-btn--primary"
+						>
 							Create workspace
 							<ArrowRight className="h-4 w-4" />
 						</Link>
@@ -401,6 +409,7 @@ export function MarketingFooter() {
 				<div className="mt-10 flex flex-wrap items-center justify-center gap-4">
 					<Link
 						to="/auth"
+						search={{ mode: "sign-up" }}
 						data-magnetic
 						className="hm-btn hm-btn--primary hm-btn--xl"
 					>

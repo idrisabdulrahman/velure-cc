@@ -79,3 +79,31 @@ describe("collections settings viewer guard", () => {
 		expectViewerGuard("markManualException({");
 	});
 });
+
+/**
+ * WS3 — the settings page distinguishes the two independent switches and reads
+ * the same derived status/amount as the rest of the app.
+ */
+describe("collections settings balance signals", () => {
+	it("shows scheduled scanning and automatic email delivery as separate signals", () => {
+		expect(source).toContain("Scheduled scanning is ");
+		expect(source).toContain("Automatic email delivery");
+		expect(source).not.toContain("Automatic reminders are ");
+	});
+
+	it("reads the boolean automatic-send switch without exposing the secret", () => {
+		expect(source).toContain('"/api/reminders/send-queue"');
+		expect(source).toContain('method: "GET"');
+		expect(source).toContain("automaticSendingEnabled");
+		// The raw env switch must never reach the client bundle.
+		expect(source).not.toContain("SCHEDULER_REMINDER_SEND_ENABLED");
+	});
+
+	it("uses the server-derived status, net amount and flags", () => {
+		expect(source).toContain("invoice.netPayable");
+		expect(source).toContain("return invoice.overdue;");
+		expect(source).toContain("return invoice.missingEmail;");
+		expect(source).toContain("return invoice.pausedOrManual;");
+		expect(source).toContain('invoice.status === "draft"');
+	});
+});

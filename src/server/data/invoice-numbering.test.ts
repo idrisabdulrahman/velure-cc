@@ -256,6 +256,54 @@ describe("mapInvoice exposes truthful delivery evidence", () => {
 		).toBe(true);
 	});
 
+	it("reports drafts separately and keeps them out of open and overdue", () => {
+		const summary = buildInvoiceListSummary([
+			{
+				documentType: "standard",
+				status: "draft",
+				total: 519_400,
+				balance: 519_400,
+				paymentAmount: 0,
+				currency: "NGN",
+				issueDate: "2026-01-01",
+			},
+			{
+				documentType: "standard",
+				status: "overdue",
+				total: 1_000,
+				balance: 1_000,
+				paymentAmount: 0,
+				currency: "NGN",
+				issueDate: "2026-01-01",
+			},
+			{
+				documentType: "standard",
+				status: "unpaid",
+				total: 2_000,
+				balance: 2_000,
+				paymentAmount: 0,
+				currency: "NGN",
+				issueDate: "2026-01-01",
+			},
+		]);
+
+		expect(summary.currencySummaries[0]).toMatchObject({
+			draftAmount: 519_400,
+			draftCount: 1,
+			openAmount: 2_000,
+			openCount: 1,
+			overdueAmount: 1_000,
+			overdueCount: 1,
+		});
+		// The draft must not leak into the unpaid/open revenue chart either.
+		expect(
+			summary.chartDataByCurrency.NGN?.reduce(
+				(total, point) => total + point.unpaidRevenue,
+				0,
+			),
+		).toBe(3_000);
+	});
+
 	it("does not fabricate deliveredAt for a created-but-unsent invoice", () => {
 		// Regression pin: the mapped `deliveredAt` used to fall back to
 		// `updatedAt` for any stored status !== "draft", so every ordinary
