@@ -133,6 +133,6 @@ describe("seller TIN gate on a VAT invoice", () => {
 			'[aria-label="Add a seller TIN before charging VAT."]',
 		);
 		expect(blocked).not.toBeNull();
-		expect(container.textContent).toContain("Review and issue");
+		expect(container.textContent).toContain("Preview invoice");
 	});
 });

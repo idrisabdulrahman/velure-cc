@@ -106,7 +106,7 @@ export type Database = {
           contact: Json
           created_at: string | null
           currency: string
-          email: string
+          email: string | null
           favorite: boolean
           id: string
           internal_notes: string | null
@@ -129,7 +129,7 @@ export type Database = {
           contact: Json
           created_at?: string | null
           currency: string
-          email: string
+          email?: string | null
           favorite: boolean
           id?: string
           internal_notes?: string | null
@@ -152,7 +152,7 @@ export type Database = {
           contact?: Json
           created_at?: string | null
           currency?: string
-          email?: string
+          email?: string | null
           favorite?: boolean
           id?: string
           internal_notes?: string | null

@@ -121,4 +121,41 @@ describe("POST /api/invoice/send/$id (G1 audit non-atomicity)", () => {
 		expect(payload.subject).toContain("Debit note DN-2026-0001");
 		expect(payload.text).toContain("debit note DN-2026-0001");
 	});
+
+	it("includes the amount, due date and PO in the email body (issue #3)", async () => {
+		const { getAuthenticatedInvoiceById } = await import(
+			"#/server/invoice-repository"
+		);
+		vi.mocked(getAuthenticatedInvoiceById).mockResolvedValueOnce({
+			id: "inv-1",
+			token: "share-token",
+			invoiceNumber: "INV-2026-0002",
+			customerName: "Acme Ltd",
+			documentType: "standard",
+			currency: "NGN",
+			dateFormat: "ng",
+			total: 155_000,
+			dueDate: "2026-02-01",
+			customerPoNumber: "PO-7788",
+			updatedAt: 1_700_000_000_000,
+			lineItems: [{ id: "li-1", name: "Service", quantity: 1, price: 100 }],
+			deliveredAt: 1_700_000_000_000,
+		} as never);
+
+		const response = await handle({
+			params: { id: "inv-1" },
+			request: sendRequest(),
+		});
+		expect(response.status).toBe(200);
+
+		const payload = resendSendSpy.mock.calls.at(-1)?.[0] as {
+			text?: string;
+			html?: string;
+		};
+		expect(payload.text).toContain("Amount:");
+		expect(payload.text).toContain("Due date:");
+		expect(payload.text).toContain("PO-7788");
+		expect(payload.html).toContain("PO-7788");
+		expect(payload.html).toContain("Due date:");
+	});
 });

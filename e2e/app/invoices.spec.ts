@@ -14,7 +14,7 @@ import { collectPageErrors, gotoApp } from "./helpers";
  *
  * READ-ONLY against a real account (AGENTS section 13): this spec navigates,
  * filters, types, and drives the composer to its validation edge, then leaves.
- * It never clicks Review and issue / Send / Schedule / Save draft, never saves,
+ * It never clicks Preview invoice / Send / Schedule / Save draft, never saves,
  * sends, pays, or deletes anything, and never uses the Import CSV file input.
  * The composer's autosave only persists a *meaningful* draft (a customer, a
  * priced line, an edited default, ...); this spec only adds an empty line item,
@@ -443,7 +443,7 @@ test.describe("invoice builder", () => {
 		// cannot be issued. The primary action is aria-disabled and exposes the
 		// blocker; assert it and leave without submitting.
 		const issue = page.getByRole("button", {
-			name: "Review and issue",
+			name: "Preview invoice",
 			exact: true,
 		});
 		await expect(issue).toBeVisible();

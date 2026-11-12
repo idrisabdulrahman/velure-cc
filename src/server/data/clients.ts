@@ -61,7 +61,8 @@ export type ClientRecord = {
 export type ClientInput = {
 	name: string;
 	company?: string;
-	email: string;
+	/** Optional: required only to email-deliver an invoice (issue #3 finding 4). */
+	email?: string;
 	phone?: string;
 	website?: string;
 	billingAddress?: string;
@@ -92,14 +93,14 @@ const CLIENT_COLUMNS =
 
 const assertValidClientPayload = (input: {
 	name: string;
-	email: string;
+	email?: string;
 	paymentTerms: string;
 	currency: string;
 	website?: string;
 	contactEmail?: string;
 }) => {
 	const name = input.name.trim();
-	const email = input.email.trim().toLowerCase();
+	const email = (input.email ?? "").trim().toLowerCase();
 	const paymentTerms = input.paymentTerms.trim();
 	const currency = input.currency.trim();
 	const contactEmail = input.contactEmail?.trim().toLowerCase();
@@ -109,7 +110,7 @@ const assertValidClientPayload = (input: {
 		throw new Error("Client name must be at least 2 characters long.");
 	}
 
-	if (!EMAIL_REGEX.test(email)) {
+	if (email && !EMAIL_REGEX.test(email)) {
 		throw new Error("Client email format is invalid.");
 	}
 
@@ -244,7 +245,7 @@ type ClientRow = {
 	owner_id: string | null;
 	name: string;
 	company: string | null;
-	email: string;
+	email: string | null;
 	phone: string | null;
 	website: string | null;
 	billing_address: string | null;
@@ -338,7 +339,7 @@ function toClientRecord(row: ClientRow): ClientRecord {
 		workspaceId: row.workspace_id ?? "",
 		name: row.name,
 		company: row.company,
-		email: row.email,
+		email: row.email ?? "",
 		phone: row.phone,
 		website: row.website,
 		billingAddress: row.billing_address,
@@ -366,6 +367,10 @@ async function assertEmailUnique(
 	idToIgnore?: string,
 ) {
 	const normalizedEmail = email.trim().toLowerCase();
+	// A name-only buyer has no email to collide with, so there is nothing to
+	// check (issue #3 finding 4). An empty string must never match every other
+	// email-less client as a "duplicate".
+	if (!normalizedEmail) return;
 	const { data, error } = await client
 		.from("clients")
 		.select("id")
@@ -407,7 +412,7 @@ export async function listClients(
 			const haystack = [
 				clientRow.name,
 				clientRow.company ?? "",
-				clientRow.email,
+				clientRow.email ?? "",
 				contact.fullName ?? "",
 			]
 				.join(" ")
@@ -525,13 +530,13 @@ export async function createClient(
 		{},
 		{
 			name: args.name,
-			email: args.email,
+			email: args.email ?? "",
 			billingAddress: args.billingAddress,
 			taxId: args.taxId,
 			buyerType: args.buyerType,
 		},
 	);
-	await assertEmailUnique(client, workspaceId, args.email);
+	await assertEmailUnique(client, workspaceId, args.email ?? "");
 
 	const { data, error } = await client
 		.from("clients")
@@ -540,7 +545,7 @@ export async function createClient(
 			owner_id: userId,
 			name: args.name.trim(),
 			company: normalize(args.company),
-			email: args.email.trim().toLowerCase(),
+			email: normalize(args.email)?.toLowerCase() ?? null,
 			phone: normalizeNigeriaPhone(args.phone),
 			website: normalize(args.website),
 			billing_address: buyer.billing_address,
@@ -599,20 +604,20 @@ export async function updateClient(
 		},
 		{
 			name: args.name,
-			email: args.email,
+			email: args.email ?? "",
 			billingAddress: args.billingAddress,
 			taxId: args.taxId,
 			buyerType: args.buyerType,
 		},
 	);
-	await assertEmailUnique(client, workspaceId, args.email, id);
+	await assertEmailUnique(client, workspaceId, args.email ?? "", id);
 
 	const { error } = await client
 		.from("clients")
 		.update({
 			name: args.name.trim(),
 			company: normalize(args.company),
-			email: args.email.trim().toLowerCase(),
+			email: normalize(args.email)?.toLowerCase() ?? null,
 			phone: normalizeNigeriaPhone(args.phone),
 			website: normalize(args.website),
 			billing_address: buyer.billing_address,
@@ -786,6 +791,15 @@ export async function importClientsCsv(
 		const email = String(row.email ?? "")
 			.trim()
 			.toLowerCase();
+		// A CSV import still requires an email per row even though the buyer
+		// record itself may be name-only (issue #3 finding 4): an imported list
+		// without addresses cannot be emailed, and a blank value would collapse
+		// every email-less row onto one dedupe key.
+		if (!email) {
+			skipped += 1;
+			addImportError(index + 2, "A client email is required for import.");
+			continue;
+		}
 		const clientRow = {
 			name: String(row.name ?? "").trim(),
 			email,
@@ -861,7 +875,7 @@ export async function importClientsCsv(
 				owner_id: userId,
 				name: doc.name,
 				company: doc.company,
-				email: doc.email,
+				email: doc.email ?? null,
 				phone: doc.phone,
 				website: doc.website,
 				billing_address: doc.buyer.billing_address,

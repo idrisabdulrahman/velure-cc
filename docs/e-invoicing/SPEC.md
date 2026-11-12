@@ -109,7 +109,7 @@ Priority: **P0** = do before any compliance claim or paying medium-taxpayer cust
 | ID | Fix | Pri | Phase |
 |---|---|---|---|
 | B1 | Supplier profile: validated TIN, required CAC RC, structured address (street, LGA/state, country), no placeholder values | P0 | Now |
-| B2 | Buyer record: name, TIN, address, email, B2B/B2C flag; **customer required to send** (drafts may be buyer-less) | P0 | Next |
+| B2 | Buyer record: name, TIN, address, B2B/B2C flag; **customer required to send** (drafts may be buyer-less). Email is optional on the buyer record and required only to email-deliver an invoice | P0 | Next |
 | B3 | Line items: description, quantity, unit of measure, unit price, discount, **VAT category** (standard/zero-rated/exempt), goods-or-service code | P0 | Next |
 | B4 | Structured payment means (bank, account name, number, reference) instead of one free-text box | P2 | Later |
 | B5 | Currency + exchange rate + NGN equivalent on every foreign-currency invoice | P1 | Later |
@@ -208,6 +208,7 @@ Priority: **P0** = do before any compliance claim or paying medium-taxpayer cust
 5. **Immutable numbering:** remove the editable "next invoice number" once the first invoice is issued (or restrict to "can only go up"). Sequence must be gap-aware and unique per supplier.
 6. **Issued invoices are locked.** Corrections via credit note / debit note, never edit or delete after "Sent".
 7. **Require a customer before sending** (drafts can be buyer-less; sending cannot). Add buyer TIN, address and email as first-class fields on Client, with a "B2B vs B2C" flag.
+   - *Amended 2026-11-12 (issue #3 finding 4, confirmed with the user):* a buyer record may be a **name alone**. Email is required to **email-deliver** an invoice (send/schedule are rejected without one), not to save the buyer; a missing email is flagged `needs_review`, not rejected.
 8. **Line-level tax data:** VAT category (standard / zero-rated / exempt), goods-or-service code and unit of measure on Products; make them required per line.
 9. Add an **invoice lifecycle** that can hold the new states: `Draft → Ready → Submitted → Cleared (IRN) / Rejected → Sent → Paid`. Store raw request/response from the provider for audit.
 10. Fix the reporting logic (exclude drafts from Outstanding unless you decide otherwise).

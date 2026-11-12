@@ -312,6 +312,51 @@ describe("client write paths store buyer flags", () => {
 		expect(created?.tax_id).toBe("8129473650");
 	});
 
+	it("createClient saves a name-only buyer and flags the missing email", async () => {
+		// Issue #3 finding 4: the shared handoff must not force an email. The
+		// record saves with a null email and a non-blocking `needs_review` flag.
+		const id = await createClient(client, USER_B, {
+			name: "Name Only Co",
+			currency: "NGN",
+			paymentTerms: "Net 14",
+			contact: {},
+			favorite: false,
+			status: "active",
+		});
+		const created = row(id);
+		expect(created?.name).toBe("Name Only Co");
+		expect(created?.email).toBeNull();
+		expect(created?.buyer_profile_status).toBe("needs_review");
+		expect(created?.buyer_profile_issues).toContain("email_required");
+	});
+
+	it("createClient allows two name-only buyers (blank is not a collision)", async () => {
+		const first = await createClient(client, USER_B, {
+			...clientInput,
+			name: "First Name Only",
+			email: "",
+		});
+		const second = await createClient(client, USER_B, {
+			...clientInput,
+			name: "Second Name Only",
+			email: "",
+		});
+		expect(row(first)?.email).toBeNull();
+		expect(row(second)?.email).toBeNull();
+	});
+
+	it("updateClient can clear the email without rejecting the edit", async () => {
+		await updateClient(client, USER_B, "client-b", {
+			...clientInput,
+			name: "Client B",
+			email: "",
+			// Clear the stored placeholder TIN so the edit is not refused for it;
+			// this test only exercises the optional email.
+			taxId: "",
+		});
+		expect(row("client-b")?.email).toBeNull();
+	});
+
 	it("createClient rejects a placeholder TIN and writes nothing", async () => {
 		const before = tables.clients?.length;
 		await expect(

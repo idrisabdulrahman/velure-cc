@@ -50,3 +50,23 @@ export function getPublicPaymentAffordances(input: {
 /** Shown in place of the payment affordances on a draft's customer page. */
 export const PUBLIC_DRAFT_PAYMENT_NOTICE =
 	"This invoice is a draft and is not payable yet.";
+
+/**
+ * The single prominent figure on the customer page, with its label. A draft is
+ * not payable, so it must never read "Amount due" against a zero balance — it
+ * shows the draft's total instead. A settled document shows what was paid.
+ */
+export function getPublicPrimaryAmount(input: {
+	status: InvoiceStatus;
+	total: number;
+	balance: number;
+	paymentAmount: number;
+}): { label: string; value: number } {
+	if (input.status === "paid") {
+		return { label: "Amount paid", value: input.paymentAmount };
+	}
+	if (isDraftPublicStatus(input.status)) {
+		return { label: "Draft total", value: input.total };
+	}
+	return { label: "Amount due", value: input.balance };
+}

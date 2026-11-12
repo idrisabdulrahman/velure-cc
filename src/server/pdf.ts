@@ -1,5 +1,9 @@
-import { toInvoiceDocument } from "#/features/invoices/invoice-document-adapter";
+import {
+	toEditorDoc,
+	toInvoiceDocument,
+} from "#/features/invoices/invoice-document-adapter";
 import { getInvoicePaymentReference } from "#/lib/invoice-document/payment-reference";
+import type { EditorDoc } from "#/lib/invoice-document/types";
 import type { Invoice } from "./invoice-repository";
 
 /**
@@ -46,6 +50,22 @@ function escapePdfText(value: string) {
 		.replace(/\\/g, "\\\\")
 		.replace(/\(/g, "\\(")
 		.replace(/\)/g, "\\)");
+}
+
+/**
+ * Flattens the same rich-text document the HTML/PDF templates render into plain
+ * printable lines, one per block, so the fallback writer carries the seller's
+ * payment instructions instead of dropping them.
+ */
+function editorDocLines(doc: EditorDoc | null): string[] {
+	if (!doc) return [];
+	return doc.content
+		.map((node) => {
+			const inline = node.content as Array<{ text?: string }> | undefined;
+			return (inline ?? []).map((part) => part.text ?? "").join("");
+		})
+		.map((line) => line.trimEnd())
+		.filter((line) => line.length > 0);
 }
 
 /** Rows a single A4/letter page holds at the fallback's fixed 18pt leading. */
@@ -118,6 +138,27 @@ function renderFallbackPdf(invoice: Invoice): Uint8Array {
 		rows.push(`WHT deduction: ${wht.toFixed(2)} ${invoice.currency}`);
 	rows.push(`Total: ${grandTotal.toFixed(2)} ${invoice.currency}`);
 	rows.push(`Net payable: ${netPayable.toFixed(2)} ${invoice.currency}`);
+
+	// A draft or scheduled document is not payable, so it prints neither the
+	// seller's bank instructions nor a payment reference — the same rule the
+	// HTML and styled PDF templates apply (their `showPaymentDetails`, and
+	// `getInvoicePaymentReference` for the reference). Without this the fallback
+	// silently dropped the instructions from an issued invoice, so the emailed
+	// attachment and the download disagreed with the public page.
+	const payable = invoice.status !== "draft" && invoice.status !== "scheduled";
+	const paymentDetailsLines = payable
+		? editorDocLines(toEditorDoc(invoice.paymentDetails))
+		: [];
+	if (paymentDetailsLines.length > 0) {
+		rows.push("");
+		rows.push(
+			invoice.templateSettings?.paymentLabel?.trim() ||
+				(invoice.documentType === "proforma"
+					? "Deposit / Payment Details"
+					: "Payment Details"),
+		);
+		rows.push(...paymentDetailsLines);
+	}
 
 	// Same reference convention the HTML renderer prints, so a payer can use it
 	// in a transfer narration. `scheduled` prints as `draft` (the adapters map

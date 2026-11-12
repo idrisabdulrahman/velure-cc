@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	getPublicPaymentAffordances,
+	getPublicPrimaryAmount,
 	isDraftPublicStatus,
 	PUBLIC_DRAFT_PAYMENT_NOTICE,
 } from "./public-payment-affordances";
@@ -101,5 +102,56 @@ describe("getPublicPaymentAffordances", () => {
 		expect(PUBLIC_DRAFT_PAYMENT_NOTICE).toBe(
 			"This invoice is a draft and is not payable yet.",
 		);
+	});
+});
+
+/**
+ * Issue #3 finding 4: a draft said "Amount due" next to a zero balance while
+ * its own notice said it was not payable. The prominent figure must be the
+ * draft's total instead.
+ */
+describe("getPublicPrimaryAmount", () => {
+	it("shows the draft's total, not a zero amount due", () => {
+		expect(
+			getPublicPrimaryAmount({
+				status: "draft",
+				total: 155_000,
+				balance: 0,
+				paymentAmount: 0,
+			}),
+		).toEqual({ label: "Draft total", value: 155_000 });
+	});
+
+	it("treats a scheduled document as a draft", () => {
+		expect(
+			getPublicPrimaryAmount({
+				status: "scheduled",
+				total: 155_000,
+				balance: 155_000,
+				paymentAmount: 0,
+			}),
+		).toEqual({ label: "Draft total", value: 155_000 });
+	});
+
+	it("shows the open balance on an issued invoice", () => {
+		expect(
+			getPublicPrimaryAmount({
+				status: "partially-paid",
+				total: 155_000,
+				balance: 100_000,
+				paymentAmount: 55_000,
+			}),
+		).toEqual({ label: "Amount due", value: 100_000 });
+	});
+
+	it("shows what was paid once settled", () => {
+		expect(
+			getPublicPrimaryAmount({
+				status: "paid",
+				total: 155_000,
+				balance: 0,
+				paymentAmount: 155_000,
+			}),
+		).toEqual({ label: "Amount paid", value: 155_000 });
 	});
 });

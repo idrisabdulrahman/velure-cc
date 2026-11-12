@@ -71,15 +71,17 @@ function NewClient() {
 
 	const nameError =
 		state.name.trim().length === 0 ? "Client name is required" : "";
+	// Email is optional on the buyer record: it is required only to email the
+	// invoice (issue #3 finding 4). A typed value must still be well-formed.
 	const emailError =
 		state.email.trim().length === 0
-			? "Email is required"
+			? ""
 			: /^\S+@\S+\.\S+$/.test(state.email.trim())
 				? ""
 				: "Please enter a valid email";
 	const visibleNameError = attemptedSubmit ? nameError : "";
 	const visibleEmailError =
-		attemptedSubmit || state.email.trim() ? emailError : "";
+		attemptedSubmit || state.email.trim().length > 0 ? emailError : "";
 
 	const isValid = !nameError && !emailError;
 
@@ -193,7 +195,11 @@ function NewClient() {
 										placeholder="Company"
 									/>
 								</Field>
-								<Field label="Email *" error={visibleEmailError}>
+								<Field
+									label="Email"
+									hint="Optional. Needed only to email invoices."
+									error={visibleEmailError}
+								>
 									<Input
 										value={state.email}
 										onChange={(event) =>
@@ -446,10 +452,12 @@ function NewClient() {
 
 function Field({
 	label,
+	hint,
 	error,
 	children,
 }: {
 	label: string;
+	hint?: string;
 	error?: string;
 	children: React.ReactNode;
 }) {
@@ -457,7 +465,11 @@ function Field({
 		<div className="space-y-1.5">
 			<Label className="text-xs text-ink-3">{label}</Label>
 			{children}
-			{error ? <p className="text-xs text-danger">{error}</p> : null}
+			{error ? (
+				<p className="text-xs text-danger">{error}</p>
+			) : hint ? (
+				<p className="text-xs text-ink-3">{hint}</p>
+			) : null}
 		</div>
 	);
 }

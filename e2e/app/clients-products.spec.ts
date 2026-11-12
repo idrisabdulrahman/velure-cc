@@ -164,7 +164,7 @@ test.describe("clients", () => {
 		for (const label of [
 			"Client name *",
 			"Company",
-			"Email *",
+			"Email",
 			"Phone",
 			"Website",
 			"TIN",

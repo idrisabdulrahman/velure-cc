@@ -206,7 +206,7 @@ describe("line classification on a no-VAT invoice", () => {
  * P1 fix: the first invoice used to hide the classification step behind an
  * undisclosed disclosure and expose a single ambiguous "Create" action, so a
  * draft could not be saved without it. The outcomes are now explicit - Save
- * draft, Review and issue, Send - and the missing fields are named at the line.
+ * draft, Preview invoice, Send - and the missing fields are named at the line.
  */
 describe("draft and issue actions are explicit", () => {
 	const oneUnclassifiedLine = {
@@ -222,7 +222,7 @@ describe("draft and issue actions are explicit", () => {
 
 	function issueButton(container: HTMLElement) {
 		return [...container.querySelectorAll("button")].find(
-			(button) => button.textContent?.trim() === "Review and issue",
+			(button) => button.textContent?.trim() === "Preview invoice",
 		);
 	}
 
@@ -266,6 +266,27 @@ describe("draft and issue actions are explicit", () => {
 			"This line needs unit and goods/service code before",
 		);
 		expect(container.textContent).toContain("Open tax & compliance");
+
+		await act(async () => root.unmount());
+	});
+
+	it("does not offer to open an invoice before one exists (issue #3)", async () => {
+		const { container, root } = renderPanel();
+		await act(async () => {
+			root.render(
+				<QueryClientProvider client={new QueryClient()}>
+					<CreateInvoicePanel initialDraft={oneUnclassifiedLine} />
+				</QueryClientProvider>,
+			);
+		});
+
+		// The old "Open invoice" icon called the creation path when there was no
+		// token. It must now be inert until an invoice is issued.
+		const openInvoice = [...container.querySelectorAll("button")].find(
+			(button) => button.getAttribute("aria-label") === "Open invoice",
+		);
+		expect(openInvoice).toBeDefined();
+		expect((openInvoice as HTMLButtonElement).disabled).toBe(true);
 
 		await act(async () => root.unmount());
 	});

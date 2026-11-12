@@ -382,10 +382,11 @@ export function ClientsIndex() {
 		});
 	}, [selected]);
 
+	const emailIsValid =
+		editState.email.trim().length === 0 ||
+		/^\S+@\S+\.\S+$/.test(editState.email.trim());
 	const updateDisabled =
-		!selected ||
-		editState.name.trim().length === 0 ||
-		!/^\S+@\S+\.\S+$/.test(editState.email);
+		!selected || editState.name.trim().length === 0 || !emailIsValid;
 
 	const isDirty =
 		Boolean(selected) &&
@@ -1487,7 +1488,10 @@ export function ClientsIndex() {
 														className="h-10 rounded-md border-rule bg-paper text-sm text-ink"
 													/>
 												</FormField>
-												<FormField label="Email">
+												<FormField
+													label="Email"
+													hint="Optional. Needed only to email invoices."
+												>
 													<Input
 														type="email"
 														value={editState.email}
