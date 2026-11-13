@@ -2,6 +2,7 @@ import type { InvoiceRecord } from "#/features/invoices/types";
 import { consumeFixedWindowRateLimit } from "#/server/http-security";
 import { emitActivation } from "#/server/observability";
 import { getSupabaseAdminClient } from "#/server/supabase";
+import { getBachsPayableInvoice } from "./bachs-invoices";
 import { recordInvoiceAudit } from "./data/audit";
 import {
 	convertQuoteToInvoice,
@@ -101,11 +102,17 @@ export async function getPublicInvoicePage(token: string) {
 	if (!result) return null;
 	const { invoice, countryCode } = result;
 
-	const [paymentContext, paymentHistory] = await Promise.all([
+	const [paymentContext, paymentHistory, bachsInvoice] = await Promise.all([
 		getPublicPaymentContextForInvoice(client, invoice, countryCode),
 		listPublicInvoicePaymentsForInvoice(client, invoice.id),
+		getBachsPayableInvoice(token),
 	]);
-	return { invoice, paymentContext, paymentHistory };
+	return {
+		invoice,
+		paymentContext,
+		paymentHistory,
+		bachsCheckoutAvailable: Boolean(bachsInvoice),
+	};
 }
 
 export async function getInvoiceByToken(token: string) {

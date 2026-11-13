@@ -590,6 +590,8 @@ const ROUTE_CLASSIFICATIONS: Record<string, Classification> = {
 	// Private submission endpoint; identity comes from the verified request session.
 	"invoice/submission/$id.ts": "session",
 	"invoice/submissions/scheduled.ts": "server-admin",
+	"payments/bachs/initialize.ts": "public-token",
+	"payments/bachs/webhook.ts": "server-admin",
 	"payments/paystack/initialize.ts": "public-token",
 	"payments/paystack/webhook.ts": "server-admin",
 	// Scheduler-secret trigger for missed-webhook recovery; no session/tenant id.

@@ -7,7 +7,6 @@ import {
 } from "#/features/invoices/customer-gate";
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import { assertSendCustomerGate } from "#/server/data/invoices";
-import { ensurePaystackTransferCharge } from "#/server/data/paystack-server";
 import { getServerEnv } from "#/server/env";
 import { safeErrorDetails } from "#/server/http-security";
 import {
@@ -319,18 +318,6 @@ async function sendInvoiceEmail({
 			safeErrorDetails(error),
 		);
 	});
-
-	// F9: only NGN invoices can use Paystack transfer, so do not pre-warm a
-	// charge for a currency the initialize path will refuse (this avoids a
-	// false "failed to prepare" error on every non-NGN send).
-	if (invoice.currency?.trim().toUpperCase() === "NGN") {
-		ensurePaystackTransferCharge(invoice.token).catch((error: unknown) => {
-			console.error(
-				"Failed to prepare Paystack transfer charge",
-				safeErrorDetails(error),
-			);
-		});
-	}
 
 	// WP-H: one activation line when an invoice is issued (sent to the buyer).
 	// Actor + resource ids only; the recipient address stays out of the log

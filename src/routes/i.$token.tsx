@@ -72,6 +72,7 @@ function PublicInvoicePage() {
 			return (await response.json()) as {
 				invoice: InvoiceRecord;
 				paymentContext: PublicPaymentContext | null;
+				bachsCheckoutAvailable?: boolean;
 				paymentHistory: Array<{
 					id: string;
 					source: PaymentSource;
@@ -90,7 +91,6 @@ function PublicInvoicePage() {
 	const isEmbedded = searchStringValue(location.search, "embed") === "1";
 	const stageEntry = useResizeObserver(stageRef);
 	const [isLinkCopied, setIsLinkCopied] = useState(false);
-	const [isAccountCopied, setIsAccountCopied] = useState(false);
 	const [isCreatingCharge, setIsCreatingCharge] = useState(false);
 	const [showClaimForm, setShowClaimForm] = useState(false);
 	const [claimAmount, setClaimAmount] = useState("");
@@ -199,48 +199,17 @@ function PublicInvoicePage() {
 		}
 	};
 
-	const charge = paymentContext?.charge;
-	const copyAccountNumber = async (accountNumber: string) => {
-		try {
-			await navigator.clipboard.writeText(accountNumber);
-			setIsAccountCopied(true);
-			toast({
-				title: "Account number copied",
-				description: "Paste it into your bank transfer screen.",
-				variant: "success",
-			});
-			window.setTimeout(() => setIsAccountCopied(false), 1800);
-		} catch {
-			toast({
-				title: "Could not copy account number",
-				description: "Select the number and copy it manually.",
-				variant: "error",
-			});
-		}
-	};
-
 	const payments = paymentHistory ?? [];
 	// A draft (and its `scheduled` alias) is not payable, so its page shows no
 	// collection panel, no bank-transfer instructions and no "I've paid" action.
-	const {
-		isDraft: isDraftState,
-		canUsePaystackTransfer,
-		showCollectionPanel,
-		canClaimPayment,
-	} = getPublicPaymentAffordances({
-		status: invoice.status,
-		balance: invoice.balance,
-		automaticBankTransfer: paymentContext?.capabilities.automaticBankTransfer,
-		payable: paymentContext?.payable,
-	});
-	const collectionStatusLabel = charge?.accountNumber
-		? "Active collection session"
-		: canUsePaystackTransfer
-			? "Ready to collect"
-			: (paymentContext?.payableIssue ?? "Online collection unavailable");
-	const collectionAmountLabel = paymentContext?.collectionAmount
-		? formatMoney(paymentContext.collectionAmount, invoice.currency)
-		: null;
+	const { isDraft: isDraftState, canClaimPayment } =
+		getPublicPaymentAffordances({
+			status: invoice.status,
+			balance: invoice.balance,
+			automaticBankTransfer: paymentContext?.capabilities.automaticBankTransfer,
+			payable: paymentContext?.payable,
+		});
+	const showCollectionPanel = Boolean(data?.bachsCheckoutAvailable);
 
 	// Match the document renderers: "scheduled" prints as "draft".
 	const paymentReference = getInvoicePaymentReference({
@@ -347,36 +316,24 @@ function PublicInvoicePage() {
 		}
 	};
 
-	const createTransferCharge = async () => {
+	const createBachsCheckout = async () => {
 		setIsCreatingCharge(true);
 		try {
-			const response = await fetch("/api/payments/paystack/initialize", {
+			const response = await fetch("/api/payments/bachs/initialize", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ token: invoice.token }),
 			});
-			const payload = (await response.json().catch(() => null)) as {
-				ok?: boolean;
-				error?: string;
-			} | null;
-			if (!response.ok || !payload?.ok) {
-				throw new Error(payload?.error ?? "Could not create transfer account.");
+			const payload = await response.json().catch(() => null);
+			if (!response.ok || typeof payload?.url !== "string") {
+				throw new Error(payload?.error ?? "Could not open checkout.");
 			}
-			toast({
-				title: "Transfer account ready",
-				description: "Use the temporary account before it expires.",
-				variant: "success",
-			});
-			// The charge is created server-side, but the account number lives on
-			// `paymentContext.charge`. Without this the payer keeps seeing the
-			// "Pay by transfer" button, retries, and burns the per-token rate
-			// limit until the endpoint answers 429.
-			await refetch();
+			window.location.assign(payload.url);
 		} catch (error) {
 			toast({
-				title: "Could not prepare transfer",
+				title: "Could not open checkout",
 				description:
-					error instanceof Error ? error.message : "Unknown payment error.",
+					error instanceof Error ? error.message : "Try again later.",
 				variant: "error",
 			});
 		} finally {
@@ -409,9 +366,6 @@ function PublicInvoicePage() {
 		{ label: "Due", value: dueDateLabel },
 		{ label: primaryAmountLabel, value: money(primaryAmountValue) },
 	];
-	const collectionTitle = paymentContext?.depositRequest
-		? "Deposit collection"
-		: "Payment collection";
 	// With no online collection the manual claim *is* the primary action; with
 	// one, "I've paid" steps back so the panel keeps a single accent.
 	const claimIsPrimary = !showCollectionPanel;
@@ -615,89 +569,19 @@ function PublicInvoicePage() {
 
 								{showCollectionPanel ? (
 									<div className="border-t border-rule px-5 py-5">
-										<div className="flex items-baseline justify-between gap-4">
-											<p className="text-xs font-medium text-ink">
-												{collectionTitle}
-											</p>
-											{paymentContext?.depositRequest &&
-											collectionAmountLabel ? (
-												<span className="font-num text-[11px] text-ink-3">
-													{collectionAmountLabel} requested
-												</span>
-											) : null}
-										</div>
-
-										{charge?.accountNumber ? (
-											<dl className="mt-3 overflow-hidden rounded-md border border-rule bg-paper-2">
-												<div className="flex items-center justify-between gap-4 border-b border-rule px-3.5 py-2.5">
-													<dt className="text-[11px] text-ink-3">Bank</dt>
-													<dd className="font-num text-sm text-ink">
-														{charge.bankName ?? "Paystack transfer"}
-													</dd>
-												</div>
-												<div className="flex items-center justify-between gap-3 border-b border-rule px-3.5 py-2.5">
-													<dt className="text-[11px] text-ink-3">
-														Account number
-													</dt>
-													<dd className="flex min-w-0 items-center gap-1">
-														<span className="select-all truncate font-num text-sm font-medium text-ink">
-															{charge.accountNumber}
-														</span>
-														<button
-															type="button"
-															onClick={() =>
-																void copyAccountNumber(
-																	charge.accountNumber ?? "",
-																)
-															}
-															className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-paper-3 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-															aria-label="Copy account number"
-															title="Copy account number"
-														>
-															{isAccountCopied ? (
-																<Check className="h-4 w-4 shrink-0" />
-															) : (
-																<Copy className="h-4 w-4 shrink-0" />
-															)}
-														</button>
-													</dd>
-												</div>
-												<div className="flex items-center justify-between gap-4 px-3.5 py-2.5">
-													<dt className="text-[11px] text-ink-3">Expires</dt>
-													<dd className="font-num text-sm text-ink">
-														{new Date(charge.expiresAt).toLocaleTimeString([], {
-															hour: "2-digit",
-															minute: "2-digit",
-														})}
-													</dd>
-												</div>
-											</dl>
-										) : canUsePaystackTransfer ? (
-											<button
-												type="button"
-												onClick={() => void createTransferCharge()}
-												disabled={isCreatingCharge}
-												className={`${PRIMARY_ACTION} mt-3 w-full`}
-											>
-												{isCreatingCharge ? (
-													<Spinner size={16} />
-												) : (
-													<Banknote className="h-4 w-4" />
-												)}
-												<span>Pay by transfer</span>
-											</button>
-										) : (
-											<p className="mt-2 text-xs text-ink-3">
-												{paymentContext?.payableIssue ??
-													`Online collection is not available for this ${documentLabel.toLowerCase()}.`}
-											</p>
-										)}
-
-										{charge?.accountNumber || canUsePaystackTransfer ? (
-											<p className="mt-2.5 text-[11px] text-ink-3">
-												{collectionStatusLabel}
-											</p>
-										) : null}
+										<button
+											type="button"
+											onClick={() => void createBachsCheckout()}
+											disabled={isCreatingCharge}
+											className={`${PRIMARY_ACTION} w-full`}
+										>
+											{isCreatingCharge ? (
+												<Spinner size={16} />
+											) : (
+												<Banknote className="h-4 w-4" />
+											)}
+											<span>Pay invoice by bank transfer</span>
+										</button>
 									</div>
 								) : null}
 
@@ -843,9 +727,11 @@ function PublicInvoicePage() {
 											>
 												<div className="min-w-0">
 													<p className="truncate text-xs font-medium text-ink">
-														{payment.provider === "paystack"
-															? "Paystack transfer"
-															: "Manual payment"}
+														{payment.provider === "bachs"
+															? "Bachs bank transfer"
+															: payment.provider === "paystack"
+																? "Paystack transfer"
+																: "Manual payment"}
 													</p>
 													<p className="mt-0.5 truncate text-[11px] text-ink-3">
 														{formatInvoiceDate(payment.createdAt, "ng")}

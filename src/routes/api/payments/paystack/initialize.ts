@@ -95,6 +95,6 @@ export const handlers = { POST: handle };
 
 export const Route = createFileRoute("/api/payments/paystack/initialize")({
 	server: {
-		handlers,
+		handlers: { POST: () => new Response(null, { status: 404 }) },
 	},
 });
