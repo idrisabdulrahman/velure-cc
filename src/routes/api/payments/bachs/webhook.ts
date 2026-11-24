@@ -1,10 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { parseBachsPayment, verifyBachsWebhook } from "#/server/bachs-invoices";
-import { readRequestText } from "#/server/http-security";
+import {
+	consumeFixedWindowRateLimit,
+	getClientIp,
+	readRequestText,
+} from "#/server/http-security";
 import { getSupabaseAdminClient } from "#/server/supabase";
 
 export async function handle({ request }: { request: Request }) {
-	const secret = process.env.BACHS_WEBHOOK_SECRET;
+	// Each Bachs environment signs with its own endpoint secret; a wrong secret
+	// can never verify, so any mismatch fails closed below. A mixed
+	// sandbox+live configuration fails closed too, matching bachsConfig().
+	if (process.env.BACHS_WEBHOOK_SECRET && process.env.BACHS_LIVE_WEBHOOK_SECRET)
+		return new Response(null, { status: 404 });
+	const secret =
+		process.env.BACHS_WEBHOOK_SECRET ?? process.env.BACHS_LIVE_WEBHOOK_SECRET;
 	if (!secret) return new Response(null, { status: 404 });
 	let raw: string;
 	try {
@@ -12,6 +22,21 @@ export async function handle({ request }: { request: Request }) {
 	} catch {
 		return new Response(null, { status: 413 });
 	}
+	// HMAC over up to 256 KB is real CPU on the free plan; bound garbage
+	// floods before verification. 429 is retryable, so a legitimate
+	// delivery throttled here is redelivered by Bachs.
+	const ip = getClientIp(request);
+	if (
+		ip &&
+		!(await consumeFixedWindowRateLimit(
+			getSupabaseAdminClient(),
+			"webhook-ip",
+			ip,
+			60,
+			60,
+		))
+	)
+		return new Response(null, { status: 429 });
 	if (
 		!verifyBachsWebhook(
 			raw,
@@ -20,7 +45,7 @@ export async function handle({ request }: { request: Request }) {
 		)
 	)
 		return new Response(null, { status: 401 });
-	let event: unknown;
+	let event: ReturnType<typeof JSON.parse>;
 	try {
 		event = JSON.parse(raw);
 	} catch {
@@ -28,9 +53,11 @@ export async function handle({ request }: { request: Request }) {
 	}
 	const payment = parseBachsPayment(event);
 	if (!payment) return Response.json({ ignored: true });
+	// The raw event is signature-verified at this point; store it so
+	// reconciliation and disputes have the provider's own record.
 	const { data, error } = await getSupabaseAdminClient().rpc(
 		"confirm_bachs_payment",
-		payment,
+		{ ...payment, input_raw_event: event },
 	);
 	if (error) return new Response(null, { status: 503 });
 	if (typeof data === "object" && data && !Array.isArray(data) && !data.ok)

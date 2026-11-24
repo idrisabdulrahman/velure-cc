@@ -44,9 +44,19 @@ export async function consumeFixedWindowRateLimit(
 }
 
 export function getClientIp(request: Request) {
-	const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0];
-	const direct = request.headers.get("x-real-ip");
-	return forwarded?.trim() || direct?.trim() || null;
+	// On Cloudflare, x-forwarded-for starts with the client-supplied value
+	// (Cloudflare appends the real one), so it is spoofable. The edge-set
+	// CF-Connecting-IP is authoritative; fall back to the LAST forwarded
+	// entry, then x-real-ip.
+	const connecting = request.headers.get("cf-connecting-ip")?.trim();
+	if (connecting) return connecting;
+	const forwardedFor = request.headers.get("x-forwarded-for");
+	if (forwardedFor) {
+		const entries = forwardedFor.split(",").map((entry) => entry.trim());
+		const last = entries.at(-1);
+		if (last) return last;
+	}
+	return request.headers.get("x-real-ip")?.trim() || null;
 }
 
 export async function readRequestText(request: Request) {

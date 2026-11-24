@@ -14,7 +14,7 @@ afterEach(() => {
 function delivery(secret: string) {
 	const body = JSON.stringify({
 		type: "checkout.completed",
-		account: "acct_sellerA",
+		organization_id: "acct_sellerA",
 		data: {
 			checkout_id: "chk_invoiceA",
 			status: "completed",
@@ -43,6 +43,15 @@ it("rejects a forged payment before touching the ledger", async () => {
 	vi.stubEnv("BACHS_WEBHOOK_SECRET", "sandbox-secret");
 	expect((await handle({ request: delivery("wrong-secret") })).status).toBe(
 		401,
+	);
+	expect(rpc).not.toHaveBeenCalled();
+});
+
+it("fails closed when sandbox and live secrets are configured at once", async () => {
+	vi.stubEnv("BACHS_WEBHOOK_SECRET", "sandbox-secret");
+	vi.stubEnv("BACHS_LIVE_WEBHOOK_SECRET", "live-secret");
+	expect((await handle({ request: delivery("sandbox-secret") })).status).toBe(
+		404,
 	);
 	expect(rpc).not.toHaveBeenCalled();
 });

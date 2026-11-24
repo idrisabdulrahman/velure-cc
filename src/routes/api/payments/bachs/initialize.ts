@@ -1,8 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-	bachsSandboxConfig,
-	createBachsCheckout,
-} from "#/server/bachs-invoices";
+import { bachsConfig, createBachsCheckout } from "#/server/bachs-invoices";
 import {
 	consumeFixedWindowRateLimit,
 	getClientIp,
@@ -11,7 +8,7 @@ import {
 import { getSupabaseAdminClient } from "#/server/supabase";
 
 async function handle({ request }: { request: Request }) {
-	if (!bachsSandboxConfig()) return new Response(null, { status: 404 });
+	if (!bachsConfig()) return new Response(null, { status: 404 });
 	let token: unknown;
 	try {
 		token = JSON.parse(await readRequestText(request))?.token;

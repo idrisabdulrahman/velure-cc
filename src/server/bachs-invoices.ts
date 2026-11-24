@@ -25,11 +25,62 @@ export function bachsSandboxConfig() {
 		!origin
 	)
 		return null;
-	return { key, secret, workspace, account, product, origin };
+	return {
+		key,
+		secret,
+		workspace,
+		account,
+		product,
+		origin,
+		api: "https://sandbox-api.bachs.io",
+		checkout: "https://sandbox-checkout.bachs.io",
+	};
+}
+
+export function bachsLiveConfig() {
+	const {
+		BACHS_LIVE_API_KEY: key,
+		BACHS_LIVE_WEBHOOK_SECRET: secret,
+		BACHS_LIVE_WORKSPACE_ID: workspace,
+		BACHS_LIVE_ACCOUNT_ID: account,
+		BACHS_LIVE_PRODUCT_ID: product,
+		BACHS_LIVE_RETURN_ORIGIN: origin,
+	} = process.env;
+	if (
+		!key?.startsWith("sk_live_") ||
+		!secret ||
+		!workspace ||
+		!account?.startsWith("acct_") ||
+		!product?.startsWith("prod_") ||
+		!origin
+	)
+		return null;
+	return {
+		key,
+		secret,
+		workspace,
+		account,
+		product,
+		origin,
+		api: "https://api.bachs.io",
+		checkout: "https://checkout.bachs.io",
+	};
+}
+
+/**
+ * Exactly one environment may be configured. A deployment that sets both the
+ * sandbox and the live env set is a mixed configuration and fails closed, so
+ * checkout sessions can never be created against the wrong Bachs environment.
+ */
+export function bachsConfig() {
+	const sandbox = bachsSandboxConfig();
+	const live = bachsLiveConfig();
+	if (sandbox && live) return null;
+	return sandbox ?? live;
 }
 
 export async function getBachsPayableInvoice(token: string) {
-	const config = bachsSandboxConfig();
+	const config = bachsConfig();
 	if (!config) return null;
 	const client = getSupabaseAdminClient();
 	const row = await invoiceByToken(client, token);
@@ -49,6 +100,38 @@ export async function getBachsPayableInvoice(token: string) {
 		id: String(row.id),
 		amount: getInvoicePaymentSnapshot(invoice).balance,
 	};
+}
+
+/**
+ * Guards against a checkout response pointing at the wrong environment,
+ * a non-checkout reference, or an unusable expiry. Throws rather than
+ * returning so a poisoned response can never reach the ledger.
+ */
+export function validateBachsCheckoutResponse(
+	checkout: {
+		checkout_id?: string;
+		checkout_url?: string;
+		expires_at?: string;
+	},
+	expectedOrigin: string,
+	now = Date.now(),
+): string {
+	let url: URL;
+	try {
+		url = new URL(checkout.checkout_url ?? "");
+	} catch {
+		throw new Error("Unexpected Bachs checkout response");
+	}
+	if (
+		url.origin !== expectedOrigin ||
+		!checkout.checkout_id?.startsWith("chk_") ||
+		!checkout.expires_at ||
+		!Number.isFinite(Date.parse(checkout.expires_at)) ||
+		Date.parse(checkout.expires_at) <= now
+	) {
+		throw new Error("Unexpected Bachs checkout response");
+	}
+	return url.href;
 }
 
 export async function createBachsCheckout(token: string) {
@@ -95,59 +178,51 @@ export async function createBachsCheckout(token: string) {
 
 	const returnUrl = new URL(`/i/${encodeURIComponent(token)}`, config.origin)
 		.href;
-	const response = await fetch(
-		"https://sandbox-api.bachs.io/v1/checkout-sessions",
-		{
-			method: "POST",
-			redirect: "error",
-			signal: AbortSignal.timeout(10_000),
-			headers: {
-				Authorization: `Bearer ${config.key}`,
-				"Content-Type": "application/json",
-				"X-Account-Id": config.account,
-				"Idempotency-Key": charge.id,
-			},
-			body: JSON.stringify({
-				product_cart: [
-					{
-						product_id: config.product,
-						quantity: 1,
-						pricing: { price_type: "fixed", amount: amount.toFixed(2) },
-					},
-				],
-				payment_method_types: ["NGN_BANK_TRANSFER"],
-				success_url: returnUrl,
-				cancel_url: returnUrl,
-			}),
+	const response = await fetch(`${config.api}/v1/checkout-sessions`, {
+		method: "POST",
+		redirect: "manual",
+		signal: AbortSignal.timeout(10_000),
+		headers: {
+			Authorization: `Bearer ${config.key}`,
+			"Content-Type": "application/json",
+			// X-Account-Id is a Connect sub-account header: Bachs rejects it
+			// with 403 when it names the platform's own organization. This
+			// checkout runs against the configured account itself, so the
+			// key alone identifies the account. Reintroduce the header only
+			// when a workspace maps to a connected account (acct_ != org).
+			"Idempotency-Key": charge.id,
 		},
-	);
+		body: JSON.stringify({
+			product_cart: [
+				{
+					product_id: config.product,
+					quantity: 1,
+					pricing: { price_type: "fixed", amount: amount.toFixed(2) },
+				},
+			],
+			payment_method_types: ["NGN_BANK_TRANSFER"],
+			success_url: returnUrl,
+			cancel_url: returnUrl,
+		}),
+	});
 	if (!response.ok) throw new Error(`Bachs checkout HTTP ${response.status}`);
 	const checkout = (await response.json()) as {
 		checkout_id?: string;
 		checkout_url?: string;
 		expires_at?: string;
 	};
-	const url = new URL(checkout.checkout_url ?? "");
-	if (
-		url.origin !== "https://checkout.bachs.io" ||
-		!checkout.checkout_id?.startsWith("chk_") ||
-		!checkout.expires_at ||
-		Date.parse(checkout.expires_at) <= Date.now() ||
-		!Number.isFinite(Date.parse(checkout.expires_at))
-	) {
-		throw new Error("Unexpected Bachs checkout response");
-	}
+	const checkoutUrl = validateBachsCheckoutResponse(checkout, config.checkout);
 	const { error } = await client
 		.from("payment_charges")
 		.update({
 			reference: checkout.checkout_id,
 			expires_at: checkout.expires_at,
-			raw_response: { account: config.account, url: url.href },
+			raw_response: { account: config.account, url: checkoutUrl },
 		})
 		.eq("id", charge.id)
 		.eq("status", "pending");
 	if (error) throw error;
-	return url.href;
+	return checkoutUrl;
 }
 
 export function verifyBachsWebhook(
@@ -172,8 +247,9 @@ export function verifyBachsWebhook(
 
 export function parseBachsPayment(event: unknown) {
 	if (!event || typeof event !== "object") return null;
-	const { type, account, data } = event as {
+	const { type, organization_id, account, data } = event as {
 		type?: string;
+		organization_id?: string;
 		account?: string;
 		data?: {
 			checkout_id?: string;
@@ -188,11 +264,15 @@ export function parseBachsPayment(event: unknown) {
 			};
 		};
 	};
+	// The event carries the account as top-level `organization_id` (per
+	// docs.bachs.io webhook payloads); `account` is kept as a defensive
+	// fallback for alternate envelope shapes.
+	const orgAccount = organization_id ?? account;
 	const charge = data?.charge;
 	if (
 		type !== "checkout.completed" ||
-		typeof account !== "string" ||
-		!account.startsWith("acct_") ||
+		typeof orgAccount !== "string" ||
+		!orgAccount.startsWith("acct_") ||
 		data?.status !== "completed" ||
 		data.mode !== "payment" ||
 		data.payment_status !== "paid" ||
@@ -209,7 +289,7 @@ export function parseBachsPayment(event: unknown) {
 		return null;
 	return {
 		input_reference: data.checkout_id,
-		input_account: account,
+		input_account: orgAccount,
 		input_provider_payment_id: charge.id,
 		input_amount: Number(charge.amount),
 		input_currency: "NGN",
