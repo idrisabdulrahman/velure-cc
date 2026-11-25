@@ -958,7 +958,7 @@ export function InvoiceDetailsSheet({
 			<Sheet open={open} onOpenChange={onOpenChange}>
 				<SheetContent
 					side="right"
-					contentClassName="w-full sm:max-w-[600px] p-0"
+					contentClassName="w-full sm:max-w-[680px] lg:max-w-[760px] p-0"
 					className="flex h-full min-h-0 flex-col border-rule bg-paper p-0 text-ink bg-none"
 					title={draft ? `Edit ${draft.invoiceNumber}` : "Edit invoice"}
 				>
@@ -998,13 +998,13 @@ export function InvoiceDetailsSheet({
 								</SheetHeader>
 							</div>
 
-							<div className="flex-1 overflow-y-auto px-6 py-6">
+							<div className="@container flex-1 overflow-y-auto px-6 py-6">
 								<div className="space-y-6">
 									<Section
 										title="Invoice details"
 										subtitle="Core billing information and dates."
 									>
-										<div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+										<div className="mb-5 grid gap-3 @sm:grid-cols-2 @2xl:grid-cols-4">
 											<CompactMetric
 												label="Issue date"
 												value={formatDate(draft.issueDate)}
@@ -1023,7 +1023,7 @@ export function InvoiceDetailsSheet({
 											/>
 										</div>
 
-										<div className="grid min-w-0 gap-4 sm:grid-cols-2">
+										<div className="grid min-w-0 gap-4 @sm:grid-cols-2">
 											<Field label="Invoice number">
 												<Input
 													value={draft.invoiceNumber}
@@ -1131,7 +1131,7 @@ export function InvoiceDetailsSheet({
 											</Button>
 										) : (
 											<>
-												<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+												<div className="grid gap-4 @sm:grid-cols-2">
 													<Field label="Seller TIN">
 														<Input
 															value={draft.compliance?.seller?.taxId ?? ""}
@@ -1544,7 +1544,7 @@ export function InvoiceDetailsSheet({
 													</Field>
 												</div>
 
-												<div className="mt-5 grid gap-3 md:grid-cols-4">
+												<div className="mt-5 grid gap-3 @sm:grid-cols-2 @2xl:grid-cols-4">
 													<CompactMetric
 														label="Subtotal"
 														value={formatMoney(
@@ -1603,7 +1603,7 @@ export function InvoiceDetailsSheet({
 										title="Line items"
 										subtitle="Update quantities, pricing, and descriptions."
 									>
-										<div className="hidden grid-cols-[minmax(0,1.35fr)_72px_minmax(0,1fr)_minmax(0,1.15fr)_32px] gap-2 px-1 text-xs font-medium text-ink-2 md:grid">
+										<div className="hidden grid-cols-[minmax(0,1.35fr)_72px_minmax(0,1fr)_minmax(0,1.15fr)_32px] gap-2 px-1 text-xs font-medium text-ink-2 @2xl:grid">
 											<span>Description</span>
 											<span>Quantity</span>
 											<span>Unit price</span>
@@ -1626,10 +1626,10 @@ export function InvoiceDetailsSheet({
 												>
 													{draft.lineItems.map((item) => (
 														<SortableLineItem key={item.id} id={item.id}>
-															<div className="rounded-md border border-rule bg-paper p-3 md:border-0 md:bg-transparent md:p-0">
-																<div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1.35fr)_72px_minmax(0,1fr)_minmax(0,1.15fr)_32px] md:items-center">
+															<div className="rounded-md border border-rule bg-paper p-3 @2xl:border-0 @2xl:bg-transparent @2xl:p-0">
+																<div className="grid min-w-0 gap-2 @2xl:grid-cols-[minmax(0,1.35fr)_72px_minmax(0,1fr)_minmax(0,1.15fr)_32px] @2xl:items-center">
 																	<div>
-																		<div className="mb-2 text-[11px] text-ink-3 md:hidden">
+																		<div className="mb-2 text-[11px] text-ink-3 @2xl:hidden">
 																			Description
 																		</div>
 																		<Input
@@ -1649,7 +1649,7 @@ export function InvoiceDetailsSheet({
 																		/>
 																	</div>
 																	<div>
-																		<div className="mb-2 text-[11px] text-ink-3 md:hidden">
+																		<div className="mb-2 text-[11px] text-ink-3 @2xl:hidden">
 																			Quantity
 																		</div>
 																		<NumberStepperInput
@@ -1663,7 +1663,7 @@ export function InvoiceDetailsSheet({
 																		/>
 																	</div>
 																	<div>
-																		<div className="mb-2 text-[11px] text-ink-3 md:hidden">
+																		<div className="mb-2 text-[11px] text-ink-3 @2xl:hidden">
 																			Unit price
 																		</div>
 																		<NumberStepperInput
@@ -1677,11 +1677,11 @@ export function InvoiceDetailsSheet({
 																		/>
 																	</div>
 																	<div>
-																		<div className="mb-2 text-[11px] text-ink-3 md:hidden">
+																		<div className="mb-2 text-[11px] text-ink-3 @2xl:hidden">
 																			Line total
 																		</div>
-																		<div className="flex h-10 items-center justify-between rounded-md border border-rule bg-paper px-3 text-sm font-medium text-ink md:justify-end">
-																			<span className="md:hidden text-ink-3">
+																		<div className="flex h-10 items-center justify-between rounded-md border border-rule bg-paper px-3 text-sm font-medium text-ink @2xl:justify-end">
+																			<span className="@2xl:hidden text-ink-3">
 																				Total
 																			</span>
 																			<span className="text-right">
@@ -1692,7 +1692,7 @@ export function InvoiceDetailsSheet({
 																			</span>
 																		</div>
 																	</div>
-																	<div className="flex items-end md:block">
+																	<div className="flex items-end @2xl:block">
 																		<button
 																			type="button"
 																			onClick={() => removeLineItem(item.id)}
@@ -1769,7 +1769,7 @@ export function InvoiceDetailsSheet({
 										</div>
 									</Section>
 
-									<div className="grid gap-6 lg:grid-cols-2">
+									<div className="grid gap-6 @2xl:grid-cols-2">
 										<Section title="Status">
 											<div className="space-y-3">
 												<div className="rounded-md border border-rule bg-paper px-3 py-2 text-sm capitalize text-ink">
@@ -1777,7 +1777,7 @@ export function InvoiceDetailsSheet({
 														? "sent"
 														: draft.status.replace("-", " ")}
 												</div>
-												<div className="grid gap-2 sm:grid-cols-2">
+												<div className="grid gap-2 @sm:grid-cols-2">
 													<Button
 														type="button"
 														variant="ghost"
@@ -1944,6 +1944,7 @@ export function InvoiceDetailsSheet({
 												<div>
 													<label
 														htmlFor="invoice-share-recipient-email"
+														id="invoice-share-recipient-email-label"
 														className="mb-2 block text-xs font-medium text-ink-2"
 													>
 														Recipient email
@@ -1960,9 +1961,13 @@ export function InvoiceDetailsSheet({
 															className="h-10 rounded-md border-rule bg-paper text-ink"
 														/>
 														<Button
+															type="button"
 															onClick={onSendEmail}
 															disabled={isSendingEmail}
 															variant="ghost"
+															aria-label="Send invoice email"
+															title="Send invoice email"
+															aria-describedby="invoice-share-recipient-email-label"
 															className="h-10 rounded-md border border-rule bg-paper px-3 hover:bg-paper-2"
 														>
 															{isSendingEmail ? (
@@ -1985,6 +1990,7 @@ export function InvoiceDetailsSheet({
 														target="_blank"
 														rel="noreferrer"
 														aria-label="Share on Telegram"
+														title="Share on Telegram"
 														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
 													>
 														<FaTelegram className="h-4 w-4" />
@@ -1994,6 +2000,7 @@ export function InvoiceDetailsSheet({
 														target="_blank"
 														rel="noreferrer"
 														aria-label="Share on WhatsApp"
+														title="Share on WhatsApp"
 														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
 													>
 														<FaWhatsapp className="h-4 w-4" />
@@ -2018,7 +2025,8 @@ export function InvoiceDetailsSheet({
 																links.publicUrl,
 															);
 														}}
-														aria-label="Share link"
+														aria-label="Share invoice link"
+														title="Share invoice link"
 														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
 													>
 														<Share2 className="h-4 w-4" />
@@ -2032,7 +2040,8 @@ export function InvoiceDetailsSheet({
 																"noopener,noreferrer",
 															)
 														}
-														aria-label="Open invoice"
+														aria-label="Open invoice in new tab"
+														title="Open invoice in new tab"
 														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
 													>
 														<ExternalLink className="h-4 w-4" />
@@ -2044,16 +2053,18 @@ export function InvoiceDetailsSheet({
 																invoiceShareLinks(draft).publicUrl,
 															)
 														}
-														aria-label="Copy link"
+														aria-label="Copy invoice link"
+														title="Copy invoice link"
 														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
 													>
 														<Copy className="h-4 w-4" />
 													</button>
 													<a
-														href={invoiceShareLinks(draft).publicUrl}
+														href={invoiceShareLinks(draft).downloadUrl}
 														target="_blank"
 														rel="noreferrer"
-														aria-label="Preview before download"
+														aria-label="Download invoice PDF"
+														title="Download invoice PDF"
 														className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink"
 													>
 														<ArrowDownToLine className="h-4 w-4" />
@@ -2085,7 +2096,8 @@ export function InvoiceDetailsSheet({
 														className="h-10 rounded-md border-rule bg-paper text-ink"
 													/>
 													<p className="mt-2 text-xs text-ink-2">
-														Select Paid in status after entering reference.
+														Enter the reference above, then choose “Mark as
+														paid” under Status to record it.
 													</p>
 												</Field>
 											</div>
@@ -2108,7 +2120,7 @@ export function InvoiceDetailsSheet({
 												Add notes & payment instructions
 											</Button>
 										) : (
-											<div className="grid gap-4 md:grid-cols-2">
+											<div className="grid gap-4 @sm:grid-cols-2">
 												<Field label="Payment details">
 													<textarea
 														value={draft.paymentDetails ?? ""}
@@ -2225,7 +2237,7 @@ export function InvoiceDetailsSheet({
 				</SheetContent>
 			</Sheet>
 			{savePillState !== "idle" ? (
-				<div className="pointer-events-none fixed bottom-6 left-1/2 z-110 -translate-x-1/2">
+				<div className="pointer-events-none fixed bottom-6 left-1/2 z-[110] -translate-x-1/2">
 					<div
 						className={`inline-flex items-center rounded-md border px-3 py-1.5 text-[12px] font-medium shadow-[0_14px_30px_rgba(0,0,0,0.35)] ${
 							savePillState === "saved"
