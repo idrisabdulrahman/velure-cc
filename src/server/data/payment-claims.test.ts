@@ -22,6 +22,7 @@ vi.mock("./payments", () => ({
 	recordPayment: vi.fn(),
 }));
 
+import { recordInvoiceAudit } from "./audit";
 import {
 	confirmPaymentClaim,
 	insertPaymentClaim,
@@ -166,11 +167,20 @@ describe("confirmPaymentClaim — evidence, not settlement", () => {
 
 		const result = await confirmPaymentClaim(client, USER_A, CLAIM_A);
 
-		expect(recordPayment).toHaveBeenCalledWith(client, USER_A, {
-			invoiceId: INV_A,
-			amount: 100,
-			reference: "ref-claim-a",
-		});
+		expect(recordPayment).toHaveBeenCalledWith(
+			client,
+			USER_A,
+			{
+				invoiceId: INV_A,
+				amount: 100,
+				reference: "ref-claim-a",
+			},
+			// Regression: confirmation runs server-side, so it MUST inject the
+			// in-process audit service. Falling back to `recordPayment`'s
+			// default (the browser `./audit-client` relative `fetch`) throws
+			// inside the worker after the payment is already applied.
+			recordInvoiceAudit,
+		);
 		expect(result).toEqual({
 			ok: true,
 			duplicate: false,

@@ -1,6 +1,6 @@
 import { emitActivation } from "#/server/observability";
 import type { Database, Json } from "#/types/database.types";
-import { recordInvoiceAudit } from "./audit-client";
+import { type InvoiceAuditWriter, recordInvoiceAudit } from "./audit-client";
 import { deriveInvoiceStatus, invoiceNetPayable } from "./invoice-balance";
 import { isInvoiceIssued } from "./invoice-numbering";
 import {
@@ -421,6 +421,11 @@ export async function recordPayment(
 		recordedAt?: number;
 		reference?: string;
 	},
+	// Server-side callers (e.g. buyer-claim confirmation, which runs inside a
+	// request handler) must inject the in-process audit service from
+	// `./audit`; the default transport is a relative `fetch`, which only
+	// resolves in the browser. See `./audit-client`'s module doc.
+	write?: InvoiceAuditWriter,
 ) {
 	const invoice = await getInvoiceById(client, userId, args.invoiceId);
 	if (!invoice) throw new Error("Invoice not found.");
@@ -527,15 +532,20 @@ export async function recordPayment(
 		(await getInvoiceById(client, userId, args.invoiceId)) ?? invoice;
 	const crossingIntoIssued =
 		!isInvoiceIssued(invoice) && isInvoiceIssued(updated);
-	await recordInvoiceAudit(client, userId, {
-		action: crossingIntoIssued ? "invoice.send" : "invoice.edit",
-		resourceId: args.invoiceId,
-		before: invoice,
-		after: updated,
-		message: crossingIntoIssued
-			? "Invoice issued when a payment was recorded."
-			: "Recorded a payment.",
-	});
+	await recordInvoiceAudit(
+		client,
+		userId,
+		{
+			action: crossingIntoIssued ? "invoice.send" : "invoice.edit",
+			resourceId: args.invoiceId,
+			before: invoice,
+			after: updated,
+			message: crossingIntoIssued
+				? "Invoice issued when a payment was recorded."
+				: "Recorded a payment.",
+		},
+		write,
+	);
 
 	// WP-H: one activation line per recorded payment (the money-visible action).
 	// Ids and the integer amount only; no PII (`AGENTS.md` §8).
