@@ -66,7 +66,7 @@ function installAdminCapture() {
 }
 
 function post(body: string, headers: Record<string, string> = {}) {
-	return new Request("http://velure.test/api/invoice/audit", {
+	return new Request("http://invoicly.test/api/invoice/audit", {
 		method: "POST",
 		headers: { "content-type": "application/json", ...headers },
 		body,

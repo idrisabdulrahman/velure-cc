@@ -151,7 +151,7 @@ function CustomerStatementPage() {
 	const navigate = useNavigate();
 	const authState = useUnifiedAuth();
 	const userId = authState.data?.user?.id;
-	const { client, velureUserId } = useSupabaseSession(userId);
+	const { client, invoiclyUserId } = useSupabaseSession(userId);
 	const [period, setPeriod] = useState<Period>("all");
 	const range = useMemo(() => periodWindow(period), [period]);
 
@@ -171,13 +171,13 @@ function CustomerStatementPage() {
 	}, [authReturnPath, navigate]);
 
 	const { data: workspace } = useQuery({
-		queryKey: ["supabase-workspace-context", velureUserId ?? "none"],
+		queryKey: ["supabase-workspace-context", invoiclyUserId ?? "none"],
 		queryFn: () => {
-			if (!client || !velureUserId)
+			if (!client || !invoiclyUserId)
 				throw new Error("Supabase session unavailable.");
-			return getWorkspaceContext(client, velureUserId);
+			return getWorkspaceContext(client, invoiclyUserId);
 		},
-		enabled: Boolean(client && velureUserId),
+		enabled: Boolean(client && invoiclyUserId),
 	});
 
 	const {

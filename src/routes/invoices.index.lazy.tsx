@@ -220,7 +220,7 @@ const PENDING_STATUSES = new Set<InvoiceStatus>([
 	"overdue",
 ]);
 
-const STANDARD_INVOICE_IMPORT_STORAGE_KEY = "velure:pending-standard-invoice";
+const STANDARD_INVOICE_IMPORT_STORAGE_KEY = "invoicly:pending-standard-invoice";
 
 function toLocalDateInputValue(date: Date) {
 	const year = date.getFullYear();
@@ -1660,7 +1660,7 @@ function InvoicesIndex() {
 													type="button"
 													variant="ghost"
 													size="icon"
-													className="h-8 w-8"
+													className="h-9 w-9"
 													title="Renumber selected"
 													aria-label="Renumber selected invoices"
 													onClick={() =>
@@ -1678,7 +1678,7 @@ function InvoicesIndex() {
 													type="button"
 													variant="ghost"
 													size="icon"
-													className="h-8 w-8 text-ink-2 hover:bg-danger-soft hover:text-danger"
+													className="h-9 w-9 text-ink-2 hover:bg-danger-soft hover:text-danger"
 													title="Delete selected"
 													aria-label="Delete selected invoices"
 													onClick={() =>
@@ -1698,7 +1698,7 @@ function InvoicesIndex() {
 											type="button"
 											variant="ghost"
 											size="icon"
-											className="h-8 w-8"
+											className="h-9 w-9"
 											title="Clear selection"
 											aria-label="Clear selection"
 											onClick={clearSelection}

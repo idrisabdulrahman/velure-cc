@@ -47,11 +47,11 @@ import { handleGet, handlePost } from "./members";
 const CONTEXT = { client: { tag: "user-scoped" }, userId: "owner-1" };
 
 function get() {
-	return new Request("http://velure.test/api/workspace/members");
+	return new Request("http://invoicly.test/api/workspace/members");
 }
 
 function post(body: unknown, raw?: string) {
-	return new Request("http://velure.test/api/workspace/members", {
+	return new Request("http://invoicly.test/api/workspace/members", {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: raw ?? JSON.stringify(body),

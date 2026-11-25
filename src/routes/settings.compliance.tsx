@@ -272,11 +272,11 @@ export const Route = createFileRoute("/settings/compliance")({
 
 function ComplianceSettingsPage() {
 	const auth = useUnifiedAuth();
-	const { client, velureUserId } = useSupabaseSession(auth.data?.user.id);
-	const enabled = Boolean(client && velureUserId);
+	const { client, invoiclyUserId } = useSupabaseSession(auth.data?.user.id);
+	const enabled = Boolean(client && invoiclyUserId);
 	const { data: workspace } = useQuery({
-		queryKey: ["compliance-workspace", velureUserId],
-		queryFn: () => getWorkspaceSettings(client!, velureUserId!),
+		queryKey: ["compliance-workspace", invoiclyUserId],
+		queryFn: () => getWorkspaceSettings(client!, invoiclyUserId!),
 		enabled,
 	});
 	const [dashboardPeriod, setDashboardPeriod] =
@@ -291,9 +291,9 @@ function ComplianceSettingsPage() {
 		[dashboardPeriod],
 	);
 	const { data: complianceDashboard } = useQuery({
-		queryKey: ["compliance-dashboard", velureUserId, dashboardWindow],
+		queryKey: ["compliance-dashboard", invoiclyUserId, dashboardWindow],
 		queryFn: () =>
-			getComplianceDashboard(client!, velureUserId!, {
+			getComplianceDashboard(client!, invoiclyUserId!, {
 				from: dashboardWindow.from,
 				to: dashboardWindow.to,
 				limit: 8,
@@ -301,8 +301,8 @@ function ComplianceSettingsPage() {
 		enabled,
 	});
 	const { data: taxProfilesRaw } = useQuery({
-		queryKey: ["compliance-tax-profiles", velureUserId],
-		queryFn: () => listTaxProfiles(client!, velureUserId!),
+		queryKey: ["compliance-tax-profiles", invoiclyUserId],
+		queryFn: () => listTaxProfiles(client!, invoiclyUserId!),
 		enabled,
 	});
 	const taxProfiles = (taxProfilesRaw ?? []) as Array<{
@@ -314,8 +314,8 @@ function ComplianceSettingsPage() {
 		isDefault: boolean;
 	}>;
 	const { data: exportsHistoryRaw } = useQuery({
-		queryKey: ["compliance-exports", velureUserId],
-		queryFn: () => listExportHistory(client!, velureUserId!),
+		queryKey: ["compliance-exports", invoiclyUserId],
+		queryFn: () => listExportHistory(client!, invoiclyUserId!),
 		enabled,
 	});
 	const exportsHistory = (exportsHistoryRaw ?? []) as Array<{
@@ -327,14 +327,14 @@ function ComplianceSettingsPage() {
 		createdAt: number;
 	}>;
 	const saveTaxProfile = (input: Parameters<typeof saveTaxProfileData>[2]) =>
-		saveTaxProfileData(client!, velureUserId!, input);
+		saveTaxProfileData(client!, invoiclyUserId!, input);
 	const createExport = ({
 		kind,
 	}: {
 		kind: Parameters<typeof createInvoiceExport>[2];
-	}) => createInvoiceExport(client!, velureUserId!, kind);
+	}) => createInvoiceExport(client!, invoiclyUserId!, kind);
 	const retryExport = ({ id }: { id: string }) =>
-		retryInvoiceExport(client!, velureUserId!, id);
+		retryInvoiceExport(client!, invoiclyUserId!, id);
 
 	const [form, setForm] = useState({
 		name: "Invoicly Workspace",

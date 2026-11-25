@@ -63,7 +63,7 @@ async function mintFor(userId: string) {
 	}
 	return new SignJWT({
 		sub: userId,
-		velure_user_id: userId,
+		invoicly_user_id: userId,
 		role: "authenticated",
 		aud: "authenticated",
 	})

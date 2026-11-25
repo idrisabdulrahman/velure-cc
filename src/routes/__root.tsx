@@ -54,10 +54,10 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 				// Applies the persisted theme to <html> before first paint: the CSS
 				// :root default is light, so an unhandled dark preference (also the
 				// app default) would flash white on every reload until hydration.
-				children: `(function(){try{var e=localStorage.getItem("velure.theme");var t=e==="light"?"light":"dark";var r=document.documentElement;r.classList.remove("light","dark");r.classList.add(t);r.style.colorScheme=t}catch(e){}})();`,
+				children: `(function(){try{var e=localStorage.getItem("invoicly.theme");if(e===null){e=localStorage.getItem("velure.theme");if(e!==null){localStorage.setItem("invoicly.theme",e);localStorage.removeItem("velure.theme")}}var t=e==="light"?"light":"dark";var r=document.documentElement;r.classList.remove("light","dark");r.classList.add(t);r.style.colorScheme=t}catch(e){}})();`,
 			},
 			{
-				children: `(function(){try{var s=localStorage.getItem("velure.textSize");if(s==="sm"||s==="lg"){document.documentElement.classList.add("text-"+s)}}catch(e){}})();`,
+				children: `(function(){try{var s=localStorage.getItem("invoicly.textSize");if(s===null){s=localStorage.getItem("velure.textSize");if(s!==null){if(s!=="sm"&&s!=="lg"){s=null}else{localStorage.setItem("invoicly.textSize",s);localStorage.removeItem("velure.textSize")}}}if(s==="sm"||s==="lg"){document.documentElement.classList.add("text-"+s)}}catch(e){}})();`,
 			},
 		],
 	}),

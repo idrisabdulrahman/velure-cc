@@ -4,7 +4,7 @@ Task: **T9** of `Task List.md` (Phase 3). Docs-only memo — **no code was
 written.** Written 2026-10-30.
 
 > Read with the audit's honesty rules: this is not financial or tax advice, and
-> nothing here claims a payment provider relationship Velure does not have.
+> nothing here claims a payment provider relationship Invoicly does not have.
 
 ## 1. Why this exists
 
@@ -74,7 +74,7 @@ already creates a **dedicated virtual account per invoice** through Paystack
 
 - one account number per invoice, tied to the exact collectible amount;
 - an **8-hour expiry** (`account_expires_at`, `paystack-server.ts:213`);
-- a persisted, deterministic reference `velure-<invoiceId>-<epochMs>`
+- a persisted, deterministic reference `invoicly-<invoiceId>-<epochMs>`
   (`paystack-server.ts:171`) so a webhook that races the response still resolves;
 - a **one-pending-charge-per-invoice** claim (`paystack-server.ts:173`), with
   reuse while the amount and currency still match (`findReusableCharge`);
@@ -123,7 +123,7 @@ server-side and keep actor/workspace/resource/result/timestamp logging.
 ## 5. Option C — bank-statement CSV import with auto-matching
 
 **Mechanism.** The user exports a statement from their bank (CSV/Excel), uploads
-it, and Velure proposes matches between statement credits and open invoices. The
+it, and Invoicly proposes matches between statement credits and open invoices. The
 user confirms; confirmed matches call the same `recordPayment` settlement path.
 
 **Nothing exists.** The only CSV reader in the repo is the invoice/customer
@@ -240,14 +240,14 @@ below is built. This section is research and a recommendation only.
 
 ### 9.1 The end destination barely changes; the *friction* does
 
-A Paystack virtual account is not a Velure account. Collected money settles
+A Paystack virtual account is not a Invoicly account. Collected money settles
 **T+1 into the workspace's own settlement bank account**. So "customer pays into
 our own account" changes **how the credit arrives and who can see it**, not
 where the money finally lands. What actually differs:
 
 | | Paystack per-invoice virtual account (B) | Workspace's own account (D) |
 | --- | --- | --- |
-| Who sees the credit | Velure (webhook) + the workspace | Only the workspace's bank |
+| Who sees the credit | Invoicly (webhook) + the workspace | Only the workspace's bank |
 | Matched automatically | Yes — reference is generated per invoice | **No** — something must read the bank |
 | Dead-account risk | 8-hour expiry | None — the account always works |
 | Extra data needed | None | A bank feed or a statement file |
@@ -274,14 +274,14 @@ and date proximity. The source changes only how much you trust them.
 
 Absolute source: `/home/asys/JS-TS/apps/projects/midday-main`.
 
-| Behaviour | Midday source (absolute) | Classification for Velure |
+| Behaviour | Midday source (absolute) | Classification for Invoicly |
 | --- | --- | --- |
 | Provider-agnostic bank adapter (plaid, teller, gocardless, enablebanking) | `apps/engine/src/providers/index.ts`, `apps/engine/src/providers/types.ts` | **adapt** the *shape* (one interface, swappable provider); **reject** the provider *set* — none of the four operates in Nigeria |
 | Connection + account + transaction tables, team-scoped | `packages/db/src/schema.ts:1056` (`bank_connections`), `:603` (`bank_accounts`), `:290` (`transactions`) | **adapt** (tenant-scoped, one row per connection). **reject** storing the provider `accessToken` in the row (`schema.ts:1068`) — use a secret store; a SELECT-scoped RLS policy is not a secret boundary |
 | Cursor/paged sync jobs, reconnect, scheduler | `packages/jobs/src/tasks/bank/sync/account.ts`, `sync/connection.ts`, `setup/initial.ts`, `scheduler/bank-scheduler.ts`, `tasks/reconnect/connection.ts` | **adapt** (idempotent upsert keyed by provider transaction id; retry/backoff; `errorRetries` in `schema.ts`) |
 | Matching engine (embedding thresholds, amount tolerance tiers, calibration from user confirm/decline) | `packages/db/src/utils/transaction-matching.ts` (388 lines), `packages/db/src/queries/transaction-matching.ts` (2,180 lines) | **reject for v1** — far too heavy for one bank/one currency. **adapt one idea**: keep an explicit `auto_matched | high_confidence | suggested` distinction and never auto-commit a low-confidence match |
 | Match types + suggestions surfaced for human confirmation | `queries/transaction-matching.ts:52,67,81,95` | **adapt** — matches are proposals the user confirms |
-| RLS policies scoped to team membership | `schema.ts:1102` (`pgPolicy("Bank Connections can be selected by a member of the team")`, `private.get_teams_for_authenticated_user()`) | **adapt** — the right tenancy shape; Velure's Phase-A equivalent is workspace membership |
+| RLS policies scoped to team membership | `schema.ts:1102` (`pgPolicy("Bank Connections can be selected by a member of the team")`, `private.get_teams_for_authenticated_user()`) | **adapt** — the right tenancy shape; Invoicly's Phase-A equivalent is workspace membership |
 
 Key finding: **Midday's "connect your bank" is real, but it is US/EU only.**
 Plaid, Teller, GoCardless and EnableBanking do not cover Nigerian banks, so the
@@ -298,7 +298,7 @@ consent** step, and its provider tokens must be treated as high-value secrets.
   connection = read access to the workspace's whole bank history, not just
   invoices. That is a much bigger blast radius than reading its invoices, and it
   makes token storage, revocation, and audit the hard part.
-- **Consent and liability.** The workspace would be granting Velure (or an
+- **Consent and liability.** The workspace would be granting Invoicly (or an
   aggregator) ongoing read access to its account. That needs real terms, not a
   checkbox.
 - **Aggregator cost is unknown here.** Nigerian aggregator pricing is not

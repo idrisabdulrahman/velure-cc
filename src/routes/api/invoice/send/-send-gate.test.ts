@@ -53,7 +53,7 @@ vi.mock("#/server/data/paystack-server", () => ({
 }));
 vi.mock("#/server/env", () => ({
 	getServerEnv: (key: string) =>
-		key === "RESEND_API_KEY" ? "re_test_key" : `${key}@velure.test`,
+		key === "RESEND_API_KEY" ? "re_test_key" : `${key}@invoicly.test`,
 }));
 vi.mock("#/server/pdf", () => ({
 	renderInvoicePdf: vi.fn(async () => new Uint8Array([1, 2, 3])),
@@ -158,7 +158,7 @@ function draftInvoiceRow(overrides: Record<string, unknown> = {}) {
 let tables: FakeTables;
 
 function sendRequest() {
-	return new Request("http://velure.test/api/invoice/send/inv-1", {
+	return new Request("http://invoicly.test/api/invoice/send/inv-1", {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify({ to: "client@example.test" }),

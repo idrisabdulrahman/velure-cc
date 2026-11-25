@@ -43,7 +43,7 @@ describe("logServerEvent", () => {
 	it("redacts an email nested in the fields", () => {
 		const log = vi.spyOn(console, "log").mockImplementation(() => {});
 		logServerEvent("info", "unit.test", {
-			user: { email: "ada@velure.ng" },
+			user: { email: "ada@invoicly.ng" },
 		});
 
 		const payload = parseLastCall(log);

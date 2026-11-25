@@ -21,7 +21,6 @@ import {
 	CircleAlert,
 	Copy,
 	DollarSign,
-	Download,
 	ExternalLink,
 	FileText,
 	GripVertical,
@@ -484,7 +483,7 @@ function CreateSortableLineItem({
 			onBlur={onBlur}
 			role="group"
 			className={cn(
-				"group relative flex min-w-0 items-start gap-2 border border-rule bg-paper px-2 py-2 @md:border-x-0 @md:border-t-0 @md:py-3 md:gap-3",
+				"group relative flex min-w-0 items-start gap-2 border border-rule bg-paper px-2 py-2 @md:border-x-0 @md:border-t-0 @md:py-3 @md:gap-3",
 				className,
 			)}
 		>
@@ -2275,6 +2274,12 @@ export function CreateInvoicePanel({
 			documentType: createdInvoice.documentType,
 			amountLabel: formatMoney(createdInvoice.total, createdInvoice.currency),
 		});
+		// The native share sheet is not universal (absent in many desktop and
+		// in-app browsers). Rendering the button only when it exists keeps the
+		// "Share link" label honest instead of silently degrading to a copy that
+		// duplicates the "Copy share link" button beside it.
+		const canWebShare =
+			typeof navigator !== "undefined" && typeof navigator.share === "function";
 
 		return (
 			<div
@@ -2428,27 +2433,23 @@ export function CreateInvoicePanel({
 												>
 													<FaWhatsapp className="h-4 w-4" />
 												</a>
-												<button
-													type="button"
-													onClick={async () => {
-														if (navigator.share) {
+												{canWebShare ? (
+													<button
+														type="button"
+														onClick={async () => {
 															await navigator.share({
 																title: `${INVOICE_DOCUMENT_TYPE_LABELS[createdInvoice.documentType]} ${createdInvoice.invoiceNumber}`,
 																text: shareLinks.text,
 																url: shareLinks.publicUrl,
 															});
-															return;
-														}
-														await navigator.clipboard.writeText(
-															shareLinks.publicUrl,
-														);
-													}}
-													className={footerIconButtonClass}
-													aria-label="Share link"
-													title="Share link"
-												>
-													<Share2 className="h-4 w-4" />
-												</button>
+														}}
+														className={footerIconButtonClass}
+														aria-label="Share link"
+														title="Share link"
+													>
+														<Share2 className="h-4 w-4" />
+													</button>
+												) : null}
 												<button
 													type="button"
 													onClick={() =>
@@ -2464,9 +2465,10 @@ export function CreateInvoicePanel({
 													target="_blank"
 													rel="noreferrer"
 													className={footerIconButtonClass}
-													aria-label="Preview before download"
+													aria-label="Open invoice page"
+													title="Open invoice page"
 												>
-													<Download className="h-4 w-4" />
+													<ExternalLink className="h-4 w-4" />
 												</a>
 											</div>
 										</div>
@@ -2551,8 +2553,8 @@ export function CreateInvoicePanel({
 					<div
 						className={`mx-auto flex h-[calc(100dvh-7rem)] min-h-0 w-full flex-col overflow-hidden border border-rule bg-paper shadow-[0_18px_60px_rgba(0,0,0,0.08)] ${isSheetMode ? "h-full" : "max-h-[960px]"} ${paperFrameClass}`}
 					>
-						<div className="flex min-h-0 flex-1 flex-col">
-							<div className="invoice-paper-controls @container flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-5 pb-16 pt-5 sm:px-6 md:px-8 md:pt-7 lg:px-10">
+						<div className="@container flex min-h-0 flex-1 flex-col">
+							<div className="invoice-paper-controls @container flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-5 pb-16 pt-5 @sm:px-6 @md:px-8 @md:pt-7 @lg:px-10">
 								{!isSheetMode ? (
 									<ol
 										aria-label="Create your first invoice in three steps"
@@ -2641,9 +2643,9 @@ export function CreateInvoicePanel({
 									</div>
 								) : null}
 
-								<div className="mb-7 grid gap-6 lg:grid-cols-[minmax(0,1fr)_96px] lg:items-start">
+								<div className="mb-7 grid gap-6 @lg:grid-cols-[minmax(0,1fr)_96px] @lg:items-start">
 									<div className="space-y-3">
-										<div className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,1fr)]">
+										<div className="grid min-w-0 gap-4 @sm:grid-cols-2 @lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,1fr)]">
 											<div className="min-h-[60px] border-b border-rule px-1 py-2">
 												<InlineLabelInput
 													value={templateLabels.invoiceNoLabel}
@@ -2712,7 +2714,7 @@ export function CreateInvoicePanel({
 										</div>
 									</div>
 
-									<div className="justify-self-start lg:justify-self-end">
+									<div className="justify-self-start @lg:justify-self-end">
 										<label className="flex h-[72px] w-[96px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-md border border-dashed border-rule bg-paper text-[12px] text-ink-3 hover:border-brand hover:text-ink focus-within:outline-2 focus-within:outline-brand">
 											{logoUrl.trim() ? (
 												<img
@@ -2737,7 +2739,7 @@ export function CreateInvoicePanel({
 									</div>
 								</div>
 
-								<div className="mb-7 grid gap-6 border-y border-rule py-5 md:grid-cols-2 md:items-start">
+								<div className="mb-7 grid gap-6 border-y border-rule py-5 @md:grid-cols-2 @md:items-start">
 									<div className="space-y-2">
 										<div className="text-sm text-ink-3">From</div>
 										<Input
@@ -2808,7 +2810,7 @@ export function CreateInvoicePanel({
 													<ChevronDown className="h-3.5 w-3.5 text-ink-3" />
 												</button>
 												{customerPickerOpen ? (
-													<div className="absolute left-0 top-10 z-20 w-full min-w-[260px] rounded-md border border-rule bg-paper p-2 shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
+													<div className="absolute left-0 top-10 z-20 w-full min-w-0 max-w-[calc(100vw-2.5rem)] rounded-md border border-rule bg-paper p-2 shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
 														<div className="mb-2 flex h-8 items-center gap-2 rounded-md border border-rule bg-paper px-2">
 															<Search className="h-3.5 w-3.5 text-ink-3" />
 															<input
@@ -2913,12 +2915,12 @@ export function CreateInvoicePanel({
 								</div>
 
 								{documentType === "proforma" ? (
-									<div className="mb-5 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(260px,0.8fr)]">
+									<div className="mb-5 grid gap-3 @lg:grid-cols-[minmax(0,1.2fr)_minmax(260px,0.8fr)]">
 										<div className="rounded-md border border-rule bg-paper p-3">
 											<p className="mb-3 text-sm font-medium text-ink">
 												Shipment and customs details
 											</p>
-											<div className="grid gap-3 sm:grid-cols-2">
+											<div className="grid gap-3 @sm:grid-cols-2">
 												<Input
 													value={shipmentWeight}
 													onChange={(event) =>
@@ -3375,7 +3377,7 @@ export function CreateInvoicePanel({
 																		<button
 																			type="button"
 																			onClick={() => decrementQuantity(index)}
-																			className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink"
+																			className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink"
 																			aria-label="Decrease quantity"
 																		>
 																			<Minus className="h-3 w-3" />
@@ -3412,7 +3414,7 @@ export function CreateInvoicePanel({
 																		<button
 																			type="button"
 																			onClick={() => incrementQuantity(index)}
-																			className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink"
+																			className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink"
 																			aria-label="Increase quantity"
 																		>
 																			<Plus className="h-3 w-3" />
@@ -3485,7 +3487,7 @@ export function CreateInvoicePanel({
 																<button
 																	type="button"
 																	onClick={() => removeLine(index)}
-																	className="absolute right-0 top-0 inline-flex h-8 w-8 items-center justify-center rounded-md border border-rule bg-paper text-ink-3 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink @md:static @md:border-transparent @md:bg-transparent @md:opacity-0 @md:group-hover:opacity-100 @md:group-focus-within:opacity-100"
+																	className="absolute right-0 top-0 inline-flex h-9 w-9 items-center justify-center rounded-md border border-rule bg-paper text-ink-3 transition-[opacity,background-color,border-color,color] duration-[110ms] ease-out hover:bg-paper-2 hover:text-ink @md:static @md:border-transparent @md:bg-transparent @md:opacity-0 @md:group-hover:opacity-100 @md:group-focus-within:opacity-100"
 																	aria-label={`Remove line item ${index + 1}`}
 																>
 																	<X className="h-3.5 w-3.5" />
@@ -3656,7 +3658,7 @@ export function CreateInvoicePanel({
 									</div>
 								</div>
 
-								<div className="mt-4 grid gap-4 md:grid-cols-[1fr_290px] md:items-start">
+								<div className="mt-4 grid gap-4 @md:grid-cols-[1fr_290px] @md:items-start">
 									<div>
 										<button
 											type="button"
@@ -3749,7 +3751,7 @@ export function CreateInvoicePanel({
 									<div
 										className={`mt-auto grid items-start gap-4 pt-10 ${
 											showPaymentDetailsSection && showNoteSection
-												? "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+												? "@md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
 												: ""
 										}`}
 									>
@@ -3817,7 +3819,7 @@ export function CreateInvoicePanel({
 								) : null}
 							</div>
 
-							<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-rule bg-paper px-6 py-3 md:px-7">
+							<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-rule bg-paper px-6 py-3 @md:px-7">
 								<div className="flex flex-wrap items-center gap-2">
 									<DropdownMenu>
 										<DropdownMenuTrigger asChild>

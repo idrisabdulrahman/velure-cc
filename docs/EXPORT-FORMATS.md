@@ -7,7 +7,7 @@ itself** — a downloaded copy can never read as a cleared tax filing
 (QuickBooks and Zoho today, Xero next): their first line must be the vendor's
 headers exactly, so the disclaimer lives on the export screen and in the audit
 log instead (see *QuickBooks invoice import* and *Zoho Books invoice import*
-below). No Velure export is ever an NRS-validated or NRS-cleared document.
+below). No Invoicly export is ever an NRS-validated or NRS-cleared document.
 
 **Status of this document:** descriptive contract for what ships today
 (2026-11-02). Planned formats are listed at the end as *not built*.
@@ -17,7 +17,7 @@ number for authority:
 
 | Tag | Meaning |
 | --- | --- |
-| `[stored]` | Read straight from the saved record or snapshot; Velure never re-computes it for export. |
+| `[stored]` | Read straight from the saved record or snapshot; Invoicly never re-computes it for export. |
 | `[derived]` | Recomputed at export time from stored parts (e.g. fraction arithmetic on stored money). Always defined so the total still matches the stored invoice total. |
 | `[computed]` | Produced by the export's own allocation rules (documented per column); exact identities are pinned by tests. |
 | `[inferred]` | A value assumed when the stored record doesn't carry it (e.g. line rows for invoices saved without line items). Confidence is lower by definition. |
@@ -79,7 +79,7 @@ formats exist.
 
 ### `normalized_accounting` (JSON)
 
-Everything Velure holds about an invoice, one JSON object per invoice, plus
+Everything Invoicly holds about an invoice, one JSON object per invoice, plus
 `generatedAt` and the disclaimer. `[stored]`; no projection is applied. Since
 2026-11-01 the row objects may also contain `template_settings` (the invoice
 craft settings, including the discount fields used by the line export).
@@ -204,7 +204,7 @@ return: one row per invoice **line**.
 > live template.** Rev360 VAT is a schedule-based official Excel workbook: the
 > user downloads the workbook, fills the Sales/Purchases/Adjustments sheets, and
 > the VAT Return Form sheet auto-populates. Guides warn that unhiding or editing
-> that sheet breaks the upload. Velure therefore **does not generate an
+> that sheet breaks the upload. Invoicly therefore **does not generate an
 > uploadable replacement workbook**; it exports the sales rows to paste in. No
 > public Rev360 VAT-template file exists, so the column order and exact headings
 > are **unverified** and may change once a real template is supplied. This file
@@ -236,7 +236,7 @@ return: one row per invoice **line**.
 | 2 | `beneficiary_tax_id` | `[derived]` | linked `clients.tax_id` (TIN/NIN/RC); **`0` when unknown** |
 | 3 | `item` | `[stored]` | stored line name (formula-lead guarded) |
 | 4 | `item_cost` | `[computed]` | line extended amount (the "amount"): `quantity × unitPrice` in naira; negated for a credit note |
-| 5 | `item_description` | `[inferred]` | the same line name; Velure stores a single line label, so both `item` and `item_description` carry it (formula-lead guarded) |
+| 5 | `item_description` | `[inferred]` | the same line name; Invoicly stores a single line label, so both `item` and `item_description` carry it (formula-lead guarded) |
 | 6 | `vat_status` | `[derived]` | from `REV360_VAT_STATUS_CONFIG` (see below) |
 | 7 | `product_code` | `[derived]` | from `REV360_PRODUCT_CODE_CONFIG`; **blank** until the user configures codes (never invented) |
 | 8 | `invoice_number` | `[stored]` | cross-check key, repeated per line |
@@ -259,7 +259,7 @@ column contract.
 
 ### Product code config table
 
-`product_code` is resolved from `REV360_PRODUCT_CODE_CONFIG` (keys are Velure
+`product_code` is resolved from `REV360_PRODUCT_CODE_CONFIG` (keys are Invoicly
 line `classificationCode` values). It is **empty by default**, so every cell is
 blank rather than an invented code. The Rev360 Sales sheet reportedly uses
 product codes that the public sources do not explain; populate this map only
@@ -308,9 +308,9 @@ a subtotal, discount, VAT or total.
 | 2 | `Customer` | `[stored]` | `invoices.customer_name`. An invoice with no customer name is excluded. |
 | 3 | `Invoice Date` | `[stored]` | `issue_date`, rendered `DD/MM/YYYY` by default. |
 | 4 | `Due Date` | `[stored]` | `due_date`, same date rendering. |
-| 5 | `Terms` | — | Always blank. Velure stores payment-terms **days**, not a QuickBooks term name; an invented `Net 30` could fail the import. |
+| 5 | `Terms` | — | Always blank. Invoicly stores payment-terms **days**, not a QuickBooks term name; an invented `Net 30` could fail the import. |
 | 6 | `Item` | `[stored]` | stored line name, formula-lead guarded. |
-| 7 | `Item Description` | `[inferred]` | the same line name; Velure has a single line label. |
+| 7 | `Item Description` | `[inferred]` | the same line name; Invoicly has a single line label. |
 | 8 | `Item Quantity` | `[stored]` | stored line quantity. A synthetic legacy line exports `1`. |
 | 9 | `Item Rate` | `[derived]` | line unit price in naira. A synthetic line exports its gross amount. |
 | 10 | `Item Amount` | `[computed]` | line gross (quantity × unit price), from the canonical row. |
@@ -384,12 +384,12 @@ sample when one is supplied.
 
 | # | Header | Tag | Notes |
 | --- | --- | --- | --- |
-| 1 | `Invoice Number` | `[stored]` | `invoices.invoice_number`, repeated per line. **Auto-generate Invoice Numbers must stay OFF** in the Zoho wizard so Velure numbers survive; the card says so. |
+| 1 | `Invoice Number` | `[stored]` | `invoices.invoice_number`, repeated per line. **Auto-generate Invoice Numbers must stay OFF** in the Zoho wizard so Invoicly numbers survive; the card says so. |
 | 2 | `Invoice Date` | `[stored]` | `issue_date`, rendered `DD/MM/YYYY` by default. |
 | 3 | `Due Date` | `[stored]` | `due_date`, same date rendering. |
 | 4 | `Customer Name` | `[stored]` | `invoices.customer_name`. An invoice with no customer name is excluded. |
 | 5 | `Item Name` | `[stored]` | stored line name, formula-lead guarded. |
-| 6 | `Item Description` | `[inferred]` | the same line name; Velure has a single line label. |
+| 6 | `Item Description` | `[inferred]` | the same line name; Invoicly has a single line label. |
 | 7 | `Quantity` | `[stored]` | stored line quantity. A synthetic legacy line exports `1`. |
 | 8 | `Item Price` | `[derived]` | line unit price in naira. A synthetic line exports its gross amount. |
 | 9 | `Item Total` | `[computed]` | line gross (quantity × unit price), from the canonical row. |
@@ -467,5 +467,5 @@ model.
   different column sets yet; renaming their columns changes all three.
 - XLSX has no styling (colors, formulas, merged cells) deliberately: the file
   must feed accountants' scripts and imports, not presentations.
-- Like everything in Velure, exports are informational. They are not NRS
+- Like everything in Invoicly, exports are informational. They are not NRS
   filings and must not be presented as such.

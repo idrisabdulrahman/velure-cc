@@ -68,7 +68,7 @@ function accountQuotaClient(fallback: Supabase): Supabase {
 export async function sendQueuedEmails(
 	client: Supabase,
 	userId: string,
-	options: { quotaClient?: Supabase; now?: Date } = {},
+	options: { quotaClient?: Supabase; now?: Date; maxSends?: number } = {},
 ) {
 	const workspaceId = await resolveActiveWorkspaceId(client, userId);
 	if (!workspaceId)
@@ -81,6 +81,10 @@ export async function sendQueuedEmails(
 		.eq("status", "queued")
 		.order("created_at");
 	if (error) throw error;
+	// Nothing queued: return before the quota read. The sweep calls this for
+	// EVERY workspace it scans, and the tick shares one 50-subrequest ceiling,
+	// so an empty queue must cost one request, not three.
+	if (!events?.length) return { sent: 0, skipped: 0, reason: "Queue is empty." };
 	const resendKey = getServerEnv("RESEND_API_KEY");
 	if (!resendKey)
 		return {
@@ -104,7 +108,23 @@ export async function sendQueuedEmails(
 	);
 	let sent = 0;
 	let skipped = 0;
+	// Per-invocation drain cap. Each queued email costs ~3 subrequests (invoice
+	// read, Resend send, status write), and the tick lives inside the Workers
+	// 50-subrequest ceiling next to the whole sweep's scanning. When the cap is
+	// reached the loop simply stops: the remaining events stay `queued` and the
+	// next tick drains them — they are deliberately NOT marked `failed`, which
+	// would wrongly tell the owner the reminder was abandoned. The Resend daily
+	// quota below is a different ceiling with different semantics (those events
+	// genuinely cannot send until 00:00 UTC).
+	const maxSends = options.maxSends ?? Number.POSITIVE_INFINITY;
+	// Bounds EVENTS TOUCHED, not just successful sends: skips (missing
+	// invoice/email) and provider failures would otherwise never increment
+	// `sent`, and a queue of unsendable events would walk the whole list —
+	// 2-3 subrequests each — straight into the Workers ceiling.
+	let touched = 0;
 	for (const event of events ?? []) {
+		if (touched >= maxSends) break;
+		touched += 1;
 		const invoice = await getInvoiceById(client, userId, event.invoice_id);
 		const recipient = invoice ? buyerEmailForInvoice(invoice) : "";
 		if (!invoice || !recipient || sent >= remainingCapacity) {

@@ -7,7 +7,7 @@ import type { Database } from "#/types/database.types";
  * A10 — browser-side Supabase session.
  *
  * The bridge route (`POST /api/auth/supabase-session`) verifies the Better
- * Auth session server-side and mints a Supabase JWT whose velure_user_id ==
+ * Auth session server-side and mints a Supabase JWT whose invoicly_user_id ==
  * the app user id. This hook mints once per user (cached for the token's
  * lifetime) and builds a USER-scoped Supabase client so every PostgREST call
  * goes through RLS.
@@ -16,7 +16,7 @@ import type { Database } from "#/types/database.types";
 type MintedSession = {
 	accessToken: string;
 	expiresAt: number;
-	velureUserId: string;
+	invoiclyUserId: string;
 };
 
 async function mintSession(): Promise<MintedSession> {
@@ -38,7 +38,7 @@ async function mintSession(): Promise<MintedSession> {
 		ok: boolean;
 		accessToken: string;
 		expiresAt: number;
-		velureUserId: string;
+		invoiclyUserId: string;
 	};
 	if (!body.ok || !body.accessToken) {
 		throw new Error("Bridge did not return a session.");
@@ -99,7 +99,7 @@ export function useSupabaseSession(userId: string | null | undefined) {
 
 	return {
 		client,
-		velureUserId: data?.velureUserId ?? null,
+		invoiclyUserId: data?.invoiclyUserId ?? null,
 		isPending,
 		isError,
 		error: error ?? clientConfigError,

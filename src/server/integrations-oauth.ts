@@ -3,7 +3,9 @@ import { parse, serialize } from "cookie";
 import { upsertConnection } from "#/server/data/integrations";
 import { getSupabaseAdminClient } from "#/server/supabase";
 
-const INTEGRATION_OAUTH_COOKIE = "velure_integration_oauth";
+// Renamed from `velure_integration_oauth` (2026-11-22). The cookie holds only
+// transient in-flight OAuth state, so no legacy fallback is needed.
+const INTEGRATION_OAUTH_COOKIE = "invoicly_integration_oauth";
 
 type Provider = "quickbooks" | "xero";
 

@@ -1073,9 +1073,9 @@ export function ClientsIndex() {
 													type="button"
 													onClick={() => void onCopyEmail(selected.email)}
 													aria-label="Copy email"
-													className="flex-none rounded p-1 text-ink-3 hover:bg-paper-3 hover:text-ink"
+													className="flex-none rounded p-2 text-ink-3 hover:bg-paper-3 hover:text-ink"
 												>
-													<Copy className="h-3.5 w-3.5" />
+													<Copy className="h-4 w-4" />
 												</button>
 											</div>
 											<p

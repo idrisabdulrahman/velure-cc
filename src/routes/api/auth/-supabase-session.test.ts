@@ -14,7 +14,7 @@ describe("Supabase session route", () => {
 			new Error("SUPABASE_JWT_PRIVATE_JWK must include its Supabase key kid"),
 		);
 		const response = await handle({
-			request: new Request("https://velure.example/api/auth/supabase-session", {
+			request: new Request("https://invoicly.example/api/auth/supabase-session", {
 				method: "POST",
 			}),
 		});

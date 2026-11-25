@@ -34,7 +34,7 @@ const MGMT = "https://api.supabase.com";
 const ISSUER_URL = process.env.ISSUER_URL ?? "";
 const PROVIDER_IDENTIFIER = "custom:velure";
 const CLIENT_SECRET =
-	process.env.CLIENT_SECRET ?? "velure-supabase-client-secret-prod";
+	process.env.CLIENT_SECRET ?? "invoicly-supabase-client-secret-prod";
 
 const suffix = `${Date.now()}`;
 const EMAIL_A = `a10-cl-a-${suffix}@gmail.com`;
@@ -206,9 +206,9 @@ async function oidcSignIn(email: string) {
 	if (!token)
 		throw new Error(`no access_token in handoff: ${handoff?.slice(0, 200)}`);
 	const decoded = decodeJwt(token);
-	if (decoded.velure_user_id !== issuerUserId) {
+	if (decoded.invoicly_user_id !== issuerUserId) {
 		throw new Error(
-			`velure_user_id claim missing (got ${String(decoded.velure_user_id ?? "null")})`,
+			`invoicly_user_id claim missing (got ${String(decoded.invoicly_user_id ?? "null")})`,
 		);
 	}
 	return { issuerUserId, jwt: token };
@@ -239,7 +239,7 @@ async function ensureProvider() {
 			provider_type: "oidc",
 			identifier: PROVIDER_IDENTIFIER,
 			name: "Invoicly (A10 clients gate)",
-			client_id: "velure-supabase-client",
+			client_id: "invoicly-supabase-client",
 			client_secret: CLIENT_SECRET,
 			issuer: ISSUER_URL,
 			scopes: ["openid", "profile", "email"],

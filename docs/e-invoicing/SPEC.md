@@ -1,4 +1,4 @@
-# Velure: Nigeria E-Invoicing (NRS / MBS) — Problems, Risks, Law, Solutions
+# Invoicly: Nigeria E-Invoicing (NRS / MBS) — Problems, Risks, Law, Solutions
 
 _Written 2026-10-16. Based on the app walkthrough video (Invoices, Reports, Products, Compliance, Payment reminders, Recurring billing, General) plus web research. Confidence tags: **[Certain]** = seen in the video or confirmed by multiple sources; **[Likely]** = strong inference or single-source; **[Guess]** = filling gaps, verify before acting._
 
@@ -6,7 +6,7 @@ _Written 2026-10-16. Based on the app walkthrough video (Invoices, Reports, Prod
 
 ## 1. Bottom line
 
-1. **Velure is a normal invoicing app today, not an e-invoicing system.** Nothing in the video shows an Invoice Reference Number (IRN), a QR code, a clearance step with the NRS, or a connection to the Merchant Buyer Solution (MBS). **[Certain]**
+1. **Invoicly is a normal invoicing app today, not an e-invoicing system.** Nothing in the video shows an Invoice Reference Number (IRN), a QR code, a clearance step with the NRS, or a connection to the Merchant Buyer Solution (MBS). **[Certain]**
 2. **The Compliance page says "Informational only … not to file taxes directly." That disclaimer is correct.** But the landing page, the nav ("Compliance", "Security") and the headline "tax lines" copy suggest more than the product does. **[Certain]**
 3. **You do not need to be certified to start.** The realistic path is to integrate with an NRS-certified provider and clear invoices through their API, and to stop short of claiming compliance until that works. **[Likely]** Whether a provider offers an API on terms you can afford is **unverified [Guess]**.
 4. **The timing favours you.** Medium taxpayers are already mandated; small taxpayers (your likely core customers) go live July 2027. That is a 9-month window to be ready, not a deadline you have missed. **[Likely]**
@@ -52,7 +52,7 @@ _Written 2026-10-16. Based on the app walkthrough video (Invoices, Reports, Prod
 | P4 | **Buyer TIN is not shown anywhere.** The Clients list shows names only; the **business** TIN sits in General. | B2B e-invoices need buyer identification. | Likely (I did not see a Client edit form) |
 | P5 | **Products have an optional "Default tax ID" and no VAT category, service/goods code or unit-of-measure standard.** | Structured e-invoice data needs a tax category per line. | Certain on the fields I saw |
 | P6 | **TIN field accepts placeholder-looking values** (`1234567890`) and **CAC RC number is optional** ("Not set"). Business address is free text. | Registration details must be accurate and verified; wrong supplier data gets invoices rejected. | Certain |
-| P7 | **Identity mismatch:** workspace name "Fr35No Inc." vs registered business name "Velure Workspace". | Supplier name on the invoice must match registration records. | Certain (probably test data) |
+| P7 | **Identity mismatch:** workspace name "Fr35No Inc." vs registered business name "Invoicly Workspace". | Supplier name on the invoice must match registration records. | Certain (probably test data) |
 | P8 | **Payment details are one free-text box.** | Fine for PDFs, but not structured payment data. | Certain |
 | P9 | **Compliance exports are labelled "Tax summary … ready"**, with no submission log, retries, or clearance receipts. | You have an export trail but no *regulator* trail. | Certain |
 | P10 | **Currency selector is NGN-only in the views I saw.** | Foreign-currency invoices need a rate and NGN equivalent for VAT. | Likely |
@@ -71,7 +71,7 @@ _Written 2026-10-16. Based on the app walkthrough video (Invoices, Reports, Prod
 
 | Risk | Detail | Severity |
 |---|---|---|
-| **Customers believe Velure invoices are compliant when they are not** | If a medium taxpayer issues Velure invoices after 1 Jul 2026 without clearance, the invoice may be invalid and VAT input claims by their buyers may be challenged. They will blame the tool. | **High** |
+| **Customers believe Invoicly invoices are compliant when they are not** | If a medium taxpayer issues Invoicly invoices after 1 Jul 2026 without clearance, the invoice may be invalid and VAT input claims by their buyers may be challenged. They will blame the tool. | **High** |
 | **Misleading marketing** | "Compliance", "Security", "tax lines" in the nav/hero, plus a "Nigerian compliance dashboard", imply regulatory coverage. | **High** |
 | **Penalties fall on the taxpayer, but reputational and contractual risk falls on you** | NTAA introduced penalties for non-compliance (amounts not verified here **[Guess]**). | High |
 | **Uncertified provider status** | Transmitting invoices to the MBS on a customer's behalf likely requires being, or going through, a certified provider. Doing it unofficially is a legal and technical dead end. | Medium–High **[Likely]** |
@@ -136,7 +136,7 @@ Priority: **P0** = do before any compliance claim or paying medium-taxpayer cust
 | D8 | Pre-submission validator (required fields, arithmetic, VAT category, TIN format) so most errors never reach the provider | P1 | Then |
 | D9 | Outage handling: define what users can do when the provider or MBS is down (queue, notify, never mark Sent) | P1 | Then |
 | D10 | Sandbox mode that points to the provider's test environment, clearly marked in the UI | P1 | Then |
-| D11 | Daily reconciliation job comparing Velure's records with provider/MBS status | P2 | Later |
+| D11 | Daily reconciliation job comparing Invoicly's records with provider/MBS status | P2 | Later |
 
 ### E. Tax engine
 | ID | Fix | Pri | Phase |
@@ -177,7 +177,7 @@ Priority: **P0** = do before any compliance claim or paying medium-taxpayer cust
 ### J. Integrations
 | ID | Fix | Pri | Phase |
 |---|---|---|---|
-| J1 | Public API + webhooks (`invoice.cleared`, `invoice.rejected`) so other systems can issue invoices through Velure | P2 | Later |
+| J1 | Public API + webhooks (`invoice.cleared`, `invoice.rejected`) so other systems can issue invoices through Invoicly | P2 | Later |
 | J2 | CSV import (already exists) with validation report per row | P1 | Next |
 | J3 | Payments: pay links (Paystack/Flutterwave locally, Stripe or similar outside Nigeria) and automatic mark-as-paid | P1 | Later |
 | J4 | Bank-statement matching to flip invoices to Paid. This is your cash-flow link and your main differentiator | P1 | Later |
@@ -191,7 +191,7 @@ Priority: **P0** = do before any compliance claim or paying medium-taxpayer cust
 
 | Option | What | Pros | Cons | My view |
 |---|---|---|---|---|
-| **A. Integrate with an NRS-certified provider's API** | Velure creates the invoice, sends it to the provider, gets IRN/QR back, stores them. | Fastest route to real compliance; no certification burden. | Per-invoice cost, dependence, provider terms. | **Recommended, after you confirm a provider offers a usable API** |
+| **A. Integrate with an NRS-certified provider's API** | Invoicly creates the invoice, sends it to the provider, gets IRN/QR back, stores them. | Fastest route to real compliance; no certification burden. | Per-invoice cost, dependence, provider terms. | **Recommended, after you confirm a provider offers a usable API** |
 | **B. Get certified yourself** | Become an access point / system provider. | Control, margin. | Slow, expensive, audit overhead. | Not for a solo, pre-revenue product |
 | **C. Export-only "portal assist"** | Generate structured data the user uploads/keys into the NRS portal. | Cheap, honest, quick. | Manual; not real compliance; weak value. | Good **interim** step for small taxpayers (before 2027) |
 | **D. Don't claim compliance** | Position as invoicing + reconciliation, with "e-invoicing ready" only when true. | Zero regulatory risk. | Gives up the compliance wedge. | Do this **immediately**, regardless of A–C |
@@ -215,7 +215,7 @@ Priority: **P0** = do before any compliance claim or paying medium-taxpayer cust
 
 **Then (before committing to build) — validate the integration**
 11. Read the **NRS MBS user guide** and the **NITDA guideline** directly. I relied on secondary summaries, so confirm schema, required fields, certificate/stamp handling and rejection codes.
-12. Shortlist 2–3 NRS-certified providers (DigiTax is named in one source). Ask each: API access for third-party apps? Sandbox? Per-invoice price? Multi-tenant (one account per Velure customer) or one master account? **Do not assume any of this.**
+12. Shortlist 2–3 NRS-certified providers (DigiTax is named in one source). Ask each: API access for third-party apps? Sandbox? Per-invoice price? Multi-tenant (one account per Invoicly customer) or one master account? **Do not assume any of this.**
 13. Build against a **sandbox** first. Do not go live until a medium-taxpayer pilot customer has cleared real invoices.
 
 **Later**
@@ -260,7 +260,7 @@ Dates come from Cleartax (updated March 2026) and Banqup; I could not cross-chec
 | Route | What | Why | Risk |
 |---|---|---|---|
 | **1. Other African clearance markets (Ghana first, then Kenya/Uganda/Zambia)** | Add a country adapter and rules pack for each | Same clearance pattern as Nigeria, so your Nigeria build transfers; you know the buyer; fewer polished SME tools **[Guess]** | Each country needs its own registration, certified-provider or API access, local tax rules, and support. Check whether a local entity is required **[Likely]** |
-| **2. "Send to anywhere" via Peppol for African exporters** | Nigerian/African firms that invoice EU or UAE customers: Velure produces a Peppol-compatible invoice and delivers it through a **managed access point** | Don't become an access point: that means OpenPeppol fees, twice-yearly protocol updates, monthly reporting and accreditation. A managed service is the realistic route; one vendor claims it can be live in days, though that vendor sells the service **[Likely]** | Niche may be small. Per-invoice partner cost eats margin. Buyer-side requirements vary by country |
+| **2. "Send to anywhere" via Peppol for African exporters** | Nigerian/African firms that invoice EU or UAE customers: Invoicly produces a Peppol-compatible invoice and delivers it through a **managed access point** | Don't become an access point: that means OpenPeppol fees, twice-yearly protocol updates, monthly reporting and accreditation. A managed service is the realistic route; one vendor claims it can be live in days, though that vendor sells the service **[Likely]** | Niche may be small. Per-invoice partner cost eats margin. Buyer-side requirements vary by country |
 | **3. Compete for EU domestic mandates (Poland, Belgium, France, Germany)** | Full local localisation | Biggest market | **Not recommended.** Strong incumbents (Pagero, Sovos, Avalara, Basware, Storecove-type providers), language, local legal duties. A solo builder will lose here **[Likely]** |
 
 ### 7.4 Recommended order

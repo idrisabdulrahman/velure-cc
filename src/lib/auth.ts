@@ -28,7 +28,7 @@ if (!databaseUrl) {
 }
 // A module-scope `pg.Pool` is only safe on a long-lived Node host; in a Worker
 // invocation it must not outlive the invocation. `createAuthPool` picks the
-// right strategy from `AUTH_DB_MODE` (see `deploy/velure.env.example`).
+// right strategy from `AUTH_DB_MODE` (see `deploy/invoicly.env.example`).
 const pool = createAuthPool(databaseUrl);
 
 /**

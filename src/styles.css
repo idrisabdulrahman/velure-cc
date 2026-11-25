@@ -1036,52 +1036,56 @@ body {
      its own `leading-*` utility or role rule still overrides it directly. */
   line-height: 1.55;
 
+  /* ── Marketing visual world: getinboxzero.com-style light SaaS skin ──
+     White ground, near-black ink, neutral warm-gray rules, black pill CTAs,
+     one warm-red accent reserved for brand moments and status. The workbench
+     (`.hm-app`) keeps its own dark system via `.dark .hm-app` overrides. */
   /* surfaces — page → card → hover → raised pill / toast / toggle */
-  --hm-paper: #0a0706;
-  --hm-paper-2: #110d0c;
-  --hm-paper-3: #171211;
-  --hm-paper-4: #1e1817;
+  --hm-paper: #ffffff;
+  --hm-paper-2: #fafaf9;
+  --hm-paper-3: #f4f4f2;
+  --hm-paper-4: #ebebe8;
   /* lines — border → row divider */
-  --hm-rule: #2a2220;
-  --hm-rule-soft: #201918;
+  --hm-rule: #e5e3e0;
+  --hm-rule-soft: #efedeb;
 
   /* text tiers */
-  --hm-ink: #f5eee9;
-  --hm-ink-2: #9b8d85;
-  --hm-ink-3: #6a5e57;
+  --hm-ink: #171412;
+  --hm-ink-2: #57514b;
+  --hm-ink-3: #7d766f;
 
   /* accent — the single functional colour */
   --hm-accent: #e5483b;
-  --hm-accent-hi: #f0584b;
+  --hm-accent-hi: #d2392d;
   --hm-accent-ink: #ffffff;
-  --hm-accent-soft: rgba(229, 72, 59, 0.11);
-  --hm-accent-line: rgba(229, 72, 59, 0.38);
-  /* accent text sitting *on* `--hm-accent-soft` — the reference's hardcoded
-   * `#ff9186` in `.eyebrow`, `.av` and `.logo`. Not a second accent: same hue,
-   * only lifted so 11–13px accent text clears contrast on the soft tint. */
-  --hm-accent-on-soft: #ff9186;
-  /* wash stops — the mock's hero/section radial gradients */
-  --hm-wash-2: rgba(229, 72, 59, 0.22);
-  --hm-wash-3: rgba(229, 72, 59, 0.07);
-  --hm-focus: rgba(229, 72, 59, 0.38);
+  --hm-accent-soft: rgba(229, 72, 59, 0.07);
+  --hm-accent-line: rgba(229, 72, 59, 0.28);
+  /* accent text sitting *on* `--hm-accent-soft` — darkened from the reference's
+   * `#ff9186` so 11–13px accent text clears contrast on the light tint. */
+  --hm-accent-on-soft: #b93528;
+  /* wash stops — the mock's hero/section radial gradients, tuned for white */
+  --hm-wash-2: rgba(229, 72, 59, 0.1);
+  --hm-wash-3: rgba(229, 72, 59, 0.04);
+  --hm-focus: rgba(229, 72, 59, 0.32);
 
-  /* status triples — fill / tint / hairline */
-  --hm-ok: #52c48f;
-  --hm-ok-soft: rgba(82, 196, 143, 0.12);
-  --hm-ok-line: rgba(82, 196, 143, 0.4);
-  --hm-warn: #e9ab43;
-  --hm-warn-soft: rgba(233, 171, 67, 0.1);
-  --hm-warn-line: rgba(233, 171, 67, 0.4);
-  --hm-danger: #ff8a7f;
-  --hm-danger-soft: rgba(229, 72, 59, 0.11);
-  --hm-danger-line: rgba(255, 138, 127, 0.4);
-  --hm-info: #5db3d6;
-  --hm-info-soft: rgba(93, 179, 214, 0.11);
-  --hm-info-line: rgba(93, 179, 214, 0.4);
+  /* status triples — fill / tint / hairline, darkened for light surfaces */
+  --hm-ok: #1a8a5c;
+  --hm-ok-soft: rgba(26, 138, 92, 0.09);
+  --hm-ok-line: rgba(26, 138, 92, 0.3);
+  --hm-warn: #b07508;
+  --hm-warn-soft: rgba(176, 117, 8, 0.1);
+  --hm-warn-line: rgba(176, 117, 8, 0.3);
+  --hm-danger: #d2392d;
+  --hm-danger-soft: rgba(210, 57, 45, 0.08);
+  --hm-danger-line: rgba(210, 57, 45, 0.3);
+  --hm-info: #1f7fb8;
+  --hm-info-soft: rgba(31, 127, 184, 0.09);
+  --hm-info-line: rgba(31, 127, 184, 0.3);
 
   /* faces — Geist for UI, Geist Mono (tabular) for money, invoice numbers,
    * dates and counts. Both self-hosted via fontsource, imported at the top of
-   * this file. The workbench keeps Inter + IBM Plex Sans Condensed. */
+   * this file. Same faces getinboxzero.com ships — the light skin keeps them.
+   * The workbench keeps Inter + IBM Plex Sans Condensed. */
   --hm-font-display: "Geist Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
   --hm-font-body: "Geist Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
   --hm-font-label: "Geist Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -1092,8 +1096,8 @@ body {
   --hm-r-btn: 10px;
   --hm-r-input: 8px;
 
-  --hm-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.72);
-  --hm-shadow-lift: 0 40px 120px -32px rgba(0, 0, 0, 0.82);
+  --hm-shadow: 0 18px 50px -18px rgba(23, 20, 18, 0.16);
+  --hm-shadow-lift: 0 32px 90px -28px rgba(23, 20, 18, 0.22);
 }
 
 /* Paint transparent landing bands against the marketing surface. */
@@ -1419,13 +1423,14 @@ body {
   }
 
   .hm-label--accent {
-    color: var(--hm-accent);
+    color: var(--hm-accent-hi);
   }
 }
 
 /* kicker role — design/landing.html `.kicker`: 12px uppercase, .1em tracking,
  * accent. Separate from `.hm-label`, which is deliberately sentence case; both
- * are marketing-scope only. */
+ * are marketing-scope only. On the light ground the small accent text uses the
+ * darker accent step so it clears 4.5:1 (the brand red stays for fills/icons). */
 .hm-kicker {
   font-family: var(--hm-font-label);
   font-weight: 500;
@@ -1433,7 +1438,15 @@ body {
   line-height: 1.3;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--hm-accent);
+  color: var(--hm-accent-hi);
+}
+
+/* kicker sitting on the brand-red compliance panel (landing diptych) — the
+ * default accent kicker is unreadable on the #c23a2e gradient, so this variant
+ * pins the light peach directly. A `text-[…]` utility can't do this: the
+ * unlayered `.hm-kicker` rule beats any utility at equal specificity. */
+.hm-kicker--on-accent {
+  color: #ffd6cc;
 }
 
 /* caps table/group header role — design/landing.html `.m-tr.h` and `.wr.h`
@@ -1588,26 +1601,31 @@ body {
     transform var(--hm-dur-fast) var(--hm-ease);
 }
 
+/* getinboxzero.com CTA treatment: primary = black pill, white type; secondary
+ * = white pill with a gray border and a barely-there shadow. */
 .hm-btn--primary {
-  background: var(--hm-accent);
-  color: var(--hm-accent-ink);
-  border: 1px solid var(--hm-accent);
+  background: var(--hm-ink);
+  color: #ffffff;
+  border: 1px solid var(--hm-ink);
 }
 
 .hm-btn--primary:hover {
-  background: var(--hm-accent-hi);
-  border-color: var(--hm-accent-hi);
+  background: #2f2b28;
+  border-color: #2f2b28;
 }
 
 .hm-btn--ghost {
-  background: transparent;
-  color: var(--hm-ink);
+  background: var(--hm-paper);
+  color: var(--hm-ink-2);
   border: 1px solid var(--hm-rule);
+  box-shadow: 0 2px 16px 0 rgba(0, 0, 0, 0.03);
 }
 
 .hm-btn--ghost:hover {
-  background: var(--hm-paper-3);
+  background: var(--hm-paper-2);
   border-color: var(--hm-ink-3);
+  color: var(--hm-ink);
+  box-shadow: 0 2px 16px 0 rgba(0, 0, 0, 0.08);
 }
 
 /* Button heights from design/landing.html: `.btn.sm` 36px, `.btn.xl` 54px.
@@ -1662,10 +1680,12 @@ body {
   z-index: 0;
   pointer-events: none;
   /* Three tight blobs that overlap each other, not the copy column. The paper
-   * stays pure white on the left two-fifths — the wash lives behind the card. */
+   * stays pure white on the left two-fifths — the wash lives behind the card.
+   * Middle blob is a neutral ink cloud (was a cool blue that read as a foreign
+   * tint on the white ground); the outer two use the soft brand-red tokens. */
   background-image:
     radial-gradient(24% 28% at 87% 10%, var(--hm-wash-2) 0%, transparent 62%),
-    radial-gradient(28% 32% at 68% 40%, oklch(62% 0.16 258 / 0.55) 0%, transparent 64%),
+    radial-gradient(28% 32% at 68% 40%, rgba(23, 20, 18, 0.05) 0%, transparent 64%),
     radial-gradient(20% 24% at 10% 76%, var(--hm-wash-3) 0%, transparent 58%);
   opacity: 0.24;
   filter: blur(36px) saturate(108%);

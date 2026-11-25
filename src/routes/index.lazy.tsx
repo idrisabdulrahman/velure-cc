@@ -24,6 +24,12 @@ import {
 	MarketingFooter,
 	MarketingNav,
 } from "#/components/marketing/MarketingLayout";
+import { PricingSection } from "#/components/marketing/PricingSection";
+import {
+	ReminderQueue,
+	SampleNote,
+	StatusPill,
+} from "#/components/marketing/ReminderQueue";
 import { useLandingMotion } from "#/components/marketing/useLandingMotion";
 import { AppLoader } from "#/components/ui/app-loader";
 import { authClient } from "#/lib/auth-client";
@@ -32,18 +38,11 @@ export const Route = createLazyFileRoute("/")({
 	component: LandingPage,
 });
 
-/* The mock's hero window, bento cards and reminder queue all render sample
+/* The mock's hero window and bento cards all render sample
  * invoices. They are illustrative product UI, so every one of them carries an
  * explicit sample note — no mock figure ships unlabelled (and none of them is
  * presented as a product claim). The compliance figures below are the app's
  * real seeded tax rule set, so they need no such note. */
-function SampleNote() {
-	return (
-		<p className="mt-3 text-center text-[12px] text-[var(--hm-ink-3)]">
-			Sample data shown for illustration.
-		</p>
-	);
-}
 
 const checkpoints = [
 	"Create the invoice from business defaults",
@@ -118,7 +117,7 @@ const bentoTiles = [
 		className: "lg:col-span-2",
 		title: "Follow-ups without noise",
 		description:
-			"Schedule reminders through Resend while manual exceptions stay visible for the finance owner.",
+			"Queue reminders from staged rules while manual exceptions stay visible for the finance owner.",
 	},
 	{
 		className: "lg:col-span-4",
@@ -202,13 +201,13 @@ function LandingPage() {
 								}}
 							/>
 
-							<div className="relative mx-auto grid w-full max-w-[1160px] justify-items-center px-5 text-center sm:px-7">
+							<div className="relative mx-auto grid w-full max-w-[1152px] justify-items-center px-5 text-center sm:px-7">
 								<span className="hm-chip w-fit" data-fade-scroll>
 									Invoice operations for small business
 								</span>
 								<h1
 									data-split
-									className="hm-display font-medium mt-[26px] text-[clamp(2.875rem,8.2vw,6.5rem)] leading-[0.98] tracking-[-0.05em]"
+									className="hm-display font-medium mt-[26px] text-[clamp(2.125rem,4.6vw,3.75rem)] leading-[1.06] tracking-[-0.03em]"
 								>
 									Send the bill.
 									<br />
@@ -216,28 +215,33 @@ function LandingPage() {
 										Track the trail.
 									</span>
 								</h1>
-								<p className="hm-lede mx-auto mt-[26px] max-w-[54ch] text-[clamp(1rem,1.6vw,1.1875rem)]">
+								<p className="hm-lede mx-auto mt-[26px] max-w-[54ch] text-[1.125rem]">
 									Invoicly turns invoices, clients, VAT and WHT fields,
 									reminders, PDFs, and exports into one tight workspace for
 									Nigerian businesses.
 								</p>
-								<div className="mt-[34px] flex flex-wrap justify-center gap-3">
-									<Link
-										to="/auth"
-										search={{ mode: "sign-up" }}
-										data-magnetic
-										className="hm-btn hm-btn--primary hm-btn--xl"
-									>
-										Create your workspace
-										<ArrowRight className="h-4 w-4" />
-									</Link>
-									<a
-										href="#features"
-										className="hm-btn hm-btn--ghost hm-btn--xl"
-									>
-										<PlayCircle className="h-4 w-4" />
-										See the system
-									</a>
+								<div className="mt-[34px] flex flex-col items-center gap-3">
+									<div className="flex flex-wrap justify-center gap-3">
+										<Link
+											to="/auth"
+											search={{ mode: "sign-up" }}
+											data-magnetic
+											className="hm-btn hm-btn--primary hm-btn--xl"
+										>
+											Start free trial
+											<ArrowRight className="h-4 w-4" />
+										</Link>
+										<a
+											href="#features"
+											className="hm-btn hm-btn--ghost hm-btn--xl"
+										>
+											<PlayCircle className="h-4 w-4" />
+											See the system
+										</a>
+									</div>
+									<p className="text-[13.5px] text-[var(--hm-ink-2)]">
+										Try 3 days free — no credit card required.
+									</p>
 								</div>
 							</div>
 
@@ -246,7 +250,7 @@ function LandingPage() {
 
 						{/* ── 2 · TRAIL STRIP ── */}
 						<section className="px-5 pb-[90px] pt-11 sm:px-7">
-							<ol className="relative mx-auto grid max-w-[1160px] gap-7 pt-[30px] sm:grid-cols-2 lg:grid-cols-4">
+							<ol className="relative mx-auto grid max-w-[1152px] gap-7 pt-[30px] sm:grid-cols-2 lg:grid-cols-4">
 								<span
 									aria-hidden="true"
 									className="absolute inset-x-0 top-[5px] hidden h-px sm:block"
@@ -275,14 +279,14 @@ function LandingPage() {
 							id="features"
 							className="scroll-mt-24 px-5 py-[110px] sm:px-7"
 						>
-							<div className="mx-auto max-w-[1160px]">
+							<div className="mx-auto max-w-[1152px]">
 								<div className="mb-[46px] grid items-end gap-10 lg:grid-cols-[1.05fr_1fr]">
 									<div>
 										<p className="hm-kicker" data-fade-scroll>
 											What feels different
 										</p>
 										<h2
-											className="hm-display font-medium mt-[14px] text-[clamp(2rem,4.6vw,3.5rem)] leading-[1.04] tracking-[-0.035em]"
+											className="hm-display font-medium mt-[14px] text-[clamp(1.75rem,3.2vw,2.5rem)] leading-[1.12] tracking-[-0.035em]"
 											data-fade-scroll
 										>
 											Not another
@@ -324,14 +328,14 @@ function LandingPage() {
 							id="reminders"
 							className="scroll-mt-24 px-5 py-[110px] sm:px-7"
 						>
-							<div className="mx-auto grid max-w-[1160px] items-center gap-10 lg:grid-cols-[1.15fr_1fr] lg:gap-16">
+							<div className="mx-auto grid max-w-[1152px] items-center gap-10 lg:grid-cols-[1.15fr_1fr] lg:gap-16">
 								<ReminderQueue />
 								<div>
 									<p className="hm-kicker" data-fade-scroll>
 										Payment reminders
 									</p>
 									<h2
-										className="hm-display font-medium mt-[14px] text-[clamp(2rem,4.6vw,3.5rem)] leading-[1.04] tracking-[-0.035em]"
+										className="hm-display font-medium mt-[14px] text-[clamp(1.75rem,3.2vw,2.5rem)] leading-[1.12] tracking-[-0.035em]"
 										data-fade-scroll
 									>
 										Polite by default.
@@ -439,11 +443,11 @@ function LandingPage() {
 									backgroundImage: "linear-gradient(160deg,#c23a2e,#a82e24)",
 								}}
 							>
-								<p className="hm-kicker text-[#ffd6cc]" data-fade-scroll>
+								<p className="hm-kicker hm-kicker--on-accent" data-fade-scroll>
 									Finance review
 								</p>
 								<h2
-									className="hm-display font-medium mt-[14px] text-[clamp(2rem,4.6vw,3.5rem)] leading-[1.04] tracking-[-0.035em] text-white"
+									className="hm-display font-medium mt-[14px] text-[clamp(1.75rem,3.2vw,2.5rem)] leading-[1.12] tracking-[-0.035em] text-white"
 									data-fade-scroll
 								>
 									Compliance support,
@@ -488,13 +492,13 @@ function LandingPage() {
 
 						{/* ── 6 · LAUNCH FLOW ── */}
 						<section className="px-5 py-[110px] sm:px-7">
-							<div className="mx-auto grid max-w-[1160px] items-stretch gap-10 lg:grid-cols-[1.2fr_1fr] lg:gap-14">
+							<div className="mx-auto grid max-w-[1152px] items-stretch gap-10 lg:grid-cols-[1.2fr_1fr] lg:gap-14">
 								<div>
 									<p className="hm-kicker" data-fade-scroll>
 										Launch flow
 									</p>
 									<h2
-										className="hm-display font-medium mt-[14px] mb-9 text-[clamp(2rem,4.6vw,3.5rem)] leading-[1.04] tracking-[-0.035em]"
+										className="hm-display font-medium mt-[14px] mb-9 text-[clamp(1.75rem,3.2vw,2.5rem)] leading-[1.12] tracking-[-0.035em]"
 										data-fade-scroll
 									>
 										Look organized before
@@ -530,7 +534,7 @@ function LandingPage() {
 									className="flex flex-col justify-end gap-[22px] rounded-[20px] border border-[var(--hm-accent-line)] p-[34px]"
 									style={{
 										backgroundImage:
-											"radial-gradient(420px 300px at 100% 0,rgba(229,72,59,.22),transparent 70%)",
+											"radial-gradient(420px 300px at 100% 0,rgba(229,72,59,0.12),transparent 70%)",
 										backgroundColor: "var(--hm-paper-2)",
 									}}
 								>
@@ -561,13 +565,13 @@ function LandingPage() {
 							id="security"
 							className="scroll-mt-24 px-5 py-[110px] pt-10 sm:px-7"
 						>
-							<div className="mx-auto grid max-w-[1160px] gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-[72px]">
+							<div className="mx-auto grid max-w-[1152px] gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-[72px]">
 								<div>
 									<p className="hm-kicker" data-fade-scroll>
 										Security
 									</p>
 									<h2
-										className="hm-display font-medium mt-[14px] text-[clamp(2rem,4.6vw,3.5rem)] leading-[1.04] tracking-[-0.035em]"
+										className="hm-display font-medium mt-[14px] text-[clamp(1.75rem,3.2vw,2.5rem)] leading-[1.12] tracking-[-0.035em]"
 										data-fade-scroll
 									>
 										Know who can access an invoice.
@@ -622,6 +626,10 @@ function LandingPage() {
 								</dl>
 							</div>
 						</section>
+
+						{/* ── 8 · PRICING (getinboxzero.com pattern: tiers on the
+						    homepage, per-card trial CTA, annual/monthly toggle) ── */}
+						<PricingSection />
 					</main>
 
 					<MarketingFooter />
@@ -679,13 +687,15 @@ function HeroStage() {
 		<div className="relative mx-auto mt-[76px] max-w-[1060px] px-5 sm:px-7">
 			<div
 				data-fade-scroll
-				className="absolute -left-4 top-[340px] z-[3] hidden max-w-[300px] items-start gap-3 rounded-[14px] border border-[var(--hm-rule)] bg-[var(--hm-paper-3)]/95 p-4 text-[13px] shadow-[0_24px_60px_rgba(0,0,0,.6)] backdrop-blur-md xl:flex"
+				className="absolute -left-4 top-[340px] z-[3] hidden max-w-[300px] items-start gap-3 rounded-[14px] border border-[var(--hm-rule)] bg-[var(--hm-paper-3)]/95 p-4 text-[13px] shadow-[0_18px_44px_-16px_rgba(23,20,18,0.18)] backdrop-blur-md xl:flex"
 			>
 				<span className="grid h-8 w-8 flex-none place-items-center rounded-[9px] bg-[var(--hm-ok-soft)] text-[var(--hm-ok)]">
 					<Check className="h-4 w-4" />
 				</span>
 				<div>
-					<b className="block font-medium text-[13.5px]">Paid with Paystack</b>
+					<b className="block font-medium text-[13.5px]">
+						Paid by bank transfer
+					</b>
 					<span className="hm-num mt-0.5 block text-xs text-[var(--hm-ink-2)]">
 						₦620,000 · INV-2026-0038 · just now
 					</span>
@@ -693,7 +703,7 @@ function HeroStage() {
 			</div>
 			<div
 				data-fade-scroll
-				className="absolute -right-4 top-[400px] z-[3] hidden max-w-[300px] items-start gap-3 rounded-[14px] border border-[var(--hm-rule)] bg-[var(--hm-paper-3)]/95 p-4 text-[13px] shadow-[0_24px_60px_rgba(0,0,0,.6)] backdrop-blur-md xl:flex"
+				className="absolute -right-4 top-[400px] z-[3] hidden max-w-[300px] items-start gap-3 rounded-[14px] border border-[var(--hm-rule)] bg-[var(--hm-paper-3)]/95 p-4 text-[13px] shadow-[0_18px_44px_-16px_rgba(23,20,18,0.18)] backdrop-blur-md xl:flex"
 			>
 				<span className="grid h-8 w-8 flex-none place-items-center rounded-[9px] bg-[var(--hm-warn-soft)] text-[var(--hm-warn)]">
 					<BellRing className="h-4 w-4" />
@@ -708,9 +718,10 @@ function HeroStage() {
 
 			<div
 				data-fade-scroll
-				className="overflow-hidden rounded-[18px] border border-[var(--hm-rule)] shadow-[0_40px_120px_rgba(0,0,0,.65)]"
+				className="overflow-hidden rounded-[18px] border border-[var(--hm-rule)] shadow-[0_32px_90px_-28px_rgba(23,20,18,0.24)]"
 				style={{
-					backgroundImage: "linear-gradient(180deg,var(--hm-paper-2),#0d0908)",
+					backgroundImage:
+						"linear-gradient(180deg,var(--hm-paper-2),var(--hm-paper-4))",
 					transform: "perspective(1600px) rotateX(6deg)",
 					transformOrigin: "50% 100%",
 					WebkitMaskImage: "linear-gradient(180deg,#000 55%,transparent 100%)",
@@ -814,37 +825,13 @@ function HeroStage() {
 	);
 }
 
-function StatusPill({
-	tone,
-	children,
-}: {
-	tone: "warn" | "bad" | "ok" | "info" | "mute";
-	children: React.ReactNode;
-}) {
-	const tones = {
-		warn: "text-[var(--hm-warn)] bg-[var(--hm-warn-soft)]",
-		bad: "text-[var(--hm-danger)] bg-[var(--hm-danger-soft)]",
-		ok: "text-[var(--hm-ok)] bg-[var(--hm-ok-soft)]",
-		info: "text-[var(--hm-info)] bg-[var(--hm-info-soft)]",
-		mute: "text-[var(--hm-ink-2)] bg-white/5",
-	} as const;
-	return (
-		<span
-			className={`inline-flex h-[22px] w-max items-center gap-1.5 rounded-full px-[9px] text-[11.5px] font-medium ${tones[tone]}`}
-		>
-			<i className="h-1.5 w-1.5 rounded-full bg-current" />
-			{children}
-		</span>
-	);
-}
-
 /* ── Bento tile visuals (design/landing.html `.vis`). Each one that shows
  * sample figures carries its own sample note. ── */
 function TileVisual({ index }: { index: number }) {
 	if (index === 0) {
 		return (
 			<div className="grid gap-3.5 sm:grid-cols-[1.3fr_1fr]">
-				<div className="rounded-xl bg-[#f6f1ec] p-4 text-[#1b1412] shadow-[0_14px_40px_rgba(0,0,0,.5)]">
+				<div className="rounded-xl bg-[#f6f1ec] p-4 text-[#1b1412] shadow-[0_14px_36px_-12px_rgba(23,20,18,0.16)]">
 					<div className="flex items-start justify-between gap-2.5">
 						<div className="flex items-center gap-[9px]">
 							<span className="grid h-7 w-7 place-items-center rounded-lg bg-[#e5483b] text-[13px] font-semibold text-white">
@@ -892,7 +879,7 @@ function TileVisual({ index }: { index: number }) {
 						₦666,500
 					</div>
 					<div className="grid h-[38px] place-items-center rounded-[9px] bg-[var(--hm-accent)] text-[13px] font-medium text-white">
-						Pay with Paystack
+						Pay by bank transfer
 					</div>
 					<div className="flex flex-wrap gap-1.5">
 						<span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-[var(--hm-rule)] px-[9px] text-[11.5px] text-[var(--hm-ink-2)]">
@@ -942,7 +929,7 @@ function TileVisual({ index }: { index: number }) {
 						−3d
 					</span>
 					<span className="flex-1">First reminder</span>
-					<StatusPill tone="ok">Auto</StatusPill>
+					<StatusPill tone="ok">Queued</StatusPill>
 				</div>
 				<div className="flex items-center gap-2.5 rounded-[10px] border border-[var(--hm-rule-soft)] bg-[var(--hm-paper)] px-3 py-2.5 text-[12.5px]">
 					<span className="hm-num w-11 text-[11.5px] text-[var(--hm-ink-3)]">
@@ -1003,106 +990,6 @@ function TileVisual({ index }: { index: number }) {
 					</div>
 				</div>
 			))}
-		</div>
-	);
-}
-
-/* ── Reminders queue card (design/landing.html `.queue`) ── */
-function ReminderQueue() {
-	const rows = [
-		{
-			initials: "KS",
-			no: "INV-2026-0041",
-			who: "Kwara Solar Supply",
-			amount: "₦812,500",
-			due: "due 12/09/2026",
-			tags: [{ label: "12 days overdue", tone: "bad" as const }],
-			selected: true,
-		},
-		{
-			initials: "AF",
-			no: "INV-2026-0042",
-			who: "Adaeze Foods Ltd",
-			amount: "₦2,418,750",
-			due: "due 21/10/2026",
-			tags: [
-				{ label: "Due in 3 days", tone: "mute" as const },
-				{ label: "Reminder queued", tone: "info" as const },
-			],
-			selected: false,
-		},
-		{
-			initials: "?",
-			no: "INV-2026-0036",
-			who: "No buyer email",
-			amount: "₦150,000",
-			due: "due 24/10/2026",
-			tags: [{ label: "Needs email", tone: "warn" as const }],
-			selected: false,
-		},
-	];
-
-	return (
-		<div data-fade-scroll>
-			<div className="overflow-hidden rounded-2xl border border-[var(--hm-rule)] bg-[var(--hm-paper-2)] shadow-[0_30px_80px_rgba(0,0,0,.5)]">
-				<div className="flex items-center justify-between border-b border-[var(--hm-rule-soft)] px-[18px] py-3.5 text-[13.5px] font-medium">
-					Queue
-					<span className="text-xs font-normal text-[var(--hm-ink-3)]">
-						3 invoices
-					</span>
-				</div>
-				<div className="flex items-center gap-3 border-b border-[var(--hm-rule-soft)] px-[18px] py-3 text-[12.5px] text-[var(--hm-ink-2)]">
-					<span
-						aria-hidden="true"
-						className="relative h-5 w-10 flex-none rounded-full border border-[var(--hm-accent-line)] bg-[var(--hm-accent-soft)]"
-					>
-						<span className="absolute left-4 top-[2px] h-3.5 w-3.5 rounded-full bg-[var(--hm-accent)]" />
-					</span>
-					<div>
-						<b className="font-medium text-[var(--hm-ink)]">
-							Automatic reminders are on
-						</b>
-						<br />
-						First reminder 3 days before due, then every 3 days.
-					</div>
-				</div>
-				{rows.map((row) => (
-					<div
-						key={row.no}
-						className={`relative grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 border-b border-[var(--hm-rule-soft)] px-[18px] py-3.5 last:border-b-0 sm:grid-cols-[auto_minmax(0,1fr)_auto] ${row.selected ? "bg-[linear-gradient(90deg,var(--hm-accent-soft),rgba(229,72,59,.015)_80%)]" : ""}`}
-					>
-						{row.selected ? (
-							<span
-								aria-hidden="true"
-								className="absolute inset-y-3 left-0 w-0.5 rounded-sm bg-[var(--hm-accent)]"
-							/>
-						) : null}
-						<span className="grid h-[30px] w-[30px] flex-none place-items-center rounded-full bg-[var(--hm-accent-soft)] text-[11px] font-semibold text-[var(--hm-accent-on-soft)] shadow-[inset_0_0_0_1px_var(--hm-accent-line)]">
-							{row.initials}
-						</span>
-						<div className="min-w-0">
-							<div className="hm-num text-[12.5px]">{row.no}</div>
-							<div className="mt-0.5 text-[12.5px] text-[var(--hm-ink-2)]">
-								{row.who}
-							</div>
-							<div className="mt-2 flex flex-wrap gap-1.5">
-								{row.tags.map((tag) => (
-									<StatusPill key={tag.label} tone={tag.tone}>
-										{tag.label}
-									</StatusPill>
-								))}
-							</div>
-						</div>
-						<div className="hm-num col-start-2 text-[13px] sm:col-start-3 sm:text-right">
-							{row.amount}{" "}
-							<small className="mt-0.5 block text-[11.5px] text-[var(--hm-ink-3)] sm:inline sm:mt-0">
-								{row.due}
-							</small>
-						</div>
-					</div>
-				))}
-			</div>
-			<SampleNote />
 		</div>
 	);
 }

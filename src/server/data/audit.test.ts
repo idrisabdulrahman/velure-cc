@@ -151,7 +151,7 @@ function installAuditEndpoint(client: Supabase) {
 		init?: RequestInit,
 	) =>
 		handleAuditWrite({
-			request: new Request(new URL(String(input), "http://velure.test"), init),
+			request: new Request(new URL(String(input), "http://invoicly.test"), init),
 		})) as typeof fetch);
 	return admin;
 }

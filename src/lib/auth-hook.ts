@@ -64,29 +64,29 @@ export function useDashboardAuth() {
 	// Minted Supabase session (null when the bridge is unavailable).
 	const {
 		client: supabaseClient,
-		velureUserId,
+		invoiclyUserId,
 		isPending: sessionPending,
 	} = useSupabaseSession(authState.isAuthenticated ? userId : null);
 
 	const canReadSupabase = Boolean(
-		supabaseClient && velureUserId && authState.isAuthenticated,
+		supabaseClient && invoiclyUserId && authState.isAuthenticated,
 	); // RLS-enforced reads through the typed module. `enabled` guarantees both
 	// are non-null when the query runs; narrow to satisfy the type checker.
 	const readWorkspaces = () =>
-		supabaseClient && velureUserId
-			? listWorkspaces(supabaseClient, velureUserId)
+		supabaseClient && invoiclyUserId
+			? listWorkspaces(supabaseClient, invoiclyUserId)
 			: Promise.resolve([]);
 	const readContext = () =>
-		supabaseClient && velureUserId
-			? getWorkspaceContext(supabaseClient, velureUserId)
+		supabaseClient && invoiclyUserId
+			? getWorkspaceContext(supabaseClient, invoiclyUserId)
 			: Promise.resolve(null);
 	const supabaseWorkspaces = useTanQuery({
-		queryKey: ["supabase-workspaces", velureUserId ?? "none"],
+		queryKey: ["supabase-workspaces", invoiclyUserId ?? "none"],
 		queryFn: readWorkspaces,
 		enabled: canReadSupabase,
 	});
 	const supabaseContext = useTanQuery({
-		queryKey: ["supabase-workspace-context", velureUserId ?? "none"],
+		queryKey: ["supabase-workspace-context", invoiclyUserId ?? "none"],
 		queryFn: readContext,
 		enabled: canReadSupabase,
 	});
@@ -116,7 +116,7 @@ export function useWorkspaceActions() {
 	const userId = authState.data?.user?.id;
 	const {
 		client: supabaseClient,
-		velureUserId,
+		invoiclyUserId,
 		error: sessionError,
 	} = useSupabaseSession(authState.isAuthenticated ? userId : null);
 	const queryClient = useQueryClient();
@@ -130,34 +130,34 @@ export function useWorkspaceActions() {
 
 	const setActive = useCallback(
 		async ({ workspaceId }: { workspaceId: string }) => {
-			if (!supabaseClient || !velureUserId)
+			if (!supabaseClient || !invoiclyUserId)
 				throw new Error(
 					sessionError instanceof Error
 						? sessionError.message
 						: "Supabase session unavailable.",
 				);
-			await setActiveWorkspace(supabaseClient, velureUserId, workspaceId);
+			await setActiveWorkspace(supabaseClient, invoiclyUserId, workspaceId);
 			invalidateWorkspaces();
 			return { ok: true as const };
 		},
-		[invalidateWorkspaces, sessionError, supabaseClient, velureUserId],
+		[invalidateWorkspaces, sessionError, supabaseClient, invoiclyUserId],
 	);
 
 	const ensure = useCallback(
 		async ({ businessName }: { businessName?: string }) => {
-			if (!supabaseClient || !velureUserId)
+			if (!supabaseClient || !invoiclyUserId)
 				throw new Error(
 					sessionError instanceof Error
 						? sessionError.message
 						: "Supabase session unavailable.",
 				);
-			const ctx = await ensureWorkspaceForUser(supabaseClient, velureUserId, {
+			const ctx = await ensureWorkspaceForUser(supabaseClient, invoiclyUserId, {
 				businessName,
 			});
 			invalidateWorkspaces();
 			return ctx;
 		},
-		[invalidateWorkspaces, sessionError, supabaseClient, velureUserId],
+		[invalidateWorkspaces, sessionError, supabaseClient, invoiclyUserId],
 	);
 
 	return { setActive, ensure };

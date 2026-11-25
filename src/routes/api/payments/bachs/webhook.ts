@@ -5,6 +5,7 @@ import {
 	getClientIp,
 	readRequestText,
 } from "#/server/http-security";
+import { notifySellerPaymentSettled } from "#/server/payment-notifications";
 import { getSupabaseAdminClient } from "#/server/supabase";
 
 export async function handle({ request }: { request: Request }) {
@@ -60,12 +61,33 @@ export async function handle({ request }: { request: Request }) {
 		{ ...payment, input_raw_event: event },
 	);
 	if (error) return new Response(null, { status: 503 });
-	if (typeof data === "object" && data && !Array.isArray(data) && !data.ok)
-		console.warn(
-			"Bachs payment needs review",
-			payment.input_reference,
-			data.reason,
-		);
+	if (typeof data === "object" && data && !Array.isArray(data)) {
+		const result = data as {
+			ok?: boolean;
+			duplicate?: boolean;
+			paid?: boolean;
+			reason?: string;
+		};
+		if (!result.ok) {
+			console.warn(
+				"Bachs payment needs review",
+				payment.input_reference,
+				result.reason,
+			);
+		} else if (!result.duplicate) {
+			// Automatic settlement: the invoice is already paid, so tell the
+			// seller a buyer paid. Awaited because floating I/O is cancelled
+			// when the Worker returns its response; the notifier swallows its
+			// own failures, so a mail problem cannot turn a settled payment
+			// into a retryable webhook error.
+			await notifySellerPaymentSettled({
+				reference: payment.input_reference,
+				amount: payment.input_amount,
+				currency: payment.input_currency,
+				paidInFull: result.paid === true,
+			});
+		}
+	}
 	return Response.json({ received: true });
 }
 

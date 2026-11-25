@@ -1,7 +1,7 @@
-# Velure on a VPS (Node + systemd + nginx)
+# Invoicly on a VPS (Node + systemd + nginx)
 
-Deploy guide for running Velure as a long-lived Node process under systemd,
-reverse-proxied by nginx at `https://velure.variadic.ng` on port 8490.
+Deploy guide for running Invoicly as a long-lived Node process under systemd,
+reverse-proxied by nginx at `https://invoicly.variadic.ng` on port 8490.
 
 This is the "option 3" path agreed on 2026-11-01: the app previously ran on
 Cloudflare Pages, where sign-in failed with error 1102
@@ -17,9 +17,9 @@ removes it; the two modes are selected by `AUTH_DB_MODE`.
 
 | File | Purpose |
 | --- | --- |
-| `velure.service` | systemd unit (hardened, non-root, loopback-only) |
-| `velure.env.example` | environment template — copy to `/etc/velure/velure.env` |
-| `nginx-velure.conf` | reverse proxy + TLS + security headers |
+| `invoicly.service` | systemd unit (hardened, non-root, loopback-only) |
+| `invoicly.env.example` | environment template — copy to `/etc/invoicly/invoicly.env` |
+| `nginx-invoicly.conf` | reverse proxy + TLS + security headers |
 
 ## Requirements
 
@@ -53,30 +53,30 @@ cd .output && HOST=127.0.0.1 PORT=8490 \
 ## 2. Create the service account and directories
 
 ```bash
-sudo useradd --system --home /opt/velure --shell /usr/sbin/nologin velure
-sudo install -d -o velure -g velure -m 0755 /opt/velure
-sudo install -d -m 0755 /etc/velure
+sudo useradd --system --home /opt/invoicly --shell /usr/sbin/nologin invoicly
+sudo install -d -o invoicly -g invoicly -m 0755 /opt/invoicly
+sudo install -d -m 0755 /etc/invoicly
 ```
 
 If you would rather reuse an existing account, change `User=`/`Group=` in the
-unit and make sure it owns `/opt/velure`.
+unit and make sure it owns `/opt/invoicly`.
 
 ## 3. Upload the build
 
 ```bash
-sudo rsync -a --delete .output/ velure@YOUR_VPS:/opt/velure/
+sudo rsync -a --delete .output/ invoicly@YOUR_VPS:/opt/invoicly/
 ```
 
-The result is `/opt/velure/server/index.mjs`, `/opt/velure/public/`, and
-`/opt/velure/nitro.json`.
+The result is `/opt/invoicly/server/index.mjs`, `/opt/invoicly/public/`, and
+`/opt/invoicly/nitro.json`.
 
 ## 4. Configure the environment
 
 ```bash
-sudo cp deploy/velure.env.example /etc/velure/velure.env
-sudo chown root:root /etc/velure/velure.env
-sudo chmod 600 /etc/velure/velure.env
-sudo "${EDITOR:-nano}" /etc/velure/velure.env   # fill in the real values
+sudo cp deploy/invoicly.env.example /etc/invoicly/invoicly.env
+sudo chown root:root /etc/invoicly/invoicly.env
+sudo chmod 600 /etc/invoicly/invoicly.env
+sudo "${EDITOR:-nano}" /etc/invoicly/invoicly.env   # fill in the real values
 ```
 
 Notes:
@@ -93,12 +93,12 @@ Notes:
 ## 5. Install and start the service
 
 ```bash
-sudo cp deploy/velure.service /etc/systemd/system/velure.service
-sudo systemd-analyze verify /etc/systemd/system/velure.service
+sudo cp deploy/invoicly.service /etc/systemd/system/invoicly.service
+sudo systemd-analyze verify /etc/systemd/system/invoicly.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now velure
-systemctl status velure
-journalctl -u velure -f
+sudo systemctl enable --now invoicly
+systemctl status invoicly
+journalctl -u invoicly -f
 ```
 
 Confirm it is listening on loopback only:
@@ -110,13 +110,13 @@ ss -ltnp | grep 8490        # should show 127.0.0.1:8490, not 0.0.0.0
 
 ## 6. nginx and TLS
 
-Point the DNS `A`/`AAAA` record for `velure.variadic.ng` at the VPS, then:
+Point the DNS `A`/`AAAA` record for `invoicly.variadic.ng` at the VPS, then:
 
 ```bash
-sudo cp deploy/nginx-velure.conf /etc/nginx/sites-available/velure.variadic.ng
-sudo ln -s /etc/nginx/sites-available/velure.variadic.ng /etc/nginx/sites-enabled/
+sudo cp deploy/nginx-invoicly.conf /etc/nginx/sites-available/invoicly.variadic.ng
+sudo ln -s /etc/nginx/sites-available/invoicly.variadic.ng /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d velure.variadic.ng
+sudo certbot --nginx -d invoicly.variadic.ng
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
@@ -135,11 +135,11 @@ config:
 ## 7. Post-deploy checks
 
 ```bash
-curl -sS -o /dev/null -w 'root   %{http_code}\n' https://velure.variadic.ng/
+curl -sS -o /dev/null -w 'root   %{http_code}\n' https://invoicly.variadic.ng/
 curl -sS -o /dev/null -w 'signin %{http_code}\n' -X POST \
-  https://velure.variadic.ng/api/auth/sign-in/email \
+  https://invoicly.variadic.ng/api/auth/sign-in/email \
   -H 'Content-Type: application/json' \
-  -H 'Origin: https://velure.variadic.ng' \
+  -H 'Origin: https://invoicly.variadic.ng' \
   -d '{"email":"YOU@example.com","password":"YOUR-PASSWORD"}'
 ```
 
@@ -148,8 +148,8 @@ longer runs into a CPU cap:
 
 ```bash
 for i in $(seq 1 10); do curl -sS -o /dev/null -w '%{http_code} %{time_total}s\n' \
-  -X POST https://velure.variadic.ng/api/auth/sign-in/email \
-  -H 'Content-Type: application/json' -H 'Origin: https://velure.variadic.ng' \
+  -X POST https://invoicly.variadic.ng/api/auth/sign-in/email \
+  -H 'Content-Type: application/json' -H 'Origin: https://invoicly.variadic.ng' \
   -d '{"email":"YOU@example.com","password":"YOUR-PASSWORD"}'; done
 ```
 
@@ -160,8 +160,8 @@ public invoice share link.
 
 The reminder/scheduler tick is driven by Supabase `pg_cron` + `pg_net`, which
 posts to the app URL stored in Vault. Update that URL to
-`https://velure.variadic.ng/api/cron/tick` and make sure the Vault secret matches
-`INVOICE_SCHEDULER_SECRET` from `/etc/velure/velure.env`. Automatic reminder
+`https://invoicly.variadic.ng/api/cron/tick` and make sure the Vault secret matches
+`INVOICE_SCHEDULER_SECRET` from `/etc/invoicly/invoicly.env`. Automatic reminder
 sending is intentionally still off (`SCHEDULER_REMINDER_SEND_ENABLED`) until real
 invoices are being issued — do not turn it on as part of a deployment.
 
@@ -170,9 +170,9 @@ invoices are being issued — do not turn it on as part of a deployment.
 ```bash
 # on the build machine
 pnpm build
-sudo rsync -a --delete .output/ velure@YOUR_VPS:/opt/velure/
+sudo rsync -a --delete .output/ invoicly@YOUR_VPS:/opt/invoicly/
 # on the VPS
-sudo systemctl restart velure && systemctl status velure
+sudo systemctl restart invoicly && systemctl status invoicly
 ```
 
 `rsync --delete` keeps the directory an exact copy of the build. Keep the

@@ -35,9 +35,9 @@ function FeaturesPage() {
 							"Search, filter, duplicate, and update statuses from one ledger-style workspace built for weekly finance work.",
 					},
 					{
-						title: "Queue payment reminders, send them yourself.",
+						title: "Queue payment reminders that send themselves.",
 						description:
-							"Queue pre-due, due-date, and overdue reminders from one place, then send each one manually. Automatic sending is not enabled yet.",
+							"Queue pre-due, due-date, and overdue reminders from one place. The scheduler sends each one automatically when it falls due — you review the trail, not the outbox.",
 					},
 					{
 						title: "Nigeria-ready VAT and WHT support.",

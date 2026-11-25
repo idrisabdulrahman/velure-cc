@@ -17,6 +17,11 @@
 const IV_LENGTH = 12; // 96-bit nonce, the value recommended for AES-GCM.
 const AUTH_TAG_LENGTH = 16; // 128-bit GCM authentication tag.
 const KEY_LENGTH = 32; // 256-bit AES key.
+// LEGACY (2026-11-22 rename): this AAD prefix was created during the Velure
+// era and stays as-is. It is additional authenticated data bound into every
+// already-encrypted integration token, so renaming it would fail decryption
+// of all stored tokens. Change it only together with a re-encryption of
+// every row.
 const AAD_PREFIX = "velure-integration-tokens";
 
 function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {

@@ -3,12 +3,17 @@ import { afterEach, expect, it, vi } from "vitest";
 import { handle } from "./webhook";
 
 const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }));
+const { notifySettled } = vi.hoisted(() => ({ notifySettled: vi.fn() }));
 vi.mock("#/server/supabase", () => ({
 	getSupabaseAdminClient: () => ({ rpc }),
+}));
+vi.mock("#/server/payment-notifications", () => ({
+	notifySellerPaymentSettled: notifySettled,
 }));
 afterEach(() => {
 	vi.unstubAllEnvs();
 	rpc.mockReset();
+	notifySettled.mockReset();
 });
 
 function delivery(secret: string) {
@@ -78,4 +83,28 @@ it("returns a retryable status on a database failure", async () => {
 	expect((await handle({ request: delivery("sandbox-secret") })).status).toBe(
 		503,
 	);
+});
+
+it("notifies the seller once a payment settles for real", async () => {
+	vi.stubEnv("BACHS_WEBHOOK_SECRET", "sandbox-secret");
+	rpc.mockResolvedValue({
+		data: { ok: true, duplicate: false, paid: true, reference: "chk_invoiceA" },
+		error: null,
+	});
+	expect((await handle({ request: delivery("sandbox-secret") })).status).toBe(
+		200,
+	);
+	expect(notifySettled).toHaveBeenCalledWith({
+		reference: "chk_invoiceA",
+		amount: 10000,
+		currency: "NGN",
+		paidInFull: true,
+	});
+});
+
+it("does not notify on a replayed (duplicate) webhook", async () => {
+	vi.stubEnv("BACHS_WEBHOOK_SECRET", "sandbox-secret");
+	rpc.mockResolvedValue({ data: { ok: true, duplicate: true }, error: null });
+	await handle({ request: delivery("sandbox-secret") });
+	expect(notifySettled).not.toHaveBeenCalled();
 });

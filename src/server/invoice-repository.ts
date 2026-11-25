@@ -17,7 +17,7 @@ async function createUserContext(request: Request) {
 	if (!url || !key)
 		throw new Error("Supabase publishable configuration is missing.");
 	return {
-		userId: minted.velureUserId,
+		userId: minted.invoiclyUserId,
 		client: createClient<Database>(url, key, {
 			global: { headers: { Authorization: `Bearer ${minted.accessToken}` } },
 			auth: {

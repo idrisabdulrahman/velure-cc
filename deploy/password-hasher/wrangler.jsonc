@@ -1,6 +1,6 @@
 {
 	"$schema": "../../node_modules/wrangler/config-schema.json",
-	"name": "velure-password-hasher",
+	"name": "invoicly-password-hasher",
 	"main": "./main.ts",
 	"compatibility_date": "2026-11-02",
 	"observability": {

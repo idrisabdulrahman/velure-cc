@@ -33,7 +33,7 @@ const workerOutputDir = "dist-worker";
  */
 function qrCodeServerStub(): Plugin {
 	return {
-		name: "velure-qrcode-server-stub",
+		name: "invoicly-qrcode-server-stub",
 		enforce: "pre",
 		resolveId(source) {
 			if (this.environment?.name === "client") return null;

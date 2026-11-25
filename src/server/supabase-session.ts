@@ -4,7 +4,7 @@ import { getAuthSessionFromRequest } from "#/server/security-stepup";
 type MintedSession = {
 	accessToken: string;
 	expiresAt: number;
-	velureUserId: string;
+	invoiclyUserId: string;
 };
 
 export async function mintSupabaseAccessToken(
@@ -39,6 +39,11 @@ export async function mintSupabaseAccessToken(
 	}
 	const token = new SignJWT({
 		sub: userId,
+		// `invoicly_user_id` is the tenant claim `app.current_user_id()` reads
+		// (migration 20261122000000). `velure_user_id` is its legacy name, kept
+		// during the transition so RLS never fails against a pre-migration
+		// hook; remove it once the cutover is verified.
+		invoicly_user_id: userId,
 		velure_user_id: userId,
 		role: "authenticated",
 		aud: "authenticated",
@@ -64,5 +69,5 @@ export async function mintSupabaseAccessToken(
 		: await token
 				.setProtectedHeader({ alg: "HS256", typ: "JWT" })
 				.sign(new TextEncoder().encode(legacySecret));
-	return { accessToken, expiresAt, velureUserId: userId };
+	return { accessToken, expiresAt, invoiclyUserId: userId };
 }

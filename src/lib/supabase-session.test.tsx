@@ -22,7 +22,7 @@ it("renews the Supabase JWT before the server's 30 minute expiry", async () => {
 			ok: true,
 			accessToken: `token-${fetchSession.mock.calls.length}`,
 			expiresAt: Math.floor(Date.now() / 1000) + 30 * 60,
-			velureUserId: "user-1",
+			invoiclyUserId: "user-1",
 		}),
 	);
 	vi.stubGlobal("fetch", fetchSession);
@@ -31,8 +31,8 @@ it("renews the Supabase JWT before the server's 30 minute expiry", async () => {
 	const root = createRoot(container);
 	const queryClient = new QueryClient();
 	function Probe() {
-		const { velureUserId } = useSupabaseSession("user-1");
-		return <span>{velureUserId}</span>;
+		const { invoiclyUserId } = useSupabaseSession("user-1");
+		return <span>{invoiclyUserId}</span>;
 	}
 	await act(async () => {
 		root.render(
