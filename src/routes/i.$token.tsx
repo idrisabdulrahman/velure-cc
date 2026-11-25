@@ -12,6 +12,11 @@ import {
 	getInvoiceTemplateSize,
 	toInvoiceDocument,
 } from "#/features/invoices/invoice-document-adapter";
+import {
+	getPublicPaymentAffordances,
+	getPublicPrimaryAmount,
+	PUBLIC_DRAFT_PAYMENT_NOTICE,
+} from "#/features/invoices/public-payment-affordances";
 import { buildInvoiceShareLinks } from "#/features/invoices/share-links";
 import type { InvoiceRecord } from "#/features/invoices/types";
 import { INVOICE_DOCUMENT_TYPE_LABELS } from "#/features/invoices/types";
@@ -215,13 +220,19 @@ function PublicInvoicePage() {
 	};
 
 	const payments = paymentHistory ?? [];
-	const canUsePaystackTransfer =
-		paymentContext?.capabilities.automaticBankTransfer &&
-		paymentContext.payable !== false &&
-		invoice.status !== "paid";
-	const showCollectionPanel =
-		paymentContext?.capabilities.automaticBankTransfer &&
-		invoice.status !== "paid";
+	// A draft (and its `scheduled` alias) is not payable, so its page shows no
+	// collection panel, no bank-transfer instructions and no "I've paid" action.
+	const {
+		isDraft: isDraftState,
+		canUsePaystackTransfer,
+		showCollectionPanel,
+		canClaimPayment,
+	} = getPublicPaymentAffordances({
+		status: invoice.status,
+		balance: invoice.balance,
+		automaticBankTransfer: paymentContext?.capabilities.automaticBankTransfer,
+		payable: paymentContext?.payable,
+	});
 	const collectionStatusLabel = charge?.accountNumber
 		? "Active collection session"
 		: canUsePaystackTransfer
@@ -236,10 +247,6 @@ function PublicInvoicePage() {
 		invoiceNumber: invoice.invoiceNumber,
 		status: invoice.status === "scheduled" ? "draft" : invoice.status,
 	});
-	const canClaimPayment =
-		invoice.status !== "paid" &&
-		invoice.status !== "canceled" &&
-		invoice.balance > 0;
 	// WP-D: a pro-forma quote can be accepted while it is an open offer.
 	const isQuote = (invoice.documentType ?? "standard") === "proforma";
 	const quoteAcceptedView = quoteAccepted || invoice.quoteStatus === "accepted";
@@ -383,8 +390,16 @@ function PublicInvoicePage() {
 	// on it. All values below are real stored amounts.
 	const money = (value: number) =>
 		formatMoney(value, invoice.currency, { currencyDisplay: "code" });
-	const settled = invoice.status === "paid";
 	const dueDateLabel = formatInvoiceDate(invoice.dueDate, invoice.dateFormat);
+	// A draft is not payable, so it must not read "Amount due" with a zero
+	// balance: show the draft's total instead.
+	const { label: primaryAmountLabel, value: primaryAmountValue } =
+		getPublicPrimaryAmount({
+			status: invoice.status,
+			total: invoice.total,
+			balance: invoice.balance,
+			paymentAmount: invoice.paymentAmount,
+		});
 	const invoiceFacts = [
 		{ label: "Invoice no", value: invoice.invoiceNumber },
 		{
@@ -392,9 +407,7 @@ function PublicInvoicePage() {
 			value: formatInvoiceDate(invoice.issueDate, invoice.dateFormat),
 		},
 		{ label: "Due", value: dueDateLabel },
-		settled
-			? { label: "Amount paid", value: money(invoice.paymentAmount) }
-			: { label: "Amount due", value: money(invoice.balance) },
+		{ label: primaryAmountLabel, value: money(primaryAmountValue) },
 	];
 	const collectionTitle = paymentContext?.depositRequest
 		? "Deposit collection"
@@ -507,15 +520,13 @@ function PublicInvoicePage() {
 							>
 								<div className="px-5 py-5">
 									<div className="flex items-baseline justify-between gap-4">
-										<span className={MICRO_CAPS}>
-											{settled ? "Amount paid" : "Amount due"}
-										</span>
+										<span className={MICRO_CAPS}>{primaryAmountLabel}</span>
 										<span className="font-num text-[11px] text-ink-3">
 											{documentLabel}
 										</span>
 									</div>
 									<p className="mt-2.5 font-num text-[1.75rem] leading-none font-medium tracking-tight text-ink">
-										{money(settled ? invoice.paymentAmount : invoice.balance)}
+										{money(primaryAmountValue)}
 									</p>
 									<dl className="mt-5 grid gap-2 border-t border-rule pt-4">
 										<div className="flex items-baseline justify-between gap-4">
@@ -539,6 +550,16 @@ function PublicInvoicePage() {
 											</dd>
 										</div>
 									</dl>
+									{/* Issue #3 finding 4: Download PDF was only reachable by
+									 * hovering an unlabeled icon in the floating pill. Give it a
+									 * visible, labeled action next to the invoice summary. */}
+									<a
+										href={downloadUrl}
+										className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-rule bg-paper-2 text-xs font-medium text-ink transition-colors hover:bg-paper-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+									>
+										<Download className="h-4 w-4 shrink-0" />
+										Download PDF
+									</a>
 								</div>
 
 								{isQuote && (canAcceptQuote || quoteAcceptedView) ? (
@@ -578,6 +599,17 @@ function PublicInvoicePage() {
 												</button>
 											</>
 										)}
+									</div>
+								) : null}
+
+								{isDraftState ? (
+									<div className="border-t border-rule px-5 py-5">
+										<p role="status" className="text-xs font-medium text-ink">
+											{PUBLIC_DRAFT_PAYMENT_NOTICE}
+										</p>
+										<p className="mt-1 text-xs text-ink-3">
+											Payment instructions appear once {sellerName} issues it.
+										</p>
 									</div>
 								) : null}
 

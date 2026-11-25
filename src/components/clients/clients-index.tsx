@@ -123,9 +123,12 @@ type ClientIntelligence = {
 		currency: string;
 		totalRevenue: number;
 		outstandingBalance: number;
+		/** Unsent drafts are not outstanding; surfaced separately. */
+		draftBalance: number;
 		paidRevenue: number;
 		averageInvoiceValue: number;
 		invoiceCount: number;
+		draftInvoiceCount: number;
 		paidInvoiceCount: number;
 		overdueInvoiceCount: number;
 	};
@@ -133,7 +136,9 @@ type ClientIntelligence = {
 		currency: string;
 		totalRevenue: number;
 		outstandingBalance: number;
+		draftBalance: number;
 		invoiceCount: number;
+		draftInvoiceCount: number;
 	}>;
 	invoiceCount: number;
 	averagePaymentDelayDays: number | null;
@@ -377,10 +382,11 @@ export function ClientsIndex() {
 		});
 	}, [selected]);
 
+	const emailIsValid =
+		editState.email.trim().length === 0 ||
+		/^\S+@\S+\.\S+$/.test(editState.email.trim());
 	const updateDisabled =
-		!selected ||
-		editState.name.trim().length === 0 ||
-		!/^\S+@\S+\.\S+$/.test(editState.email);
+		!selected || editState.name.trim().length === 0 || !emailIsValid;
 
 	const isDirty =
 		Boolean(selected) &&
@@ -662,6 +668,14 @@ export function ClientsIndex() {
 			? intelligence.primaryCurrency.outstandingBalance
 			: 0;
 	const selectedCurrency = intelligence?.primaryCurrency.currency ?? "NGN";
+	const selectedDraftBalance =
+		intelligence && intelligence.invoiceCount > 0
+			? intelligence.primaryCurrency.draftBalance
+			: 0;
+	const selectedDraftInvoiceCount =
+		intelligence && intelligence.invoiceCount > 0
+			? intelligence.primaryCurrency.draftInvoiceCount
+			: 0;
 	const balanceCount =
 		selected && selectedOutstanding > 0 && selectedId !== null ? 1 : 0;
 
@@ -1204,6 +1218,20 @@ export function ClientsIndex() {
 																billed
 															</span>
 														</p>
+														{selectedDraftBalance > 0 ? (
+															<p className="mt-2 text-xs text-ink-3">
+																<span className="font-num tabular-nums text-ink-2">
+																	{formatMoney(
+																		selectedDraftBalance,
+																		selectedCurrency,
+																		{ maximumFractionDigits: 0 },
+																	)}
+																</span>{" "}
+																in {selectedDraftInvoiceCount} unsent draft
+																{selectedDraftInvoiceCount === 1 ? "" : "s"} —
+																not counted as outstanding.
+															</p>
+														) : null}
 													</div>
 
 													{selectedDraft ? (
@@ -1460,7 +1488,10 @@ export function ClientsIndex() {
 														className="h-10 rounded-md border-rule bg-paper text-sm text-ink"
 													/>
 												</FormField>
-												<FormField label="Email">
+												<FormField
+													label="Email"
+													hint="Optional. Needed only to email invoices."
+												>
 													<Input
 														type="email"
 														value={editState.email}

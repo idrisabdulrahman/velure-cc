@@ -82,6 +82,15 @@ const SEND_SWITCH = "SCHEDULER_REMINDER_SEND_ENABLED";
 const BATCH_SWITCH = "SCHEDULER_REMINDER_SWEEP_BATCH";
 const BUDGET_SWITCH = "SCHEDULER_REMINDER_SWEEP_BUDGET_MS";
 const SWEEP_JOB_NAME = "reminder_sweep";
+
+/**
+ * The ONE read of the automatic-sending switch, so the settings UI and the
+ * sweep can never disagree. Returns a plain boolean; the raw env value never
+ * leaves the server.
+ */
+export function isAutomaticReminderSendingEnabled(): boolean {
+	return process.env[SEND_SWITCH] === "true";
+}
 /**
  * The tick faces TWO ceilings in production, both imposed on the Cloudflare
  * Pages Function behind `/api/cron/tick`:
@@ -144,7 +153,7 @@ export async function runReminderSweep(
 	const now = options.now ?? new Date();
 	const today = now.toISOString().slice(0, 10);
 	const timestamp = now.toISOString();
-	const sendEnabled = options.send ?? process.env[SEND_SWITCH] === "true";
+	const sendEnabled = options.send ?? isAutomaticReminderSendingEnabled();
 	const batchSize =
 		options.batchSize ??
 		positiveInt(process.env[BATCH_SWITCH], REMINDER_SWEEP_DEFAULT_BATCH_SIZE);

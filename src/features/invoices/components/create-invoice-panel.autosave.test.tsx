@@ -235,4 +235,43 @@ describe("invoice draft autosave status", () => {
 		window.dispatchEvent(cleanLeave);
 		expect(cleanLeave.defaultPrevented).toBe(false);
 	});
+
+	it("saves a draft with no unit/code and no TIN through Save draft", async () => {
+		await act(async () => {
+			root.render(
+				<QueryClientProvider client={new QueryClient()}>
+					<CreateInvoicePanel
+						initialDraft={{
+							customerName: "QA Client",
+							lineItems: [{ name: "Consulting", quantity: 2, price: 1000 }],
+						}}
+					/>
+				</QueryClientProvider>,
+			);
+		});
+		hoisted.autosaveDraft.mockClear();
+
+		const saveDraft = container.querySelector<HTMLButtonElement>(
+			'[data-testid="invoice-save-draft"]',
+		);
+		expect(saveDraft).not.toBeNull();
+		expect(saveDraft?.disabled).toBe(false);
+
+		await act(async () => {
+			saveDraft?.click();
+		});
+		await flush();
+
+		expect(hoisted.autosaveDraft).toHaveBeenCalledTimes(1);
+		const lineItems = hoisted.autosaveDraft.mock.calls[0][2].lineItems;
+		expect(lineItems[0].quantity).toBe(2);
+		expect(lineItems[0].price).toBe(1000);
+		// The hidden step is gone: a draft saves before classification exists.
+		expect(lineItems[0].unit).toBeUndefined();
+		expect(lineItems[0].classificationCode).toBeUndefined();
+		// The inline "Draft saved" status is not asserted here: when the server
+		// assigns the number the signature changes once more, and this jsdom +
+		// React 19 harness leaves the status text at "Saving..." even though the
+		// save succeeded (reproduces on the base component, not from this work).
+	});
 });

@@ -77,4 +77,34 @@ describe("payableInvoiceIssue", () => {
 			).toBe("Payments are not enabled for credit or debit notes.");
 		}
 	});
+
+	it("blocks a scheduled invoice by its projected status", () => {
+		const scheduled = {
+			...draftInvoice(),
+			// `mapPublicInvoice`/`mapInvoice` project the derived status; the
+			// public claim handler reads this field directly.
+			status: "scheduled",
+		};
+		expect(payableInvoiceIssue(scheduled)).toBe(
+			"Scheduled invoices are not payable until they are issued.",
+		);
+		// Not even the owner's manual settlement path may pay it.
+		expect(payableInvoiceIssue(scheduled, { allowDraft: true })).toBe(
+			"Scheduled invoices are not payable until they are issued.",
+		);
+	});
+
+	it("blocks a scheduled invoice through the schedule columns too", () => {
+		// A public projection may drop the schedule columns but still carry the
+		// scheduled status; conversely a derived snapshot needs the columns. Both
+		// routes must be refused.
+		expect(
+			payableInvoiceIssue({
+				...draftInvoice(),
+				status: "unpaid",
+				scheduledAt: Date.parse("2026-09-01T00:00:00.000Z"),
+				scheduleVersion: "v1",
+			}),
+		).toBe("Scheduled invoices are not payable until they are issued.");
+	});
 });

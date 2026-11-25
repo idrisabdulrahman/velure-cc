@@ -5,6 +5,7 @@ import {
 	CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE,
 	INVOICE_LINE_CLASSIFICATION_REQUIRED_MESSAGE,
 } from "#/features/invoices/customer-gate";
+import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import { assertSendCustomerGate } from "#/server/data/invoices";
 import { ensurePaystackTransferCharge } from "#/server/data/paystack-server";
 import { getServerEnv } from "#/server/env";
@@ -196,6 +197,21 @@ async function sendInvoiceEmail({
 					? "pro-forma invoice"
 					: "invoice";
 
+	// Issue #3 finding 3: let the buyer identify the amount, due date and their
+	// PO from the email alone, without opening the attachment.
+	const emailFacts: string[] = [
+		`Amount: ${formatMoney(invoice.total, invoice.currency)}`,
+	];
+	if (invoice.dueDate) {
+		emailFacts.push(
+			`Due date: ${formatInvoiceDate(invoice.dueDate, invoice.dateFormat)}`,
+		);
+	}
+	if (invoice.customerPoNumber?.trim()) {
+		emailFacts.push(`PO: ${invoice.customerPoNumber.trim()}`);
+	}
+	const safeEmailFacts = emailFacts.map(escapeHtml);
+
 	let pdfBytes: Uint8Array;
 	try {
 		pdfBytes = await renderInvoicePdf(invoice);
@@ -224,7 +240,7 @@ async function sendInvoiceEmail({
 				from: sanitizeFromAddress(getServerEnv("RESEND_FROM_EMAIL")),
 				to,
 				subject: `${mailLabel.replace(/^./, (letter) => letter.toUpperCase())} ${invoice.invoiceNumber}`,
-				text: `Your ${mailLabel} ${invoice.invoiceNumber} for ${invoice.customerName} is attached as a PDF. You can also view it online: ${publicUrl}`,
+				text: `Your ${mailLabel} ${invoice.invoiceNumber} for ${invoice.customerName} is attached as a PDF.\n${emailFacts.join("\n")}\nYou can also view it online: ${publicUrl}`,
 				html: `
         <div style="font-family: Arial, sans-serif; color: #111; line-height: 1.5;">
 			  <h2 style="margin: 0 0 12px;">${escapeHtml(mailLabel.replace(/^./, (letter) => letter.toUpperCase()))} ${safeInvoiceNumber}</h2>
@@ -232,6 +248,9 @@ async function sendInvoiceEmail({
           <p style="margin: 0 0 12px;">
 			  Your ${mailLabel} for <strong>${safeCustomerName}</strong> is attached as a PDF.
           </p>
+          <ul style="margin: 0 0 12px; padding-left: 18px;">
+            ${safeEmailFacts.map((line) => `<li>${line}</li>`).join("\n            ")}
+          </ul>
           <p style="margin: 0 0 12px;">
             You can also view it online: <a href="${safePublicUrl}">${safePublicUrl}</a>
           </p>

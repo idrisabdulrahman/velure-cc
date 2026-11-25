@@ -1,10 +1,10 @@
 import { emitActivation } from "#/server/observability";
 import type { Database, Json } from "#/types/database.types";
 import { recordInvoiceAudit } from "./audit-client";
+import { deriveInvoiceStatus, invoiceNetPayable } from "./invoice-balance";
 import { isInvoiceIssued } from "./invoice-numbering";
 import {
 	assertCustomerForIssueTransition,
-	getDerivedInvoiceStatus,
 	getById as getInvoiceById,
 } from "./invoices";
 import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
@@ -115,6 +115,11 @@ type InvoicePaymentState = {
 	paymentAmount?: number;
 	status?: string;
 	deliveredAt?: number;
+	// A scheduled send is not yet issued: `deriveInvoiceStatus` reports the
+	// `scheduled` state while both columns are present, and any payment path
+	// must refuse it (P0).
+	scheduledAt?: number;
+	scheduleVersion?: string;
 	lifecycle?: {
 		emailDeliveredAt?: number;
 		sentAt?: number;
@@ -198,23 +203,7 @@ export function roundMoney(amount: number) {
 }
 
 export function invoiceAmount(invoice: InvoicePaymentState) {
-	if (invoice.compliance?.netPayable !== undefined) {
-		return Math.max(0, invoice.compliance.netPayable);
-	}
-	if (invoice.compliance?.grandTotal !== undefined) {
-		return Math.max(
-			0,
-			invoice.compliance.grandTotal -
-				(invoice.compliance.withholdingTaxAmount ?? 0),
-		);
-	}
-	return Math.max(
-		0,
-		(invoice.lineItems ?? []).reduce(
-			(sum, item) => sum + item.quantity * item.price,
-			0,
-		),
-	);
+	return invoiceNetPayable(invoice);
 }
 
 function currentPaymentAmount(invoice: InvoicePaymentState, total: number) {
@@ -224,39 +213,11 @@ function currentPaymentAmount(invoice: InvoicePaymentState, total: number) {
 	return invoice.status === "paid" ? total : 0;
 }
 
-function deliveredAtForInvoice(invoice: InvoicePaymentState) {
-	return (
-		invoice.deliveredAt ??
-		invoice.lifecycle?.emailDeliveredAt ??
-		invoice.lifecycle?.sentAt ??
-		(invoice.status && invoice.status !== "draft"
-			? invoice.updatedAt
-			: undefined)
-	);
-}
-
 export function derivedPaymentStatus(
 	invoice: InvoicePaymentState,
 	now = Date.now(),
 ) {
-	const total = invoiceAmount(invoice);
-	const paid = currentPaymentAmount(invoice, total);
-
-	if (invoice.canceledAt || invoice.status === "canceled") return "canceled";
-	if (total > 0 && paid >= total) return "paid";
-	if (paid > 0 && paid < total) return "partially-paid";
-	if (!deliveredAtForInvoice(invoice)) return "draft";
-
-	const dueDate = invoice.dueDate
-		? new Date(`${invoice.dueDate}T00:00:00`)
-		: null;
-	if (dueDate && !Number.isNaN(dueDate.getTime())) {
-		const today = new Date(now);
-		today.setHours(0, 0, 0, 0);
-		if (dueDate.getTime() < today.getTime()) return "overdue";
-	}
-
-	return "unpaid";
+	return deriveInvoiceStatus(invoice, new Date(now));
 }
 
 export function getInvoicePaymentSnapshot(
@@ -281,6 +242,13 @@ export function payableInvoiceIssue(
 		return "Payments are not enabled for credit or debit notes.";
 	}
 	const { status, balance } = getInvoicePaymentSnapshot(invoice);
+	// P0 — a scheduled invoice has deferred its send, so it is not issued and
+	// nothing may be collected or recorded against it. Check both the derived
+	// snapshot status and the projected/stored status, because a public
+	// projection may carry the `scheduled` status without the schedule columns
+	// that the snapshot deriver needs.
+	if (status === "scheduled" || invoice.status === "scheduled")
+		return "Scheduled invoices are not payable until they are issued.";
 	// `allowDraft` is for the owner's manual "Mark as paid" only — an unsent
 	// draft can still be settled offline. Public payment context and the
 	// Paystack transfer-charge path keep blocking drafts: nobody should be
@@ -494,7 +462,7 @@ export async function recordPayment(
 		client,
 		workspaceId,
 		invoice,
-		getDerivedInvoiceStatus(invoice),
+		deriveInvoiceStatus(invoice),
 		payment.isPaid ? "paid" : "partially-paid",
 	);
 
@@ -744,6 +712,11 @@ export function rawRowToInvoiceState(
 					: undefined,
 		status: typeof row.status === "string" ? (row.status as string) : undefined,
 		deliveredAt: epoch(row.delivered_at as string | null | undefined),
+		scheduledAt: epoch(row.scheduled_at as string | null | undefined),
+		scheduleVersion:
+			typeof row.schedule_version === "string"
+				? (row.schedule_version as string)
+				: undefined,
 		lifecycle: (row.lifecycle as InvoicePaymentState["lifecycle"]) ?? {},
 		canceledAt: epoch(row.canceled_at as string | null | undefined),
 		dueDate:

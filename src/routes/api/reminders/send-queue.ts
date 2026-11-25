@@ -3,6 +3,7 @@ import { sendQueuedEmails } from "#/server/data/reminders-send-queue";
 import { getServerEnv } from "#/server/env";
 import { safeErrorDetails } from "#/server/http-security";
 import { getInvoiceUserContext } from "#/server/invoice-repository";
+import { isAutomaticReminderSendingEnabled } from "#/server/reminder-sweep";
 
 /**
  * POST /api/reminders/send-queue — deliver queued reminder emails.
@@ -46,12 +47,34 @@ export async function handleSendQueue(request: Request) {
 	}
 }
 
+/**
+ * GET /api/reminders/send-queue — report whether automatic email delivery is
+ * enabled by the scheduler switch. Session-authed and boolean-only: the settings
+ * UI needs to distinguish "scheduled scanning is on" from "emails are actually
+ * being sent without a manual click", and the raw env value must never leak.
+ */
+export async function handleSendQueueStatus(request: Request) {
+	const context = await getInvoiceUserContext(request);
+	if (!context) {
+		return Response.json(
+			{ ok: false, error: "Authentication required." },
+			{ status: 401 },
+		);
+	}
+
+	return Response.json({
+		ok: true,
+		automaticSendingEnabled: isAutomaticReminderSendingEnabled(),
+	});
+}
+
 export const handle = ({ request }: { request: Request }) =>
 	handleSendQueue(request);
 
 export const Route = createFileRoute("/api/reminders/send-queue")({
 	server: {
 		handlers: {
+			GET: ({ request }) => handleSendQueueStatus(request),
 			POST: handle,
 		},
 	},

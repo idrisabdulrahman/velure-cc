@@ -155,6 +155,9 @@ type CurrencySummary = {
 	overdueCount: number;
 	paidAmount: number;
 	paidCount: number;
+	/** Drafts are not open; they are reported as their own figure. */
+	draftAmount: number;
+	draftCount: number;
 };
 
 type CleanupPreviewItem = {
@@ -209,8 +212,9 @@ function isEmptyDraftRow(invoice: {
 	);
 }
 
+// Collectible statuses only. A draft is never "pending revenue" — it is shown
+// separately in the KPI strip and the draft segment.
 const PENDING_STATUSES = new Set<InvoiceStatus>([
-	"draft",
 	"unpaid",
 	"partially-paid",
 	"overdue",
@@ -1507,7 +1511,7 @@ function InvoicesIndex() {
 				</section>
 			) : null}
 
-			<KpiStrip>
+			<KpiStrip className="xl:grid-cols-5">
 				<Kpi
 					label="Open"
 					tone="warn"
@@ -1553,6 +1557,19 @@ function InvoicesIndex() {
 					value={isInvoicesLoading ? "…" : String(paymentScore.score)}
 					sub={paymentScoreSub}
 				/>
+				<Kpi
+					label="Drafts"
+					tone="mute"
+					value={
+						isInvoicesLoading
+							? "…"
+							: formatCompactMoney(
+									selectedCurrencySummary.draftAmount,
+									summaryCurrency,
+								)
+					}
+					sub={`${selectedCurrencySummary.draftCount} ${summaryCurrency} invoices`}
+				/>
 			</KpiStrip>
 
 			{canMutate && emptyDrafts.length > 0 && !allEmptyDraftsSelected ? (
@@ -1562,7 +1579,8 @@ function InvoicesIndex() {
 					action={{ label: "Select them", onClick: selectEmptyDrafts }}
 				>
 					These drafts have no customer and a {formatMoney(0, summaryCurrency)}{" "}
-					total. They count toward your open invoices and the reminder queue.
+					total. They are not open invoices, are not overdue, and are excluded
+					from the reminder queue.
 					<span className="mt-2 block">
 						<button
 							type="button"
@@ -1891,6 +1909,8 @@ function createEmptyCurrencySummary(currency: string): CurrencySummary {
 		overdueCount: 0,
 		paidAmount: 0,
 		paidCount: 0,
+		draftAmount: 0,
+		draftCount: 0,
 	};
 }
 

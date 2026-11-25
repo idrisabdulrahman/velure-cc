@@ -87,13 +87,18 @@ describe("validateBuyerProfile", () => {
 		}
 	});
 
-	it("requires name and email and rejects a malformed email", () => {
+	it("requires a name, treats a missing email as a flag, and rejects a malformed email", () => {
 		expect(codes(validateBuyerProfile({ ...validB2b, name: " " }))).toEqual([
 			"name_required",
 		]);
-		expect(codes(validateBuyerProfile({ ...validB2b, email: "" }))).toEqual([
-			"email_required",
-		]);
+		// Issue #3 finding 4: a buyer can be a name alone. A missing email is a
+		// completeness gap (`needs_review`), not a rejection; email is required
+		// only to email-deliver the invoice.
+		const noEmail = validateBuyerProfile({ ...validB2b, email: "" });
+		expect(codes(noEmail)).toEqual(["email_required"]);
+		expect(noEmail.valid).toBe(true);
+		expect(noEmail.blockingIssues).toEqual([]);
+		expect(noEmail.status).toBe("needs_review");
 		const badEmail = validateBuyerProfile({
 			...validB2b,
 			email: "not-an-email",

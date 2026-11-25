@@ -120,10 +120,17 @@ import {
 	type WithholdingRecipientResidency,
 } from "#/features/compliance/types";
 import { isCorrectionSource } from "#/features/invoices/correction-sources";
-import { lineMissingClassification } from "#/features/invoices/customer-gate";
+import {
+	LINE_VAT_CATEGORIES,
+	lineMissingClassification,
+} from "#/features/invoices/customer-gate";
 import { formatMoney } from "#/features/invoices/format";
 import type { ImportedInvoiceDraft } from "#/features/invoices/import-spreadsheet";
-import { toEditorDoc } from "#/features/invoices/invoice-document-adapter";
+import {
+	getInvoiceTemplateSize,
+	toEditorDoc,
+	toInvoiceDocument,
+} from "#/features/invoices/invoice-document-adapter";
 import {
 	lineTotalKobo,
 	priceToKobo,
@@ -133,6 +140,7 @@ import { buildInvoiceShareLinks } from "#/features/invoices/share-links";
 import type {
 	InvoiceDocumentType,
 	InvoiceLineItem,
+	InvoiceRecord,
 	InvoiceTemplateSettings,
 } from "#/features/invoices/types";
 import {
@@ -144,6 +152,7 @@ import {
 	VAT_CATEGORY_OPTIONS,
 } from "#/features/products/product-form-utils";
 import { useUnifiedAuth } from "#/lib/auth-hook";
+import { HtmlTemplate } from "#/lib/invoice-document/templates/html";
 import type { EditorDoc } from "#/lib/invoice-document/types";
 import { useSupabaseSession } from "#/lib/supabase-session";
 import { createClient, listClients } from "#/server/data/clients";
@@ -172,6 +181,8 @@ type CreateInvoicePanelProps = {
 };
 
 type ComposerStage = "editor" | "success";
+/** Email delivery is tracked separately from invoice creation (issue #3). */
+type EmailDeliveryStatus = "idle" | "sending" | "sent" | "failed";
 
 type CreateIntent = "create" | "open" | "create_and_send" | "scheduled";
 type AutosaveStatus = "idle" | "saving" | "saved" | "error";
@@ -501,6 +512,49 @@ function createEmptyLineItem(): LineItem {
 	};
 }
 
+type LineClassificationLike = {
+	id: string;
+	unit?: string;
+	vatCategory?: string;
+	classificationCode?: string;
+};
+
+/**
+ * The classification fields a line still needs before the server will let the
+ * invoice leave Draft, named in the order they appear in the row. The composer
+ * persists `defaultVatCategory` as the fallback, so callers pass the same
+ * effective value the payload sends.
+ */
+function missingLineClassificationFields(
+	item: LineClassificationLike,
+): string[] {
+	const fields: string[] = [];
+	if (!item.unit?.trim()) fields.push("unit");
+	if (!LINE_VAT_CATEGORIES.has(item.vatCategory ?? "")) {
+		fields.push("VAT category");
+	}
+	if (!item.classificationCode?.trim()) fields.push("goods/service code");
+	return fields;
+}
+
+/** "unit", "unit and goods/service code", "a, b, and c". */
+function formatFieldList(fields: string[]): string {
+	if (fields.length <= 1) return fields[0] ?? "";
+	if (fields.length === 2) return `${fields[0]} and ${fields[1]}`;
+	return `${fields.slice(0, -1).join(", ")}, and ${fields.at(-1)}`;
+}
+
+/** Selector for the first field the row still needs, so focus lands on it. */
+function firstMissingClassificationSelector(
+	item: LineClassificationLike,
+): string {
+	if (!item.unit?.trim()) return `#invoice-line-unit-${item.id}`;
+	if (!LINE_VAT_CATEGORIES.has(item.vatCategory ?? "")) {
+		return `#invoice-line-vat-${item.id}`;
+	}
+	return `#invoice-line-code-${item.id}`;
+}
+
 function resolveTemplateVariant(
 	templateName: SupportedTemplateName,
 ): TemplateVariant {
@@ -587,6 +641,16 @@ export function CreateInvoicePanel({
 	const [composerStage, setComposerStage] = useState<ComposerStage>("editor");
 	const [createdInvoice, setCreatedInvoice] =
 		useState<CreatedInvoiceSummary | null>(null);
+	// Issue #3 finding 2: the primary action opens a read-only preview; only the
+	// preview's explicit confirm finalizes (issues/sends/schedules) the invoice.
+	const [previewOpen, setPreviewOpen] = useState(false);
+	const [previewDocument, setPreviewDocument] = useState<ReturnType<
+		typeof toInvoiceDocument
+	> | null>(null);
+	// Issue #3 finding 3: an email failure after the invoice exists is reported
+	// on the success screen, not as a failed creation.
+	const [emailStatus, setEmailStatus] = useState<EmailDeliveryStatus>("idle");
+	const [emailError, setEmailError] = useState<string>();
 	const [invoiceNumber, setInvoiceNumber] = useState(() =>
 		generateInvoiceNumber(),
 	);
@@ -668,8 +732,7 @@ export function CreateInvoicePanel({
 
 	const onCreateClientSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (!newClientName.trim() || !newClientEmail.trim() || newClientSubmitting)
-			return;
+		if (!newClientName.trim() || newClientSubmitting) return;
 
 		setNewClientSubmitting(true);
 		try {
@@ -1139,9 +1202,16 @@ export function CreateInvoicePanel({
 	const hasPricedLineItem = lineItems.some(
 		(item) => item.name.trim().length > 0 && item.price > 0,
 	);
+	// "Save draft" only needs something worth saving: a customer name or one
+	// priced line. Classification and seller TIN are issue requirements, not
+	// draft requirements - the server enforces them only when an invoice leaves
+	// Draft (`assertCustomerForIssueTransition`), so the draft path must not
+	// demand them.
+	const hasDraftContent = customerName.trim().length > 0 || hasPricedLineItem;
+	const canSaveDraft = hasDraftContent && !submitting;
 	// The server's leave-Draft gate (assertCustomerForIssueTransition) requires
 	// a unit, a supported VAT category and a goods/service code on every line it
-	// finalizes - not only when the invoice charges VAT. The Create button asks
+	// finalizes - not only when the invoice charges VAT. The issue action asks
 	// `lineMissingClassification`, the same predicate the gate uses, so the panel
 	// can never let through a submit the server then rejects for fields a non-VAT
 	// invoice did not show.
@@ -1154,15 +1224,24 @@ export function CreateInvoicePanel({
 				vatCategory: item.vatCategory ?? defaultVatCategory,
 			}),
 	);
+	const firstMissingTaxFields = firstMissingTaxLine
+		? missingLineClassificationFields({
+				...firstMissingTaxLine,
+				vatCategory: firstMissingTaxLine.vatCategory ?? defaultVatCategory,
+			})
+		: [];
 	const dueDateInvalid = Boolean(issueDate && dueDate && dueDate < issueDate);
-	const canSubmit =
+	// Issuing leaves Draft, so a seller TIN is required whenever VAT is charged.
+	const sellerTinBlocked = requiresSellerTin && !sellerTinForSubmission;
+	const canIssue =
 		customerName.trim().length > 1 &&
 		Boolean(customerId) &&
 		hasPricedLineItem &&
 		!firstMissingTaxLine &&
 		!dueDateInvalid &&
+		!sellerTinBlocked &&
 		!submitting;
-	// B2: finalizing requires a saved client record (the server rejects a
+	// B2: issuing requires a saved client record (the server rejects a
 	// customer-less invoice leaving Draft), so the blocker names the picker.
 	const submitBlockerText = dueDateInvalid
 		? "Due date is before issue date."
@@ -1173,11 +1252,14 @@ export function CreateInvoicePanel({
 				: !hasPricedLineItem
 					? "Add at least one priced line item."
 					: firstMissingTaxLine
-						? "Add a unit and goods/service code to each priced item."
-						: "";
+						? `This line needs ${formatFieldList(firstMissingTaxFields)} before you can issue.`
+						: sellerTinBlocked
+							? "Add a seller TIN before charging VAT."
+							: "";
 	const focusSubmitBlocker = () => {
-		if (!canSubmit && !submitting) {
+		if (!canIssue && !submitting) {
 			if (!customerId) setCustomerPickerOpen(true);
+			if (sellerTinBlocked) openComplianceDialog();
 			if (firstMissingTaxLine) {
 				setExpandedTaxLineIds((ids) => [
 					...new Set([...ids, firstMissingTaxLine.id]),
@@ -1193,8 +1275,16 @@ export function CreateInvoicePanel({
 						? 'input[aria-controls="invoice-customer-options"]'
 						: !hasPricedLineItem
 							? 'input[id^="invoice-line-description-"]'
-							: `#invoice-line-code-${firstMissingTaxLine?.id}`;
-				document.querySelector<HTMLElement>(selector)?.focus();
+							: firstMissingTaxLine
+								? firstMissingClassificationSelector({
+										...firstMissingTaxLine,
+										vatCategory:
+											firstMissingTaxLine.vatCategory ?? defaultVatCategory,
+									})
+								: sellerTinBlocked
+									? "#seller-tin"
+									: "";
+				if (selector) document.querySelector<HTMLElement>(selector)?.focus();
 			});
 		}
 	};
@@ -1428,15 +1518,23 @@ export function CreateInvoicePanel({
 		buildArgs: () => buildDraftMutationArgs(autosaveDraftIdRef.current),
 	};
 
-	const persistAutosaveDraft = async () => {
+	const persistAutosaveDraft = async (options?: {
+		force?: boolean;
+	}): Promise<boolean> => {
 		const runtime = autosaveRuntimeRef.current;
-		if (!runtime.canSave) return;
+		// `force` is the explicit "Save draft" action: it still needs a
+		// meaningful draft, but not a well-formed TIN/RC or a classification,
+		// because the server accepts those only as issue requirements.
+		const canSave = options?.force
+			? composerStage === "editor" && hasMeaningfulDraft
+			: runtime.canSave;
+		if (!canSave) return false;
 
 		const signature = runtime.signature;
-		if (autosaveSignatureRef.current === signature) return;
+		if (autosaveSignatureRef.current === signature) return true;
 		if (autosaveInFlightRef.current) {
 			autosavePendingRef.current = true;
-			return;
+			return false;
 		}
 
 		autosaveInFlightRef.current = true;
@@ -1453,17 +1551,54 @@ export function CreateInvoicePanel({
 			setInvoiceNumber(saved.invoiceNumber);
 			autosaveSignatureRef.current = signature;
 			setAutosaveStatus("saved");
+			return true;
 		} catch (_error) {
 			setAutosaveStatus("error");
+			return false;
 		} finally {
 			autosaveInFlightRef.current = false;
 			if (autosavePendingRef.current) {
 				autosavePendingRef.current = false;
 				// Re-read the runtime ref so a change that landed while this
 				// save was in flight is the one that persists.
-				void persistAutosaveDraft();
+				void persistAutosaveDraft(options);
 			}
 		}
+	};
+
+	const saveDraft = async () => {
+		if (!canSaveDraft) return;
+		const saved = await persistAutosaveDraft({ force: true });
+		if (saved) {
+			toast({
+				title: "Draft saved",
+				description:
+					"Not payable until you issue it. Use Preview invoice when it is ready.",
+				variant: "success",
+			});
+			return;
+		}
+		// A save may already be in flight; report that instead of a false failure.
+		if (autosaveInFlightRef.current || autosavePendingRef.current) {
+			toast({
+				title: "Saving draft",
+				description: "Your latest changes are still being saved.",
+			});
+			return;
+		}
+		if (!supabaseClient || !userId) {
+			toast({
+				title: "Could not save draft",
+				description: "Your session expired. Sign in again to save.",
+				variant: "error",
+			});
+			return;
+		}
+		toast({
+			title: "Could not save draft",
+			description: "Check your connection and try again.",
+			variant: "error",
+		});
 	};
 
 	autosaveNowRef.current = () => {
@@ -1878,15 +2013,21 @@ export function CreateInvoicePanel({
 		setAutosaveStatus("idle");
 	};
 
-	const createInvoice = async (intent: CreateIntent = deliveryType) => {
-		if (!canSubmit) return;
+	/**
+	 * The gate every finalizing intent passes before it can persist anything.
+	 * Both "open the read-only preview" and "issue/send/schedule" run it, so the
+	 * preview only ever shows a document the server would accept. Returns false
+	 * when a blocker was reported, without touching the database.
+	 */
+	const validateIssue = (intent: CreateIntent): boolean => {
+		if (!canIssue) return false;
 		if (!tinIsValid) {
 			toast({
 				title: "Check seller tax ID",
 				description: `Leave TIN blank or enter ${NIGERIA_TIN_MIN_DIGITS}-${NIGERIA_TIN_MAX_DIGITS} digits.`,
 				variant: "error",
 			});
-			return;
+			return false;
 		}
 		if (!rcIsValid) {
 			toast({
@@ -1894,7 +2035,7 @@ export function CreateInvoicePanel({
 				description: "Leave RC blank or use RC-1234567 format.",
 				variant: "error",
 			});
-			return;
+			return false;
 		}
 		if (requiresSellerTin && !sellerTinForSubmission) {
 			toast({
@@ -1903,9 +2044,8 @@ export function CreateInvoicePanel({
 				variant: "error",
 			});
 			openComplianceDialog();
-			return;
+			return false;
 		}
-
 		if (
 			intent === "scheduled" &&
 			(!scheduledAt || Date.parse(scheduledAt) <= Date.now())
@@ -1915,7 +2055,7 @@ export function CreateInvoicePanel({
 				description: "Scheduled time must be in the future.",
 				variant: "error",
 			});
-			return;
+			return false;
 		}
 		if (
 			(intent === "create_and_send" || intent === "scheduled") &&
@@ -1926,8 +2066,78 @@ export function CreateInvoicePanel({
 				description: "Add a customer email before sending or scheduling.",
 				variant: "error",
 			});
-			return;
+			return false;
 		}
+		return true;
+	};
+
+	/**
+	 * Issue #3 finding 3: delivery is tracked apart from creation. A provider
+	 * failure lands on `emailStatus` so the success screen can say "Invoice
+	 * issued · Email failed" and offer a retry — it never turns a created
+	 * invoice into "Could not create invoice".
+	 */
+	const sendInvoiceEmail = async (invoiceId: string, to: string) => {
+		setEmailStatus("sending");
+		setEmailError(undefined);
+		try {
+			const response = await fetch(
+				`/api/invoice/send/${encodeURIComponent(invoiceId)}`,
+				{
+					method: "POST",
+					credentials: "include",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ to }),
+				},
+			);
+			if (!response.ok) {
+				const detail = await response.text().catch(() => "");
+				throw new Error(detail.trim() || "The email provider rejected it.");
+			}
+			setEmailStatus("sent");
+		} catch (error) {
+			setEmailStatus("failed");
+			setEmailError(error instanceof Error ? error.message : "Unknown error");
+		}
+	};
+
+	/**
+	 * Issue #3 finding 2: build the exact document the recipient will receive,
+	 * straight from the live composer state, so the read-only preview cannot
+	 * drift from what "Issue invoice" persists.
+	 */
+	const buildPreviewDocument = () => {
+		const args = buildDraftMutationArgs(autosaveDraftIdRef.current);
+		return toInvoiceDocument({
+			...args,
+			id: args.id ?? "preview",
+			invoiceNumber: args.invoiceNumber || invoiceNumber.trim() || "DRAFT",
+			// A scheduled document previews as its post-issue self: it is not
+			// payable yet, so the adapter maps `scheduled` back to `draft` and
+			// the payment block stays hidden.
+			status: deliveryType === "scheduled" ? "scheduled" : "unpaid",
+			total: netPayable,
+			balance: netPayable,
+			paymentAmount: 0,
+		} as unknown as InvoiceRecord);
+	};
+
+	const openPreview = () => {
+		if (!validateIssue(deliveryType)) return;
+		try {
+			setPreviewDocument(buildPreviewDocument());
+			setPreviewOpen(true);
+		} catch (error) {
+			toast({
+				title: "Could not build preview",
+				description: error instanceof Error ? error.message : "Unknown error",
+				variant: "error",
+			});
+		}
+	};
+
+	const createInvoice = async (intent: CreateIntent = deliveryType) => {
+		if (!validateIssue(intent)) return;
 		setSubmitting(true);
 		try {
 			if (!supabaseClient || !userId) throw new Error("Session unavailable");
@@ -2023,20 +2233,14 @@ export function CreateInvoicePanel({
 				total: netPayable,
 				currency,
 			});
+			setEmailStatus("idle");
+			setEmailError(undefined);
 			setComposerStage("success");
 			onCreated?.(created.id);
 			if (intent === "create_and_send") {
-				const response = await fetch(
-					`/api/invoice/send/${encodeURIComponent(created.id)}`,
-					{
-						method: "POST",
-						credentials: "include",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({ to: customerEmail.trim() }),
-					},
-				);
-				if (!response.ok)
-					throw new Error("Invoice created but email delivery failed.");
+				// Tracked separately: a delivery failure keeps the invoice and is
+				// reported on the success screen, not as a creation failure.
+				await sendInvoiceEmail(created.id, customerEmail.trim());
 			}
 			autosaveDraftIdRef.current = null;
 			autosaveTokenRef.current = `pub-${crypto.randomUUID()}`;
@@ -2091,6 +2295,61 @@ export function CreateInvoicePanel({
 									was created successfully.
 								</p>
 							</div>
+
+							{/* Issue #3 finding 3: the invoice exists; a delivery failure
+							 * is reported here (with a retry), never as a failed
+							 * creation. */}
+							{emailStatus !== "idle" ? (
+								<div
+									aria-live="polite"
+									data-testid="invoice-email-status"
+									className={cn(
+										"mt-5 rounded-md border px-4 py-3 text-[13px]",
+										emailStatus === "failed"
+											? "border-warn-line bg-paper-2"
+											: "border-rule bg-paper-2",
+									)}
+								>
+									<div className="flex flex-wrap items-center justify-between gap-3">
+										<div className="min-w-0">
+											<div className="font-medium text-ink">
+												{
+													INVOICE_DOCUMENT_TYPE_LABELS[
+														createdInvoice.documentType
+													]
+												}{" "}
+												issued ·{" "}
+												{emailStatus === "failed"
+													? "Email failed"
+													: emailStatus === "sending"
+														? "Sending email…"
+														: "Email sent"}
+											</div>
+											{emailStatus === "failed" && emailError ? (
+												<p className="mt-1 text-[12px] text-ink-3">
+													{emailError}
+												</p>
+											) : null}
+										</div>
+										{emailStatus === "failed" &&
+										createdInvoice.customerEmail ? (
+											<Button
+												type="button"
+												variant="outline"
+												onClick={() =>
+													void sendInvoiceEmail(
+														createdInvoice.id,
+														createdInvoice.customerEmail,
+													)
+												}
+												className="h-9 border-rule bg-paper text-ink hover:bg-paper-3"
+											>
+												Retry email
+											</Button>
+										) : null}
+									</div>
+								</div>
+							) : null}
 
 							<div className="relative mx-auto my-auto w-full max-w-[430px] border border-rule bg-paper-2 p-4 pb-6">
 								<div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 text-[12px] text-ink-3">
@@ -2270,6 +2529,16 @@ export function CreateInvoicePanel({
 			</div>
 		);
 	}
+
+	const previewSize = previewDocument
+		? getInvoiceTemplateSize(previewDocument.template)
+		: { width: 595, height: 842 };
+	const previewIntentLabel =
+		deliveryType === "create_and_send"
+			? "Send invoice"
+			: deliveryType === "scheduled"
+				? "Schedule invoice"
+				: "Issue invoice";
 
 	return (
 		<>
@@ -2857,9 +3126,12 @@ export function CreateInvoicePanel({
 													const isExiting = exitingLineIds.includes(item.id);
 													const isProductSearchOpen =
 														productSearchIndex === index;
-													const missingTaxDetails =
-														!item.unit?.trim() ||
-														!item.classificationCode?.trim();
+													const missingClassification =
+														missingLineClassificationFields({
+															...item,
+															vatCategory:
+																item.vatCategory ?? defaultVatCategory,
+														});
 													const taxDetailsOpen = expandedTaxLineIds.includes(
 														item.id,
 													);
@@ -3250,15 +3522,23 @@ export function CreateInvoicePanel({
 																</span>
 																{taxDetailsOpen ? "▾" : "▸"}
 															</button>
-															{missingTaxDetails &&
+															{missingClassification.length > 0 &&
 															blurredTaxLineIds.includes(item.id) &&
 															(item.name.trim() || item.price > 0) ? (
 																<p
 																	className="text-[12px] text-warn"
 																	role="status"
 																>
-																	Complete the unit and goods/service code for
-																	this line.
+																	This line needs{" "}
+																	{formatFieldList(missingClassification)}{" "}
+																	before you can issue.{" "}
+																	<button
+																		type="button"
+																		onClick={openComplianceDialog}
+																		className="underline underline-offset-2 hover:text-ink"
+																	>
+																		Open tax &amp; compliance
+																	</button>
 																</p>
 															) : null}
 															{taxDetailsOpen ? (
@@ -3911,16 +4191,33 @@ export function CreateInvoicePanel({
 										type="button"
 										variant="ghost"
 										onClick={() => {
-											if (lastCreatedToken) {
-												openInvoiceTab(lastCreatedToken);
-												return;
-											}
-											void createInvoice("open");
+											// Issue #3 finding 2: opening an invoice must
+											// never create one. Without a token the action
+											// is disabled until the invoice is issued.
+											if (lastCreatedToken) openInvoiceTab(lastCreatedToken);
 										}}
+										disabled={!lastCreatedToken}
 										className={footerIconButtonClass}
-										title="Open invoice"
+										title={
+											lastCreatedToken
+												? "Open invoice"
+												: "Issue the invoice first to open it"
+										}
+										aria-label="Open invoice"
 									>
 										<ExternalLink className="h-4 w-4" />
+									</Button>
+
+									<Button
+										type="button"
+										variant="ghost"
+										onClick={() => void saveDraft()}
+										disabled={!canSaveDraft}
+										data-testid="invoice-save-draft"
+										className={footerGhostButtonClass}
+										title="Save this invoice as a draft without issuing it"
+									>
+										Save draft
 									</Button>
 
 									<TooltipProvider>
@@ -3928,36 +4225,26 @@ export function CreateInvoicePanel({
 											<TooltipTrigger asChild>
 												<div
 													className="flex overflow-hidden rounded-md border border-brand"
-													tabIndex={!canSubmit ? 0 : undefined}
-													aria-label={
-														!canSubmit ? submitBlockerText : undefined
-													}
+													tabIndex={!canIssue ? 0 : undefined}
+													aria-label={!canIssue ? submitBlockerText : undefined}
 												>
 													<button
 														type="button"
-														aria-disabled={!canSubmit}
+														aria-disabled={!canIssue}
 														onClick={() =>
-															canSubmit
-																? void createInvoice(deliveryType)
-																: focusSubmitBlocker()
+															canIssue ? openPreview() : focusSubmitBlocker()
 														}
 														className={cn(
 															"inline-flex h-10 items-center bg-brand px-5 text-[13px] font-medium text-brand-ink transition-[background-color,border-color,color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-brand-hi aria-disabled:cursor-not-allowed aria-disabled:bg-rule aria-disabled:text-ink-3",
 														)}
 													>
-														{submitting
-															? "Working..."
-															: deliveryType === "create_and_send"
-																? "Create & Send"
-																: deliveryType === "scheduled"
-																	? "Schedule"
-																	: "Create"}
+														{submitting ? "Working..." : "Preview invoice"}
 													</button>
 													<DropdownMenu>
 														<DropdownMenuTrigger asChild>
 															<button
 																type="button"
-																disabled={!canSubmit}
+																disabled={!canIssue}
 																aria-label="Choose invoice delivery action"
 																className="inline-flex h-10 w-10 items-center justify-center border-l border-brand-line bg-brand text-brand-ink transition-[background-color,border-color,color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-brand-hi disabled:bg-rule"
 															>
@@ -3971,8 +4258,8 @@ export function CreateInvoicePanel({
 														>
 															{(
 																[
-																	["create", "Create"],
-																	["create_and_send", "Create & Send"],
+																	["create", "Issue invoice"],
+																	["create_and_send", "Send"],
 																	["scheduled", "Schedule"],
 																] as const
 															).map(([value, label]) => (
@@ -4008,7 +4295,7 @@ export function CreateInvoicePanel({
 													</DropdownMenu>
 												</div>
 											</TooltipTrigger>
-											{!canSubmit && submitBlockerText ? (
+											{!canIssue && submitBlockerText ? (
 												<TooltipContent
 													side="top"
 													className="border-rule bg-paper text-ink"
@@ -4540,7 +4827,7 @@ export function CreateInvoicePanel({
 							</div>
 							<div className="space-y-2">
 								<label htmlFor="new-client-email" className="text-sm text-ink">
-									Email address *
+									Email address
 								</label>
 								<Input
 									id="new-client-email"
@@ -4549,8 +4836,10 @@ export function CreateInvoicePanel({
 									onChange={(e) => setNewClientEmail(e.target.value)}
 									placeholder="billing@example.com"
 									className="h-10 border-rule bg-paper text-sm text-ink"
-									required
 								/>
+								<p className="text-[12px] text-ink-3">
+									Optional. Needed only to email the invoice.
+								</p>
 							</div>
 						</div>
 						<div className="mt-6 flex justify-end gap-3">
@@ -4564,17 +4853,78 @@ export function CreateInvoicePanel({
 							</Button>
 							<Button
 								type="submit"
-								disabled={
-									!newClientName.trim() ||
-									!newClientEmail.trim() ||
-									newClientSubmitting
-								}
+								disabled={!newClientName.trim() || newClientSubmitting}
 								className="h-10 bg-brand text-brand-ink hover:bg-brand-hi"
 							>
 								{newClientSubmitting ? "Creating..." : "Create"}
 							</Button>
 						</div>
 					</form>
+				</DialogContent>
+			</Dialog>
+
+			{/* Issue #3 finding 2: a read-only preview built from the live
+			 * composer state. Nothing persists until "Issue/Send/Schedule
+			 * invoice" is confirmed here. */}
+			<Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+				<DialogContent
+					hideClose
+					className="flex max-h-[90vh] w-[94vw] max-w-4xl flex-col overflow-hidden rounded-lg border-rule bg-paper p-0 text-ink"
+				>
+					<div className="flex items-start justify-between gap-4 border-b border-rule px-6 py-5">
+						<div>
+							<DialogTitle className="mb-1 text-[20px] font-medium tracking-[-0.02em] text-ink">
+								Preview{" "}
+								{INVOICE_DOCUMENT_TYPE_LABELS[documentType].toLowerCase()}
+							</DialogTitle>
+							<DialogDescription className="text-[13px] text-ink-3">
+								Read-only. Nothing is saved or sent until you confirm below.
+							</DialogDescription>
+						</div>
+					</div>
+					<div className="min-h-0 flex-1 overflow-auto bg-paper-2 px-4 py-6 sm:px-6">
+						{previewDocument ? (
+							<div className="mx-auto w-fit">
+								<div className="shadow-[0_18px_60px_rgba(0,0,0,0.14)]">
+									<HtmlTemplate
+										data={previewDocument}
+										width={previewSize.width}
+										height={previewSize.height}
+										appearance="app"
+									/>
+								</div>
+							</div>
+						) : null}
+					</div>
+					<div className="flex shrink-0 items-center justify-between gap-3 border-t border-rule px-6 py-4">
+						<div className="min-w-0 text-[12px] text-ink-3">
+							{previewDocument?.invoiceNumber ?? "Draft"}
+							{previewDocument?.customerName
+								? ` • ${previewDocument.customerName}`
+								: ""}
+						</div>
+						<div className="flex items-center gap-3">
+							<DialogClose asChild>
+								<Button
+									type="button"
+									variant="outline"
+									className="h-10 border-rule bg-paper text-ink hover:bg-paper-2"
+								>
+									Back to editor
+								</Button>
+							</DialogClose>
+							<Button
+								type="button"
+								onClick={() => {
+									setPreviewOpen(false);
+									void createInvoice(deliveryType);
+								}}
+								className="h-10 rounded-md border border-brand bg-brand px-5 text-[13px] font-medium text-brand-ink hover:bg-brand-hi"
+							>
+								{previewIntentLabel}
+							</Button>
+						</div>
+					</div>
 				</DialogContent>
 			</Dialog>
 		</>

@@ -151,6 +151,27 @@ function PaymentRemindersSettingsPage() {
 		enabled: canRead,
 	});
 	const latestRun = recentRuns?.[0];
+	// A boolean read of the scheduler's automatic-send switch. The schedule
+	// (`reminder_rules.enabled`) only queues reminders; this second signal tells
+	// the operator whether the background sweep is actually delivering them, so
+	// the toggle can never imply emails are being sent while they are not.
+	const { data: sendStatus } = useQuery({
+		queryKey: ["reminder-send-status", userId ?? "none"],
+		queryFn: async () => {
+			const response = await fetch("/api/reminders/send-queue", {
+				method: "GET",
+			});
+			const body = (await response.json().catch(() => null)) as {
+				ok?: boolean;
+				automaticSendingEnabled?: boolean;
+			} | null;
+			return {
+				automaticSendingEnabled: body?.automaticSendingEnabled === true,
+			};
+		},
+		enabled: canRead,
+	});
+	const automaticSendingEnabled = sendStatus?.automaticSendingEnabled === true;
 	const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(
 		null,
 	);
@@ -297,7 +318,7 @@ function PaymentRemindersSettingsPage() {
 		? isMissingEmail(selectedInvoice)
 		: false;
 	const selectedIsDraftUnsent = selectedInvoice
-		? !selectedInvoice.lifecycle?.sentAt
+		? selectedInvoice.status === "draft"
 		: false;
 	const selectedIsPaused = selectedInvoice
 		? isPausedOrManual(selectedInvoice)
@@ -476,7 +497,7 @@ function PaymentRemindersSettingsPage() {
 			<Panel>
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 					<Toggle
-						label={`Automatic reminders are ${policy.enabled ? "on" : "off"}`}
+						label={`Scheduled scanning is ${policy.enabled ? "on" : "off"}`}
 						description={`First reminder ${policy.daysBeforeDue} days before due, then every ${policy.overdueCadenceDays} days.`}
 						checked={policy.enabled}
 						disabled={isViewer || busyAction !== null}
@@ -495,7 +516,7 @@ function PaymentRemindersSettingsPage() {
 									businessSignature: next.businessSignature,
 								});
 								toast({
-									title: `Automatic reminders ${checked ? "on" : "off"}`,
+									title: `Scheduled scanning ${checked ? "on" : "off"}`,
 									variant: "success",
 								});
 							} finally {
@@ -558,6 +579,17 @@ function PaymentRemindersSettingsPage() {
 							{busyAction === "send" ? "Sending…" : "Send queue"}
 						</Button>
 					</div>
+				</div>
+				<div className="mt-4 flex flex-wrap items-center gap-2 border-t border-rule pt-4">
+					<span className="text-sm text-ink-3">Automatic email delivery</span>
+					<StatusPill tone={automaticSendingEnabled ? "ok" : "mute"}>
+						{automaticSendingEnabled ? "On" : "Off"}
+					</StatusPill>
+					<span className="text-xs text-ink-3">
+						{automaticSendingEnabled
+							? "Scheduled runs send queued reminders without a manual click."
+							: "Scheduled runs only queue reminders; press Send queue to deliver them."}
+					</span>
 				</div>
 				{isViewer ? (
 					<p className="mt-4 rounded-md border border-rule bg-paper-2 px-4 py-3 text-xs text-ink-3">
@@ -833,7 +865,7 @@ function PaymentRemindersSettingsPage() {
 								const overdue = isOverdue(invoice);
 								const missingEmail = isMissingEmail(invoice);
 								const paused = isPausedOrManual(invoice);
-								const draft = !invoice.lifecycle?.sentAt;
+								const draft = invoice.status === "draft";
 								const amount = invoiceAmount(invoice);
 								const dueLabel = dueDateLabel(invoice);
 								return (
@@ -1188,38 +1220,63 @@ function PaymentRemindersSettingsPage() {
 	);
 }
 
+/**
+ * View model for one reminder-queue row. The status, amount and flags below are
+ * derived server-side by the ONE WS3 authority (`invoice-balance.ts`), so the
+ * queue shows the same "Draft vs Sent" and net amount as the Invoices list.
+ */
 type CollectionsInvoice = {
 	id: string;
 	invoiceNumber: string;
 	customerName: string;
 	dueDate: string;
 	status: InvoiceStatus;
+	/** Net payable (WHT deducted) — never the gross grandTotal. */
+	netPayable: number;
+	/** Collectible balance; 0 when the invoice is not open. */
+	balance: number;
+	overdue: boolean;
+	missingEmail: boolean;
+	pausedOrManual: boolean;
 	reminder?: {
 		paused?: boolean;
 		escalationStatus?: "idle" | "manual_review" | "slack_sent";
 	};
 	lifecycle?: {
 		sentAt?: number;
+		emailDeliveredAt?: number;
 	};
 	compliance?: {
 		buyer?: {
 			email?: string;
 		};
+		netPayable?: number;
 		grandTotal?: number;
 	};
 };
+
+/** Mirrors `COLLECTIBLE_STATUSES` in `src/server/data/invoice-balance.ts`. */
+const COLLECTIBLE_STATUSES = new Set<InvoiceStatus>([
+	"unpaid",
+	"partially-paid",
+	"overdue",
+]);
+
+function isCollectibleStatus(status: InvoiceStatus) {
+	return COLLECTIBLE_STATUSES.has(status);
+}
 
 function buyerEmailForInvoice(invoice: CollectionsInvoice) {
 	return invoice.compliance?.buyer?.email?.trim() ?? "";
 }
 
 function invoiceAmount(invoice: CollectionsInvoice): number | null {
-	const total = invoice.compliance?.grandTotal;
+	const total = invoice.netPayable;
 	return typeof total === "number" && Number.isFinite(total) ? total : null;
 }
 
 function isActiveInvoice(invoice: CollectionsInvoice) {
-	return invoice.status !== "paid" && invoice.status !== "canceled";
+	return isCollectibleStatus(invoice.status);
 }
 
 function parseDueDate(value: string | null | undefined) {
@@ -1234,31 +1291,28 @@ function startOfToday() {
 	return today;
 }
 
+// Server-derived: overdue requires a positive balance, a past due date, and
+// delivery evidence; a never-issued draft is never overdue.
 function isOverdue(invoice: CollectionsInvoice) {
-	if (!isActiveInvoice(invoice)) return false;
-	const dueDate = parseDueDate(invoice.dueDate);
-	if (!dueDate) return invoice.status === "overdue";
-	return invoice.status === "overdue" || dueDate < startOfToday();
+	return invoice.overdue;
 }
 
 function isMissingEmail(invoice: CollectionsInvoice) {
-	return isActiveInvoice(invoice) && buyerEmailForInvoice(invoice) === "";
+	return invoice.missingEmail;
 }
 
 function isPausedOrManual(invoice: CollectionsInvoice) {
-	return Boolean(
-		invoice.reminder?.paused ||
-			invoice.reminder?.escalationStatus === "manual_review",
-	);
+	return invoice.pausedOrManual;
 }
 
 function isInReminderWindow(
 	invoice: CollectionsInvoice,
 	daysBeforeDue: number,
 ) {
+	// The derived status already encodes delivery evidence, so a draft (never
+	// delivered) is never in the window and needs no separate `sentAt` check.
 	if (!isActiveInvoice(invoice)) return false;
 	if (invoice.reminder?.paused) return false;
-	if (!invoice.lifecycle?.sentAt) return false;
 	const dueDate = parseDueDate(invoice.dueDate);
 	if (!dueDate) return false;
 	const daysUntilDue = Math.ceil(

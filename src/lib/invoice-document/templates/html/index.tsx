@@ -49,6 +49,10 @@ export function HtmlTemplate({
 	const isAppAppearance = appearance === "app";
 	const isPublicAppearance = appearance === "public";
 	const paymentReference = getInvoicePaymentReference(data);
+	// A draft's customer page must not show bank-transfer instructions. The
+	// reference is already null for a draft (`getInvoicePaymentReference`), but
+	// the configured payment details would still print, so omit the block.
+	const showPaymentDetails = data.status !== "draft";
 	const paperVars = isPublicAppearance
 		? ({
 				["--invoice-bg" as string]: "#101011",
@@ -167,18 +171,22 @@ export function HtmlTemplate({
 				<div
 					className={`grid grid-cols-2 ${isPublicAppearance ? "gap-12" : "gap-4 md:gap-6"}`}
 				>
-					<div>
-						<p className={sectionLabelClass}>{template.paymentLabel}</p>
-						<EditorContent content={paymentDetails} />
-						{paymentReference && (
-							<p className="mt-1 text-[11px] leading-4 text-[var(--invoice-muted)]">
-								{paymentReference.label}:{" "}
-								<span className="font-medium text-[var(--invoice-text)]">
-									{paymentReference.value}
-								</span>
-							</p>
-						)}
-					</div>
+					{/* A draft has nothing to pay, so the seller's bank details and
+					 * the reference are omitted from the sheet entirely. */}
+					{showPaymentDetails ? (
+						<div>
+							<p className={sectionLabelClass}>{template.paymentLabel}</p>
+							<EditorContent content={paymentDetails} />
+							{paymentReference && (
+								<p className="mt-1 text-[11px] leading-4 text-[var(--invoice-muted)]">
+									{paymentReference.label}:{" "}
+									<span className="font-medium text-[var(--invoice-text)]">
+										{paymentReference.value}
+									</span>
+								</p>
+							)}
+						</div>
+					) : null}
 					{noteDetails && (
 						<div>
 							<p className={sectionLabelClass}>{template.noteLabel}</p>

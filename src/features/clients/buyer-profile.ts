@@ -11,13 +11,20 @@
  * Severity split (deliberate divergence from B1's reject-on-incomplete):
  * - FORMAT issues (invalid buyer_type, bad email shape, malformed/placeholder
  *   TIN, over-long address) must never persist — the server write path
- *   rejects them. Missing name or email is blocking too: the clients write
- *   path already requires both upstream (`assertValidClientPayload`).
- * - COMPLETENESS issues (missing address, missing B2B TIN) are surfaced
- *   through `status`/`issues` and stored in the non-destructive
+ *   rejects them. A missing name is blocking too: the clients write path
+ *   already requires it upstream (`assertValidClientPayload`).
+ * - COMPLETENESS issues (missing email, missing address, missing B2B TIN) are
+ *   surfaced through `status`/`issues` and stored in the non-destructive
  *   `buyer_profile_status` / `buyer_profile_issues` flag columns so bulk
  *   pre-existing clients and CSV imports keep working while incomplete
  *   buyers are flagged for follow-up.
+ *
+ * Email is deliberately a COMPLETENESS gap, not a blocking one (issue #3
+ * finding 4, confirmed 2026-11-12): a buyer can be a name alone, which keeps
+ * the share-an-invoice handoff free of a forced email. Email is required only
+ * to EMAIL-DELIVER an invoice, and that is enforced on the send/schedule path
+ * (`assertSendCustomerGate`), not when saving the buyer record. The missing
+ * email still flags `needs_review` so it can be completed later.
  */
 
 import {
@@ -61,6 +68,11 @@ export type BuyerProfileIssue = {
  * Issue codes that block persistence (format problems). Everything else is a
  * completeness gap that is flagged, not rejected.
  *
+ * `email_required` is deliberately NOT here: a buyer can be a name alone and
+ * email is required only to email-deliver an invoice (issue #3 finding 4), so
+ * a missing email flags `needs_review` instead of refusing the buyer. A
+ * present-but-malformed email (`email_format`) is still rejected.
+ *
  * Note: `tin_format` is deliberately NOT here. The required TIN shape is
  * UNCONFIRMED (SPEC 6.2 item 4; a provider sample shows a dashed TIN), so a
  * wrong-shaped TIN is stored and flagged `needs_review` rather than refusing
@@ -69,7 +81,6 @@ export type BuyerProfileIssue = {
  */
 const BLOCKING_ISSUE_CODES = new Set<BuyerProfileIssueCode>([
 	"buyer_type_invalid",
-	"email_required",
 	"email_format",
 	"address_too_long",
 	"tin_placeholder",
