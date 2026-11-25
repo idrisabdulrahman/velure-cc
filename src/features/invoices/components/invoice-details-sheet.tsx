@@ -2065,7 +2065,7 @@ export function InvoiceDetailsSheet({
 														<Copy className="h-4 w-4" />
 													</button>
 													<a
-														href={invoiceShareLinks(draft).downloadUrl}
+														href={`/api/invoice/download/${encodeURIComponent(draft.token)}`}
 														target="_blank"
 														rel="noreferrer"
 														aria-label="Download invoice PDF"

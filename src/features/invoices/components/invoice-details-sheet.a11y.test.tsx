@@ -123,4 +123,22 @@ describe("invoice details sheet label association", () => {
 
 		await act(async () => root.unmount());
 	});
+
+	it("points the download control at the PDF endpoint, not the no-op page param", async () => {
+		const { root } = await renderSheet();
+
+		// The control is labelled "Download invoice PDF", so it must actually
+		// download. The public page ignores `?download=1`; the real attachment
+		// lives at this endpoint (the public page uses the same URL).
+		const link = document.querySelector<HTMLAnchorElement>(
+			'a[aria-label="Download invoice PDF"]',
+		);
+		expect(link).not.toBeNull();
+		expect(link?.getAttribute("href")).toBe(
+			`/api/invoice/download/${encodeURIComponent(invoice.token)}`,
+		);
+		expect(link?.getAttribute("href")).not.toContain("?download=1");
+
+		await act(async () => root.unmount());
+	});
 });
