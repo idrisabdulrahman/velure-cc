@@ -16,6 +16,7 @@ const read = (relative: string) =>
 
 const marketingLayout = read("./MarketingLayout.tsx");
 const landing = read("../../routes/index.lazy.tsx");
+const pricingSection = read("./PricingSection.tsx");
 const pricing = read("../../routes/pricing.tsx");
 const features = read("../../routes/features.tsx");
 
@@ -27,7 +28,11 @@ describe("signed-out start CTA contract", () => {
 		expect(marketingLayout.match(signUpSearch)?.length).toBeGreaterThanOrEqual(
 			3,
 		);
-		expect(marketingLayout).toContain("Get started");
+		expect(marketingLayout).toContain("Start free trial");
+		// The trial is free and cardless — every hero carries the no-card line.
+		expect(marketingLayout).toContain(
+			"Try 3 days free — no credit card required.",
+		);
 	});
 
 	it("keeps the separate plain sign-in link in the header", () => {
@@ -39,26 +44,35 @@ describe("signed-out start CTA contract", () => {
 		);
 	});
 
-	it("deep-links sign-up from the homepage hero and lower card", () => {
-		expect(landing.match(signUpSearch)?.length).toBeGreaterThanOrEqual(2);
-		expect(landing).toContain("Create your workspace");
+	it("deep-links sign-up from the homepage hero and pricing cards", () => {
+		// Hero on the landing; the per-tier trial CTA lives once in the shared
+		// PricingSection source and renders per card.
+		expect(landing.match(signUpSearch)?.length).toBeGreaterThanOrEqual(1);
+		expect(pricingSection.match(signUpSearch)?.length).toBe(1);
+		expect(landing).toContain("Start free trial");
+		expect(pricingSection).toContain("Try 3 days free");
 	});
 
-	it("gives pricing one working pilot CTA plus a sign-in link and no inert plan button", () => {
-		expect(pricing).toContain("Join the pilot");
-		expect(pricing).toMatch(signUpSearchOnce);
+	it("gives pricing working trial CTAs in the shared tier cards, not inert price blocks", () => {
+		// The /pricing page and the homepage section share PricingCards/PricingToggle.
+		expect(pricing).toContain("PricingCards");
+		expect(pricing).toContain("PricingToggle");
+		// The trial banner stays on the pricing page.
 		expect(pricing).toContain(
-			'<Link to="/auth" className="hm-btn hm-btn--ghost hm-btn--xl">',
+			"Every plan starts with a 3-day free trial. No credit card required.",
 		);
-		// The old per-plan button ("Start Starter"/"Start Growth"/…) did nothing.
+		// Every tier card carries one real sign-up CTA (source renders per card).
+		expect(pricingSection).toContain("Try 3 days free");
+		expect(pricingSection).toMatch(signUpSearchOnce);
+		// The old per-plan button ("Start Starter"/"Start Growth"/...) did nothing.
 		expect(pricing).not.toContain("Start {plan.name}");
 		expect(pricing).not.toContain("#/components/ui/button");
 	});
 
-	it("features no longer claims Slack escalation or automatic sending", () => {
+	it("features claims automatic sending (live since 2026-11-22) and no Slack escalation", () => {
 		expect(features).not.toContain("Slack");
-		expect(features).not.toMatch(/automatically/i);
-		expect(features).toContain("send them yourself");
-		expect(features).toContain("Automatic sending is not enabled yet.");
+		expect(features).toContain("send themselves");
+		expect(features).toContain("automatically");
+		expect(features).not.toContain("not enabled yet");
 	});
 });

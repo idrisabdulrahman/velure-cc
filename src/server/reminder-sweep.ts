@@ -76,6 +76,15 @@ export type ReminderSweepOptions = Readonly<{
 	batchSize?: number;
 	/** Wall-clock budget in ms. Defaults to the env var or 7000. */
 	budgetMs?: number;
+	/**
+	 * Max reminder EMAILS sent across the whole tick. Each send costs ~3
+	 * subrequests and the tick shares the Workers 50-subrequest ceiling with
+	 * every scan query, so an unbounded drain on one workspace with a large
+	 * queue kills the tick mid-send (observed live 2026-11-22). Capped sends
+	 * stay `queued` and drain over following ticks. Defaults to the
+	 * `SCHEDULER_REMINDER_SEND_BUDGET` env var or 3.
+	 */
+	sendBudget?: number;
 }>;
 
 const SEND_SWITCH = "SCHEDULER_REMINDER_SEND_ENABLED";
@@ -113,9 +122,23 @@ export function isAutomaticReminderSendingEnabled(): boolean {
  * The per-workspace cost is an ESTIMATE: a workspace with many due invoices adds
  * one `queueReminderEvent` request per queued invoice, and the time budget — not
  * the batch cap — is what stops a pathological workspace from eating the tick.
+ *
+ * With automatic SENDING on, the sweep phase costs ~8 subrequests/workspace
+ * (scan ~4, send phase ~4 even with an empty queue — the drain returns before
+ * the quota read when nothing is queued), so the send-enabled tick walks
+ * REMINDER_SWEEP_DEFAULT_SEND_BATCH_SIZE (3) workspaces: 4 jobs × ~4 fixed +
+ * 3 × 8 ≈ 40, with headroom for per-due-invoice queueing inserts. Sends draw
+ * from an explicit per-tick budget (`REMINDER_SWEEP_DEFAULT_SEND_BUDGET`,
+ * env `SCHEDULER_REMINDER_SEND_BUDGET`); capped events stay `queued` for the
+ * next tick. 8 workspaces × ~8 + ~15 fixed is the send-ON worst case the
+ * first live tick hit and exceeded — hence the smaller send batch.
  */
 export const REMINDER_SWEEP_DEFAULT_BUDGET_MS = 5000;
 export const REMINDER_SWEEP_DEFAULT_BATCH_SIZE = 8;
+/** Batch when sending is ON: the send phase adds ~4 subrequests/workspace. */
+export const REMINDER_SWEEP_DEFAULT_SEND_BATCH_SIZE = 3;
+export const REMINDER_SWEEP_DEFAULT_SEND_BUDGET = 3;
+const SEND_BUDGET_SWITCH = "SCHEDULER_REMINDER_SEND_BUDGET";
 
 function positiveInt(value: string | undefined, fallback: number): number {
 	const parsed = Number(value);
@@ -156,10 +179,23 @@ export async function runReminderSweep(
 	const sendEnabled = options.send ?? isAutomaticReminderSendingEnabled();
 	const batchSize =
 		options.batchSize ??
-		positiveInt(process.env[BATCH_SWITCH], REMINDER_SWEEP_DEFAULT_BATCH_SIZE);
+		positiveInt(
+			process.env[BATCH_SWITCH],
+			// Sending adds ~4 subrequests per workspace (active-workspace resolve,
+			// queued-event listing, quota read, drain), so a send-enabled tick
+			// walks fewer workspaces per tick. First live send tick (2026-11-22):
+			// 6 workspaces × ~8 + ~15 fixed jobs blew the 50-request ceiling in
+			// the last workspace's send phase.
+			sendEnabled
+				? REMINDER_SWEEP_DEFAULT_SEND_BATCH_SIZE
+				: REMINDER_SWEEP_DEFAULT_BATCH_SIZE,
+		);
 	const budgetMs =
 		options.budgetMs ??
 		positiveInt(process.env[BUDGET_SWITCH], REMINDER_SWEEP_DEFAULT_BUDGET_MS);
+	const sendBudget =
+		options.sendBudget ??
+		positiveInt(process.env[SEND_BUDGET_SWITCH], REMINDER_SWEEP_DEFAULT_SEND_BUDGET);
 	const cursor =
 		options.cursor === undefined
 			? await readPreviousCursor(admin)
@@ -215,7 +251,9 @@ export async function runReminderSweep(
 			let skippedCount = 0;
 			let note: string | null = null;
 			if (sendEnabled) {
-				const delivery = await sendQueuedEmails(admin, userId);
+				const delivery = await sendQueuedEmails(admin, userId, {
+					maxSends: Math.max(0, sendBudget - summary.sentCount),
+				});
 				sentCount = delivery.sent;
 				skippedCount = delivery.skipped;
 				note = (delivery as { reason?: string }).reason ?? "Automatic sweep.";

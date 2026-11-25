@@ -18,6 +18,7 @@ import { Route as FeaturesRouteImport } from './routes/features'
 import { Route as InvoicesRouteImport } from './routes/invoices'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as RemindersRouteImport } from './routes/reminders'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -117,6 +118,11 @@ const PricingRoute = PricingRouteImport.update({
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RemindersRoute = RemindersRouteImport.update({
+  id: '/reminders',
+  path: '/reminders',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportsRoute = ReportsRouteImport.update({
@@ -424,6 +430,7 @@ export interface FileRoutesByFullPath {
   '/invoices': typeof InvoicesRouteWithChildren
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
+  '/reminders': typeof RemindersRoute
   '/reports': typeof ReportsRouteWithChildren
   '/security': typeof SecurityRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -487,6 +494,7 @@ export interface FileRoutesByTo {
   '/features': typeof FeaturesRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
+  '/reminders': typeof RemindersRoute
   '/security': typeof SecurityRoute
   '/terms': typeof TermsRoute
   '/verify-email': typeof VerifyEmailRoute
@@ -552,6 +560,7 @@ export interface FileRoutesById {
   '/invoices': typeof InvoicesRouteWithChildren
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
+  '/reminders': typeof RemindersRoute
   '/reports': typeof ReportsRouteWithChildren
   '/security': typeof SecurityRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -620,6 +629,7 @@ export interface FileRouteTypes {
     | '/invoices'
     | '/pricing'
     | '/privacy'
+    | '/reminders'
     | '/reports'
     | '/security'
     | '/settings'
@@ -683,6 +693,7 @@ export interface FileRouteTypes {
     | '/features'
     | '/pricing'
     | '/privacy'
+    | '/reminders'
     | '/security'
     | '/terms'
     | '/verify-email'
@@ -747,6 +758,7 @@ export interface FileRouteTypes {
     | '/invoices'
     | '/pricing'
     | '/privacy'
+    | '/reminders'
     | '/reports'
     | '/security'
     | '/settings'
@@ -814,6 +826,7 @@ export interface RootRouteChildren {
   InvoicesRoute: typeof InvoicesRouteWithChildren
   PricingRoute: typeof PricingRoute
   PrivacyRoute: typeof PrivacyRoute
+  RemindersRoute: typeof RemindersRoute
   ReportsRoute: typeof ReportsRouteWithChildren
   SecurityRoute: typeof SecurityRoute
   SettingsRoute: typeof SettingsRouteWithChildren
@@ -919,6 +932,13 @@ declare module '@tanstack/react-router' {
       path: '/privacy'
       fullPath: '/privacy'
       preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reminders': {
+      id: '/reminders'
+      path: '/reminders'
+      fullPath: '/reminders'
+      preLoaderRoute: typeof RemindersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reports': {
@@ -1406,6 +1426,7 @@ const rootRouteChildren: RootRouteChildren = {
   InvoicesRoute: InvoicesRouteWithChildren,
   PricingRoute: PricingRoute,
   PrivacyRoute: PrivacyRoute,
+  RemindersRoute: RemindersRoute,
   ReportsRoute: ReportsRouteWithChildren,
   SecurityRoute: SecurityRoute,
   SettingsRoute: SettingsRouteWithChildren,

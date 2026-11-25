@@ -27,32 +27,27 @@ export type MarketingMetric = {
 	label: string;
 };
 
+// Footer route links. Every marketing topic is a real page now (features,
+// reminders, compliance, security, pricing), so the footer lists them all as
+// plain routes — no hash anchors anywhere.
 const navItems = [
 	{ to: "/features", label: "Features" },
+	{ to: "/reminders", label: "Reminders" },
+	{ to: "/compliance", label: "Compliance" },
+	{ to: "/security", label: "Security" },
 	{ to: "/pricing", label: "Pricing" },
 ] as const;
 
-// The nav row, verbatim from design/landing.html: Features · Reminders ·
-// Compliance · Security. It mixes route links and section anchors, so it can't
-// be one of the two shape-typed lists above.
-//
-// `navItems` still carries Pricing, but only for the footer — the mock's nav
-// has four links and a fifth changes the row's rhythm. They route through `/`
-// where they're anchors, so the nav also works from /features and /pricing.
+// The nav row: Features · Reminders · Compliance · Security · Pricing — one
+// real page per link, matching getinboxzero.com's one-page-per-topic nav
+// (which also carries Pricing directly in the header row). The landing page
+// keeps its own section anchors for in-page reading.
 const primaryNav = [
 	{ label: "Features", to: "/features" },
-	{ label: "Reminders", hash: "reminders" },
-	{ label: "Compliance", hash: "compliance" },
-	{ label: "Security", hash: "security" },
-] as const;
-
-// Footer topics. Security and Compliance are real landing sections;
-// Small business and Enterprise used to be, until SolutionsTrack was removed
-// to match design/landing.html (which has no solutions section) — their links
-// would now be dead anchors, so they are gone with it.
-const sectionLinks = [
-	{ hash: "compliance", label: "Compliance" },
-	{ hash: "security", label: "Security" },
+	{ label: "Reminders", to: "/reminders" },
+	{ label: "Compliance", to: "/compliance" },
+	{ label: "Security", to: "/security" },
+	{ label: "Pricing", to: "/pricing" },
 ] as const;
 
 const iconMap = {
@@ -89,15 +84,14 @@ export function Wordmark() {
 				its ink so the asset sizes directly. Height is in em so the logo
 				tracks the app's persisted text-size setting.
 
-				The `.hm` marketing scope is dark in both theme directions
-				(design.md, "Marketing scope"), so this is the `-dark` master —
-				artwork *for dark surfaces*: paper #FCF8F5 wordmark + warm-red
-				figure, exported as public/invoicly-lockup-horizontal-dark.svg.
-				The ink `-light` lockup on `#0a0706` would be invisible here.
+				The `.hm` marketing scope is light in both theme directions
+				(getinboxzero.com-style white ground), so this is the `-light`
+				master — artwork *for light surfaces*: ink wordmark + warm-red
+				figure, exported as public/invoicly-lockup-horizontal-light.svg.
 				Masters and guidelines: design/brand/invoicly/.
 			*/}
 			<img
-				src="/invoicly-lockup-horizontal-dark.svg"
+				src="/invoicly-lockup-horizontal-light.svg"
 				alt="Invoicly"
 				width={584}
 				height={152}
@@ -120,15 +114,14 @@ export function MarketingNav() {
 				background: "color-mix(in oklab, var(--hm-paper) 88%, transparent)",
 			}}
 		>
-			<div className="mx-auto flex min-h-16 w-full max-w-7xl items-center gap-5 px-5 py-3 lg:px-8">
+			<div className="mx-auto flex min-h-16 w-full max-w-6xl items-center gap-5 px-5 py-3 lg:px-8">
 				<Wordmark />
 
 				<nav className="mx-auto hidden items-center gap-1 lg:flex">
 					{primaryNav.map((item) => (
 						<Link
 							key={item.label}
-							to={"to" in item ? item.to : "/"}
-							hash={"hash" in item ? item.hash : undefined}
+							to={item.to}
 							className="hm-navlink rounded-full px-3 py-2 transition-colors hover:text-[var(--hm-ink)]"
 						>
 							{item.label}
@@ -145,7 +138,7 @@ export function MarketingNav() {
 						search={{ mode: "sign-up" }}
 						className="hm-btn hm-btn--primary"
 					>
-						Get started
+						Start free trial
 						<ArrowRight className="h-4 w-4" />
 					</Link>
 				</div>
@@ -163,8 +156,7 @@ export function MarketingNav() {
 					{primaryNav.map((item) => (
 						<Link
 							key={item.label}
-							to={"to" in item ? item.to : "/"}
-							hash={"hash" in item ? item.hash : undefined}
+							to={item.to}
 							className="hm-navlink flex min-h-11 items-center rounded-lg px-3 hover:bg-[var(--hm-paper-3)]"
 							onClick={(event) => {
 								event.currentTarget.closest("details")?.removeAttribute("open");
@@ -190,33 +182,41 @@ export function MarketingHero({
 	kicker: string;
 	title: string;
 	description: string;
-	secondaryTo?: "/pricing" | "/features" | "/security";
+	secondaryTo?:
+		| "/pricing"
+		| "/features"
+		| "/security"
+		| "/compliance"
+		| "/reminders";
 	secondaryLabel?: string;
 	children?: ReactNode;
 }) {
 	return (
 		<section className="relative isolate overflow-hidden">
 			<div className="hm-wash" aria-hidden="true" />
-			<div className="relative mx-auto grid w-full max-w-7xl items-center gap-10 px-5 py-16 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-14 lg:px-8 lg:py-24">
+			<div className="relative mx-auto grid w-full max-w-6xl items-center gap-10 px-5 py-16 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-14 lg:px-8 lg:py-24">
 				<div className="hm-reveal">
 					<p className="hm-label hm-label--accent">{kicker}</p>
-					<h1 className="hm-display mt-4 text-[clamp(2.5rem,7vw,4.25rem)]">
+					<h1 className="hm-display mt-4 text-[clamp(1.875rem,3.6vw,2.75rem)]">
 						{title}
 					</h1>
 					<p className="hm-lede mt-5 max-w-xl text-lg">{description}</p>
-					<div className="mt-8 flex flex-wrap gap-3">
+					<div className="mt-8 flex flex-wrap items-center gap-3">
 						<Link
 							to="/auth"
 							search={{ mode: "sign-up" }}
 							className="hm-btn hm-btn--primary"
 						>
-							Create workspace
+							Start free trial
 							<ArrowRight className="h-4 w-4" />
 						</Link>
 						<Link to={secondaryTo} className="hm-btn hm-btn--ghost">
 							{secondaryLabel}
 						</Link>
 					</div>
+					<p className="hm-lede mt-3 text-sm">
+						Try 3 days free — no credit card required.
+					</p>
 				</div>
 				<div
 					className="hm-reveal hm-card hm-card--raised p-4 lg:p-5"
@@ -294,7 +294,7 @@ export function LedgerPreview() {
 export function FeatureGrid({ items }: { items: MarketingFeature[] }) {
 	return (
 		<section className="hm-band">
-			<div className="mx-auto grid w-full max-w-7xl gap-4 px-5 py-16 sm:grid-cols-2 lg:grid-cols-3 lg:px-8 lg:py-20">
+			<div className="mx-auto grid w-full max-w-6xl gap-4 px-5 py-16 sm:grid-cols-2 lg:grid-cols-3 lg:px-8 lg:py-20">
 				{items.map((item, index) => {
 					const Icon = iconList[index % iconList.length];
 					return (
@@ -338,10 +338,10 @@ export function SplitSection({
 }) {
 	return (
 		<section>
-			<div className="mx-auto grid w-full max-w-7xl gap-10 px-5 py-16 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:px-8 lg:py-20">
+			<div className="mx-auto grid w-full max-w-6xl gap-10 px-5 py-16 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:px-8 lg:py-20">
 				<div className={reverse ? "lg:order-2" : undefined}>
 					<p className="hm-label hm-label--accent">{kicker}</p>
-					<h2 className="hm-display mt-4 text-[clamp(1.875rem,4vw,2.75rem)]">
+					<h2 className="hm-display mt-4 text-[clamp(1.625rem,3vw,2.25rem)]">
 						{title}
 					</h2>
 					<p className="hm-lede mt-4 max-w-md">{body}</p>
@@ -372,7 +372,7 @@ export function SplitSection({
 export function MetricsStrip({ metrics }: { metrics: MarketingMetric[] }) {
 	return (
 		<section className="hm-band hm-rule-t">
-			<div className="mx-auto grid max-w-7xl gap-8 px-5 py-12 sm:grid-cols-3 lg:px-8">
+			<div className="mx-auto grid max-w-6xl gap-8 px-5 py-12 sm:grid-cols-3 lg:px-8">
 				{metrics.map((metric) => (
 					<div key={metric.label} data-fade-scroll className="min-w-0">
 						<p
@@ -396,26 +396,29 @@ export function MarketingFooter() {
 			className="hm-rule-t relative isolate overflow-hidden px-5 pb-9 pt-[150px] text-center lg:px-8"
 		>
 			<div className="hm-wash hm-wash--footer" aria-hidden="true" />
-			<div className="relative mx-auto max-w-7xl">
+			<div className="relative mx-auto max-w-6xl">
 				<h2
 					data-fade-scroll
-					className="hm-display mx-auto max-w-[15ch] text-[clamp(2.375rem,6.4vw,5.25rem)] font-medium leading-none tracking-[-0.045em]"
+					className="hm-display mx-auto max-w-[15ch] text-[clamp(2rem,4.4vw,3.75rem)] font-medium leading-[1.06] tracking-[-0.03em]"
 				>
 					Send the invoice,{" "}
 					<span style={{ color: "var(--hm-ink-2)" }}>
 						then stop wondering where it went.
 					</span>
 				</h2>
-				<div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+				<div className="mt-10 flex flex-col items-center gap-3.5">
 					<Link
 						to="/auth"
 						search={{ mode: "sign-up" }}
 						data-magnetic
 						className="hm-btn hm-btn--primary hm-btn--xl"
 					>
-						Open app
+						Start free trial
 						<ArrowRight className="h-4 w-4" />
 					</Link>
+					<p className="text-[13.5px] text-[var(--hm-ink-2)]">
+						Try 3 days free — no credit card required.
+					</p>
 				</div>
 
 				<div className="mt-[130px] flex flex-wrap items-center gap-x-5 gap-y-4 border-t border-[var(--hm-rule-soft)] py-6 text-left text-[13.5px] text-[var(--hm-ink-3)]">
@@ -425,16 +428,6 @@ export function MarketingFooter() {
 							<Link
 								key={item.to}
 								to={item.to}
-								className="transition-colors hover:text-[var(--hm-ink)]"
-							>
-								{item.label}
-							</Link>
-						))}
-						{sectionLinks.map((item) => (
-							<Link
-								key={item.hash}
-								to="/"
-								hash={item.hash}
 								className="transition-colors hover:text-[var(--hm-ink)]"
 							>
 								{item.label}
@@ -452,6 +445,12 @@ export function MarketingFooter() {
 						>
 							Terms
 						</Link>
+						<a
+							href="mailto:support@invoicly.cv"
+							className="transition-colors hover:text-[var(--hm-ink)]"
+						>
+							Support: support@invoicly.cv
+						</a>
 					</nav>
 					<span className="sm:ml-auto">
 						Invoicly 2026 · Invoicing for Nigerian businesses
