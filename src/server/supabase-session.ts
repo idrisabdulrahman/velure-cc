@@ -40,11 +40,10 @@ export async function mintSupabaseAccessToken(
 	const token = new SignJWT({
 		sub: userId,
 		// `invoicly_user_id` is the tenant claim `app.current_user_id()` reads
-		// (migration 20261122000000). `velure_user_id` is its legacy name, kept
-		// during the transition so RLS never fails against a pre-migration
-		// hook; remove it once the cutover is verified.
+		// (migration 20261122000000). The transitional `velure_user_id` alias
+		// was retired once the cutover was verified
+		// (migration 20261125000002).
 		invoicly_user_id: userId,
-		velure_user_id: userId,
 		role: "authenticated",
 		aud: "authenticated",
 	})
