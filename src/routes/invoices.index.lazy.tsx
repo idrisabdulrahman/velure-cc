@@ -220,7 +220,7 @@ const PENDING_STATUSES = new Set<InvoiceStatus>([
 	"overdue",
 ]);
 
-const STANDARD_INVOICE_IMPORT_STORAGE_KEY = "velure:pending-standard-invoice";
+const STANDARD_INVOICE_IMPORT_STORAGE_KEY = "invoicly:pending-standard-invoice";
 
 function toLocalDateInputValue(date: Date) {
 	const year = date.getFullYear();

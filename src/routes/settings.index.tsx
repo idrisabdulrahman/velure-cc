@@ -211,16 +211,16 @@ function validate(form: BusinessForm): FormErrors {
 function SettingsPage() {
 	const navigate = useNavigate();
 	const { data: session } = authClient.useSession();
-	const { client, velureUserId } = useSupabaseSession(session?.user.id);
+	const { client, invoiclyUserId } = useSupabaseSession(session?.user.id);
 	const {
 		data: workspace,
 		isPending: settingsPending,
 		isError: settingsError,
 		refetch: refetchSettings,
 	} = useQuery({
-		queryKey: ["supabase-workspace-settings", velureUserId],
-		queryFn: () => getWorkspaceSettings(client!, velureUserId!),
-		enabled: Boolean(client && velureUserId),
+		queryKey: ["supabase-workspace-settings", invoiclyUserId],
+		queryFn: () => getWorkspaceSettings(client!, invoiclyUserId!),
+		enabled: Boolean(client && invoiclyUserId),
 	});
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -234,11 +234,11 @@ function SettingsPage() {
 	const [errors, setErrors] = useState<FormErrors>({});
 	const [logoPreview, setLogoPreview] = useState<string | null>(() => {
 		if (typeof window === "undefined") return null;
-		return window.localStorage.getItem("velure-business-logo");
+		return window.localStorage.getItem("invoicly-business-logo");
 	});
 	const [savedLogo, setSavedLogo] = useState<string | null>(() => {
 		if (typeof window === "undefined") return null;
-		return window.localStorage.getItem("velure-business-logo");
+		return window.localStorage.getItem("invoicly-business-logo");
 	});
 	const [saving, setSaving] = useState(false);
 	const [deletingAccount, setDeletingAccount] = useState(false);
@@ -296,7 +296,7 @@ function SettingsPage() {
 			const result = typeof reader.result === "string" ? reader.result : null;
 			setLogoPreview(result);
 			if (result && typeof window !== "undefined") {
-				window.localStorage.setItem("velure-business-logo", result);
+				window.localStorage.setItem("invoicly-business-logo", result);
 			}
 		};
 		reader.readAsDataURL(file);
@@ -316,9 +316,9 @@ function SettingsPage() {
 
 		setSaving(true);
 		try {
-			if (!client || !velureUserId)
+			if (!client || !invoiclyUserId)
 				throw new Error("Supabase session unavailable.");
-			await upsertWorkspaceSettings(client, velureUserId, {
+			await upsertWorkspaceSettings(client, invoiclyUserId, {
 				name: form.name.trim(),
 				legalName: form.legalName.trim() || form.name.trim(),
 				email: form.email.trim(),
@@ -422,7 +422,7 @@ function SettingsPage() {
 				throw new Error("We couldn't delete your account. Please try again.");
 			}
 			if (typeof window !== "undefined") {
-				window.localStorage.removeItem("velure-business-logo");
+				window.localStorage.removeItem("invoicly-business-logo");
 			}
 			await authClient.signOut();
 			toast({ title: "Account deleted", variant: "success" });

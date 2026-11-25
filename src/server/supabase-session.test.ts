@@ -32,7 +32,8 @@ describe("local Supabase session token", () => {
 		if (!publicKey) throw new Error("missing test public key");
 		const verified = await jwtVerify(minted?.accessToken ?? "", publicKey);
 		expect(verified.payload.sub).toBe("k5-user");
-		expect(verified.payload.velure_user_id).toBe("k5-user");
+		expect(verified.payload.invoicly_user_id).toBe("k5-user");
+		expect(verified.payload.invoicly_user_id).toBe("k5-user");
 		expect(verified.payload.role).toBe("authenticated");
 	});
 
@@ -59,6 +60,6 @@ describe("local Supabase session token", () => {
 			minted?.accessToken ?? "",
 			new TextEncoder().encode(process.env.SUPABASE_JWT_SECRET),
 		);
-		expect(verified.payload.velure_user_id).toBe("k5-legacy");
+		expect(verified.payload.invoicly_user_id).toBe("k5-legacy");
 	});
 });

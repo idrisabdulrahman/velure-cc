@@ -1,4 +1,4 @@
-# Velure decisions ledger
+# Invoicly decisions ledger
 
 Future agents read this before asking again. One entry per decision: date,
 question, answer, task ID. Append-only.
@@ -89,7 +89,7 @@ These block work that depends on the answer. Unattended runs must stop here.
 
 - **Finding:** Midday is AGPL-3.0, and its README (`80-87`) frames AGPL as
   **non-commercial** with a paid commercial licence at `engineer@midday.ai`.
-  Velure ships 28 derived files under `src/lib/midday-invoice/**` plus
+  Invoicly ships 28 derived files under `src/lib/midday-invoice/**` plus
   `src/shims/midday-utils/format.ts` and `src/features/invoices/midday-adapter.ts`,
   with no `LICENSE`/`NOTICE`.
 - **Action:** Wrote `docs/LICENSE-REVIEW.md` (plain-language obligations and
@@ -151,13 +151,13 @@ These block work that depends on the answer. Unattended runs must stop here.
   applied to project `kbexydkmmfabfutgkbxn` (`apply_migration`). Result:
   `pg_cron` 1.6.4 and `pg_net` 0.20.4 enabled, `public.invoke_scheduler_tick()`
   created, `reminder_events_invoice_stage_channel_unique` created, and the
-  `velure-scheduler-tick` job scheduled (`*/10 * * * *`, active).
-- **Vault:** `velure_scheduler_url` =
-  `https://velure-f2c.pages.dev/api/cron/tick`; `velure_scheduler_secret` =
+  `invoicly-scheduler-tick` job scheduled (`*/10 * * * *`, active).
+- **Vault:** `invoicly_scheduler_url` =
+  `https://invoicly-f2c.pages.dev/api/cron/tick`; `invoicly_scheduler_secret` =
   a fresh 32-byte random hex generated **inside** Postgres
   (`extensions.gen_random_bytes`), so its value is not recorded here. Retrieve
   with `select decrypted_secret from vault.decrypted_secrets where
-  name = 'velure_scheduler_secret';` (service role/postgres only).
+  name = 'invoicly_scheduler_secret';` (service role/postgres only).
 - **Q:** Enable automatic reminder email sending? **Answer:** yes — enable it.
   This is a customer-facing, irreversible action the user explicitly approved.
   It only takes effect once the app env var `SCHEDULER_REMINDER_SEND_ENABLED`
@@ -167,7 +167,7 @@ These block work that depends on the answer. Unattended runs must stop here.
   The live site returns **404** for `POST /api/cron/tick` (checked 2026-10-29)
   because `development` is not deployed, so every cron tick is a harmless 404
   until then. A redeploy is also required for the env-var change to take effect.
-- **Env vars set via the Cloudflare API (safe):** Pages project `velure`
+- **Env vars set via the Cloudflare API (safe):** Pages project `invoicly`
   (account `699cc6ec07aa29df7034163270b23f87`) now has
   `INVOICE_SCHEDULER_SECRET` = the Vault secret value (`secret_text`) and
   `SCHEDULER_REMINDER_SEND_ENABLED=true` (`plain_text`). Before writing, the
@@ -218,11 +218,11 @@ These block work that depends on the answer. Unattended runs must stop here.
 - **Finding.** `.env.test`'s `PAYSTACK_TEST_SERVICE_ROLE_KEY` was a `service_role`
   HS256 JWT minted with a **10-hour** lifetime (`iat` 2026-10-29T10:14:25Z,
   `exp` 2026-10-29T19:54:25Z) against the running local stack
-  (`velure-einv-qa`, ports 55421/55422). After `exp`, PostgREST rejects it and
+  (`invoicly-einv-qa`, ports 55421/55422). After `exp`, PostgREST rejects it and
   the three DB-backed Paystack suites fail with `JWT expired` (23 tests).
 - **Decision — re-mint the token instead of restarting the stack.** The stack
   was started from a project directory that no longer exists anywhere on disk
-  (no `config.toml` with `project_id = "velure-einv-qa"`), so a faithful
+  (no `config.toml` with `project_id = "invoicly-einv-qa"`), so a faithful
   `supabase stop && supabase start` for that identity/ports is not safely
   reproducible; `supabase stop` would risk taking the stack down with no
   matching config to bring it back. The stack's signing secret is unchanged
@@ -240,7 +240,7 @@ These block work that depends on the answer. Unattended runs must stop here.
   break `.env.test` again by design. If the local stack is ever recreated, prefer
   `supabase start` from this repo's own `supabase/config.toml` (`velure-cc`,
   ports 54321/54322) and point `.env.test` at it, rather than reviving the lost
-  `velure-einv-qa` identity.
+  `invoicly-einv-qa` identity.
 
 ### 2026-10-30 — Tasks T6/T7 (e-invoicing gap analysis + provider questions)
 
@@ -275,10 +275,10 @@ These block work that depends on the answer. Unattended runs must stop here.
   **Answer:** yes (the user reviewed and approved deploying T1).
 - **Deployment method:** direct upload —
   `pnpm deploy:pages` = `build:pages` + `wrangler pages deploy dist
-  --project-name velure --branch main --env-file .env`. No git push is
+  --project-name invoicly --branch main --env-file .env`. No git push is
   involved; `development` remains local-only.
 - **Result:** deployed revision `709411ca`
-  (`https://709411ca.velure-f2c.pages.dev`). Live checks (read-only):
+  (`https://709411ca.invoicly-f2c.pages.dev`). Live checks (read-only):
   `POST /api/cron/tick` → **401** (route now exists; the old build 404'd),
   `GET /` → **200**, `GET /auth` → **200**.
 - **First live tick (06:30 UTC) — partial.** `net._http_response` row
@@ -308,7 +308,7 @@ These block work that depends on the answer. Unattended runs must stop here.
   the count to "3 of 17" and the table headers to "Provider-published field"
   (only that which a provider actually publishes), with a source caveat.
 - **Q (rejection codes):** Invented codes read like real NRS/provider codes.
-  **Action:** every code Velure invents is now prefixed `MOCK_`
+  **Action:** every code Invoicly invents is now prefixed `MOCK_`
   (`rejection-guidance.ts`, `provider-adapter.ts`, `einvoice-submissions.ts`);
   the real catalogue is UNKNOWN.
 - **Q (accreditation):** Do not build a real adapter until the accreditation
@@ -391,7 +391,7 @@ These block work that depends on the answer. Unattended runs must stop here.
   half right. Paystack **Pay-with-Transfer already creates a per-invoice
   dedicated virtual account** (`ensurePaystackTransferCharge`,
   `src/server/data/paystack-server.ts:113`) with an 8-hour expiry, a
-  deterministic `velure-<invoiceId>-<ts>` reference, and webhook + reconcile
+  deterministic `invoicly-<invoiceId>-<ts>` reference, and webhook + reconcile
   confirmation. Option B is therefore an **extension**, not a new build.
 - **Pricing:** taken from `https://paystack.com/pricing` (fetched 2026-10-30).
   Virtual Accounts **1% capped at ₦300**; local transactions 1.5% + ₦100 capped
@@ -410,7 +410,7 @@ These block work that depends on the answer. Unattended runs must stop here.
   memo). Payment mix in practice: **mixed**.
 - **User follow-up (new Q-J):** what if the workspace wants customers to pay
   into its **own** bank account rather than the generated virtual account — how
-  would Velure verify that, or should it copy Midday and connect the bank to
+  would Invoicly verify that, or should it copy Midday and connect the bank to
   check automatically?
 - **Research (no code):** `docs/BANK-RECONCILIATION-OPTIONS.md` §9. Midday's
   bank connection is real but **US/EU only** — its providers are plaid, teller,
@@ -420,7 +420,7 @@ These block work that depends on the answer. Unattended runs must stop here.
   `packages/db/src/queries/transaction-matching.ts`) and is **rejected for v1**;
   only the explicit `auto_matched | high_confidence | suggested` tier idea is
   adapted. Its `bank_connections` **stores the provider access token in the row**
-  (`packages/db/src/schema.ts:1068`) — flagged as a defect Velure must **not**
+  (`packages/db/src/schema.ts:1068`) — flagged as a defect Invoicly must **not**
   copy. `AGENTS.md` §3 requires product-strategy approval before any banking
   domain work, so nothing is built.
 - **Recommended sequencing:** (1) put the **invoice number as a payment
@@ -626,7 +626,7 @@ These block work that depends on the answer. Unattended runs must stop here.
   required and non-empty in `src/env.ts`, so it cannot simply be blanked; an
   invalid key makes Resend reject the send and `sendOnboardingEmail` swallows
   the failure. Confirmed: one failed send attempt, **no email delivered**.
-  The QA user is `qa-responsive@velure.test` (workspace auto-provisioned by
+  The QA user is `qa-responsive@invoicly.test` (workspace auto-provisioned by
   `ensureWorkspaceForUser` on first sign-in). No production user was touched and
   no invitation was sent.
 - **Touch drag works — the suspicion is refuted.** Line-item reordering was
@@ -753,7 +753,7 @@ against the deployment.**
 
 ---
 
-## 2026-11-01 — sign-in 1102 is a CPU-budget limit; Velure moves to a Node host
+## 2026-11-01 — sign-in 1102 is a CPU-budget limit; Invoicly moves to a Node host
 
 **Task ID:** `auth-signin-1101-2026-11`, `vps-node-deployment-2026-11`
 
@@ -765,7 +765,7 @@ fixable in code, and if not, how should we host the app?
 **Answer (user, 2026-11-01).** First "test 3 & 2 so far it runs on cloudflare"
 (both options), then, after the results below, **"go for option 3 i will host it
 on a VPS ... i don use docker there but i do commit using what linux already
-provides meaning i let them run as a service"**, on `velure.variadic.ng`, port
+provides meaning i let them run as a service"**, on `invoicly.variadic.ng`, port
 `8490`.
 
 **Finding.** The 1102 is a platform budget, not an application defect.
@@ -811,7 +811,7 @@ Supabase schema. No RLS, migration, or issued-invoice behaviour was touched.
 
 **Evidence.** `pnpm test` 880 passed / 86 skipped; `pnpm typecheck` clean;
 `pnpm check` exit 0 / 359 pre-existing warnings;
-`systemd-analyze verify deploy/velure.service` exit 0. Pool mode measured on the
+`systemd-analyze verify deploy/invoicly.service` exit 0. Pool mode measured on the
 VPS-equivalent Node run: authenticated request 1.0-2.4 s -> 0.4-0.7 s, sign-in
 1.6-2.0 s -> ~0.7 s. `nginx -t` was not run (nginx is not installed here).
 
@@ -950,7 +950,7 @@ no object or data touched), then `supabase db push --linked` applied all four.
 - `invoice_exports_kind_check` now admits `accountant_lines_csv` and
   `accountant_lines_xlsx` (six kinds total).
 - Scheduler is intact and **not duplicated**: `cron.job` holds exactly one active
-  `velure-scheduler-tick` (total jobs = 1), the
+  `invoicly-scheduler-tick` (total jobs = 1), the
   `reminder_events_invoice_stage_channel_unique` index exists, and
   `invoke_scheduler_tick` exists. (Push NOTICE: the unique index already existed,
   skipping — the intended idempotent path.)
@@ -1077,7 +1077,7 @@ not built.
 - **Q-D (target segment) — recommended, awaiting confirmation.** Serve **small
   businesses under ₦1bn turnover only** for the next release. Medium taxpayers
   (₦1bn–₦5bn) are already in the e-invoicing mandate (from 1 July 2026,
-  enforcement January–March 2027) and Velure's sandbox cannot serve them; do
+  enforcement January–March 2027) and Invoicly's sandbox cannot serve them; do
   not use compliance claims aimed at them. **Status: unconfirmed.**
 - **Q-F (real pilots) — OPEN, user must fill in.** Weekly-active businesses
   ___, paying ___, names/sectors (no personal data) ___. If zero, write `0`.
@@ -1102,7 +1102,7 @@ corrects the Rev360 VAT design and the Tax ID rule. What changes now?
 - **Rev360 VAT is a schedule-based official Excel workbook.** The user fills
   the Sales/Purchases/Adjustments sheets and the VAT Return Form sheet
   auto-populates; guides warn that editing/hiding that sheet breaks the upload.
-  Velure must **not** generate an uploadable replacement. It now exports
+  Invoicly must **not** generate an uploadable replacement. It now exports
   **paste-ready Sales-sheet rows**: `beneficiary_name`, `beneficiary_tax_id`,
   `item`, `item_cost`, `item_description`, `vat_status`, `product_code`,
   `invoice_number`, `invoice_date` (one row per line). Row 2 of the sheet says
@@ -1122,7 +1122,7 @@ corrects the Rev360 VAT design and the Tax ID rule. What changes now?
   answered before it is written. Do not build.
 - **Step 3 export settings:** date format is a user setting (default
   `DD/MM/YYYY`, shown to the user); Zoho auto-numbering defaults **off** so
-  Velure numbers survive; QuickBooks keeps custom numbers only with "Custom
+  Invoicly numbers survive; QuickBooks keeps custom numbers only with "Custom
   transaction numbers" on. Not built yet.
 
 ---
@@ -1170,7 +1170,7 @@ is derived once and targets cannot drift.
 - Dates default to `DD/MM/YYYY`; the format is a builder option and a persisted
   export setting is deferred to the Xero slice (Xero depends on the
   organisation's regional settings).
-- `Terms` is blank (Velure stores days, not a QBO term name) and
+- `Terms` is blank (Invoicly stores days, not a QBO term name) and
   `Item Tax Code` is a blank-default config table (`QBO_ITEM_TAX_CODE_CONFIG`).
 - Excluded with returned warnings: credit notes, discounted invoices, invoices
   outside the workspace base currency, and invoices without a customer name.
@@ -1197,7 +1197,7 @@ typed per-line row model as QuickBooks; no new money math.
   readable **provisional** header set (`ZOHO_INVOICE_HEADERS`) rather than a
   rigid vendor template. It is explicitly unverified until a real Zoho sample
   file is supplied.
-- **Auto-generate Invoice Numbers must stay off** in the Zoho wizard so Velure
+- **Auto-generate Invoice Numbers must stay off** in the Zoho wizard so Invoicly
   numbers survive; the Exports card says so.
 - Zoho's import help page caps the upload at **10 MB**; the export aborts above
   the byte cap rather than truncating. No row/invoice count is documented, so
@@ -1230,10 +1230,10 @@ directly and answered.
 - **Data layer:** **Supabase Postgres + RLS** is live; Convex is not present in
   the checkout. `AGENTS.md` §1's "Convex + Better Auth" line was stale.
 - **Host:** **Cloudflare Workers free** is production. This matches `AGENTS.md`
-  §10 all along; the Node-VPS deployment (`deploy/`, `velure.variadic.ng:8490`,
+  §10 all along; the Node-VPS deployment (`deploy/`, `invoicly.variadic.ng:8490`,
   task `vps-node-deployment-2026-11` marked done) is **not** the live host. §10
   now says so explicitly so a future agent is not misled by the VPS record.
-- **Name:** the product is **Invoicly** (`invoicly.cv`), with `velure` kept as the
+- **Name:** the product is **Invoicly** (`invoicly.cv`), with `invoicly` kept as the
   infrastructure/persistence slug.
 
 **Changes.** `AGENTS.md` §1 (runtime, product name, data layer), §2 (brand),

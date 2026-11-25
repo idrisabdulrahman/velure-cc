@@ -26,7 +26,7 @@ import { handle, handlers } from "./quote-accept";
 afterEach(() => vi.clearAllMocks());
 
 function request(body: unknown, raw = false) {
-	return new Request("https://velure.example/api/invoice/public/quote-accept", {
+	return new Request("https://invoicly.example/api/invoice/public/quote-accept", {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: raw ? (body as string) : JSON.stringify(body),

@@ -28,7 +28,7 @@ afterEach(() => vi.clearAllMocks());
 
 function request(token = "invoice-token") {
 	return new Request(
-		"https://velure.example/api/payments/paystack/initialize",
+		"https://invoicly.example/api/payments/paystack/initialize",
 		{
 			method: "POST",
 			headers: { "content-type": "application/json" },

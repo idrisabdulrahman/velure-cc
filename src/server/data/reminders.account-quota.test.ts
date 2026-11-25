@@ -24,7 +24,7 @@ const { resendSendSpy } = vi.hoisted(() => ({
 
 vi.mock("#/server/env", () => ({
 	getServerEnv: (key: string) =>
-		key === "RESEND_API_KEY" ? "re_test_key" : `${key}@velure.test`,
+		key === "RESEND_API_KEY" ? "re_test_key" : `${key}@invoicly.test`,
 }));
 vi.mock("resend", () => ({
 	Resend: class {

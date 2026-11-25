@@ -25,7 +25,7 @@ afterEach(() => vi.clearAllMocks());
 const CONTEXT = { client: { tag: "user-scoped" }, userId: "user-b" };
 
 function request(
-	url = "http://velure.test/api/invoice/claims?invoiceId=inv-b",
+	url = "http://invoicly.test/api/invoice/claims?invoiceId=inv-b",
 ) {
 	return new Request(url);
 }
@@ -49,7 +49,7 @@ describe("GET /api/invoice/claims", () => {
 		getContextMock.mockResolvedValue(CONTEXT);
 
 		const response = await handle({
-			request: request("http://velure.test/api/invoice/claims"),
+			request: request("http://invoicly.test/api/invoice/claims"),
 		});
 
 		expect(response.status).toBe(400);

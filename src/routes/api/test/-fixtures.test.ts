@@ -9,7 +9,7 @@ describe("test fixture endpoint security contract", () => {
 		);
 
 		expect(source).toContain('process.env.NODE_ENV !== "production"');
-		expect(source).toContain('process.env.VELURE_ENABLE_TEST_FIXTURES === "1"');
+		expect(source).toContain('process.env.INVOICLY_ENABLE_TEST_FIXTURES === "1"');
 		expect(source).toContain("getInvoiceUserContext(request)");
 		expect(source).toContain("resolveActiveWorkspaceId(");
 		expect(source).not.toContain("service_role");

@@ -20,7 +20,7 @@ Source of truth: `/home/asys/JS-TS/apps/projects/midday-main`.
 So Midday is dual-track: AGPL-3.0 (with an explicit non-commercial framing) or a
 paid commercial licence.
 
-## 2. What Velure copied
+## 2. What Invoicly copied
 
 Midday-derived code in this repository:
 
@@ -32,7 +32,7 @@ Midday-derived code in this repository:
   - `utils/` (`calculate.ts`, `content.ts`, `logo.ts`, `pdf-format.ts`,
     `transform.ts`)
 - `src/shims/midday-utils/format.ts` — compatibility shim for a Midday util.
-- `src/features/invoices/midday-adapter.ts` — adapter that maps a Velure
+- `src/features/invoices/midday-adapter.ts` — adapter that maps a Invoicly
   `InvoiceRecord` into the Midday template shape.
 
 Consumers that are *not* by themselves copied, but depend on the above:
@@ -52,7 +52,7 @@ The repo has **no** `LICENSE` or `NOTICE` file.
 - **Notices.** You must keep copyright and licence notices and state what you
   changed.
 
-If Velure is distributed/operated as a closed-source paid SaaS, running these
+If Invoicly is distributed/operated as a closed-source paid SaaS, running these
 derived templates as-is means, on the face of it, that the whole derivative
 work must be offered under AGPL-3.0 — which conflicts with a closed-source
 plan. This is exactly why Q-C (licence intent) must be answered before more
@@ -69,7 +69,7 @@ work lands on top of the derived templates.
 
 ## 5. Recommendation
 
-1. Answer **Q-C**: is Velure intended to be closed-source paid SaaS, or open to
+1. Answer **Q-C**: is Invoicly intended to be closed-source paid SaaS, or open to
    publishing source?
 2. If **closed source** → prefer **C** if the fee is acceptable, otherwise
    **B** (rewrite). Both are compatible with the product strategy.
@@ -96,7 +96,7 @@ What was done:
 - Scrubbed the last "Midday" strings from comments, test names, and sample
   links (`styles.css`, `invoices.test.ts`, `create-invoice-panel.responsive.test.ts`,
   the two `format.test.tsx` files).
-- Added a Velure module docblock to the adapter.
+- Added a Invoicly module docblock to the adapter.
 - **Zero "midday" references remain in `src/` or build config.**
 
 Verification: `pnpm typecheck` clean; `pnpm test` **757 passed / 86 skipped**
@@ -105,7 +105,7 @@ Verification: `pnpm typecheck` clean; `pnpm test` **757 passed / 86 skipped**
 **Honest caveat.** A rename + de-branding does not, by itself, discharge the
 AGPL obligation if the code is still substantially the original expression.
 This pass removes the provenance/naming from the codebase and makes it
-Velure-owned, but a genuinely independent reimplementation of the logic-bearing
+Invoicly-owned, but a genuinely independent reimplementation of the logic-bearing
 files (`utils/calculate.ts`, `token/index.ts`, `types.ts`, and the adapter's
 mapping) is still advisable before public launch if legal certainty is required.
 Recommended: obtain a written opinion or a commercial licence if the rewrite

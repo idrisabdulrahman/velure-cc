@@ -69,7 +69,7 @@ vi.mock("#/server/data/reminders-send-queue", () => ({
 }));
 vi.mock("#/server/env", () => ({
 	getServerEnv: (key: string) =>
-		key === "RESEND_API_KEY" ? "re_test_key" : `${key}@velure.test`,
+		key === "RESEND_API_KEY" ? "re_test_key" : `${key}@invoicly.test`,
 }));
 vi.mock("#/server/pdf", () => ({
 	renderInvoicePdf: renderInvoicePdfMock,
@@ -94,7 +94,7 @@ beforeEach(() => {
 const WORKSPACE_B_CONTEXT = { client: {}, userId: "user-b" };
 
 function sendRequest(invoiceId: string) {
-	return new Request(`http://velure.test/api/invoice/send/${invoiceId}`, {
+	return new Request(`http://invoicly.test/api/invoice/send/${invoiceId}`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify({ to: "client@example.test" }),
@@ -144,7 +144,7 @@ describe("POST /api/invoice/send/$id — cross-tenant id swap", () => {
 		});
 
 		// A forged identity/resource hint in the body must not steer the lookup.
-		const forged = new Request("http://velure.test/api/invoice/send/inv-b", {
+		const forged = new Request("http://invoicly.test/api/invoice/send/inv-b", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({
@@ -205,7 +205,7 @@ describe("POST /api/reminders/send-queue — session-derived tenancy", () => {
 		getInvoiceUserContextMock.mockResolvedValue(null);
 
 		const response = await handleSendQueue({
-			request: new Request("http://velure.test/api/reminders/send-queue", {
+			request: new Request("http://invoicly.test/api/reminders/send-queue", {
 				method: "POST",
 			}),
 		});
@@ -218,7 +218,7 @@ describe("POST /api/reminders/send-queue — session-derived tenancy", () => {
 		const context = WORKSPACE_B_CONTEXT;
 		getInvoiceUserContextMock.mockResolvedValue(context);
 
-		const forged = new Request("http://velure.test/api/reminders/send-queue", {
+		const forged = new Request("http://invoicly.test/api/reminders/send-queue", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({ userId: "user-a", workspaceId: "ws-a" }),
@@ -235,7 +235,7 @@ describe("POST /api/reminders/send-queue — session-derived tenancy", () => {
 
 describe("POST /api/invoice/public/claim — token-only public boundary", () => {
 	function claimRequest(body: Record<string, unknown>) {
-		return new Request("http://velure.test/api/invoice/public/claim", {
+		return new Request("http://invoicly.test/api/invoice/public/claim", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify(body),
@@ -296,7 +296,7 @@ describe("POST /api/invoice/claims/$id — session-derived tenancy", () => {
 		});
 
 		const forged = new Request(
-			"http://velure.test/api/invoice/claims/claim-b",
+			"http://invoicly.test/api/invoice/claims/claim-b",
 			{
 				method: "POST",
 				headers: { "content-type": "application/json" },
@@ -330,7 +330,7 @@ describe("POST /api/invoice/claims/$id — session-derived tenancy", () => {
 		);
 
 		const response = await handleClaimAction({
-			request: new Request("http://velure.test/api/invoice/claims/claim-a", {
+			request: new Request("http://invoicly.test/api/invoice/claims/claim-a", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
 				body: JSON.stringify({ action: "confirm" }),
@@ -349,7 +349,7 @@ describe("GET /api/invoice/claims — session-scoped claim list", () => {
 
 		const response = await handleClaimsList({
 			request: new Request(
-				"http://velure.test/api/invoice/claims?invoiceId=inv-a",
+				"http://invoicly.test/api/invoice/claims?invoiceId=inv-a",
 			),
 		});
 
@@ -363,7 +363,7 @@ describe("GET /api/invoice/claims — session-scoped claim list", () => {
 
 		const response = await handleClaimsList({
 			request: new Request(
-				"http://velure.test/api/invoice/claims?invoiceId=inv-a",
+				"http://invoicly.test/api/invoice/claims?invoiceId=inv-a",
 			),
 		});
 

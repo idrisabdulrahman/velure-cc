@@ -28,7 +28,7 @@ export const Route = createLazyFileRoute("/auth")({
 });
 
 type Mode = "sign-in" | "sign-up" | "forgot" | "reset";
-const pendingBusinessNameKey = "velure.pending-business-name";
+const pendingBusinessNameKey = "invoicly.pending-business-name";
 const authSubmitRetryDelaysMs = [350, 900, 1800] as const;
 // Kept in step with `emailAndPassword.minPasswordLength` in `src/lib/auth.ts`:
 // the server rejects anything shorter when a password is *set* (sign-up, reset).
@@ -249,7 +249,7 @@ function AuthPage() {
 		if (!hydrated) return;
 		if (typeof window === "undefined") return;
 
-		const savedPreference = window.localStorage.getItem("velure.remember-me");
+		const savedPreference = window.localStorage.getItem("invoicly.remember-me");
 		if (savedPreference === "false") {
 			setRememberMe(false);
 		}
@@ -258,7 +258,7 @@ function AuthPage() {
 	useEffect(() => {
 		if (!hydrated) return;
 		if (typeof window === "undefined") return;
-		window.localStorage.setItem("velure.remember-me", String(rememberMe));
+		window.localStorage.setItem("invoicly.remember-me", String(rememberMe));
 	}, [hydrated, rememberMe]);
 
 	useEffect(() => {

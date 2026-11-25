@@ -58,7 +58,7 @@ import { getCollectionOverview } from "#/server/data/reminders";
 const matchesPathSegment = (pathname: string, path: string) =>
 	pathname === path || pathname.startsWith(`${path}/`);
 
-const pendingBusinessNameKey = "velure.pending-business-name";
+const pendingBusinessNameKey = "invoicly.pending-business-name";
 
 // Same default filter shapes the pages use, so the layout's count queries
 // share the pages' React Query cache instead of fetching twice.

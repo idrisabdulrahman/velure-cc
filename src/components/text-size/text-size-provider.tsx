@@ -25,13 +25,27 @@ type TextSizeContextValue = {
 	cycleSize: () => void;
 };
 
-const textSizeStorageKey = "velure.textSize";
+const textSizeStorageKey = "invoicly.textSize";
+// Renamed from `velure.textSize` (2026-11-22). Read once as a fallback so
+// existing users keep their saved size, then migrated to the new key.
+const legacyTextSizeStorageKey = "velure.textSize";
 const TextSizeContext = createContext<TextSizeContextValue | null>(null);
 
 function readStoredSize(): TextSize {
 	if (typeof window === "undefined") return "sm";
 
-	const stored = window.localStorage.getItem(textSizeStorageKey);
+	let stored = window.localStorage.getItem(textSizeStorageKey);
+	if (stored === null) {
+		stored = window.localStorage.getItem(legacyTextSizeStorageKey);
+		if (stored !== null) {
+			try {
+				window.localStorage.setItem(textSizeStorageKey, stored);
+				window.localStorage.removeItem(legacyTextSizeStorageKey);
+			} catch {
+				// Storage unavailable — the read value still applies.
+			}
+		}
+	}
 	return TEXT_SIZE_ORDER.includes(stored as TextSize)
 		? (stored as TextSize)
 		: "base";

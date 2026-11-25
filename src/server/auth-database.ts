@@ -41,7 +41,7 @@ import pg from "pg";
  * Supabase's EU pooler with the invocation strategy, every authenticated request
  * cost a fresh connection (~1.0-2.4 s); a real `pg.Pool` amortises that to a
  * pool checkout. Set `AUTH_DB_MODE=pool` on a Node host to opt in (see
- * `deploy/velure.env.example`). The default stays Worker-safe so an accidental
+ * `deploy/invoicly.env.example`). The default stays Worker-safe so an accidental
  * Cloudflare deployment cannot regress into error 1101.
  */
 export type AuthPool = {

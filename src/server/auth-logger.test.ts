@@ -13,7 +13,7 @@ describe("redactEmails", () => {
 	it("redacts emails embedded in a sentence", () => {
 		expect(
 			redactEmails(
-				"Credential account not found for ada.lovelace+work@velure.ng",
+				"Credential account not found for ada.lovelace+work@invoicly.ng",
 			),
 		).toBe("Credential account not found for [redacted-email]");
 	});
@@ -70,7 +70,7 @@ describe("createAuthLogger", () => {
 	it("redacts emails nested in the log arguments", () => {
 		const error = vi.spyOn(console, "error").mockImplementation(() => {});
 		createAuthLogger().log("error", "hook failed", {
-			user: { email: "ada@velure.ng", id: "usr_1" },
+			user: { email: "ada@invoicly.ng", id: "usr_1" },
 		});
 
 		expect(error).toHaveBeenCalledWith("hook failed", {
@@ -91,7 +91,7 @@ describe("createAuthLogger", () => {
 
 	it("does not recurse without bound", () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
-		let nested: Record<string, unknown> = { email: "deep@velure.ng" };
+		let nested: Record<string, unknown> = { email: "deep@invoicly.ng" };
 		for (let i = 0; i < 10; i += 1) nested = { level: nested };
 
 		expect(() => createAuthLogger().log("error", "deep", nested)).not.toThrow();

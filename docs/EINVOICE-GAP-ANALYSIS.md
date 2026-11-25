@@ -5,7 +5,7 @@ Written 2026-10-30. Read-only research; no code, schema or customer-facing copy
 was changed by this task.
 
 > **Not legal or tax advice. Nothing here claims NRS compliance or clearance.**
-> This document maps Velure's internal canonical model against what is
+> This document maps Invoicly's internal canonical model against what is
 > *officially published* about the NRS/MBS schema. Where a field is not covered
 > by a public source it is marked **UNKNOWN**, never guessed.
 
@@ -90,7 +90,7 @@ that verified record and does no additional client-ID lookup. It must preserve
 available values and avoid fabricating unknown data") and in the code comment on
 `toCanonicalInvoice` (`src/features/einvoicing/canonical-invoice.ts:177`).
 `SPEC.md D1` asked for a model "independent of any one country or provider", so
-the fields mirror what Velure already stores (seller/buyer identity, lines,
+the fields mirror what Invoicly already stores (seller/buyer identity, lines,
 tax/withholding, totals) rather than any authority's field list.
 
 The "around 55 mandatory fields" figure in the T6 hypothesis is **not in this
@@ -119,7 +119,7 @@ for every 10-digit, non-placeholder string. `SPEC.md §6.2 item 4` says "10
 digits is what the UI hints at; **confirm the current format and any checksum**".
 
 > Note: the Etranzact sample uses a **dashed** TIN (`TIN-0099990001`,
-> `45678901-0003`), unlike Velure's `^\d{10}$`. This is a real inconsistency to
+> `45678901-0003`), unlike Invoicly's `^\d{10}$`. This is a real inconsistency to
 > raise with a provider/NRS; see §9. It may be provider formatting, not the NRS
 > rule — do not assume either way.
 
@@ -263,18 +263,18 @@ rejection catalogue is public on the NRS portal or the provider docs retrieved.
 codes such as `BUYER_TIN_INVALID`, `SUPPLIER_TIN_INVALID`,
 `LINE_CLASSIFICATION_MISSING`, `TOTAL_MISMATCH`, `LOCAL_VALIDATION_FAILED`,
 `IDEMPOTENCY_KEY_REQUIRED`, `IDEMPOTENCY_KEY_REUSED`, `MOCK_REJECTION` to
-plain-language fixes. **These are Velure-invented mock codes, not real NRS or
-provider codes.** (`IDEMPOTENCY_KEY_*` are Velure's own queue semantics; the
+plain-language fixes. **These are Invoicly-invented mock codes, not real NRS or
+provider codes.** (`IDEMPOTENCY_KEY_*` are Invoicly's own queue semantics; the
 `MOCK_REJECTION` code is from the mock adapter.) The local validator codes
 (`tin_required`, `currency_invalid`, `subtotal_mismatch`, …) are likewise
-Velure's own pre-submission checks.
+Invoicly's own pre-submission checks.
 
 **Consequence:** the real code catalogue is **UNKNOWN** and must come from the
 NITDA guideline, the NRS API docs, or a provider contract before D5
 ("provider rejection codes mapped to plain-language fixes") can be truthful.
 
 **Action (2026-10-30):** the guidance map and the mock adapter are being changed
-so every Velure-invented code carries a `MOCK_` prefix (e.g.
+so every Invoicly-invented code carries a `MOCK_` prefix (e.g.
 `MOCK_BUYER_TIN_INVALID`), so no invented code can be mistaken for a real NRS or
 provider code. See §10 item 4.
 
@@ -288,7 +288,7 @@ provider code. See §10 item 4.
 4. Whether third-party apps may integrate via a certified provider's API, and on
    what commercial terms (`SPEC.md §8` lists this as unconfirmed).
 5. Whether the TIN is `^\d{10}$` or a dashed format (provider sample shows
-   dashed; Velure assumes digits).
+   dashed; Invoicly assumes digits).
 6. Any **B2G** specifics (mentioned as an `invoice_kind`) beyond the sample.
 
 ## 8. T7 — accredited providers / APPs / SIs
@@ -322,15 +322,15 @@ cost/provider/timeline constraints yet.
 
 > **★ Ask first, and get it in writing: Q4 (accreditation) and Q2 (TIN format).**
 > **Do not build a real adapter until Q4 is answered in writing** — the risk is
-> building an adapter Velure is not permitted to operate. The SI role (map to
-> UBL, apply the CSID, register devices) is exactly what a Velure→provider
+> building an adapter Invoicly is not permitted to operate. The SI role (map to
+> UBL, apply the CSID, register devices) is exactly what a Invoicly→provider
 > integration would rely on someone doing, so "can we be a plain client?"
 > is load-bearing, not a later detail.
 
 **Working answers from the user [Likely, 2026-10-30] where they can be given:**
 
 - **Q9 (auth):** both are true at different layers — OAuth 2.0 is the NRS-facing
-  side, the provider's API key + HMAC is the provider-facing side. Velure would
+  side, the provider's API key + HMAC is the provider-facing side. Invoicly would
   use the provider's scheme, not NRS's.
 - **Q10 (party of record):** the **taxpayer**. The process flow starts with
   enabling each taxpayer and registering their device, which implies
@@ -345,7 +345,7 @@ cost/provider/timeline constraints yet.
    it available without sign-in? Can we get the NITDA guideline PDF directly?
 2. ★ What is the **TIN format** required in `accounting_supplier_party.tin` /
    `accounting_customer_party.tin` — plain 10 digits or a dashed/alphanumeric
-   form (the provider sample shows a dashed form)? Is there a checksum? (Velure
+   form (the provider sample shows a dashed form)? Is there a checksum? (Invoicly
    currently assumes `^\d{10}$` and is relaxing it to a warning.)
 3. Is the published **field-level rejection code** list available, or only HTTP
    statuses? How are errors returned per field?
@@ -369,7 +369,7 @@ cost/provider/timeline constraints yet.
 9. Is there a **public sandbox**? What credentials/registration does it need,
    and what is the auth model (the NRS portal says OAuth 2.0; Etranzact uses
    API key + HMAC signature — which applies)?
-10. As a Velure customer's supplier, **who is the accredited party of record** —
+10. As a Invoicly customer's supplier, **who is the accredited party of record** —
     the customer, or us — and what documents do we sign?
 11. **Pricing and volume terms**: per-invoice cost, platform/minimum fees, and
     tiers; what happens at higher volumes.
@@ -379,7 +379,7 @@ cost/provider/timeline constraints yet.
     pre-submission `validate` call exists (Etranzact offers one).
 14. **Multi-currency and withholding (WHT)**: do you accept foreign-currency
     invoices, and **does your `payable_amount` subtract WHT?** The provider
-    sample has no WHT field, so if NRS's payable ignores WHT, Velure's
+    sample has no WHT field, so if NRS's payable ignores WHT, Invoicly's
     withholding-adjusted `payableTotal` will disagree with theirs — confirm
     which figure is submitted as `payable_amount`.
 15. **Data protection**: where is invoice data stored/processed, and what NDPA
@@ -390,7 +390,7 @@ cost/provider/timeline constraints yet.
 Priority order after the 2026-10-30 review:
 
 1. ★ **Answer Q4 (accreditation) in writing before building any real adapter.**
-   Do not build an adapter Velure may not be permitted to operate.
+   Do not build an adapter Invoicly may not be permitted to operate.
 2. **Fix the structured-address mapper** — the data already exists upstream
    (street/LGA/state/country) and is flattened to one string; confirm and fix
    this **first** among the model gaps, then `invoice_kind`, HS/product codes,

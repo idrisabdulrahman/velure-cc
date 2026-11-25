@@ -7,7 +7,7 @@ const MARKER = /^[a-zA-Z0-9_-]{1,80}$/;
 function allowedRuntime() {
 	return (
 		process.env.NODE_ENV !== "production" &&
-		process.env.VELURE_ENABLE_TEST_FIXTURES === "1"
+		process.env.INVOICLY_ENABLE_TEST_FIXTURES === "1"
 	);
 }
 

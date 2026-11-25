@@ -30,7 +30,7 @@ afterEach(() => vi.clearAllMocks());
 const CONTEXT = { client: { tag: "user-scoped" }, userId: "user-b" };
 
 function request(body: unknown, raw = false) {
-	return new Request("https://velure.example/api/invoice/claims/claim-1", {
+	return new Request("https://invoicly.example/api/invoice/claims/claim-1", {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: raw ? (body as string) : JSON.stringify(body),

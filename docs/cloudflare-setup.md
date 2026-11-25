@@ -1,4 +1,4 @@
-# Velure on Cloudflare Workers (free plan)
+# Invoicly on Cloudflare Workers (free plan)
 
 Authoritative hosting procedure. Governing rules live in `AGENTS.md` §10; this
 file is the procedure. Product direction, target architecture, and migration
@@ -50,7 +50,7 @@ Not used: D1, KV. Supabase Postgres is the system of record.
 
 ## 3. Free-tier budget (verified 2026-11-02)
 
-| Resource | Free limit | Consequence for Velure |
+| Resource | Free limit | Consequence for Invoicly |
 |---|---|---|
 | Worker requests | 100,000/day | Static asset requests are free and do not count. SSR, server functions, and API routes do. |
 | Worker **CPU** | **10 ms per invocation** | The binding constraint. Waiting on DB/network does not count; JS execution does. |
@@ -71,7 +71,7 @@ notification configured.
 
 ## 4. Build toolchain: Nitro, not the Vite plugin
 
-Velure builds through **Nitro** (`nitro/vite` in `vite.config.ts`), not
+Invoicly builds through **Nitro** (`nitro/vite` in `vite.config.ts`), not
 `@cloudflare/vite-plugin`. Nitro's own documentation
 (`node_modules/nitro/dist/docs/1.deploy/2.providers/5.cloudflare.md`) names
 **`cloudflare_module`** as the Workers preset and explicitly recommends it over
@@ -110,7 +110,7 @@ after every binding change.
 ```jsonc
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "velure",
+  "name": "invoicly",
   "compatibility_date": "2026-11-02",
   "observability": { "enabled": true }
 }
@@ -149,7 +149,7 @@ through the Worker or Hyperdrive. This keeps schema statements out of the
 
 ### 5.2 Per-request connection objects
 
-Never hold a socket in a module-level singleton. Velure already satisfies this
+Never hold a socket in a module-level singleton. Invoicly already satisfies this
 in a measured, deliberate way — do not "fix" it:
 
 - `src/server/auth-database.ts` keeps connections **invocation-scoped**, opened
@@ -223,7 +223,7 @@ The config therefore selects the header by runtime
 | Workers | `cf-connecting-ip` | The edge sets it and strips any client copy, so it cannot be forged. There is no `x-forwarded-for`. |
 | Node (VPS) | `x-forwarded-for` | nginx must REPLACE it (`proxy_set_header X-Forwarded-For $remote_addr`). Trusting `cf-connecting-ip` here would be spoofable, because nothing in front of the process validates it. |
 
-Verification after the fix, on `https://velure.noicepikachu.workers.dev`: three
+Verification after the fix, on `https://invoicly.noicepikachu.workers.dev`: three
 failed sign-ins returned 401 and the fourth returned 429 with
 `{"message":"Too many requests. Please try again later."}`, and the table held
 exactly one row with `count = 4` whose `key` is a 64-character hex digest.
@@ -263,7 +263,7 @@ stored hashes stay valid. The upgrade (1.4.9 -> 1.7.15) is still worth taking �
 it drops the pure-JS path and picks up security fixes — but per §6.1 the native
 path was already measured at ~142 ms and is not sufficient on its own.
 
-All configuration Velure relies on exists in 1.7.15 (`emailAndPassword`,
+All configuration Invoicly relies on exists in 1.7.15 (`emailAndPassword`,
 `minPasswordLength`, `maxPasswordLength`, `revokeSessionsOnPasswordReset`,
 `rateLimit.customRules`, `advanced.ipAddressHeaders`, `advanced.useSecureCookies`,
 `trustedOrigins`, `databaseHooks`, and the `emailAndPassword.password.hash` /
@@ -344,7 +344,7 @@ There is **no file storage today**: no Supabase Storage bucket, no upload route,
 no filesystem writes. Logos are a `logo_url` text column pointing at an external
 URL. R2 is greenfield, not a migration.
 
-1. Create a **private** bucket (`velure-files`). No public bucket URL, no
+1. Create a **private** bucket (`invoicly-files`). No public bucket URL, no
    `r2.dev` access.
 2. Access only through the Worker binding behind an authenticated server
    function. Never mint public links.
@@ -521,8 +521,8 @@ Recorded so the next agent does not re-derive them:
 
 ## 13.1 What the first live deploy proved
 
-Deployed 2026-11-03 to `https://velure.noicepikachu.workers.dev`
-(worker `velure`, hasher `velure-password-hasher`, account
+Deployed 2026-11-03 to `https://invoicly.noicepikachu.workers.dev`
+(worker `invoicly`, hasher `invoicly-password-hasher`, account
 `699cc6ec07aa29df7034163270b23f87`).
 
 - Build and deploy are reproducible: `pnpm build:worker` then `npx wrangler

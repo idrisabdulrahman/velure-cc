@@ -16,14 +16,24 @@ type ThemeContextValue = {
 	toggleTheme: () => void;
 };
 
-const themeStorageKey = "velure.theme";
+const themeStorageKey = "invoicly.theme";
+// Renamed from `velure.theme` (2026-11-22). Read once as a fallback so every
+// existing user keeps their saved theme, then migrated to the new key.
+const legacyThemeStorageKey = "velure.theme";
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function readStoredTheme(): Theme {
 	if (typeof window === "undefined") return "dark";
 
 	try {
-		const storedTheme = window.localStorage.getItem(themeStorageKey);
+		let storedTheme = window.localStorage.getItem(themeStorageKey);
+		if (storedTheme === null) {
+			storedTheme = window.localStorage.getItem(legacyThemeStorageKey);
+			if (storedTheme !== null) {
+				window.localStorage.setItem(themeStorageKey, storedTheme);
+				window.localStorage.removeItem(legacyThemeStorageKey);
+			}
+		}
 		return storedTheme === "light" || storedTheme === "dark"
 			? storedTheme
 			: "dark";

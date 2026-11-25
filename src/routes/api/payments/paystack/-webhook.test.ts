@@ -36,7 +36,7 @@ function chargeSuccessBody(overrides: Record<string, unknown> = {}) {
 		data: {
 			id: 12345,
 			status: "success",
-			reference: "velure-ref",
+			reference: "invoicly-ref",
 			amount: 150_000,
 			currency: "NGN",
 			customer: { email: "payer@example.com" },
@@ -61,7 +61,7 @@ describe("verifyPaystackSignature", () => {
 		const secret = "sk_test_route_secret";
 		const body = JSON.stringify({
 			event: "charge.success",
-			data: { reference: "velure-ref" },
+			data: { reference: "invoicly-ref" },
 		});
 
 		expect(verifyPaystackSignature(secret, body, signature(secret, body))).toBe(
@@ -84,7 +84,7 @@ describe("verifyPaystackSignature", () => {
 		const secret = "sk_test_route_secret";
 		const body = JSON.stringify({
 			event: "charge.success",
-			data: { reference: "velure-ref", amount: 100 },
+			data: { reference: "invoicly-ref", amount: 100 },
 		});
 		const tampered = body.replace("100", "999");
 		expect(
@@ -174,7 +174,7 @@ describe("Paystack webhook route", () => {
 		vi.stubEnv("PAYSTACK_SECRET_KEY", "sk_test_route_secret");
 		const body = JSON.stringify({
 			event: "charge.success",
-			data: { status: "success", reference: "velure-ref" },
+			data: { status: "success", reference: "invoicly-ref" },
 		});
 		const response = await post(body);
 		expect(response.status).toBe(400);
@@ -201,7 +201,7 @@ describe("Paystack webhook route", () => {
 		confirm.mockResolvedValueOnce({
 			ok: true,
 			duplicate: false,
-			reference: "velure-ref",
+			reference: "invoicly-ref",
 			paid: true,
 		});
 
@@ -212,7 +212,7 @@ describe("Paystack webhook route", () => {
 		expect(confirm).toHaveBeenCalledTimes(1);
 		const arg = confirm.mock.calls[0]?.[0];
 		expect(arg).toMatchObject({
-			reference: "velure-ref",
+			reference: "invoicly-ref",
 			amountKobo: 150_000,
 			currency: "NGN",
 			eventType: "charge.success",
@@ -256,7 +256,7 @@ describe("Paystack webhook route", () => {
 			vi.mocked(confirmPaystackWebhookPayment).mockResolvedValueOnce({
 				ok: false,
 				duplicate: false,
-				reference: "velure-ref",
+				reference: "invoicly-ref",
 				reason,
 			});
 			const response = await post(chargeSuccessBody());
@@ -269,7 +269,7 @@ describe("Paystack webhook route", () => {
 			// F11: exactly one structured anomaly event per rejection.
 			expect(logPaymentAnomaly).toHaveBeenCalledWith({
 				type: "business_rejection",
-				reference: "velure-ref",
+				reference: "invoicly-ref",
 				reason,
 			});
 		}
@@ -305,7 +305,7 @@ describe("Paystack webhook route", () => {
 			event: "transfer.success",
 			data: {
 				status: "success",
-				reference: "velure-ref",
+				reference: "invoicly-ref",
 				amount: 100,
 				currency: "NGN",
 			},
@@ -321,19 +321,19 @@ describe("Paystack webhook route", () => {
 
 	it("passes a webhook replay through the same reference for idempotent handling", async () => {
 		vi.stubEnv("PAYSTACK_SECRET_KEY", "sk_test_route_secret");
-		const body = chargeSuccessBody({ reference: "velure-replay-ref" });
+		const body = chargeSuccessBody({ reference: "invoicly-replay-ref" });
 		const confirm = vi.mocked(confirmPaystackWebhookPayment);
 		confirm
 			.mockResolvedValueOnce({
 				ok: true,
 				duplicate: false,
-				reference: "velure-replay-ref",
+				reference: "invoicly-replay-ref",
 				paid: true,
 			})
 			.mockResolvedValueOnce({
 				ok: true,
 				duplicate: true,
-				reference: "velure-replay-ref",
+				reference: "invoicly-replay-ref",
 			});
 
 		await expect((await post(body)).json()).resolves.toMatchObject({

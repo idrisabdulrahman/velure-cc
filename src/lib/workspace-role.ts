@@ -37,15 +37,15 @@ export function isWorkspaceViewer(
 export function useWorkspaceRole(): WorkspaceRole | null {
 	const { data: session } = authClient.useSession();
 	const userId = session?.user.id;
-	const { client, velureUserId } = useSupabaseSession(userId);
+	const { client, invoiclyUserId } = useSupabaseSession(userId);
 	const { data } = useQuery({
-		queryKey: ["supabase-workspace-context", velureUserId ?? "none"],
+		queryKey: ["supabase-workspace-context", invoiclyUserId ?? "none"],
 		queryFn: () => {
-			if (!client || !velureUserId)
+			if (!client || !invoiclyUserId)
 				throw new Error("Supabase session unavailable.");
-			return getWorkspaceContext(client, velureUserId);
+			return getWorkspaceContext(client, invoiclyUserId);
 		},
-		enabled: Boolean(client && velureUserId),
+		enabled: Boolean(client && invoiclyUserId),
 	});
 	return data?.role ?? null;
 }

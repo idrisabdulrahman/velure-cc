@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 390" role="img" aria-labelledby="title desc">
-  <title id="title">Velure invoice lifecycle</title>
+  <title id="title">Invoicly invoice lifecycle</title>
   <desc id="desc">Prepare an invoice, validate it, and simulate submission in a mock sandbox. Only the mock accepted path continues to customer delivery and payment tracking. Rejected mock invoices need corrections. Neither result is NRS or MBS clearance.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">

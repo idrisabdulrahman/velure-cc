@@ -1,10 +1,12 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "velure",
+	"name": "invoicly",
 	"compatibility_date": "2026-11-02",
-	// The workers.dev origin is the temporary public entry point
-	// (https://velure.noicepikachu.workers.dev) while the custom domain is not
-	// moved. Pinned explicitly so the deploy does not depend on a default.
+	// Renamed from `velure` (2026-11-22). The public entry points are the
+	// custom domain https://invoicly.cv (attached via the Cloudflare Custom
+	// Domains API, service `invoicly`) and
+	// https://invoicly.noicepikachu.workers.dev. `workers_dev` stays pinned so
+	// the deploy does not depend on a default.
 	"workers_dev": true,
 	// Per-version preview URLs are extra public endpoints nothing here uses.
 	"preview_urls": false,
@@ -23,13 +25,15 @@
 	// exported from a Worker entry and Nitro owns this Worker's entry module.
 	// `script_name` binds the namespace defined there; the class is not redefined
 	// here, so this file needs no `migrations` block. Deploy order matters:
-	// `velure-password-hasher` must exist before this Worker is deployed.
+	// `invoicly-password-hasher` (deploy/password-hasher, deployed with
+	// `npx wrangler deploy --config deploy/password-hasher/wrangler.jsonc`)
+	// must exist before this Worker is deployed.
 	"durable_objects": {
 		"bindings": [
 			{
 				"name": "PASSWORD_HASHER",
 				"class_name": "PasswordHasher",
-				"script_name": "velure-password-hasher"
+				"script_name": "invoicly-password-hasher"
 			}
 		]
 	}

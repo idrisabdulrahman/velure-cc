@@ -187,7 +187,7 @@ export async function ensurePaystackTransferCharge(token: string) {
 	// webhook that races the response (or a failed post-provider DB update)
 	// can never leave a paid reference unmatched. The previous `claim-...`
 	// placeholder only became the real reference after the network call.
-	const reference = `velure-${String(row.id).replace(/[^a-zA-Z0-9]/g, "")}-${now}`;
+	const reference = `invoicly-${String(row.id).replace(/[^a-zA-Z0-9]/g, "")}-${now}`;
 	const { data: claim, error: claimError } = await client
 		.from("payment_charges")
 		.insert({

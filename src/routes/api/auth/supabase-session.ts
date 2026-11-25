@@ -15,7 +15,7 @@ export async function handle({ request }: { request: Request }) {
 			ok: true,
 			accessToken: minted.accessToken,
 			expiresAt: minted.expiresAt,
-			velureUserId: minted.velureUserId,
+			invoiclyUserId: minted.invoiclyUserId,
 		});
 	} catch (error) {
 		console.error("Failed to mint Supabase session", safeErrorDetails(error));
