@@ -6,9 +6,8 @@ import { describe, expect, it } from "vitest";
 /**
  * G1 browser boundary — proof that audit writes happen only on the server.
  *
- * `src/server/data/audit.ts` holds the service-role INSERT and
- * `src/server/data/paystack-server.ts` holds the remaining service-role
- * Paystack machinery; both must stay out of every browser-reachable module
+ * `src/server/data/audit.ts` and `src/server/supabase.ts` hold the
+ * service-role access; they must stay out of every browser-reachable module
  * (AGENTS.md §8: the service-role key never reaches a client bundle).
  *
  * This test walks the real import graph starting from the browser entry
@@ -17,8 +16,7 @@ import { describe, expect, it } from "vitest";
  * plus `src/router.tsx`) and asserts:
  *
  *   1. no reachable module references `getSupabaseAdminClient` or imports
- *      `#/server/supabase`, and none of them is the server-only audit or
- *      Paystack module;
+ *      `#/server/supabase`, and none of them is the server-only audit module;
  *   2. the browser-safe transport (`./audit-client`) and the lifecycle
  *      modules ARE reachable — otherwise the walk would prove nothing.
  *
@@ -154,10 +152,9 @@ describe("browser boundary (no service-role code client-side)", () => {
 		expect(offenders.map(relative)).toEqual([]);
 	});
 
-	it("keeps the server-only audit, Paystack and session modules out of the browser graph", () => {
+	it("keeps the server-only audit and session modules out of the browser graph", () => {
 		for (const forbidden of [
 			"server/data/audit.ts",
-			"server/data/paystack-server.ts",
 			"server/supabase.ts",
 			"server/invoice-repository.ts",
 			"routes/api/invoice/audit.ts",

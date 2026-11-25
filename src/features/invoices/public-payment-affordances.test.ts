@@ -24,7 +24,7 @@ describe("getPublicPaymentAffordances", () => {
 		expect(affordances).toEqual({
 			isDraft: true,
 			showCollectionPanel: false,
-			canUsePaystackTransfer: false,
+			canUseBankTransfer: false,
 			canClaimPayment: false,
 		});
 	});
@@ -41,7 +41,7 @@ describe("getPublicPaymentAffordances", () => {
 
 		expect(affordances.isDraft).toBe(true);
 		expect(affordances.showCollectionPanel).toBe(false);
-		expect(affordances.canUsePaystackTransfer).toBe(false);
+		expect(affordances.canUseBankTransfer).toBe(false);
 		expect(affordances.canClaimPayment).toBe(false);
 	});
 
@@ -56,7 +56,7 @@ describe("getPublicPaymentAffordances", () => {
 		expect(affordances).toEqual({
 			isDraft: false,
 			showCollectionPanel: true,
-			canUsePaystackTransfer: true,
+			canUseBankTransfer: true,
 			canClaimPayment: true,
 		});
 	});
@@ -83,7 +83,7 @@ describe("getPublicPaymentAffordances", () => {
 		});
 
 		expect(affordances.showCollectionPanel).toBe(false);
-		expect(affordances.canUsePaystackTransfer).toBe(false);
+		expect(affordances.canUseBankTransfer).toBe(false);
 		expect(affordances.canClaimPayment).toBe(false);
 	});
 

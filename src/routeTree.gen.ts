@@ -68,9 +68,6 @@ import { Route as ApiInvoiceSubmissionIdRouteImport } from './routes/api/invoice
 import { Route as ApiInvoiceSubmissionsScheduledRouteImport } from './routes/api/invoice/submissions/scheduled'
 import { Route as ApiPaymentsBachsInitializeRouteImport } from './routes/api/payments/bachs/initialize'
 import { Route as ApiPaymentsBachsWebhookRouteImport } from './routes/api/payments/bachs/webhook'
-import { Route as ApiPaymentsPaystackInitializeRouteImport } from './routes/api/payments/paystack/initialize'
-import { Route as ApiPaymentsPaystackReconcileRouteImport } from './routes/api/payments/paystack/reconcile'
-import { Route as ApiPaymentsPaystackWebhookRouteImport } from './routes/api/payments/paystack/webhook'
 import { Route as ApiSecurityLinkStepupRequestRouteImport } from './routes/api/security/link-stepup/request'
 import { Route as ApiSecurityLinkStepupStatusRouteImport } from './routes/api/security/link-stepup/status'
 import { Route as ApiSecurityLinkStepupVerifyRouteImport } from './routes/api/security/link-stepup/verify'
@@ -383,24 +380,6 @@ const ApiPaymentsBachsWebhookRoute = ApiPaymentsBachsWebhookRouteImport.update({
   path: '/api/payments/bachs/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPaymentsPaystackInitializeRoute =
-  ApiPaymentsPaystackInitializeRouteImport.update({
-    id: '/api/payments/paystack/initialize',
-    path: '/api/payments/paystack/initialize',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPaymentsPaystackReconcileRoute =
-  ApiPaymentsPaystackReconcileRouteImport.update({
-    id: '/api/payments/paystack/reconcile',
-    path: '/api/payments/paystack/reconcile',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiPaymentsPaystackWebhookRoute =
-  ApiPaymentsPaystackWebhookRouteImport.update({
-    id: '/api/payments/paystack/webhook',
-    path: '/api/payments/paystack/webhook',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiSecurityLinkStepupRequestRoute =
   ApiSecurityLinkStepupRequestRouteImport.update({
     id: '/api/security/link-stepup/request',
@@ -479,9 +458,6 @@ export interface FileRoutesByFullPath {
   '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
   '/api/payments/bachs/initialize': typeof ApiPaymentsBachsInitializeRoute
   '/api/payments/bachs/webhook': typeof ApiPaymentsBachsWebhookRoute
-  '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
-  '/api/payments/paystack/reconcile': typeof ApiPaymentsPaystackReconcileRoute
-  '/api/payments/paystack/webhook': typeof ApiPaymentsPaystackWebhookRoute
   '/api/security/link-stepup/request': typeof ApiSecurityLinkStepupRequestRoute
   '/api/security/link-stepup/status': typeof ApiSecurityLinkStepupStatusRoute
   '/api/security/link-stepup/verify': typeof ApiSecurityLinkStepupVerifyRoute
@@ -541,9 +517,6 @@ export interface FileRoutesByTo {
   '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
   '/api/payments/bachs/initialize': typeof ApiPaymentsBachsInitializeRoute
   '/api/payments/bachs/webhook': typeof ApiPaymentsBachsWebhookRoute
-  '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
-  '/api/payments/paystack/reconcile': typeof ApiPaymentsPaystackReconcileRoute
-  '/api/payments/paystack/webhook': typeof ApiPaymentsPaystackWebhookRoute
   '/api/security/link-stepup/request': typeof ApiSecurityLinkStepupRequestRoute
   '/api/security/link-stepup/status': typeof ApiSecurityLinkStepupStatusRoute
   '/api/security/link-stepup/verify': typeof ApiSecurityLinkStepupVerifyRoute
@@ -609,9 +582,6 @@ export interface FileRoutesById {
   '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
   '/api/payments/bachs/initialize': typeof ApiPaymentsBachsInitializeRoute
   '/api/payments/bachs/webhook': typeof ApiPaymentsBachsWebhookRoute
-  '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
-  '/api/payments/paystack/reconcile': typeof ApiPaymentsPaystackReconcileRoute
-  '/api/payments/paystack/webhook': typeof ApiPaymentsPaystackWebhookRoute
   '/api/security/link-stepup/request': typeof ApiSecurityLinkStepupRequestRoute
   '/api/security/link-stepup/status': typeof ApiSecurityLinkStepupStatusRoute
   '/api/security/link-stepup/verify': typeof ApiSecurityLinkStepupVerifyRoute
@@ -678,9 +648,6 @@ export interface FileRouteTypes {
     | '/api/invoice/submissions/scheduled'
     | '/api/payments/bachs/initialize'
     | '/api/payments/bachs/webhook'
-    | '/api/payments/paystack/initialize'
-    | '/api/payments/paystack/reconcile'
-    | '/api/payments/paystack/webhook'
     | '/api/security/link-stepup/request'
     | '/api/security/link-stepup/status'
     | '/api/security/link-stepup/verify'
@@ -740,9 +707,6 @@ export interface FileRouteTypes {
     | '/api/invoice/submissions/scheduled'
     | '/api/payments/bachs/initialize'
     | '/api/payments/bachs/webhook'
-    | '/api/payments/paystack/initialize'
-    | '/api/payments/paystack/reconcile'
-    | '/api/payments/paystack/webhook'
     | '/api/security/link-stepup/request'
     | '/api/security/link-stepup/status'
     | '/api/security/link-stepup/verify'
@@ -807,9 +771,6 @@ export interface FileRouteTypes {
     | '/api/invoice/submissions/scheduled'
     | '/api/payments/bachs/initialize'
     | '/api/payments/bachs/webhook'
-    | '/api/payments/paystack/initialize'
-    | '/api/payments/paystack/reconcile'
-    | '/api/payments/paystack/webhook'
     | '/api/security/link-stepup/request'
     | '/api/security/link-stepup/status'
     | '/api/security/link-stepup/verify'
@@ -860,9 +821,6 @@ export interface RootRouteChildren {
   ApiInvoiceSubmissionsScheduledRoute: typeof ApiInvoiceSubmissionsScheduledRoute
   ApiPaymentsBachsInitializeRoute: typeof ApiPaymentsBachsInitializeRoute
   ApiPaymentsBachsWebhookRoute: typeof ApiPaymentsBachsWebhookRoute
-  ApiPaymentsPaystackInitializeRoute: typeof ApiPaymentsPaystackInitializeRoute
-  ApiPaymentsPaystackReconcileRoute: typeof ApiPaymentsPaystackReconcileRoute
-  ApiPaymentsPaystackWebhookRoute: typeof ApiPaymentsPaystackWebhookRoute
   ApiSecurityLinkStepupRequestRoute: typeof ApiSecurityLinkStepupRequestRoute
   ApiSecurityLinkStepupStatusRoute: typeof ApiSecurityLinkStepupStatusRoute
   ApiSecurityLinkStepupVerifyRoute: typeof ApiSecurityLinkStepupVerifyRoute
@@ -1284,27 +1242,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPaymentsBachsWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/payments/paystack/initialize': {
-      id: '/api/payments/paystack/initialize'
-      path: '/api/payments/paystack/initialize'
-      fullPath: '/api/payments/paystack/initialize'
-      preLoaderRoute: typeof ApiPaymentsPaystackInitializeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/payments/paystack/reconcile': {
-      id: '/api/payments/paystack/reconcile'
-      path: '/api/payments/paystack/reconcile'
-      fullPath: '/api/payments/paystack/reconcile'
-      preLoaderRoute: typeof ApiPaymentsPaystackReconcileRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/payments/paystack/webhook': {
-      id: '/api/payments/paystack/webhook'
-      path: '/api/payments/paystack/webhook'
-      fullPath: '/api/payments/paystack/webhook'
-      preLoaderRoute: typeof ApiPaymentsPaystackWebhookRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/security/link-stepup/request': {
       id: '/api/security/link-stepup/request'
       path: '/api/security/link-stepup/request'
@@ -1461,9 +1398,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInvoiceSubmissionsScheduledRoute: ApiInvoiceSubmissionsScheduledRoute,
   ApiPaymentsBachsInitializeRoute: ApiPaymentsBachsInitializeRoute,
   ApiPaymentsBachsWebhookRoute: ApiPaymentsBachsWebhookRoute,
-  ApiPaymentsPaystackInitializeRoute: ApiPaymentsPaystackInitializeRoute,
-  ApiPaymentsPaystackReconcileRoute: ApiPaymentsPaystackReconcileRoute,
-  ApiPaymentsPaystackWebhookRoute: ApiPaymentsPaystackWebhookRoute,
   ApiSecurityLinkStepupRequestRoute: ApiSecurityLinkStepupRequestRoute,
   ApiSecurityLinkStepupStatusRoute: ApiSecurityLinkStepupStatusRoute,
   ApiSecurityLinkStepupVerifyRoute: ApiSecurityLinkStepupVerifyRoute,

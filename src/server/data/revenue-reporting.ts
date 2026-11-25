@@ -44,8 +44,8 @@ type PaymentLike = {
 	invoiceId: string;
 	amount: number;
 	currency: string;
-	source: "manual" | "paystack";
-	provider?: "paystack";
+	source: "manual" | "bachs";
+	provider?: "bachs";
 	reference?: string;
 	createdAt: number;
 };

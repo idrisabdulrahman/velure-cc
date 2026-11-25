@@ -88,7 +88,11 @@ const DEFAULT_VALUES = {
 		status: "draft",
 	},
 	recurring_invoice_schedules: { generated_count: 0 },
-	payment_charges: { provider: "paystack" },
+	// No payment_charges provider default: legacy Convex charges were
+	// Paystack-era, and the Supabase schema no longer accepts a 'paystack'
+	// provider (see supabase/migrations/20261125000003_remove_paystack.sql).
+	// Leaving the value absent makes a missing provider fail NOT NULL instead
+	// of silently mislabelling the row.
 };
 
 function snake(value) {

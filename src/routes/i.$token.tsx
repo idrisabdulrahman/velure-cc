@@ -729,9 +729,7 @@ function PublicInvoicePage() {
 													<p className="truncate text-xs font-medium text-ink">
 														{payment.provider === "bachs"
 															? "Bachs bank transfer"
-															: payment.provider === "paystack"
-																? "Paystack transfer"
-																: "Manual payment"}
+															: "Manual payment"}
 													</p>
 													<p className="mt-0.5 truncate text-[11px] text-ink-3">
 														{formatInvoiceDate(payment.createdAt, "ng")}

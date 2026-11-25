@@ -68,7 +68,7 @@ type RecurringScheduleRow = {
 	template: string;
 	payment_details: string | null;
 	payment_link: string | null;
-	payment_provider: "manual" | "paystack" | null;
+	payment_provider: "manual" | "bachs" | null;
 	notes: string | null;
 	line_items: Array<{
 		id?: string;

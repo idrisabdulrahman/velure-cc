@@ -1,6 +1,5 @@
 import type { Json } from "#/types/database.types";
 import { dispatchDueInvoiceSubmissions } from "./data/einvoice-submissions";
-import { reconcilePendingPaystackCharges } from "./data/paystack-server";
 import type { Supabase } from "./data/workspaces";
 import { formatErrorMessage } from "./error-message";
 import { dispatchScheduledInvoiceEmails } from "./invoice-mailer";
@@ -67,16 +66,6 @@ export const SCHEDULER_JOBS: SchedulerJob[] = [
 		run: async ({ admin, now }) =>
 			toJobResult(
 				await dispatchDueInvoiceSubmissions({
-					now: () => now,
-					adminClient: admin,
-				}),
-			),
-	},
-	{
-		name: "paystack_reconcile",
-		run: async ({ admin, now }) =>
-			toJobResult(
-				await reconcilePendingPaystackCharges({
 					now: () => now,
 					adminClient: admin,
 				}),

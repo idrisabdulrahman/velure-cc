@@ -20,9 +20,9 @@ import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
  * listInvoicePayments, getPublicPaymentContext, listPublicInvoicePayments.
  * Return shapes match the Convex surface so call sites compile unchanged.
  *
- * Server-internal machinery lives in `./paystack-server`: charge creation
- * (ensurePaystackTransferCharge), Paystack webhook handling
- * (confirmPaystackWebhookPayment), and the internal charge lookups.
+ * Online collection runs through the Bachs routes (`src/features/payments` /
+ * `src/routes/api/payments/bachs`); this module stays the provider-neutral
+ * money surface.
  * Append-only audit-log writes (audit_logs is SELECT-only for members under
  * RLS) go through `./audit-client`, a browser-safe transport that POSTs to
  * `POST /api/invoice/audit`, where the server derives the actor from the
@@ -36,14 +36,7 @@ import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
  * same shapes through a member-scoped client (the gate exercises that).
  */
 
-export type PaymentSource = "manual" | "paystack" | "bachs";
-export type PaymentChargeStatus =
-	| "pending"
-	| "success"
-	| "succeeded"
-	| "failed"
-	| "expired"
-	| "reversed";
+export type PaymentSource = "manual" | "bachs";
 
 export type PaymentTransaction = {
 	_id: string;
@@ -51,7 +44,7 @@ export type PaymentTransaction = {
 	ownerId?: string;
 	invoiceId: string;
 	source: PaymentSource;
-	provider?: "paystack" | "bachs";
+	provider?: "bachs";
 	reference?: string;
 	providerPaymentId?: string;
 	eventType?: string;
@@ -65,46 +58,12 @@ export type PaymentTransaction = {
 	updatedAt: number;
 };
 
-export type PaymentCharge = {
-	_id: string;
-	workspaceId: string;
-	invoiceId: string;
-	provider: "paystack";
-	reference: string;
-	status: PaymentChargeStatus;
-	amount: number;
-	currency: string;
-	accountName?: string;
-	accountNumber?: string;
-	bankName?: string;
-	bankSlug?: string;
-	expiresAt: number;
-	providerStatus?: string;
-	providerMessage?: string;
-	rawResponse?: string;
-	createdAt: number;
-	updatedAt: number;
-};
-
 export type PaymentCapabilities = {
 	automaticBankTransfer: boolean;
-	provider: "paystack" | null;
-};
-
-export type PublicCharge = {
-	reference: string;
-	status: PaymentChargeStatus;
-	amount: number;
-	currency: string;
-	accountName?: string;
-	accountNumber?: string;
-	bankName?: string;
-	expiresAt: number;
 };
 
 export type PublicPaymentContext = {
 	capabilities: PaymentCapabilities;
-	charge: PublicCharge | null;
 	payable: boolean;
 	payableIssue: string | null;
 	collectionAmount: number;
@@ -159,34 +118,13 @@ type PaymentTransactionRow = {
 	updated_at: string;
 };
 
-export type PaymentChargeRow = {
-	id: string;
-	workspace_id: string;
-	invoice_id: string;
-	provider: "paystack";
-	reference: string;
-	status: PaymentChargeStatus;
-	amount: number;
-	currency: string;
-	account_name: string | null;
-	account_number: string | null;
-	bank_name: string | null;
-	bank_slug: string | null;
-	expires_at: string;
-	provider_status: string | null;
-	provider_message: string | null;
-	raw_response: unknown;
-	created_at: string;
-	updated_at: string;
-};
-
 export function getPaymentCapabilities(
 	_workspace:
 		| Pick<{ countryCode?: string | null }, "countryCode">
 		| null
 		| undefined,
 ): PaymentCapabilities {
-	return { automaticBankTransfer: false, provider: null };
+	return { automaticBankTransfer: false };
 }
 
 export function roundMoney(amount: number) {
@@ -242,7 +180,7 @@ export function payableInvoiceIssue(
 		return "Scheduled invoices are not payable until they are issued.";
 	// `allowDraft` is for the owner's manual "Mark as paid" only — an unsent
 	// draft can still be settled offline. Public payment context and the
-	// Paystack transfer-charge path keep blocking drafts: nobody should be
+	// online collection path keep blocking drafts: nobody should be
 	// able to collect money online against an invoice that was never sent.
 	if (status === "draft" && !options.allowDraft)
 		return "Draft invoices are not payable.";
@@ -326,22 +264,6 @@ export function collectionAmountForInvoice(
 		: snapshot.balance;
 }
 
-export function publicCharge(
-	charge: PaymentCharge | null | undefined,
-): PublicCharge | null {
-	if (!charge) return null;
-	return {
-		reference: charge.reference,
-		status: charge.status,
-		amount: charge.amount,
-		currency: charge.currency,
-		accountName: charge.accountName,
-		accountNumber: charge.accountNumber,
-		bankName: charge.bankName,
-		expiresAt: charge.expiresAt,
-	};
-}
-
 function epoch(value?: string | null): number | undefined {
 	if (!value) return undefined;
 	const ms = Date.parse(value);
@@ -355,10 +277,7 @@ function toPaymentTransaction(row: PaymentTransactionRow): PaymentTransaction {
 		ownerId: row.owner_id ?? undefined,
 		invoiceId: row.invoice_id,
 		source: row.source,
-		provider:
-			row.provider === "paystack" || row.provider === "bachs"
-				? row.provider
-				: undefined,
+		provider: row.provider === "bachs" ? row.provider : undefined,
 		reference: row.reference ?? undefined,
 		providerPaymentId: row.provider_payment_id ?? undefined,
 		eventType: row.event_type ?? undefined,
@@ -378,39 +297,11 @@ function toPaymentTransaction(row: PaymentTransactionRow): PaymentTransaction {
 	};
 }
 
-export function toPaymentCharge(row: PaymentChargeRow): PaymentCharge {
-	return {
-		_id: row.id,
-		workspaceId: row.workspace_id,
-		invoiceId: row.invoice_id,
-		provider: "paystack",
-		reference: row.reference,
-		status: row.status,
-		amount: Number(row.amount),
-		currency: row.currency,
-		accountName: row.account_name ?? undefined,
-		accountNumber: row.account_number ?? undefined,
-		bankName: row.bank_name ?? undefined,
-		bankSlug: row.bank_slug ?? undefined,
-		expiresAt: epoch(row.expires_at) ?? 0,
-		providerStatus: row.provider_status ?? undefined,
-		providerMessage: row.provider_message ?? undefined,
-		rawResponse:
-			typeof row.raw_response === "string"
-				? (row.raw_response as string)
-				: row.raw_response !== null
-					? JSON.stringify(row.raw_response)
-					: undefined,
-		createdAt: epoch(row.created_at) ?? 0,
-		updatedAt: epoch(row.updated_at) ?? 0,
-	};
-}
-
 /**
  * Record a manual payment against an invoice. Mirrors convex/payments.ts
- * recordPayment: enforces the payable invariant, dedupes by reference
- * (paystack source), inserts the transaction row, then patches the invoice
- * payment state (amount, paidAt, reference, reminder, lifecycle, status).
+ * recordPayment: enforces the payable invariant, dedupes by reference,
+ * inserts the transaction row, then patches the invoice payment state
+ * (amount, paidAt, reference, reminder, lifecycle, status).
  */
 export async function recordPayment(
 	client: Supabase,
@@ -629,7 +520,6 @@ export async function getPublicPaymentContextForInvoice(
 
 	return {
 		capabilities,
-		charge: null,
 		payable: !issue,
 		payableIssue: issue,
 		collectionAmount,

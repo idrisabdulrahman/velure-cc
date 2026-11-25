@@ -39,7 +39,6 @@ describe("scheduler job registry", () => {
 		expect(SCHEDULER_JOB_NAMES).toEqual([
 			"scheduled_invoice_emails",
 			"einvoice_submissions",
-			"paystack_reconcile",
 			"recurring_generation",
 			// The bounded sweep runs last so it cannot starve the cheap jobs.
 			"reminder_sweep",

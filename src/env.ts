@@ -21,8 +21,6 @@ export const env = createEnv({
 		RESEND_WEBHOOK_SECRET: z.string().min(1).optional(),
 		INVOICE_SCHEDULER_SECRET: z.string().min(32).optional(),
 		SITE_URL: z.url().optional(),
-		PAYSTACK_SECRET_KEY: z.string().min(1).optional(),
-		PAYSTACK_PUBLIC_KEY: z.string().min(1).optional(),
 		SUPABASE_URL: z.url().optional(),
 		SUPABASE_PUBLISHABLE_KEY: z.string().min(1).optional(),
 		SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),

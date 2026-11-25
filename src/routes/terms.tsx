@@ -34,8 +34,8 @@ function TermsPage() {
 						<h2 className="text-base font-medium text-ink">Payments</h2>
 						<p className="mt-2">
 							Payment collection may route through third-party providers such as
-							Paystack. Provider fees, settlement timing, chargebacks, and
-							payment disputes are handled under the provider terms.
+							Bachs. Provider fees, settlement timing, chargebacks, and payment
+							disputes are handled under the provider terms.
 						</p>
 					</section>
 				</div>

@@ -18,10 +18,10 @@ export function isDraftPublicStatus(status: InvoiceStatus): boolean {
 
 export type PublicPaymentAffordances = {
 	isDraft: boolean;
-	/** Online (Paystack) collection panel for a funded transfer session. */
+	/** Online collection panel for a funded transfer session. */
 	showCollectionPanel: boolean;
 	/** "Pay by transfer" button that opens a new collection session. */
-	canUsePaystackTransfer: boolean;
+	canUseBankTransfer: boolean;
 	/** Bank-transfer instructions and the "I've paid" action. */
 	canClaimPayment: boolean;
 };
@@ -39,7 +39,7 @@ export function getPublicPaymentAffordances(input: {
 	const onlineCollection = Boolean(input.automaticBankTransfer);
 	return {
 		isDraft,
-		canUsePaystackTransfer:
+		canUseBankTransfer:
 			!isDraft && onlineCollection && input.payable !== false && !settled,
 		showCollectionPanel: !isDraft && onlineCollection && !settled,
 		canClaimPayment:

@@ -31,7 +31,7 @@ function paidInvoice() {
 }
 
 describe("payableInvoiceIssue", () => {
-	it("blocks drafts by default — public payment context and Paystack charges stay closed", () => {
+	it("blocks drafts by default — public payment context and collection stay closed", () => {
 		expect(payableInvoiceIssue(draftInvoice())).toBe(
 			"Draft invoices are not payable.",
 		);

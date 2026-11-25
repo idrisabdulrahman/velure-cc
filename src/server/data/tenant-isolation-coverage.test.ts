@@ -24,9 +24,9 @@ import { describe, expect, it } from "vitest";
  *   route tests under `src/routes/api`.
  * - `pure`: pure computation or formatting with no database access.
  * - `server-admin`: server-only admin/webhook machinery (audit transport,
- *   Paystack webhook confirmation, token encryption helpers). Never
- *   reachable from a tenant-supplied workspace id; identity comes from the
- *   webhook signature or the verified server context.
+ *   Bachs webhook confirmation, token encryption helpers). Never reachable
+ *   from a tenant-supplied workspace id; identity comes from the webhook
+ *   signature or the verified server context.
  * - `session`: identity/session plumbing whose tenancy behavior is covered
  *   by the auth layer tests, not the data-layer probes.
  * - `test-only`: reachable only when the dev fixtures flag is enabled; never
@@ -259,8 +259,6 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	applyPaymentToSnapshot: "pure",
 	canReuseCollectionSession: "pure",
 	collectionAmountForInvoice: "pure",
-	publicCharge: "pure",
-	toPaymentCharge: "pure",
 	recordPayment: "app-scoped",
 	listInvoicePayments: "app-scoped",
 	invoiceByToken: "public-token",
@@ -281,16 +279,6 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	confirmPaymentClaim: "app-scoped",
 	rejectPaymentClaim: "app-scoped",
 	insertPaymentClaim: "public-token",
-	// paystack-server.ts
-	ensurePaystackTransferCharge: "server-admin",
-	confirmPaystackWebhookPayment: "server-admin",
-	// Server-only webhook/reconcile machinery: identity is the webhook
-	// signature or the scheduler secret, never a tenant-supplied id.
-	logPaymentAnomaly: "server-admin",
-	reconcilePendingPaystackCharges: "server-admin",
-	// Pure marker class: tags a provider error message as safe to show a payer.
-	// No data, session, or query surface of any kind.
-	PublicPaymentError: "pure",
 	// money.ts — pure integer minor-unit conversion, no query surface
 	nairaToKobo: "pure",
 	koboToNaira: "pure",
@@ -592,12 +580,6 @@ const ROUTE_CLASSIFICATIONS: Record<string, Classification> = {
 	"invoice/submissions/scheduled.ts": "server-admin",
 	"payments/bachs/initialize.ts": "public-token",
 	"payments/bachs/webhook.ts": "server-admin",
-	"payments/paystack/initialize.ts": "public-token",
-	"payments/paystack/webhook.ts": "server-admin",
-	// Scheduler-secret trigger for missed-webhook recovery; no session/tenant id.
-	"payments/paystack/reconcile.ts": "server-admin",
-	// Test-only harness: fixtures + signing helpers for the webhook suite.
-	"payments/paystack/-test-helpers.ts": "test-only",
 	"reminders/send-queue.ts": "session",
 	"security/link-stepup/request.ts": "session",
 	"security/link-stepup/status.ts": "session",

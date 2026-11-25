@@ -88,7 +88,7 @@ export type InvoiceDocumentType =
 export type InvoiceType = "one-time" | "recurring";
 export type InvoiceSize = "A4" | "LETTER";
 export type DateFormat = "iso" | "us" | "ng";
-export type PaymentProvider = "manual" | "paystack" | "bachs";
+export type PaymentProvider = "manual" | "bachs";
 
 export type LineItem = {
 	id: string;

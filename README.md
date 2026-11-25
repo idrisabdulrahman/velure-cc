@@ -25,7 +25,7 @@ Invoicly keeps the everyday work around an invoice together:
 - Create standard, pro-forma, credit, and debit documents with customer and product details.
 - Review line items, tax categories, totals, payment terms, and due dates before delivery.
 - Share a customer-safe invoice page, download a PDF, or send an invoice by email.
-- Record payments, collect through Paystack when configured, and see what remains outstanding.
+- Record payments, collect bank transfers through Bachs when configured, and see what remains outstanding.
 - Schedule reminders and recurring invoices, then review the history from the workspace.
 - Export invoice and tax summaries for your accountant.
 
@@ -71,7 +71,7 @@ pnpm install
 cp .env.example .env.local
 ```
 
-Fill in the Supabase URL and publishable key, Better Auth secret and URL, database connection, and the server-side signing settings described in `.env.example`. Add Resend or Paystack credentials only when you want to exercise those integrations. Keep secrets out of commits and screenshots.
+Fill in the Supabase URL and publishable key, Better Auth secret and URL, database connection, and the server-side signing settings described in `.env.example`. Add Resend or Bachs credentials only when you want to exercise those integrations. Keep secrets out of commits and screenshots.
 
 ```bash
 pnpm dev

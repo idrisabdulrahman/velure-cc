@@ -1,7 +1,7 @@
 /**
  * Integer minor-unit money helpers for provider payments.
  *
- * Paystack amounts are integers in the lowest currency unit (kobo for NGN:
+ * Provider amounts are integers in the lowest currency unit (kobo for NGN:
  * ₦1.00 = 100 kobo). Money must never be converted through binary floating
  * point, so these helpers parse the decimal *string* form of a naira amount
  * and do the arithmetic in integers. `nairaToKobo` recovers the exact kobo
