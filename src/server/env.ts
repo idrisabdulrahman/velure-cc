@@ -1,6 +1,4 @@
 type ServerEnvName =
-	| "PAYSTACK_PUBLIC_KEY"
-	| "PAYSTACK_SECRET_KEY"
 	| "RESEND_API_KEY"
 	| "RESEND_FROM"
 	| "RESEND_FROM_EMAIL"
@@ -8,10 +6,6 @@ type ServerEnvName =
 
 function getViteEnv(name: ServerEnvName) {
 	switch (name) {
-		case "PAYSTACK_PUBLIC_KEY":
-			return import.meta.env.PAYSTACK_PUBLIC_KEY;
-		case "PAYSTACK_SECRET_KEY":
-			return import.meta.env.PAYSTACK_SECRET_KEY;
 		case "RESEND_API_KEY":
 			return import.meta.env.RESEND_API_KEY;
 		case "RESEND_FROM":

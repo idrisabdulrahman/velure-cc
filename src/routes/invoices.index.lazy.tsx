@@ -1217,7 +1217,7 @@ function InvoicesIndex() {
 			title="No invoices yet."
 			copy={
 				canMutate
-					? "Create an invoice, add a client email, then share the Paystack-enabled public link."
+					? "Create an invoice, add a client email, then share the public invoice link."
 					: "No invoices have been created in this workspace yet."
 			}
 			action={

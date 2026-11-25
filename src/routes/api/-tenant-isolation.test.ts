@@ -22,7 +22,6 @@ const {
 	getAuthenticatedInvoiceByIdMock,
 	recordInvoiceDeliveryEventMock,
 	getInvoiceByTokenMock,
-	ensurePaystackTransferChargeMock,
 	renderInvoicePdfMock,
 	sendQueuedEmailsMock,
 	submitPublicPaymentClaimMock,
@@ -38,7 +37,6 @@ const {
 	getAuthenticatedInvoiceByIdMock: vi.fn(),
 	recordInvoiceDeliveryEventMock: vi.fn(async () => {}),
 	getInvoiceByTokenMock: vi.fn(),
-	ensurePaystackTransferChargeMock: vi.fn(async () => undefined),
 	renderInvoicePdfMock: vi.fn(async () => new Uint8Array([1, 2, 3])),
 	sendQueuedEmailsMock: vi.fn(async () => ({ sent: 0, skipped: 0 })),
 	submitPublicPaymentClaimMock: vi.fn(),
@@ -60,9 +58,6 @@ vi.mock("#/server/data/payment-claims", () => ({
 	confirmPaymentClaim: confirmPaymentClaimMock,
 	rejectPaymentClaim: rejectPaymentClaimMock,
 	listPaymentClaims: listPaymentClaimsMock,
-}));
-vi.mock("#/server/data/paystack-server", () => ({
-	ensurePaystackTransferCharge: ensurePaystackTransferChargeMock,
 }));
 vi.mock("#/server/data/reminders-send-queue", () => ({
 	sendQueuedEmails: sendQueuedEmailsMock,
@@ -121,7 +116,6 @@ describe("POST /api/invoice/send/$id — cross-tenant id swap", () => {
 		});
 		expect(resendSendSpy).not.toHaveBeenCalled();
 		expect(recordInvoiceDeliveryEventMock).not.toHaveBeenCalled();
-		expect(ensurePaystackTransferChargeMock).not.toHaveBeenCalled();
 		expect(renderInvoicePdfMock).not.toHaveBeenCalled();
 	});
 

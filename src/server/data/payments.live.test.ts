@@ -595,7 +595,7 @@ describe.skipIf(!LIVE)("A10 payments domain (live velure-cc)", () => {
 		expect(context).not.toBeNull();
 		expect(context!.payable).toBe(false);
 		expect(context!.collectionAmount).toBe(0);
-		expect(context!.capabilities.automaticBankTransfer).toBe(true);
+		expect(context!.capabilities.automaticBankTransfer).toBe(false);
 
 		const history = await listPublicInvoicePayments(clientA, invoiceAToken);
 		expect(history).toHaveLength(2);

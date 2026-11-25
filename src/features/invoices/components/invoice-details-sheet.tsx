@@ -2097,7 +2097,7 @@ export function InvoiceDetailsSheet({
 														onChange={(event) =>
 															setPaymentReference(event.target.value)
 														}
-														placeholder="Transfer ref, Paystack ref, or receipt no."
+														placeholder="Transfer ref, bank ref, or receipt no."
 														className="h-10 rounded-md border-rule bg-paper text-ink"
 													/>
 													<p className="mt-2 text-xs text-ink-2">

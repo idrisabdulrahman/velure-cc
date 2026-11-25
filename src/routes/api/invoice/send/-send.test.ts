@@ -28,9 +28,6 @@ vi.mock("#/server/invoice-repository", () => ({
 		throw new Error("audit insert refused");
 	}),
 }));
-vi.mock("#/server/data/paystack-server", () => ({
-	ensurePaystackTransferCharge: vi.fn(async () => undefined),
-}));
 vi.mock("#/server/env", () => ({
 	getServerEnv: (key: string) =>
 		key === "RESEND_API_KEY" ? "re_test_key" : `${key}@invoicly.test`,

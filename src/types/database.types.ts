@@ -1103,6 +1103,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "invoices_quote_converted_invoice_id_fkey"
+            columns: ["quote_converted_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "invoices_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
@@ -1223,7 +1230,7 @@ export type Database = {
           expires_at: string
           id?: string
           invoice_id: string
-          provider?: string
+          provider: string
           provider_message?: string | null
           provider_status?: string | null
           raw_response?: Json | null
@@ -2192,19 +2199,6 @@ export type Database = {
         }
         Returns: Json
       }
-      confirm_paystack_payment: {
-        Args: {
-          input_amount: number
-          input_currency: string
-          input_customer_email?: string
-          input_event_type: string
-          input_provider_payment_id?: string
-          input_provider_status: string
-          input_raw_event?: Json
-          input_reference: string
-        }
-        Returns: Json
-      }
       consume_public_rate_limit: {
         Args: {
           input_key_hash: string
@@ -2219,6 +2213,7 @@ export type Database = {
         Args: { r: Database["public"]["Tables"]["invoices"]["Row"] }
         Returns: boolean
       }
+      invoke_scheduler_tick: { Args: never; Returns: number }
       public_invoice_by_token: { Args: { input_token: string }; Returns: Json }
     }
     Enums: {
@@ -2289,7 +2284,7 @@ export type Database = {
         | "failed"
         | "expired"
         | "manual_review"
-      payment_source: "manual" | "paystack" | "bachs"
+      payment_source: "manual" | "bachs"
       provider: "quickbooks" | "xero" | "slack"
       recurring_frequency: "monthly" | "quarterly"
       recurring_run_status: "created" | "skipped" | "failed"
@@ -2538,7 +2533,7 @@ export const Constants = {
         "expired",
         "manual_review",
       ],
-      payment_source: ["manual", "paystack", "bachs"],
+      payment_source: ["manual", "bachs"],
       provider: ["quickbooks", "xero", "slack"],
       recurring_frequency: ["monthly", "quarterly"],
       recurring_run_status: ["created", "skipped", "failed"],

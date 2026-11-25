@@ -436,7 +436,7 @@ test.describe("settings surfaces", () => {
 		).toBeVisible();
 
 		// The three planned integrations are listed.
-		for (const name of ["Paystack", "QuickBooks", "Xero"]) {
+		for (const name of ["Bachs", "QuickBooks", "Xero"]) {
 			await expect(page.getByText(name, { exact: true })).toBeVisible();
 		}
 
