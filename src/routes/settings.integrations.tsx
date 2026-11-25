@@ -8,8 +8,8 @@ export const Route = createFileRoute("/settings/integrations")({
 
 const upcomingIntegrations = [
 	{
-		title: "Paystack",
-		body: "Collect invoice payments from public invoice pages.",
+		title: "Bachs",
+		body: "Confirm bank transfers automatically on public invoices.",
 		icon: <CreditCard className="h-5 w-5" />,
 	},
 	{

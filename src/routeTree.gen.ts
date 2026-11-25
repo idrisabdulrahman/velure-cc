@@ -65,6 +65,8 @@ import { Route as ApiInvoicePublicQuoteAcceptRouteImport } from './routes/api/in
 import { Route as ApiInvoiceSendIdRouteImport } from './routes/api/invoice/send/$id'
 import { Route as ApiInvoiceSubmissionIdRouteImport } from './routes/api/invoice/submission/$id'
 import { Route as ApiInvoiceSubmissionsScheduledRouteImport } from './routes/api/invoice/submissions/scheduled'
+import { Route as ApiPaymentsBachsInitializeRouteImport } from './routes/api/payments/bachs/initialize'
+import { Route as ApiPaymentsBachsWebhookRouteImport } from './routes/api/payments/bachs/webhook'
 import { Route as ApiPaymentsPaystackInitializeRouteImport } from './routes/api/payments/paystack/initialize'
 import { Route as ApiPaymentsPaystackReconcileRouteImport } from './routes/api/payments/paystack/reconcile'
 import { Route as ApiPaymentsPaystackWebhookRouteImport } from './routes/api/payments/paystack/webhook'
@@ -364,6 +366,17 @@ const ApiInvoiceSubmissionsScheduledRoute =
     path: '/api/invoice/submissions/scheduled',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPaymentsBachsInitializeRoute =
+  ApiPaymentsBachsInitializeRouteImport.update({
+    id: '/api/payments/bachs/initialize',
+    path: '/api/payments/bachs/initialize',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPaymentsBachsWebhookRoute = ApiPaymentsBachsWebhookRouteImport.update({
+  id: '/api/payments/bachs/webhook',
+  path: '/api/payments/bachs/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPaymentsPaystackInitializeRoute =
   ApiPaymentsPaystackInitializeRouteImport.update({
     id: '/api/payments/paystack/initialize',
@@ -457,6 +470,8 @@ export interface FileRoutesByFullPath {
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
   '/api/invoice/submission/$id': typeof ApiInvoiceSubmissionIdRoute
   '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
+  '/api/payments/bachs/initialize': typeof ApiPaymentsBachsInitializeRoute
+  '/api/payments/bachs/webhook': typeof ApiPaymentsBachsWebhookRoute
   '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
   '/api/payments/paystack/reconcile': typeof ApiPaymentsPaystackReconcileRoute
   '/api/payments/paystack/webhook': typeof ApiPaymentsPaystackWebhookRoute
@@ -516,6 +531,8 @@ export interface FileRoutesByTo {
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
   '/api/invoice/submission/$id': typeof ApiInvoiceSubmissionIdRoute
   '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
+  '/api/payments/bachs/initialize': typeof ApiPaymentsBachsInitializeRoute
+  '/api/payments/bachs/webhook': typeof ApiPaymentsBachsWebhookRoute
   '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
   '/api/payments/paystack/reconcile': typeof ApiPaymentsPaystackReconcileRoute
   '/api/payments/paystack/webhook': typeof ApiPaymentsPaystackWebhookRoute
@@ -581,6 +598,8 @@ export interface FileRoutesById {
   '/api/invoice/send/$id': typeof ApiInvoiceSendIdRoute
   '/api/invoice/submission/$id': typeof ApiInvoiceSubmissionIdRoute
   '/api/invoice/submissions/scheduled': typeof ApiInvoiceSubmissionsScheduledRoute
+  '/api/payments/bachs/initialize': typeof ApiPaymentsBachsInitializeRoute
+  '/api/payments/bachs/webhook': typeof ApiPaymentsBachsWebhookRoute
   '/api/payments/paystack/initialize': typeof ApiPaymentsPaystackInitializeRoute
   '/api/payments/paystack/reconcile': typeof ApiPaymentsPaystackReconcileRoute
   '/api/payments/paystack/webhook': typeof ApiPaymentsPaystackWebhookRoute
@@ -647,6 +666,8 @@ export interface FileRouteTypes {
     | '/api/invoice/send/$id'
     | '/api/invoice/submission/$id'
     | '/api/invoice/submissions/scheduled'
+    | '/api/payments/bachs/initialize'
+    | '/api/payments/bachs/webhook'
     | '/api/payments/paystack/initialize'
     | '/api/payments/paystack/reconcile'
     | '/api/payments/paystack/webhook'
@@ -706,6 +727,8 @@ export interface FileRouteTypes {
     | '/api/invoice/send/$id'
     | '/api/invoice/submission/$id'
     | '/api/invoice/submissions/scheduled'
+    | '/api/payments/bachs/initialize'
+    | '/api/payments/bachs/webhook'
     | '/api/payments/paystack/initialize'
     | '/api/payments/paystack/reconcile'
     | '/api/payments/paystack/webhook'
@@ -770,6 +793,8 @@ export interface FileRouteTypes {
     | '/api/invoice/send/$id'
     | '/api/invoice/submission/$id'
     | '/api/invoice/submissions/scheduled'
+    | '/api/payments/bachs/initialize'
+    | '/api/payments/bachs/webhook'
     | '/api/payments/paystack/initialize'
     | '/api/payments/paystack/reconcile'
     | '/api/payments/paystack/webhook'
@@ -820,6 +845,8 @@ export interface RootRouteChildren {
   ApiInvoiceSendIdRoute: typeof ApiInvoiceSendIdRoute
   ApiInvoiceSubmissionIdRoute: typeof ApiInvoiceSubmissionIdRoute
   ApiInvoiceSubmissionsScheduledRoute: typeof ApiInvoiceSubmissionsScheduledRoute
+  ApiPaymentsBachsInitializeRoute: typeof ApiPaymentsBachsInitializeRoute
+  ApiPaymentsBachsWebhookRoute: typeof ApiPaymentsBachsWebhookRoute
   ApiPaymentsPaystackInitializeRoute: typeof ApiPaymentsPaystackInitializeRoute
   ApiPaymentsPaystackReconcileRoute: typeof ApiPaymentsPaystackReconcileRoute
   ApiPaymentsPaystackWebhookRoute: typeof ApiPaymentsPaystackWebhookRoute
@@ -1223,6 +1250,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiInvoiceSubmissionsScheduledRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/payments/bachs/initialize': {
+      id: '/api/payments/bachs/initialize'
+      path: '/api/payments/bachs/initialize'
+      fullPath: '/api/payments/bachs/initialize'
+      preLoaderRoute: typeof ApiPaymentsBachsInitializeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/payments/bachs/webhook': {
+      id: '/api/payments/bachs/webhook'
+      path: '/api/payments/bachs/webhook'
+      fullPath: '/api/payments/bachs/webhook'
+      preLoaderRoute: typeof ApiPaymentsBachsWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/payments/paystack/initialize': {
       id: '/api/payments/paystack/initialize'
       path: '/api/payments/paystack/initialize'
@@ -1397,6 +1438,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiInvoiceSendIdRoute: ApiInvoiceSendIdRoute,
   ApiInvoiceSubmissionIdRoute: ApiInvoiceSubmissionIdRoute,
   ApiInvoiceSubmissionsScheduledRoute: ApiInvoiceSubmissionsScheduledRoute,
+  ApiPaymentsBachsInitializeRoute: ApiPaymentsBachsInitializeRoute,
+  ApiPaymentsBachsWebhookRoute: ApiPaymentsBachsWebhookRoute,
   ApiPaymentsPaystackInitializeRoute: ApiPaymentsPaystackInitializeRoute,
   ApiPaymentsPaystackReconcileRoute: ApiPaymentsPaystackReconcileRoute,
   ApiPaymentsPaystackWebhookRoute: ApiPaymentsPaystackWebhookRoute,

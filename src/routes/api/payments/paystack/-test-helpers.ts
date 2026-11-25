@@ -247,15 +247,6 @@ export async function readCharge(pool: TestPool, reference: string) {
 	return rows[0];
 }
 
-export async function listPaymentCharges(pool: TestPool, invoiceId: string) {
-	const { rows } = await pool.query(
-		`select reference, status, amount, currency from public.payment_charges
-     where invoice_id = $1 order by created_at`,
-		[invoiceId],
-	);
-	return rows;
-}
-
 /** Backdate a pending charge so reconciliation treats it as a missed webhook. */
 export async function expirePendingCharge(
 	pool: TestPool,

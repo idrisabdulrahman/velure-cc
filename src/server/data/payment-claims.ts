@@ -1,4 +1,5 @@
 import type { Database } from "#/types/database.types";
+import { recordInvoiceAudit } from "./audit";
 import { getById as getInvoiceById } from "./invoices";
 import { recordPayment } from "./payments";
 import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
@@ -158,11 +159,22 @@ export async function confirmPaymentClaim(
 	if (claim.status === "confirmed")
 		return { ok: true, duplicate: true, invoiceId: claim.invoiceId };
 
-	const result = await recordPayment(client, userId, {
-		invoiceId: claim.invoiceId,
-		amount: claim.claimedAmount,
-		reference: claim.claimReference ?? undefined,
-	});
+	const result = await recordPayment(
+		client,
+		userId,
+		{
+			invoiceId: claim.invoiceId,
+			amount: claim.claimedAmount,
+			reference: claim.claimReference ?? undefined,
+		},
+		// This module is server-only (only server routes and the public
+		// repository import it), so settle with the in-process audit service.
+		// The default `recordPayment` writer is the browser transport
+		// (`./audit-client`), whose relative `fetch` fails inside a request
+		// handler — which would apply the payment but throw before the claim
+		// is confirmed or the audit row is written.
+		recordInvoiceAudit,
+	);
 
 	const now = new Date().toISOString();
 	const { error } = await client

@@ -160,7 +160,7 @@ export type InvoiceRecord = {
 	paymentAmount: number;
 	paymentDetails?: string;
 	paymentLink?: string;
-	paymentProvider?: "manual" | "paystack";
+	paymentProvider?: "manual" | "paystack" | "bachs";
 	paidAt?: number;
 	paymentReference?: string;
 	finalizedAt?: number;

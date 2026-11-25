@@ -2178,6 +2178,20 @@ export type Database = {
         }
         Returns: number
       }
+      confirm_bachs_payment: {
+        Args: {
+          input_account: string
+          input_amount: number
+          input_currency: string
+          input_customer_email?: string
+          input_event_type: string
+          input_provider_payment_id?: string
+          input_provider_status: string
+          input_raw_event?: Json
+          input_reference: string
+        }
+        Returns: Json
+      }
       confirm_paystack_payment: {
         Args: {
           input_amount: number
@@ -2275,7 +2289,7 @@ export type Database = {
         | "failed"
         | "expired"
         | "manual_review"
-      payment_source: "manual" | "paystack"
+      payment_source: "manual" | "paystack" | "bachs"
       provider: "quickbooks" | "xero" | "slack"
       recurring_frequency: "monthly" | "quarterly"
       recurring_run_status: "created" | "skipped" | "failed"
@@ -2524,7 +2538,7 @@ export const Constants = {
         "expired",
         "manual_review",
       ],
-      payment_source: ["manual", "paystack"],
+      payment_source: ["manual", "paystack", "bachs"],
       provider: ["quickbooks", "xero", "slack"],
       recurring_frequency: ["monthly", "quarterly"],
       recurring_run_status: ["created", "skipped", "failed"],

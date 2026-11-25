@@ -1,6 +1,6 @@
 import { emitActivation } from "#/server/observability";
 import type { Database, Json } from "#/types/database.types";
-import { recordInvoiceAudit } from "./audit-client";
+import { type InvoiceAuditWriter, recordInvoiceAudit } from "./audit-client";
 import { deriveInvoiceStatus, invoiceNetPayable } from "./invoice-balance";
 import { isInvoiceIssued } from "./invoice-numbering";
 import {
@@ -36,7 +36,7 @@ import { resolveActiveWorkspaceId, type Supabase } from "./workspaces";
  * same shapes through a member-scoped client (the gate exercises that).
  */
 
-export type PaymentSource = "manual" | "paystack";
+export type PaymentSource = "manual" | "paystack" | "bachs";
 export type PaymentChargeStatus =
 	| "pending"
 	| "success"
@@ -51,7 +51,7 @@ export type PaymentTransaction = {
 	ownerId?: string;
 	invoiceId: string;
 	source: PaymentSource;
-	provider?: "paystack";
+	provider?: "paystack" | "bachs";
 	reference?: string;
 	providerPaymentId?: string;
 	eventType?: string;
@@ -180,22 +180,13 @@ export type PaymentChargeRow = {
 	updated_at: string;
 };
 
-const PAYSTACK_PWT_COUNTRIES = ["NG"] as const;
-
 export function getPaymentCapabilities(
-	workspace:
+	_workspace:
 		| Pick<{ countryCode?: string | null }, "countryCode">
 		| null
 		| undefined,
 ): PaymentCapabilities {
-	const countryCode = workspace?.countryCode?.toUpperCase();
-	const supportsPaystackPwt = PAYSTACK_PWT_COUNTRIES.includes(
-		countryCode as (typeof PAYSTACK_PWT_COUNTRIES)[number],
-	);
-	return {
-		automaticBankTransfer: supportsPaystackPwt,
-		provider: supportsPaystackPwt ? "paystack" : null,
-	};
+	return { automaticBankTransfer: false, provider: null };
 }
 
 export function roundMoney(amount: number) {
@@ -364,7 +355,10 @@ function toPaymentTransaction(row: PaymentTransactionRow): PaymentTransaction {
 		ownerId: row.owner_id ?? undefined,
 		invoiceId: row.invoice_id,
 		source: row.source,
-		provider: row.provider === "paystack" ? "paystack" : undefined,
+		provider:
+			row.provider === "paystack" || row.provider === "bachs"
+				? row.provider
+				: undefined,
 		reference: row.reference ?? undefined,
 		providerPaymentId: row.provider_payment_id ?? undefined,
 		eventType: row.event_type ?? undefined,
@@ -427,6 +421,11 @@ export async function recordPayment(
 		recordedAt?: number;
 		reference?: string;
 	},
+	// Server-side callers (e.g. buyer-claim confirmation, which runs inside a
+	// request handler) must inject the in-process audit service from
+	// `./audit`; the default transport is a relative `fetch`, which only
+	// resolves in the browser. See `./audit-client`'s module doc.
+	write?: InvoiceAuditWriter,
 ) {
 	const invoice = await getInvoiceById(client, userId, args.invoiceId);
 	if (!invoice) throw new Error("Invoice not found.");
@@ -533,15 +532,20 @@ export async function recordPayment(
 		(await getInvoiceById(client, userId, args.invoiceId)) ?? invoice;
 	const crossingIntoIssued =
 		!isInvoiceIssued(invoice) && isInvoiceIssued(updated);
-	await recordInvoiceAudit(client, userId, {
-		action: crossingIntoIssued ? "invoice.send" : "invoice.edit",
-		resourceId: args.invoiceId,
-		before: invoice,
-		after: updated,
-		message: crossingIntoIssued
-			? "Invoice issued when a payment was recorded."
-			: "Recorded a payment.",
-	});
+	await recordInvoiceAudit(
+		client,
+		userId,
+		{
+			action: crossingIntoIssued ? "invoice.send" : "invoice.edit",
+			resourceId: args.invoiceId,
+			before: invoice,
+			after: updated,
+			message: crossingIntoIssued
+				? "Invoice issued when a payment was recorded."
+				: "Recorded a payment.",
+		},
+		write,
+	);
 
 	// WP-H: one activation line per recorded payment (the money-visible action).
 	// Ids and the integer amount only; no PII (`AGENTS.md` §8).
@@ -614,7 +618,7 @@ export async function getPublicPaymentContext(
 }
 
 export async function getPublicPaymentContextForInvoice(
-	client: Supabase,
+	_client: Supabase,
 	invoice: InvoicePaymentState & { id: string; currency: string },
 	countryCode: string | null,
 ): Promise<PublicPaymentContext> {
@@ -622,29 +626,10 @@ export async function getPublicPaymentContextForInvoice(
 	const snapshot = getInvoicePaymentSnapshot(invoice);
 	const collectionAmount = collectionAmountForInvoice(invoice, snapshot);
 	const issue = payableInvoiceIssue(invoice);
-	const now = Date.now();
-	const { data: charges, error } = await client
-		.from("payment_charges")
-		.select("*")
-		.eq("invoice_id", invoice.id)
-		.order("created_at", { ascending: false });
-	if (error) throw error;
-
-	const charge =
-		(charges ?? [])
-			.map((row) => toPaymentCharge(row as unknown as PaymentChargeRow))
-			.filter((row) =>
-				canReuseCollectionSession(row, {
-					amount: collectionAmount,
-					currency: invoice.currency,
-					now,
-				}),
-			)
-			.sort((a, b) => b.createdAt - a.createdAt)[0] ?? null;
 
 	return {
 		capabilities,
-		charge: publicCharge(charge),
+		charge: null,
 		payable: !issue,
 		payableIssue: issue,
 		collectionAmount,

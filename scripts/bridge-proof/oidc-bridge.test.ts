@@ -193,7 +193,16 @@ describe("Negative verification (fail closed)", () => {
 	it("rejects a tampered id_token", async () => {
 		const { idToken } = await oidcFlow();
 		const [h, p, s] = idToken.split(".");
-		const tampered = `${h}.${p}.${(s!.slice(0, -2) ?? "")}zz`;
+		// Flip a bit in the first byte of the signature. Rewriting the trailing
+		// base64url characters is not a reliable tamper: for a 256-byte RS256
+		// signature the final character carries only padding bits, so its last
+		// characters can decode to the original bytes (~0.6% of runs), letting
+		// the "tampered" token verify and flaking this test. The leading byte is
+		// always significant, so the mutation is guaranteed to change the
+		// signature.
+		const signature = Buffer.from(s!, "base64url");
+		signature[0] = signature[0]! ^ 0x01;
+		const tampered = `${h}.${p}.${signature.toString("base64url")}`;
 		const { keys } = await fetchJwks();
 		await expect(
 			verifyVelureJwt(tampered, { keys }, { issuer: ISSUER, audience: CLIENT_ID }),
