@@ -18,6 +18,7 @@ import {
 	listPublicInvoicePaymentsForInvoice,
 	payableInvoiceIssue,
 } from "./data/payments";
+import { notifySellerPaymentClaimed } from "./payment-notifications";
 
 export type Invoice = InvoiceRecord;
 
@@ -226,6 +227,18 @@ export async function submitPublicPaymentClaim(
 		reference: input.reference,
 		note: input.note,
 	});
+	// A buyer's first "I've paid" notice emails the seller so they can confirm
+	// it without polling the app. Duplicates never re-notify; the notifier
+	// swallows its own failures so a mail problem cannot fail the claim.
+	if (!inserted.duplicate) {
+		await notifySellerPaymentClaimed({
+			workspaceId,
+			invoiceNumber: invoice.invoiceNumber,
+			customerName: invoice.customerName,
+			amount: input.amount,
+			currency: invoice.currency,
+		});
+	}
 	emitActivation("payment.claim_submitted", {
 		invoiceId,
 		workspaceId,
