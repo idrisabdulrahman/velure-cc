@@ -72,5 +72,9 @@ describe("invoice PDF mock-clearance gate", () => {
 		expect(visiblePdf).toContain("Mock IRN: MOCK-IRN-demo-1");
 		expect(visiblePdf).toContain("MOCK-SANDBOX|NOT-NRS-CLEARED|");
 		expect(log).toHaveBeenCalledTimes(2);
-	});
+		// Both renders exercise the pure-JS fallback PDF writer, which is
+		// CPU-heavy and runs alongside the rest of the suite. The 5s default
+		// was measured at ~5.01s under full-suite load (it passes in ~2s in
+		// isolation), so give it headroom instead of failing on contention.
+	}, 15_000);
 });

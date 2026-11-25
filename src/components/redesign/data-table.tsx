@@ -4,10 +4,16 @@ import { cn } from "#/utils";
 
 export type DataTableAlign = "left" | "center" | "right";
 
+/** Breakpoint below which a column is dropped. A wide ledger table cannot be
+ * read on a phone, so low-value columns step out instead of forcing every row
+ * into a long horizontal scroll. `md` and up always shows the column. */
+export type DataTableHideBelow = "sm" | "md" | "lg";
+
 export type DataTableColumn<T> = {
 	key: string;
 	header: ReactNode;
 	align?: DataTableAlign;
+	hideBelow?: DataTableHideBelow;
 	render: (row: T) => ReactNode;
 };
 
@@ -29,6 +35,14 @@ const alignClass: Record<DataTableAlign, string> = {
 	left: "text-left",
 	center: "text-center",
 	right: "text-right",
+};
+
+// `hidden` + `table-cell` keeps the table layout identical to a normal cell at
+// and above the breakpoint.
+const hideBelowClass: Record<DataTableHideBelow, string> = {
+	sm: "hidden sm:table-cell",
+	md: "hidden md:table-cell",
+	lg: "hidden lg:table-cell",
 };
 
 export function DataTable<T>({
@@ -91,6 +105,7 @@ export function DataTable<T>({
 									className={cn(
 										"h-[38px] px-3.5 font-medium text-[11px] tracking-[0.08em] whitespace-nowrap text-ink-3 uppercase",
 										alignClass[col.align ?? "left"],
+										col.hideBelow ? hideBelowClass[col.hideBelow] : null,
 									)}
 								>
 									{col.header}
@@ -130,6 +145,7 @@ export function DataTable<T>({
 												className={cn(
 													"px-3.5 py-3 align-middle",
 													alignClass[col.align ?? "left"],
+													col.hideBelow ? hideBelowClass[col.hideBelow] : null,
 												)}
 											>
 												{col.render(row)}

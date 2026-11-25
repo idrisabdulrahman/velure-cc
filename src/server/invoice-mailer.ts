@@ -29,7 +29,8 @@ export async function sendInvoiceWithResend(
 	const customer = escapeHtml(invoice.customerName);
 	const pdf = await renderInvoicePdf(invoice as never);
 	const result = await new Resend(key).emails.send({
-		from: getServerEnv("RESEND_FROM_EMAIL") ?? "Velure <onboarding@resend.dev>",
+		from:
+			getServerEnv("RESEND_FROM_EMAIL") ?? "Invoicly <onboarding@resend.dev>",
 		to,
 		subject: `${proforma ? "Pro-forma" : "Invoice"} ${invoice.invoiceNumber}`,
 		text: `Your ${label} ${invoice.invoiceNumber} for ${invoice.customerName} is attached as a PDF. View it online: ${publicUrl}`,

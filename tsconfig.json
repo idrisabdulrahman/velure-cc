@@ -7,9 +7,7 @@
     "ignoreDeprecations": "5.0",
     "paths": {
       "#/*": ["./src/*"],
-      "#convex/*": ["./convex/*"],
-      "@midday/ui/*": ["./src/components/ui/*"],
-      "@midday/utils/*": ["./src/shims/midday-utils/*"]
+      "#convex/*": ["./convex/*"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client","node"],

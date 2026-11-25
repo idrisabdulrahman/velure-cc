@@ -407,7 +407,7 @@ describe("invoice lifecycle wiring", () => {
 			workspaces: [
 				{
 					data: {
-						name: "Velure",
+						name: "Invoicly",
 						invoice_number_mode: "prefix",
 						invoice_number_prefix: "INV",
 						next_invoice_sequence: 7,
@@ -846,7 +846,7 @@ describe("material state transitions", () => {
 			workspaces: [
 				{
 					data: {
-						name: "Velure",
+						name: "Invoicly",
 						invoice_number_mode: "prefix",
 						invoice_number_prefix: "INV",
 						next_invoice_sequence: 7,
@@ -888,7 +888,7 @@ describe("material state transitions", () => {
 			workspaces: [
 				{
 					data: {
-						name: "Velure",
+						name: "Invoicly",
 						invoice_number_mode: "prefix",
 						invoice_number_prefix: "INV",
 						next_invoice_sequence: 7,

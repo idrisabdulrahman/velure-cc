@@ -54,12 +54,15 @@ export function DatePicker({
 	const date = toDate(value);
 	const [month, setMonth] = React.useState<Date | undefined>(date);
 	const [inputValue, setInputValue] = React.useState(formatDisplay(date));
+	// A stable per-instance id keeps the label/input association valid when more
+	// than one picker renders (e.g. issue date + due date in the same form).
+	const generatedId = React.useId();
 
 	React.useEffect(() => {
 		setInputValue(formatDisplay(toDate(value)));
 	}, [value]);
 
-	const inputId = id ?? "date-picker-input";
+	const inputId = id ?? generatedId;
 
 	return (
 		<div className={cn("relative", className)}>

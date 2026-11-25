@@ -27,7 +27,16 @@ import {
 	Share2,
 	X,
 } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+	cloneElement,
+	isValidElement,
+	type ReactElement,
+	type ReactNode,
+	useEffect,
+	useId,
+	useRef,
+	useState,
+} from "react";
 import { FaTelegram, FaWhatsapp } from "react-icons/fa6";
 import { DatePicker } from "#/components/navigation/DatePicker";
 import { Button } from "#/components/ui/button";
@@ -70,12 +79,14 @@ import {
 import type { MockScenario } from "#/features/einvoicing/provider-adapter";
 import { invoiceTotal } from "#/features/invoices/calculate";
 import { NotesEditor } from "#/features/invoices/components/editor/notes-editor";
+import { PaymentClaimsSection } from "#/features/invoices/components/payment-claims-section";
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
-import { toEditorDoc } from "#/features/invoices/midday-adapter";
+import { toEditorDoc } from "#/features/invoices/invoice-document-adapter";
+import { buildInvoiceShareLinks } from "#/features/invoices/share-links";
 import type { InvoiceLineItem, InvoiceRecord } from "#/features/invoices/types";
 import { INVOICE_DOCUMENT_TYPE_LABELS } from "#/features/invoices/types";
 import { useUnifiedAuth } from "#/lib/auth-hook";
-import type { EditorDoc } from "#/lib/midday-invoice/types";
+import type { EditorDoc } from "#/lib/invoice-document/types";
 import { useSupabaseSession } from "#/lib/supabase-session";
 import { cancelSchedule, reschedule } from "#/server/data/invoices";
 import { getInvoiceWorkspaceSettings } from "#/server/data/workspaces";
@@ -132,19 +143,18 @@ function formatDate(value: string) {
 	return formatInvoiceDate(value, "ng");
 }
 
-function shareLinks(invoice: InvoiceRecord) {
+// Thin adapter: maps an invoice record onto the shared, pure link builder.
+// Link formatting/encoding lives only in `buildInvoiceShareLinks`.
+function invoiceShareLinks(invoice: InvoiceRecord) {
 	const origin = typeof window !== "undefined" ? window.location.origin : "";
-	const publicUrl = `${origin}/i/${invoice.token}`;
-	const downloadUrl = `${publicUrl}?download=1`;
-	const label =
-		INVOICE_DOCUMENT_TYPE_LABELS[invoice.documentType ?? "standard"];
-	const text = `${label} ${invoice.invoiceNumber} for ${invoice.customerName}`;
-	const body = `${text}\n\nView & download: ${downloadUrl}`;
-
-	const telegramHref = `https://t.me/share/url?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(body)}`;
-	const whatsappHref = `https://wa.me/?text=${encodeURIComponent(body)}`;
-
-	return { publicUrl, telegramHref, whatsappHref };
+	return buildInvoiceShareLinks({
+		token: invoice.token,
+		origin,
+		invoiceNumber: invoice.invoiceNumber,
+		customerName: invoice.customerName,
+		documentType: invoice.documentType,
+		amountLabel: formatMoney(invoice.total, invoice.currency),
+	});
 }
 
 async function readSendEmailPayload(response: Response) {
@@ -227,11 +237,11 @@ function withDerivedCompliance(invoice: InvoiceRecord): InvoiceRecord {
 		legalName:
 			existingCompliance?.seller?.legalName ||
 			existingCompliance?.seller?.tradingName ||
-			"Velure Workspace",
+			"Invoicly Workspace",
 		tradingName:
 			existingCompliance?.seller?.tradingName ??
 			existingCompliance?.seller?.legalName ??
-			"Velure Workspace",
+			"Invoicly Workspace",
 		countryCode: (existingCompliance?.seller?.countryCode ??
 			"NG") as JurisdictionCode,
 	};
@@ -356,9 +366,38 @@ function Section({
 	);
 }
 
-function FieldLabel({ children }: { children: ReactNode }) {
+function Field({
+	label,
+	children,
+	htmlFor,
+}: {
+	label: string;
+	children: ReactNode;
+	htmlFor?: string;
+}) {
+	// Associate the visible label with its control. When the control is a single
+	// element and the caller did not supply an id, inject a generated one so the
+	// label does not point at nothing (the previous `FieldLabel` div gave screen
+	// readers no programmatic association at all).
+	const generatedId = useId();
+	const controlId = htmlFor ?? generatedId;
+	const control =
+		htmlFor || !isValidElement(children)
+			? children
+			: cloneElement(children as ReactElement<{ id?: string }>, {
+					id: controlId,
+				});
+
 	return (
-		<div className="mb-2 block text-xs font-medium text-ink-2">{children}</div>
+		<div>
+			<label
+				htmlFor={controlId}
+				className="mb-2 block text-xs font-medium text-ink-2"
+			>
+				{label}
+			</label>
+			{control}
+		</div>
 	);
 }
 
@@ -985,8 +1024,7 @@ export function InvoiceDetailsSheet({
 										</div>
 
 										<div className="grid min-w-0 gap-4 sm:grid-cols-2">
-											<div>
-												<FieldLabel>Invoice number</FieldLabel>
+											<Field label="Invoice number">
 												<Input
 													value={draft.invoiceNumber}
 													onChange={(event) =>
@@ -997,9 +1035,8 @@ export function InvoiceDetailsSheet({
 													}
 													className="h-10 rounded-md border-rule bg-paper text-ink"
 												/>
-											</div>
-											<div>
-												<FieldLabel>Customer name</FieldLabel>
+											</Field>
+											<Field label="Customer name">
 												<Input
 													value={draft.customerName}
 													onChange={(event) =>
@@ -1019,9 +1056,8 @@ export function InvoiceDetailsSheet({
 													}
 													className="h-10 rounded-md border-rule bg-paper text-ink"
 												/>
-											</div>
-											<div>
-												<FieldLabel>Customer PO number</FieldLabel>
+											</Field>
+											<Field label="Customer PO number">
 												<Input
 													value={draft.customerPoNumber ?? ""}
 													onChange={(event) =>
@@ -1033,27 +1069,24 @@ export function InvoiceDetailsSheet({
 													placeholder="PO number from the client"
 													className="h-10 rounded-md border-rule bg-paper text-ink"
 												/>
-											</div>
-											<div>
-												<FieldLabel>Issue date</FieldLabel>
+											</Field>
+											<Field label="Issue date">
 												<DatePicker
 													value={draft.issueDate}
 													onChange={(v) =>
 														patchDraft((prev) => ({ ...prev, issueDate: v }))
 													}
 												/>
-											</div>
-											<div>
-												<FieldLabel>Due date</FieldLabel>
+											</Field>
+											<Field label="Due date">
 												<DatePicker
 													value={draft.dueDate}
 													onChange={(v) =>
 														patchDraft((prev) => ({ ...prev, dueDate: v }))
 													}
 												/>
-											</div>
-											<div>
-												<FieldLabel>Currency</FieldLabel>
+											</Field>
+											<Field label="Currency">
 												<select
 													value={draft.currency}
 													onChange={(event) =>
@@ -1067,9 +1100,8 @@ export function InvoiceDetailsSheet({
 														</option>
 													))}
 												</select>
-											</div>
-											<div>
-												<FieldLabel>Template</FieldLabel>
+											</Field>
+											<Field label="Template">
 												<Input
 													value={draft.template}
 													onChange={(event) =>
@@ -1080,7 +1112,7 @@ export function InvoiceDetailsSheet({
 													}
 													className="h-10 rounded-md border-rule bg-paper text-ink"
 												/>
-											</div>
+											</Field>
 										</div>
 									</Section>
 
@@ -1100,8 +1132,7 @@ export function InvoiceDetailsSheet({
 										) : (
 											<>
 												<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-													<div>
-														<FieldLabel>Seller TIN</FieldLabel>
+													<Field label="Seller TIN">
 														<Input
 															value={draft.compliance?.seller?.taxId ?? ""}
 															onChange={(event) =>
@@ -1118,10 +1149,10 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															placeholder="10-digit TIN"
+															placeholder="10-12 digit TIN"
 															className="h-10 rounded-md border-rule bg-paper text-ink"
 														/>
-													</div>
+													</Field>
 													{draft.status === "scheduled" ? (
 														<div className="mt-3 space-y-2 rounded-md border border-brand-line bg-brand-soft p-3">
 															<div className="flex flex-wrap items-end gap-2">
@@ -1215,8 +1246,7 @@ export function InvoiceDetailsSheet({
 															</div>
 														</div>
 													) : null}
-													<div>
-														<FieldLabel>CAC RC Number</FieldLabel>
+													<Field label="CAC RC Number">
 														<Input
 															value={draft.compliance?.seller?.rcNumber ?? ""}
 															onChange={(event) =>
@@ -1237,9 +1267,8 @@ export function InvoiceDetailsSheet({
 															placeholder="RC-1234567"
 															className="h-10 rounded-md border-rule bg-paper text-ink"
 														/>
-													</div>
-													<div>
-														<FieldLabel>Buyer TIN</FieldLabel>
+													</Field>
+													<Field label="Buyer TIN">
 														<Input
 															value={draft.compliance?.buyer?.taxId ?? ""}
 															onChange={(event) =>
@@ -1256,12 +1285,11 @@ export function InvoiceDetailsSheet({
 																		: prev.compliance,
 																}))
 															}
-															placeholder="10-digit TIN"
+															placeholder="10-12 digit TIN"
 															className="h-10 rounded-md border-rule bg-paper text-ink"
 														/>
-													</div>
-													<div>
-														<FieldLabel>Buyer email for reminders</FieldLabel>
+													</Field>
+													<Field label="Buyer email for reminders">
 														<Input
 															value={draft.compliance?.buyer?.email ?? ""}
 															onChange={(event) => {
@@ -1283,9 +1311,8 @@ export function InvoiceDetailsSheet({
 															placeholder="client@email.com"
 															className="h-10 rounded-md border-rule bg-paper text-ink"
 														/>
-													</div>
-													<div>
-														<FieldLabel>Seller country</FieldLabel>
+													</Field>
+													<Field label="Seller country">
 														<select
 															value={
 																draft.compliance?.seller?.countryCode ?? "NG"
@@ -1313,9 +1340,8 @@ export function InvoiceDetailsSheet({
 																</option>
 															))}
 														</select>
-													</div>
-													<div>
-														<FieldLabel>Buyer country</FieldLabel>
+													</Field>
+													<Field label="Buyer country">
 														<select
 															value={
 																draft.compliance?.buyer?.countryCode ?? "NG"
@@ -1347,9 +1373,8 @@ export function InvoiceDetailsSheet({
 																</option>
 															))}
 														</select>
-													</div>
-													<div>
-														<FieldLabel>Seller tax status</FieldLabel>
+													</Field>
+													<Field label="Seller tax status">
 														<select
 															value={
 																draft.compliance?.sellerTaxStatus ??
@@ -1378,9 +1403,8 @@ export function InvoiceDetailsSheet({
 																</option>
 															))}
 														</select>
-													</div>
-													<div>
-														<FieldLabel>Tax treatment</FieldLabel>
+													</Field>
+													<Field label="Tax treatment">
 														<select
 															value={draft.compliance?.taxTreatment ?? "none"}
 															onChange={(event) =>
@@ -1403,9 +1427,8 @@ export function InvoiceDetailsSheet({
 																</option>
 															))}
 														</select>
-													</div>
-													<div>
-														<FieldLabel>VAT rate %</FieldLabel>
+													</Field>
+													<Field label="VAT rate %">
 														<Input
 															type="number"
 															min={0}
@@ -1425,9 +1448,8 @@ export function InvoiceDetailsSheet({
 															}
 															className="h-10 rounded-md border-rule bg-paper text-ink"
 														/>
-													</div>
-													<div>
-														<FieldLabel>WHT category</FieldLabel>
+													</Field>
+													<Field label="WHT category">
 														<select
 															value={
 																draft.compliance?.withholding?.category ??
@@ -1457,9 +1479,8 @@ export function InvoiceDetailsSheet({
 																</option>
 															))}
 														</select>
-													</div>
-													<div>
-														<FieldLabel>WHT recipient type</FieldLabel>
+													</Field>
+													<Field label="WHT recipient type">
 														<select
 															value={
 																draft.compliance?.withholding
@@ -1489,9 +1510,8 @@ export function InvoiceDetailsSheet({
 																</option>
 															))}
 														</select>
-													</div>
-													<div>
-														<FieldLabel>WHT residency</FieldLabel>
+													</Field>
+													<Field label="WHT residency">
 														<select
 															value={
 																draft.compliance?.withholding
@@ -1521,7 +1541,7 @@ export function InvoiceDetailsSheet({
 																</option>
 															))}
 														</select>
-													</div>
+													</Field>
 												</div>
 
 												<div className="mt-5 grid gap-3 md:grid-cols-4">
@@ -1922,9 +1942,15 @@ export function InvoiceDetailsSheet({
 										<Section title="Share">
 											<div className="space-y-3">
 												<div>
-													<FieldLabel>Recipient email</FieldLabel>
+													<label
+														htmlFor="invoice-share-recipient-email"
+														className="mb-2 block text-xs font-medium text-ink-2"
+													>
+														Recipient email
+													</label>
 													<div className="flex gap-2">
 														<Input
+															id="invoice-share-recipient-email"
 															value={recipientEmail}
 															onChange={(event) =>
 																setRecipientEmail(event.target.value)
@@ -1955,7 +1981,7 @@ export function InvoiceDetailsSheet({
 
 												<div className="flex flex-wrap gap-2">
 													<a
-														href={shareLinks(draft).telegramHref}
+														href={invoiceShareLinks(draft).telegramHref}
 														target="_blank"
 														rel="noreferrer"
 														aria-label="Share on Telegram"
@@ -1964,7 +1990,7 @@ export function InvoiceDetailsSheet({
 														<FaTelegram className="h-4 w-4" />
 													</a>
 													<a
-														href={shareLinks(draft).whatsappHref}
+														href={invoiceShareLinks(draft).whatsappHref}
 														target="_blank"
 														rel="noreferrer"
 														aria-label="Share on WhatsApp"
@@ -1975,7 +2001,7 @@ export function InvoiceDetailsSheet({
 													<button
 														type="button"
 														onClick={async () => {
-															const links = shareLinks(draft);
+															const links = invoiceShareLinks(draft);
 															if (navigator.share) {
 																const label =
 																	INVOICE_DOCUMENT_TYPE_LABELS[
@@ -2015,7 +2041,7 @@ export function InvoiceDetailsSheet({
 														type="button"
 														onClick={() =>
 															void navigator.clipboard.writeText(
-																shareLinks(draft).publicUrl,
+																invoiceShareLinks(draft).publicUrl,
 															)
 														}
 														aria-label="Copy link"
@@ -2024,7 +2050,7 @@ export function InvoiceDetailsSheet({
 														<Copy className="h-4 w-4" />
 													</button>
 													<a
-														href={shareLinks(draft).publicUrl}
+														href={invoiceShareLinks(draft).publicUrl}
 														target="_blank"
 														rel="noreferrer"
 														aria-label="Preview before download"
@@ -2049,8 +2075,7 @@ export function InvoiceDetailsSheet({
 											</Button>
 										) : (
 											<div className="grid gap-4">
-												<div>
-													<FieldLabel>Payment reference</FieldLabel>
+												<Field label="Payment reference">
 													<Input
 														value={paymentReference}
 														onChange={(event) =>
@@ -2062,10 +2087,12 @@ export function InvoiceDetailsSheet({
 													<p className="mt-2 text-xs text-ink-2">
 														Select Paid in status after entering reference.
 													</p>
-												</div>
+												</Field>
 											</div>
 										)}
 									</Section>
+
+									<PaymentClaimsSection invoice={draft} />
 
 									<Section
 										title="Notes"
@@ -2082,8 +2109,7 @@ export function InvoiceDetailsSheet({
 											</Button>
 										) : (
 											<div className="grid gap-4 md:grid-cols-2">
-												<div>
-													<FieldLabel>Payment details</FieldLabel>
+												<Field label="Payment details">
 													<textarea
 														value={draft.paymentDetails ?? ""}
 														onChange={(event) =>
@@ -2094,7 +2120,7 @@ export function InvoiceDetailsSheet({
 														}
 														className="min-h-32 w-full rounded-md border border-rule bg-paper px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-3"
 														placeholder={
-															"Bank Name: Zenith Bank\nAccount Name: Velure Studio\nAccount Number: 0123456789"
+															"Bank Name: Zenith Bank\nAccount Name: Invoicly Studio\nAccount Number: 0123456789"
 														}
 													/>
 													{draft.currency.trim().toUpperCase() !== "NGN" ? (
@@ -2102,12 +2128,15 @@ export function InvoiceDetailsSheet({
 															{NIGERIA_FOREIGN_CURRENCY_WARNING}
 														</p>
 													) : null}
-												</div>
+												</Field>
 												<div>
-													<FieldLabel>Internal note</FieldLabel>
+													<span className="mb-2 block text-xs font-medium text-ink-2">
+														Internal note
+													</span>
 													<NotesEditor
 														key={draft.id}
 														initialContent={toEditorDoc(draft.notes)}
+														ariaLabel="Internal note"
 														onChange={(content) =>
 															patchDraft((prev) => ({
 																...prev,

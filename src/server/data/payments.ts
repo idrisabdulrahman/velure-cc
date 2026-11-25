@@ -1,3 +1,4 @@
+import { emitActivation } from "#/server/observability";
 import type { Database, Json } from "#/types/database.types";
 import { recordInvoiceAudit } from "./audit-client";
 import { isInvoiceIssued } from "./invoice-numbering";
@@ -572,6 +573,16 @@ export async function recordPayment(
 		message: crossingIntoIssued
 			? "Invoice issued when a payment was recorded."
 			: "Recorded a payment.",
+	});
+
+	// WP-H: one activation line per recorded payment (the money-visible action).
+	// Ids and the integer amount only; no PII (`AGENTS.md` §8).
+	emitActivation("payment.recorded", {
+		invoiceId: args.invoiceId,
+		workspaceId,
+		amount: payment.amount,
+		currency: invoice.currency,
+		fullyPaid: payment.isPaid,
 	});
 
 	return { ok: true, duplicate: false, invoiceId: args.invoiceId };

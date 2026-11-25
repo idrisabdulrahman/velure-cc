@@ -331,6 +331,87 @@ export type Database = {
           },
         ]
       }
+      expense_categories: {
+        Row: {
+          code: string
+          created_at: string
+          is_active: boolean
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      expenses: {
+        Row: {
+          amount: number
+          category_code: string
+          created_at: string
+          currency: string
+          id: string
+          incurred_on: string
+          note: string | null
+          owner_id: string | null
+          updated_at: string
+          voided_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          amount: number
+          category_code: string
+          created_at?: string
+          currency?: string
+          id?: string
+          incurred_on: string
+          note?: string | null
+          owner_id?: string | null
+          updated_at?: string
+          voided_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          amount?: number
+          category_code?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          incurred_on?: string
+          note?: string | null
+          owner_id?: string | null
+          updated_at?: string
+          voided_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_category_code_fkey"
+            columns: ["category_code"]
+            isOneToOne: false
+            referencedRelation: "expense_categories"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "expenses_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integration_connections: {
         Row: {
           access_token: string | null
@@ -877,6 +958,10 @@ export type Database = {
           payment_provider: Database["public"]["Enums"]["payment_source"] | null
           payment_reference: string | null
           payment_terms_days: number | null
+          quote_accepted_at: string | null
+          quote_converted_invoice_id: string | null
+          quote_sent_at: string | null
+          quote_status: string | null
           reminder: Json | null
           schedule_version: string | null
           scheduled_at: string | null
@@ -928,6 +1013,10 @@ export type Database = {
             | null
           payment_reference?: string | null
           payment_terms_days?: number | null
+          quote_accepted_at?: string | null
+          quote_converted_invoice_id?: string | null
+          quote_sent_at?: string | null
+          quote_status?: string | null
           reminder?: Json | null
           schedule_version?: string | null
           scheduled_at?: string | null
@@ -979,6 +1068,10 @@ export type Database = {
             | null
           payment_reference?: string | null
           payment_terms_days?: number | null
+          quote_accepted_at?: string | null
+          quote_converted_invoice_id?: string | null
+          quote_sent_at?: string | null
+          quote_status?: string | null
           reminder?: Json | null
           schedule_version?: string | null
           scheduled_at?: string | null
@@ -1169,6 +1262,66 @@ export type Database = {
           },
           {
             foreignKeyName: "payment_charges_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_claims: {
+        Row: {
+          claim_reference: string | null
+          claimed_amount: number
+          claimed_at: string
+          created_at: string
+          id: string
+          invoice_id: string
+          note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          claim_reference?: string | null
+          claimed_amount: number
+          claimed_at?: string
+          created_at?: string
+          id?: string
+          invoice_id: string
+          note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          claim_reference?: string | null
+          claimed_amount?: number
+          claimed_at?: string
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_claims_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_claims_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"

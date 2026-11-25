@@ -282,7 +282,7 @@ async function ensureProvider() {
 		body: JSON.stringify({
 			provider_type: "oidc",
 			identifier: PROVIDER_IDENTIFIER,
-			name: "Velure (A10 reminders gate)",
+			name: "Invoicly (A10 reminders gate)",
 			client_id: "velure-supabase-client",
 			client_secret: CLIENT_SECRET,
 			issuer: ISSUER_URL,
@@ -568,7 +568,7 @@ describe.skipIf(!LIVE)("A10 reminders domain (live velure-cc)", () => {
 			overdueCadenceDays: 2,
 			maxOverdueReminders: 2,
 			escalateAfterCount: 1,
-			businessSignature: "Velure Finance Team",
+			businessSignature: "Invoicly Finance Team",
 		});
 		expect(id).toBeTruthy();
 

@@ -1,0 +1,16 @@
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	"name": "velure-password-hasher",
+	"main": "./main.ts",
+	"compatibility_date": "2026-11-02",
+	"observability": {
+		"enabled": true
+	},
+	"workers_dev": false,
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["PasswordHasher"]
+		}
+	]
+}

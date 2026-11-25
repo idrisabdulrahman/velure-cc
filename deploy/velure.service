@@ -1,0 +1,71 @@
+[Unit]
+Description=Velure invoicing server (TanStack Start / Nitro Node server)
+Documentation=file:/opt/velure/README.md
+# The service talks to Supabase and Resend over the network, so wait for it.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# A dedicated, unprivileged account. If you prefer to reuse an existing account,
+# change User/Group here and make sure /opt/velure is owned by it.
+User=velure
+Group=velure
+WorkingDirectory=/opt/velure
+# Secrets live here, root-owned, mode 0600. systemd reads the file as root
+# before dropping to User=, so the service account never needs read access.
+EnvironmentFile=/etc/velure/velure.env
+ExecStart=/usr/bin/node server/index.mjs
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+# Keep the process (and its V8 heap) from being killed by an out-of-memory
+# condition caused by a runaway request.
+MemoryMax=1G
+
+# --- Deployment shape (not secret) ---
+Environment=NODE_ENV=production
+# Bind to loopback only: nginx is the only thing that should reach the app.
+Environment=HOST=127.0.0.1
+Environment=PORT=8490
+
+# --- Hardening ---
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+# Requires systemd 247 or newer.
+ProtectProc=invisible
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RemoveIPC=true
+# AF_NETLINK is included because glibc uses it during name resolution.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Drop every capability: the app binds an unprivileged port and needs none.
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+# The app may use /var/lib/velure and /var/cache/velure for runtime state; systemd
+# creates them, gives them to User=, and makes them writable under
+# ProtectSystem=strict.
+StateDirectory=velure
+CacheDirectory=velure
+
+# NOTE: MemoryDenyWriteExecute is deliberately NOT set — V8's JIT compiles to
+# writable+executable memory and the process would crash immediately.
+
+[Install]
+WantedBy=multi-user.target

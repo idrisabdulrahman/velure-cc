@@ -370,7 +370,7 @@ async function processQueuedSubmission({
 		errorCode = "MOCK_PROVIDER_UNAVAILABLE";
 	}
 	if (outcome === "timeout") errorCode = "MOCK_PROVIDER_TIMEOUT";
-	if (outcome === "duplicate") errorCode = "IDEMPOTENCY_KEY_REUSED";
+	if (outcome === "duplicate") errorCode = "MOCK_IDEMPOTENCY_KEY_REUSED";
 	if (
 		outcome === "rejected" &&
 		responseSnapshot &&

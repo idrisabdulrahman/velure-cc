@@ -204,3 +204,55 @@ export async function setScheduleStatus(
 	if (error) throw error;
 	return { ok: true };
 }
+
+export type RecurringRun = {
+	_id: string;
+	scheduleId: string;
+	periodKey: string;
+	invoiceId?: string;
+	status: "created" | "skipped" | "failed";
+	error?: string;
+	createdAt: number;
+};
+
+type RecurringRunRow = {
+	id: string;
+	schedule_id: string;
+	period_key: string;
+	invoice_id: string | null;
+	status: "created" | "skipped" | "failed";
+	error: string | null;
+	created_at: string;
+};
+
+/**
+ * The workspace's most recent recurring generation attempts, newest first.
+ * `recurring_invoice_runs` is the ledger the scheduler writes; the member RLS
+ * policy lets the settings page read its own rows with the user-scoped client.
+ */
+export async function listRecurringRuns(
+	client: Supabase,
+	userId: string,
+	limit = 5,
+): Promise<RecurringRun[]> {
+	const workspaceId = await workspace(client, userId);
+	const { data, error } = await client
+		.from("recurring_invoice_runs")
+		.select("*")
+		.eq("workspace_id", workspaceId)
+		.order("created_at", { ascending: false })
+		.limit(Math.min(Math.max(Math.floor(limit), 1), 50));
+	if (error) throw error;
+	return (data ?? []).map((row) => {
+		const run = row as unknown as RecurringRunRow;
+		return {
+			_id: run.id,
+			scheduleId: run.schedule_id,
+			periodKey: run.period_key,
+			invoiceId: run.invoice_id ?? undefined,
+			status: run.status,
+			error: run.error ?? undefined,
+			createdAt: Date.parse(run.created_at) || 0,
+		};
+	});
+}

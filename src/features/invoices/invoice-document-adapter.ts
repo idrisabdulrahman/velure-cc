@@ -1,0 +1,346 @@
+import { calculateInvoiceCompliance } from "#/features/compliance/calculate";
+import { NIGERIA_AUTHORITY_LABEL } from "#/features/compliance/nigeria";
+import type { DiscountMode } from "#/features/compliance/types";
+import type {
+	EditorDoc,
+	EditorNode,
+	Invoice as InvoiceDocument,
+	Template,
+} from "#/lib/invoice-document/types";
+import { normalizeCurrencyCode, resolveCurrencyLocale } from "./format";
+import type { InvoiceRecord } from "./types";
+import { INVOICE_DOCUMENT_TYPE_LABELS } from "./types";
+
+/**
+ * Invoicly invoice-document mapper.
+ *
+ * Translates a stored `InvoiceRecord` into the flat, presentation-only shape
+ * that the HTML and PDF document renderers consume. It owns the mapping
+ * between Invoicly's domain model (compliance totals, fiscalization snapshot,
+ * document type, template settings) and the renderer's fields, so the
+ * renderers stay free of domain logic. All money values are handled as major
+ * units for display only; stored values remain integer minor units.
+ */
+export function toEditorDoc(
+	text: string | EditorDoc | null | undefined,
+): EditorDoc | null {
+	if (!text) return null;
+	if (typeof text === "object") {
+		return text.content?.length ? text : null;
+	}
+	if (text.trim().length === 0) return null;
+
+	const paragraphs = text
+		.split("\n")
+		.map((line) => line.trimEnd())
+		.filter((line) => line.length > 0);
+
+	if (paragraphs.length === 0) return null;
+
+	return {
+		type: "doc",
+		content: paragraphs.map((line) => ({
+			type: "paragraph",
+			content: [{ type: "text", text: line }],
+		})),
+	};
+}
+
+export function mergeDocBlocks(docs: Array<EditorDoc | null | undefined>) {
+	const blocks: EditorNode[] = [];
+	for (const doc of docs) {
+		if (doc) blocks.push(...doc.content);
+	}
+	return blocks.length ? { type: "doc" as const, content: blocks } : null;
+}
+
+function amountFromLineItems(invoice: InvoiceRecord) {
+	return invoice.lineItems.reduce(
+		(sum, item) => sum + item.quantity * item.price,
+		0,
+	);
+}
+
+function buildIdentityDoc(lines: Array<string | null | undefined>) {
+	return toEditorDoc(
+		lines
+			.map((line) => line?.trim())
+			.filter((line): line is string => Boolean(line && line.length > 0))
+			.join("\n"),
+	);
+}
+
+/**
+ * Resolves how this invoice's discount applies. `line` mode uses the sum of the
+ * per-line discounts; invoice-level modes use the stored invoice discount. A
+ * legacy discounted invoice with no stored mode resolves to `invoice_after_tax`
+ * (what the renderer has always displayed). Mirrors `resolveInvoiceDiscount`.
+ */
+function resolveDocumentDiscount(invoice: InvoiceRecord): {
+	mode: DiscountMode;
+	discount: number;
+	includeDiscount: boolean;
+} {
+	const settings = invoice.templateSettings ?? {};
+	const lineDiscountTotal = invoice.lineItems.reduce(
+		(sum, line) => sum + (line.discount ?? 0),
+		0,
+	);
+	const invoiceDiscount = settings.includeDiscount
+		? (settings.discount ?? 0)
+		: 0;
+	const mode: DiscountMode =
+		settings.discountMode ??
+		(lineDiscountTotal > 0
+			? "line"
+			: invoiceDiscount > 0
+				? "invoice_after_tax"
+				: "none");
+	const discount =
+		mode === "line"
+			? lineDiscountTotal
+			: mode === "invoice_before_tax" || mode === "invoice_after_tax"
+				? invoiceDiscount
+				: 0;
+	return {
+		mode,
+		discount,
+		includeDiscount:
+			settings.includeDiscount ?? (mode === "line" && lineDiscountTotal > 0),
+	};
+}
+
+/** Compliance snapshot, recomputed only when the invoice has none stored. */
+function resolveCompliance(invoice: InvoiceRecord) {
+	if (invoice.compliance) return invoice.compliance;
+	const settings = invoice.templateSettings ?? {};
+	return calculateInvoiceCompliance({
+		seller: { legalName: "Invoicly", countryCode: "NG" },
+		buyer: {
+			legalName: invoice.customerName,
+			countryCode: "NG",
+		},
+		currency: invoice.currency,
+		lineItems: invoice.lineItems,
+		discount: settings.includeDiscount ? settings.discount : undefined,
+		discountMode: settings.discountMode,
+	});
+}
+
+function buildTemplate(invoice: InvoiceRecord): Template {
+	const isProforma = invoice.documentType === "proforma";
+	const documentLabel =
+		INVOICE_DOCUMENT_TYPE_LABELS[invoice.documentType ?? "standard"];
+	const templateSize = invoice.invoiceSize === "LETTER" ? "letter" : "a4";
+	const dateFormat =
+		invoice.dateFormat === "us"
+			? "MM/dd/yyyy"
+			: invoice.dateFormat === "ng"
+				? "dd/MM/yyyy"
+				: "yyyy-MM-dd";
+	const currency = normalizeCurrencyCode(invoice.currency);
+	const compliance = resolveCompliance(invoice);
+	const discount = resolveDocumentDiscount(invoice);
+
+	const settings = invoice.templateSettings ?? {};
+	return {
+		customerLabel: settings.customerLabel ?? "To",
+		title: settings.title ?? documentLabel,
+		fromLabel: settings.fromLabel ?? "From",
+		invoiceNoLabel: settings.invoiceNoLabel ?? `${documentLabel} No`,
+		issueDateLabel: settings.issueDateLabel ?? "Issue Date",
+		dueDateLabel: settings.dueDateLabel ?? "Due Date",
+		descriptionLabel: settings.descriptionLabel ?? "Description",
+		priceLabel: settings.priceLabel ?? "Price",
+		quantityLabel: settings.quantityLabel ?? "Quantity",
+		totalLabel: settings.totalLabel ?? "Total",
+		totalSummaryLabel: settings.totalSummaryLabel ?? "Total",
+		vatLabel: "VAT",
+		subtotalLabel: settings.subtotalLabel ?? "Subtotal",
+		taxLabel: "Tax",
+		discountLabel: settings.discountLabel ?? "Discount",
+		withholdingTaxLabel: compliance.withholdingTaxLabel,
+		netAmountLabel:
+			compliance.withholding.category === "none"
+				? "Amount Payable"
+				: "Net Amount Payable",
+		timezone: "UTC",
+		paymentLabel:
+			settings.paymentLabel ??
+			(isProforma ? "Deposit / Payment Details" : "Payment Details"),
+		noteLabel: settings.noteLabel ?? "Note",
+		logoUrl: invoice.logoUrl?.trim() ? invoice.logoUrl.trim() : null,
+		currency,
+		paymentDetails: toEditorDoc(invoice.paymentDetails),
+		fromDetails: buildIdentityDoc([
+			compliance.seller.legalName ??
+				compliance.seller.tradingName ??
+				"Invoicly",
+			compliance.seller.address,
+			compliance.seller.email,
+			compliance.seller.phone,
+			compliance.seller.taxId ? `TIN: ${compliance.seller.taxId}` : undefined,
+			compliance.seller.rcNumber
+				? `CAC RC Number: ${compliance.seller.rcNumber}`
+				: undefined,
+			NIGERIA_AUTHORITY_LABEL,
+		]),
+		noteDetails: null,
+		dateFormat,
+		includeVat:
+			compliance.taxLabel.toUpperCase() === "VAT" &&
+			compliance.taxLines.length > 0,
+		includeTax:
+			compliance.taxLabel.toUpperCase() !== "VAT" &&
+			compliance.taxLines.length > 0,
+		includeDiscount: discount.includeDiscount,
+		/** How the discount applies; drives before- vs after-tax VAT. */
+		discountMode: discount.mode,
+		includeDecimals: settings.includeDecimals ?? true,
+		includeUnits: settings.includeUnits ?? false,
+		includeQr: settings.includeQr ?? false,
+		taxRate:
+			compliance.taxLabel.toUpperCase() === "VAT" ? 0 : compliance.taxRate,
+		vatRate:
+			compliance.taxLabel.toUpperCase() === "VAT" ? compliance.taxRate : 0,
+		withholdingTaxRate: compliance.withholdingTaxRate,
+		size: templateSize,
+		deliveryType: "create",
+		locale: resolveCurrencyLocale(currency),
+	};
+}
+
+export function getInvoiceTemplateSize(template: Template) {
+	if (template.size === "letter") {
+		return { width: 750, height: 1056 };
+	}
+
+	return { width: 595, height: 842 };
+}
+
+export function toInvoiceDocument(invoice: InvoiceRecord): InvoiceDocument {
+	const template = buildTemplate(invoice);
+	const compliance = resolveCompliance(invoice);
+	const documentDiscount = resolveDocumentDiscount(invoice);
+	const amount = compliance.grandTotal || amountFromLineItems(invoice);
+	const netPayable = amount - (compliance.withholdingTaxAmount || 0);
+	const customerName = invoice.customerName || null;
+	const fiscalization = invoice.fiscalization;
+	const mockClearance =
+		fiscalization?.status === "mock_cleared" &&
+		fiscalization.mock === true &&
+		fiscalization.provider === "mock" &&
+		fiscalization.environment === "sandbox" &&
+		typeof fiscalization.mockIrn === "string" &&
+		fiscalization.mockIrn.startsWith("MOCK-IRN-") &&
+		typeof fiscalization.qrCodePayload === "string" &&
+		fiscalization.qrCodePayload.startsWith("MOCK-SANDBOX|NOT-NRS-CLEARED|")
+			? {
+					irn: fiscalization.mockIrn,
+					qrPayload: fiscalization.qrCodePayload,
+				}
+			: undefined;
+	const shipmentLines = invoice.shipmentDetails
+		? [
+				invoice.shipmentDetails.weight
+					? `Weight: ${invoice.shipmentDetails.weight}`
+					: null,
+				invoice.shipmentDetails.packageCount
+					? `Packages: ${invoice.shipmentDetails.packageCount}`
+					: null,
+				invoice.shipmentDetails.hsCode
+					? `HS code: ${invoice.shipmentDetails.hsCode}`
+					: null,
+				invoice.shipmentDetails.incoterms
+					? `Incoterms: ${invoice.shipmentDetails.incoterms}`
+					: null,
+				invoice.shipmentDetails.portOfLoading
+					? `Port of loading: ${invoice.shipmentDetails.portOfLoading}`
+					: null,
+				invoice.shipmentDetails.portOfDischarge
+					? `Port of discharge: ${invoice.shipmentDetails.portOfDischarge}`
+					: null,
+			].filter(Boolean)
+		: [];
+	const depositLine = invoice.depositRequest
+		? `Deposit requested: ${
+				invoice.depositRequest.kind === "percentage"
+					? `${invoice.depositRequest.value}%`
+					: `${invoice.currency} ${invoice.depositRequest.value}`
+			}${invoice.depositRequest.dueDate ? ` by ${invoice.depositRequest.dueDate}` : ""}`
+		: null;
+
+	return {
+		id: invoice.id,
+		dueDate: invoice.dueDate,
+		invoiceNumber: invoice.invoiceNumber,
+		customerPoNumber: invoice.customerPoNumber ?? null,
+		createdAt: new Date().toISOString(),
+		amount,
+		currency: normalizeCurrencyCode(invoice.currency),
+		lineItems: invoice.lineItems,
+		paymentDetails: template.paymentDetails,
+		customerDetails: buildIdentityDoc([
+			invoice.customerName || "Untitled customer",
+			compliance.buyer.email,
+			compliance.buyer.phone,
+			compliance.buyer.taxId
+				? `Buyer TIN: ${compliance.buyer.taxId}`
+				: undefined,
+		]),
+		reminderSentAt: null,
+		updatedAt: null,
+		note: null,
+		internalNote: null,
+		paidAt: invoice.paidAt
+			? new Date(invoice.paidAt).toISOString()
+			: invoice.reminder?.paidAt
+				? new Date(invoice.reminder.paidAt).toISOString()
+				: null,
+		vat: template.includeVat ? compliance.totalTax : null,
+		tax: template.includeTax ? compliance.totalTax : null,
+		withholdingTax: compliance.withholdingTaxAmount || null,
+		netPayable,
+		regulatoryNotice: compliance.regulatoryNotice ?? null,
+		filePath: null,
+		status: invoice.status === "scheduled" ? "draft" : invoice.status,
+		viewedAt: null,
+		fromDetails: template.fromDetails,
+		issueDate: invoice.issueDate,
+		sentAt: null,
+		template,
+		noteDetails: mergeDocBlocks([
+			toEditorDoc(
+				[
+					invoice.documentType === "proforma"
+						? "Pro-forma invoice - not a final tax invoice until converted."
+						: null,
+					depositLine,
+					shipmentLines.length > 0 ? shipmentLines.join("\n") : null,
+				]
+					.filter(Boolean)
+					.join("\n\n"),
+			),
+			typeof invoice.notes === "string"
+				? toEditorDoc(invoice.notes)
+				: invoice.notes,
+			toEditorDoc(compliance.regulatoryNotice),
+		]),
+		customerName,
+		token: invoice.token,
+		sentTo: null,
+		discount: documentDiscount.discount,
+		topBlock: invoice.topBlock ?? null,
+		bottomBlock: invoice.bottomBlock ?? null,
+		customer: {
+			name: customerName,
+			website: null,
+			email: null,
+		},
+		customerId: null,
+		team: {
+			name: "Invoicly",
+		},
+		...(mockClearance ? { mockClearance } : {}),
+	};
+}

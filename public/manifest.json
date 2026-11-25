@@ -1,7 +1,7 @@
 {
-  "name": "Velure",
-  "short_name": "Velure",
-  "description": "Modern invoice and client billing workspace for Velure.",
+  "name": "Invoicly",
+  "short_name": "Invoicly",
+  "description": "Modern invoice and client billing workspace.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

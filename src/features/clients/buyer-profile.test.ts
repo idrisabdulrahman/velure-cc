@@ -58,20 +58,33 @@ describe("validateBuyerProfile", () => {
 		expect(result.valid).toBe(true);
 	});
 
-	it("validates a TIN that IS provided by a B2C buyer", () => {
+	it("flags — does not reject — a malformed TIN shape", () => {
 		const bad = validateBuyerProfile({ ...validB2c, taxId: "12345" });
 		expect(codes(bad)).toContain("tin_format");
-		expect(bad.valid).toBe(false);
+		// The required TIN shape is unconfirmed, so a wrong shape is a warning
+		// (stored + flagged), never a save-blocking error.
+		expect(bad.valid).toBe(true);
+		expect(bad.status).toBe("needs_review");
 	});
 
 	it.each([
 		["walkthrough placeholder", "1234567890"],
 		["all zeros", "0000000000"],
 		["all ones", "1111111111"],
+		["11-digit all ones", "11111111111"],
 	])("rejects a placeholder TIN (%s)", (_label, taxId) => {
 		const result = validateBuyerProfile({ ...validB2b, taxId });
 		expect(codes(result)).toEqual(["tin_placeholder"]);
 		expect(result.valid).toBe(false);
+	});
+
+	it("accepts an 11-12 digit B2B TIN (widened rule)", () => {
+		for (const taxId of ["12345600001", "123456000012"]) {
+			const result = validateBuyerProfile({ ...validB2b, taxId });
+			expect(codes(result)).toEqual([]);
+			expect(result.valid).toBe(true);
+			expect(result.complete).toBe(true);
+		}
 	});
 
 	it("requires name and email and rejects a malformed email", () => {

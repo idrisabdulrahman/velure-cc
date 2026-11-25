@@ -94,7 +94,7 @@ describe("mock provider adapter", () => {
 				});
 			}
 			if (scenario === "rejection") {
-				expect(first.rejectionCode).toBe("BUYER_TIN_INVALID");
+				expect(first.rejectionCode).toBe("MOCK_BUYER_TIN_INVALID");
 			}
 		},
 	);
@@ -108,7 +108,7 @@ describe("mock provider adapter", () => {
 		});
 		expect(result).toMatchObject({
 			outcome: "rejected",
-			rejectionCode: "LOCAL_VALIDATION_FAILED",
+			rejectionCode: "MOCK_LOCAL_VALIDATION_FAILED",
 			issues: invalid.issues,
 			mock: true,
 		});
@@ -133,7 +133,7 @@ describe("mock provider adapter", () => {
 		});
 		expect(replay).toMatchObject({
 			outcome: "duplicate",
-			rejectionCode: "IDEMPOTENCY_KEY_REUSED",
+			rejectionCode: "MOCK_IDEMPOTENCY_KEY_REUSED",
 			reference: first.reference,
 			mock: true,
 			environment: "sandbox",

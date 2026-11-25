@@ -3,9 +3,14 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import {
 	AlertTriangle,
+	ChevronRight,
 	Download,
+	FileSpreadsheet,
+	FileText,
+	Landmark,
 	ReceiptText,
 	Search,
+	Table2,
 	UsersRound,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -13,6 +18,7 @@ import { Kpi, KpiStrip } from "#/components/redesign/kpi-strip";
 import { Panel } from "#/components/redesign/panel";
 import { StatusPill } from "#/components/redesign/status-pill";
 import { Tabs } from "#/components/redesign/tabs";
+import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { PanelLoader } from "#/components/ui/panel-loader";
@@ -44,6 +50,7 @@ import { MockSandboxNotice } from "#/features/einvoicing/mock-sandbox-notice";
 import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import { useUnifiedAuth } from "#/lib/auth-hook";
 import { useSupabaseSession } from "#/lib/supabase-session";
+import { cn } from "#/lib/utils.ts";
 import {
 	createInvoiceExport,
 	getComplianceDashboard,
@@ -96,6 +103,12 @@ function exportStatusTone(status: string): "ok" | "warn" | "bad" | "mute" {
 	return "mute";
 }
 
+/** A ready/completed export is downloadable, so it has nothing to retry. */
+function isExportReady(status: string) {
+	const normalized = status.toLowerCase();
+	return normalized === "ready" || normalized === "completed";
+}
+
 function formatCount(value: number) {
 	return new Intl.NumberFormat("en-NG").format(
 		Number.isFinite(value) ? value : 0,
@@ -111,6 +124,12 @@ function formatExportKind(value: string) {
 	if (value === "invoices_csv") return "Invoice report";
 	if (value === "tax_summary_csv") return "Tax summary";
 	if (value === "customer_ledger_csv") return "Customer balance report";
+	if (value === "accountant_lines_csv") return "Accountant line export";
+	if (value === "accountant_lines_xlsx")
+		return "Accountant line export (Excel)";
+	if (value === "vat_sales_schedule_xlsx") return "VAT sales data (Rev360)";
+	if (value === "qbo_invoices_csv") return "QuickBooks invoices";
+	if (value === "zoho_invoices_csv") return "Zoho Books invoices";
 	return value
 		.split("_")
 		.filter(Boolean)
@@ -124,11 +143,26 @@ function formatExportDisplayName(record: { kind: string; createdAt?: number }) {
 	return date === "No exports yet" ? label : `${label} - ${date}`;
 }
 
-function downloadExportContent(record: { fileName: string; content: string }) {
+const XLSX_MIME =
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+function blobForExport(record: { fileName: string; content: string }): Blob {
 	const extension = record.fileName.split(".").pop()?.toLowerCase();
+	if (extension === "xlsx") {
+		// invoice_exports.content stores the workbook bytes base64-encoded
+		// (docs/EXPORT-FORMATS.md) — decode back to binary.
+		const binary = Uint8Array.from(window.atob(record.content), (char) =>
+			char.charCodeAt(0),
+		);
+		return new Blob([binary], { type: XLSX_MIME });
+	}
 	const mimeType =
 		extension === "json" ? "application/json" : "text/csv;charset=utf-8";
-	const blob = new Blob([record.content], { type: mimeType });
+	return new Blob([record.content], { type: mimeType });
+}
+
+function downloadExportContent(record: { fileName: string; content: string }) {
+	const blob = blobForExport(record);
 	const url = window.URL.createObjectURL(blob);
 	const link = document.createElement("a");
 
@@ -138,6 +172,85 @@ function downloadExportContent(record: { fileName: string; content: string }) {
 	link.click();
 	link.remove();
 	window.URL.revokeObjectURL(url);
+}
+
+/**
+ * One export offering on the Exports tab. The icon tile and footer keep every
+ * card in a row the same height, so the generate buttons line up; the format
+ * badges make the CSV/Excel split readable at a glance. Integration cards use
+ * the `info` tone and a visible warning pill, and long caveats live behind the
+ * "Import notes" disclosure so the default card reads in one line.
+ */
+function ExportCard({
+	icon: Icon,
+	title,
+	description,
+	formats,
+	tone = "default",
+	warning,
+	note,
+	children,
+}: {
+	icon: LucideIcon;
+	title: string;
+	description: string;
+	formats: string[];
+	tone?: "default" | "info";
+	warning?: string;
+	note?: ReactNode;
+	children: ReactNode;
+}) {
+	return (
+		<div className="flex h-full flex-col rounded-lg border border-rule bg-paper-2 p-5">
+			<div className="flex items-start gap-3">
+				<span
+					className={cn(
+						"mt-0.5 inline-flex h-9 w-9 flex-none items-center justify-center rounded-md",
+						tone === "info"
+							? "bg-info-soft text-info"
+							: "bg-brand-soft text-brand",
+					)}
+				>
+					<Icon aria-hidden="true" className="h-4 w-4" />
+				</span>
+				<div className="min-w-0 flex-1">
+					<p className="text-sm font-medium text-ink">{title}</p>
+					<p className="mt-1 text-xs leading-5 text-ink-2">{description}</p>
+					{warning ? (
+						<StatusPill tone="warn" className="mt-2.5">
+							{warning}
+						</StatusPill>
+					) : null}
+				</div>
+			</div>
+			{note ? (
+				<details className="group mt-3">
+					<summary className="flex w-fit cursor-pointer list-none items-center gap-1 text-xs font-medium text-ink-2 transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
+						<ChevronRight
+							aria-hidden="true"
+							className="size-3.5 flex-none transition-transform group-open:rotate-90"
+						/>
+						Import notes
+					</summary>
+					<div className="mt-2 text-xs leading-5 text-ink-2">{note}</div>
+				</details>
+			) : null}
+			<div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-rule/60 pt-4">
+				<div className="flex flex-wrap gap-1.5">
+					{formats.map((format) => (
+						<Badge
+							key={format}
+							variant="tag-outline"
+							className="h-[20px] px-2 text-[10px] font-medium uppercase tracking-[0.08em]"
+						>
+							{format}
+						</Badge>
+					))}
+				</div>
+				<div className="flex flex-wrap justify-end gap-2">{children}</div>
+			</div>
+		</div>
+	);
 }
 
 function validateTaxProfile(form: {
@@ -224,8 +337,8 @@ function ComplianceSettingsPage() {
 		retryInvoiceExport(client!, velureUserId!, id);
 
 	const [form, setForm] = useState({
-		name: "Velure Workspace",
-		legalName: "Velure Workspace",
+		name: "Invoicly Workspace",
+		legalName: "Invoicly Workspace",
 		email: "",
 		phone: "",
 		address: "",
@@ -238,7 +351,7 @@ function ComplianceSettingsPage() {
 		taxRuleSetVersion: NIGERIA_TAX_RULE_SET_VERSION,
 		atrsEnvironment: "sandbox",
 		atrsCredentialsConfigured: false,
-		reminderSignature: "Velure Finance Team",
+		reminderSignature: "Invoicly Finance Team",
 		remindersEnabled: true,
 		logoUrl: "",
 		paymentDetails: "",
@@ -334,7 +447,7 @@ function ComplianceSettingsPage() {
 			atrsCredentialsConfigured:
 				(workspace as { atrs?: { credentialsConfigured?: boolean } }).atrs
 					?.credentialsConfigured ?? false,
-			reminderSignature: workspace.reminderSignature ?? "Velure Finance Team",
+			reminderSignature: workspace.reminderSignature ?? "Invoicly Finance Team",
 			remindersEnabled: workspace.remindersEnabled,
 			logoUrl: workspace.logoUrl ?? "",
 			paymentDetails: workspace.paymentDetails ?? "",
@@ -406,39 +519,49 @@ function ComplianceSettingsPage() {
 				aria-label="Compliance disclaimer"
 				className="rounded-md border border-warn-line/35 bg-warn-soft px-4 py-3 text-xs leading-5 text-warn"
 			>
-				{NRS_INFORMATIONAL_DISCLAIMER} Velure is not an NRS-certified
+				{NRS_INFORMATIONAL_DISCLAIMER} Invoicly is not an NRS-certified
 				e-invoicing provider and does not submit invoices to the NRS for
 				clearance.
 			</div>
 			<MockSandboxNotice />
 
 			<section aria-label="Official sources">
-				<h2 className="text-[11px] font-bold uppercase tracking-[0.22em] text-ink-3">
-					Official sources
-				</h2>
-				<p className="mt-2 max-w-2xl text-xs leading-5 text-ink-3">
-					{NRS_OFFICIAL_SOURCES_INTRO}
-				</p>
-				<ul className="mt-3 grid gap-3 md:grid-cols-2">
-					{NRS_OFFICIAL_SOURCES.map((source) => (
-						<li
-							key={source.url}
-							className="rounded-md border border-rule bg-paper px-4 py-3"
-						>
-							<a
-								href={source.url}
-								target="_blank"
-								rel="noopener noreferrer"
-								className="text-sm font-medium text-brand underline underline-offset-2 hover:text-brand-hi"
-							>
-								{source.title}
-							</a>
-							<p className="mt-1 text-xs leading-5 text-ink-3">
-								{source.description}
-							</p>
-						</li>
-					))}
-				</ul>
+				<details className="group rounded-md border border-rule bg-paper">
+					<summary className="flex cursor-pointer list-none items-center gap-2.5 px-4 py-3 [&::-webkit-details-marker]:hidden">
+						<ChevronRight
+							aria-hidden="true"
+							className="size-4 flex-none text-ink-3 transition-transform group-open:rotate-90"
+						/>
+						<span className="text-sm font-medium text-ink">
+							Official sources
+						</span>
+						<span className="min-w-0 truncate text-xs text-ink-3">
+							Nigerian tax and e-invoicing references
+						</span>
+					</summary>
+					<div className="border-t border-rule/60 px-4 py-3">
+						<p className="max-w-2xl text-xs leading-5 text-ink-3">
+							{NRS_OFFICIAL_SOURCES_INTRO}
+						</p>
+						<ul className="mt-3 grid gap-2 md:grid-cols-2">
+							{NRS_OFFICIAL_SOURCES.map((source) => (
+								<li key={source.url}>
+									<a
+										href={source.url}
+										target="_blank"
+										rel="noopener noreferrer"
+										className="text-sm font-medium text-brand underline underline-offset-2 hover:text-brand-hi"
+									>
+										{source.title}
+									</a>
+									<p className="mt-0.5 text-xs leading-5 text-ink-3">
+										{source.description}
+									</p>
+								</li>
+							))}
+						</ul>
+					</div>
+				</details>
 			</section>
 
 			{isDashboardLoading ? (
@@ -748,7 +871,7 @@ function ComplianceSettingsPage() {
 							accounting apps will be added later.
 						</p>
 						<p className="mt-1 text-xs text-ink-3">
-							Velure helps structure invoice data for Nigerian finance
+							Invoicly helps structure invoice data for Nigerian finance
 							workflows. Confirm VAT, WHT, and filing treatment with your
 							accountant or tax advisor.
 						</p>
@@ -1100,145 +1223,381 @@ function ComplianceSettingsPage() {
 			) : null}
 
 			{activeTab === "exports" ? (
-				<section aria-label="Exports">
+				<section aria-label="Exports" className="space-y-8">
 					<Panel
 						title="Exports"
-						sub="Your data is yours. Export invoices as PDF or CSV anytime. Downloadable CSV reports cover invoicing, customer balances, and tax review."
+						sub="Your data is yours. Export invoices as PDF or CSV/Excel anytime. Downloadable reports cover invoicing, customer balances, tax review, and a per-line accounting export."
 					>
-						<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-							<div className="grid gap-3 rounded-md border border-rule bg-paper-2 px-4 py-3">
-								<div>
-									<p className="text-sm font-medium text-ink">Invoice report</p>
-									<p className="mt-1 text-xs text-ink-3">
-										Every invoice in the period with VAT and status.
-									</p>
-								</div>
-								<Button
-									type="button"
-									variant="outline"
-									className="border-rule bg-transparent"
-									onClick={async () => {
-										const result = await createExport({ kind: "invoices_csv" });
-										downloadExportContent(result);
-										toast({
-											title: "Invoice report generated",
-											description: "Download started.",
-											variant: "success",
-										});
-									}}
-								>
-									<Download className="h-4 w-4" />
-									Generate CSV
-								</Button>
+						<div>
+							<div className="flex items-center gap-3">
+								<h3 className="text-sm font-semibold text-ink">Reports</h3>
+								<span aria-hidden="true" className="h-px flex-1 bg-rule" />
 							</div>
-							<div className="grid gap-3 rounded-md border border-rule bg-paper-2 px-4 py-3">
-								<div>
-									<p className="text-sm font-medium text-ink">
-										Customer balance report
-									</p>
-									<p className="mt-1 text-xs text-ink-3">
-										What each customer owes, by invoice.
-									</p>
-								</div>
-								<Button
-									type="button"
-									variant="outline"
-									className="border-rule bg-transparent"
-									onClick={async () => {
-										const result = await createExport({
-											kind: "customer_ledger_csv",
-										});
-										downloadExportContent(result);
-										toast({
-											title: "Customer balance report generated",
-											description: "Download started.",
-											variant: "success",
-										});
-									}}
+							<p className="mt-1.5 text-xs text-ink-3">
+								Download-ready files for your records and your accountant.
+							</p>
+							<div className="mt-4 grid gap-4 md:grid-cols-2">
+								<ExportCard
+									icon={ReceiptText}
+									title="Invoice report"
+									formats={["CSV"]}
+									description="Every invoice in the period with VAT and status."
 								>
-									<Download className="h-4 w-4" />
-									Generate CSV
-								</Button>
-							</div>
-							<div className="grid gap-3 rounded-md border border-rule bg-paper-2 px-4 py-3">
-								<div>
-									<p className="text-sm font-medium text-ink">Tax summary</p>
-									<p className="mt-1 text-xs text-ink-3">
-										VAT and WHT totals by month.
-									</p>
-								</div>
-								<Button
-									type="button"
-									variant="outline"
-									className="border-rule bg-transparent"
-									onClick={async () => {
-										const result = await createExport({
-											kind: "tax_summary_csv",
-										});
-										downloadExportContent(result);
-										toast({
-											title: "Tax summary generated",
-											description: "Download started.",
-											variant: "success",
-										});
-									}}
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="border-rule bg-transparent"
+										onClick={async () => {
+											const result = await createExport({
+												kind: "invoices_csv",
+											});
+											downloadExportContent(result);
+											toast({
+												title: "Invoice report generated",
+												description: "Download started.",
+												variant: "success",
+											});
+										}}
+									>
+										<Download className="h-4 w-4" />
+										Generate CSV
+									</Button>
+								</ExportCard>
+								<ExportCard
+									icon={UsersRound}
+									title="Customer balance report"
+									formats={["CSV"]}
+									description="What each customer owes, by invoice."
 								>
-									<Download className="h-4 w-4" />
-									Generate CSV
-								</Button>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="border-rule bg-transparent"
+										onClick={async () => {
+											const result = await createExport({
+												kind: "customer_ledger_csv",
+											});
+											downloadExportContent(result);
+											toast({
+												title: "Customer balance report generated",
+												description: "Download started.",
+												variant: "success",
+											});
+										}}
+									>
+										<Download className="h-4 w-4" />
+										Generate CSV
+									</Button>
+								</ExportCard>
+								<ExportCard
+									icon={FileText}
+									title="Tax summary"
+									formats={["CSV"]}
+									description="VAT and WHT totals by month."
+								>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="border-rule bg-transparent"
+										onClick={async () => {
+											const result = await createExport({
+												kind: "tax_summary_csv",
+											});
+											downloadExportContent(result);
+											toast({
+												title: "Tax summary generated",
+												description: "Download started.",
+												variant: "success",
+											});
+										}}
+									>
+										<Download className="h-4 w-4" />
+										Generate CSV
+									</Button>
+								</ExportCard>
+								<ExportCard
+									icon={Table2}
+									title="Accountant line export"
+									formats={["CSV", "Excel"]}
+									description="One row per invoice line, grouped by invoice."
+								>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="border-rule bg-transparent"
+										onClick={async () => {
+											const result = await createExport({
+												kind: "accountant_lines_csv",
+											});
+											downloadExportContent(result);
+											toast({
+												title: "Accountant line export generated",
+												description: "Download started.",
+												variant: "success",
+											});
+										}}
+									>
+										<Download className="h-4 w-4" />
+										Generate CSV
+									</Button>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="border-rule bg-transparent"
+										onClick={async () => {
+											const result = await createExport({
+												kind: "accountant_lines_xlsx",
+											});
+											downloadExportContent(result);
+											toast({
+												title: "Accountant line export generated",
+												description: "Download started.",
+												variant: "success",
+											});
+										}}
+									>
+										<Download className="h-4 w-4" />
+										Generate Excel
+									</Button>
+								</ExportCard>
 							</div>
 						</div>
-
-						<div className="mt-4 space-y-3">
-							{visibleExports.map((record) => (
-								<div
-									key={record._id}
-									className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-rule bg-paper px-4 py-3"
+						<div className="mt-8">
+							<div className="flex items-center gap-3">
+								<h3 className="text-sm font-semibold text-ink">
+									For importing into
+								</h3>
+								<span aria-hidden="true" className="h-px flex-1 bg-rule" />
+							</div>
+							<p className="mt-1.5 text-xs text-ink-3">
+								Files shaped for another system&apos;s import wizard. Check the
+								import notes before you upload.
+							</p>
+							<div className="mt-4 grid gap-4 md:grid-cols-3">
+								<ExportCard
+									icon={Landmark}
+									title="VAT sales data (Rev360)"
+									formats={["Excel"]}
+									tone="info"
+									description="Rows for the official Rev360 Sales sheet."
+									warning="Layout not verified"
+									note="Buyer Tax ID is 0 when unknown. The column layout has not been verified against the live Rev360 template, so check the first rows after you paste."
 								>
-									<div className="min-w-0 flex-1">
-										<p className="truncate text-sm font-medium text-ink">
-											{formatExportDisplayName(record)}
-										</p>
-										<p className="mt-1 text-xs text-ink-3">
-											{formatExportKind(record.kind)} • {record.fileName}
-										</p>
-									</div>
-									<StatusPill tone={exportStatusTone(record.status)}>
-										{record.status}
-									</StatusPill>
-									<div className="flex gap-2">
-										<Button
-											type="button"
-											variant="outline"
-											className="border-rule bg-transparent"
-											onClick={() => downloadExportContent(record)}
-										>
-											Download
-										</Button>
-										<Button
-											type="button"
-											variant="outline"
-											className="border-rule bg-transparent"
-											onClick={async () => {
-												await retryExport({ id: record._id });
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="border-rule bg-transparent"
+										onClick={async () => {
+											const result = await createExport({
+												kind: "vat_sales_schedule_xlsx",
+											});
+											downloadExportContent(result);
+											toast({
+												title: "VAT sales data generated",
+												description: "Download started.",
+												variant: "success",
+											});
+										}}
+									>
+										<Download className="h-4 w-4" />
+										Generate Excel
+									</Button>
+								</ExportCard>
+								<ExportCard
+									icon={FileSpreadsheet}
+									title="QuickBooks invoices (CSV)"
+									formats={["CSV"]}
+									tone="info"
+									description="QuickBooks-ready invoice lines."
+									note={
+										<>
+											Dates are DD/MM/YYYY. Custom invoice numbers survive only
+											with &quot;Custom transaction numbers&quot; turned on in
+											QuickBooks. Credit notes, discounted invoices, other
+											currencies, and rows without a customer are skipped with a
+											warning. At most 100 invoices / 1,000 rows per file.
+										</>
+									}
+								>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="border-rule bg-transparent"
+										onClick={async () => {
+											try {
+												const result = await createExport({
+													kind: "qbo_invoices_csv",
+												});
+												downloadExportContent(result);
 												toast({
-													title: "Export marked ready",
+													title: "QuickBooks invoices generated",
+													description:
+														result.warnings.length > 0
+															? `${result.warnings.join(" ")} Download started.`
+															: "Download started.",
 													variant: "success",
 												});
-											}}
-										>
-											Retry
-										</Button>
-									</div>
-								</div>
-							))}
-							{visibleExports.length === 0 ? (
-								<div className="rounded-md border border-dashed border-rule bg-paper px-4 py-6 text-sm text-ink-3">
-									No downloadable exports yet. Generate an invoice list,
-									customer balance report, or tax summary.
-								</div>
-							) : null}
+											} catch (error) {
+												toast({
+													title: "QuickBooks export failed",
+													description:
+														error instanceof Error
+															? error.message
+															: "Please try again.",
+													variant: "error",
+												});
+											}
+										}}
+									>
+										<Download className="h-4 w-4" />
+										Generate CSV
+									</Button>
+								</ExportCard>
+								<ExportCard
+									icon={FileSpreadsheet}
+									title="Zoho Books invoices (CSV)"
+									formats={["CSV"]}
+									tone="info"
+									description="Zoho Books-ready invoice lines."
+									note={
+										<>
+											Dates are DD/MM/YYYY. Leave &quot;Auto-generate Invoice
+											Numbers&quot; off in the Zoho import wizard so Invoicly
+											numbers survive. Credit notes, discounted invoices, other
+											currencies, and rows without a customer are skipped with a
+											warning. Files over 10 MB are refused.
+										</>
+									}
+								>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="border-rule bg-transparent"
+										onClick={async () => {
+											try {
+												const result = await createExport({
+													kind: "zoho_invoices_csv",
+												});
+												downloadExportContent(result);
+												toast({
+													title: "Zoho Books invoices generated",
+													description:
+														result.warnings.length > 0
+															? `${result.warnings.join(" ")} Download started.`
+															: "Download started.",
+													variant: "success",
+												});
+											} catch (error) {
+												toast({
+													title: "Zoho Books export failed",
+													description:
+														error instanceof Error
+															? error.message
+															: "Please try again.",
+													variant: "error",
+												});
+											}
+										}}
+									>
+										<Download className="h-4 w-4" />
+										Generate CSV
+									</Button>
+								</ExportCard>
+							</div>
 						</div>
+					</Panel>
+					<Panel
+						title="Recent exports"
+						sub="Re-download a generated file or retry a failed one."
+					>
+						{visibleExports.length === 0 ? (
+							<div className="rounded-md border border-dashed border-rule bg-paper px-4 py-6 text-center text-sm text-ink-3">
+								No downloadable exports yet. Generate an invoice list, customer
+								balance report, or tax summary.
+							</div>
+						) : (
+							<div
+								className="overflow-x-auto"
+								// biome-ignore lint/a11y/noNoninteractiveTabindex: WCAG 2.1.1 — a scrollable table must be keyboard reachable
+								tabIndex={0}
+								role="region"
+								aria-label="Recent exports table"
+							>
+								<table className="w-full min-w-[720px] text-left text-sm">
+									<thead className="border-b border-rule text-xs uppercase tracking-[0.08em] text-ink-3">
+										<tr>
+											<th className="py-3 pr-4 font-medium">Export</th>
+											<th className="py-3 pr-4 font-medium">File</th>
+											<th className="py-3 pr-4 font-medium">Status</th>
+											<th className="py-3 pr-4 text-right font-medium">
+												Created
+											</th>
+											<th className="py-3 text-right font-medium">Actions</th>
+										</tr>
+									</thead>
+									<tbody className="divide-y divide-rule">
+										{visibleExports.map((record) => (
+											<tr key={record._id} className="text-ink-2">
+												<td className="py-3.5 pr-4 font-medium text-ink">
+													{formatExportKind(record.kind)}
+												</td>
+												<td className="py-3.5 pr-4">
+													<span className="block max-w-[280px] truncate text-xs text-ink-2">
+														{record.fileName}
+													</span>
+												</td>
+												<td className="py-3.5 pr-4">
+													<StatusPill tone={exportStatusTone(record.status)}>
+														{record.status}
+													</StatusPill>
+												</td>
+												<td className="py-3.5 pr-4 text-right font-num text-xs tabular-nums">
+													{formatExportDate(record.createdAt)}
+												</td>
+												<td className="py-3.5">
+													<div className="flex justify-end gap-2">
+														<Button
+															type="button"
+															variant="outline"
+															size="sm"
+															className="border-rule bg-transparent"
+															onClick={() => downloadExportContent(record)}
+														>
+															Download
+														</Button>
+														{isExportReady(record.status) ? null : (
+															<Button
+																type="button"
+																variant="outline"
+																size="sm"
+																className="border-rule bg-transparent"
+																onClick={async () => {
+																	await retryExport({ id: record._id });
+																	toast({
+																		title: "Export marked ready",
+																		variant: "success",
+																	});
+																}}
+															>
+																Retry
+															</Button>
+														)}
+													</div>
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+						)}
 					</Panel>
 				</section>
 			) : null}

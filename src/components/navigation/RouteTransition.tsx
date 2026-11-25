@@ -14,7 +14,7 @@ export function RouteTransition({
 	className,
 }: RouteTransitionProps) {
 	return (
-		<AnimatePresence mode="popLayout" initial={false}>
+		<AnimatePresence mode="wait" initial={false}>
 			<motion.div
 				key={routeKey}
 				className={cn("w-full", className)}

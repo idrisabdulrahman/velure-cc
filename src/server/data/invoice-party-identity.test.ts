@@ -229,6 +229,38 @@ describe("server-derived party identity on invoice writes", () => {
 		expect(validation.issues.map(({ code }) => code)).toContain("tin_required");
 	});
 
+	it("creates the invoice when the workspace stores a legacy placeholder TIN", async () => {
+		// Live 2026-11-10: workspace "Fr35No Inc." stored tax_id = 1234567890.
+		// The server derive overwrote the editor's value, so createDraft threw
+		// "That looks like a placeholder TIN." for a freelancer whose TIN field
+		// was off, with no way to proceed from the editor.
+		tables = seedTables();
+		(tables.workspaces as Array<Record<string, unknown>>)[0].tax_id =
+			"1234567890";
+		client = createFakeSupabase(tables).client;
+
+		const created = await createDraft(client, USER, draftInput);
+		const snapshot = storedSnapshot(created.id) as Record<
+			string,
+			Record<string, unknown>
+		>;
+		expect(snapshot.seller.taxId).toBeUndefined();
+		expect(snapshot.buyer.taxId).toBe("4815162342");
+	});
+
+	it("creates the invoice when the client stores a legacy placeholder TIN", async () => {
+		tables = seedTables(clientRow({ tax_id: "1234567890" }));
+		client = createFakeSupabase(tables).client;
+
+		const created = await createDraft(client, USER, draftInput);
+		const snapshot = storedSnapshot(created.id) as Record<
+			string,
+			Record<string, unknown>
+		>;
+		expect(snapshot.buyer.taxId).toBeUndefined();
+		expect(snapshot.seller.taxId).toBe("8129473650");
+	});
+
 	it("discards a client-supplied fiscalization snapshot", async () => {
 		const created = await createDraft(client, USER, {
 			...draftInput,

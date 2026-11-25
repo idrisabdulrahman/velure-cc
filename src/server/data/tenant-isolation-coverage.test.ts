@@ -65,10 +65,12 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	// audit.ts recordInvoiceAudit dedupes with audit-client above
 	// client-intelligence.ts
 	buildClientIntelligence: "pure",
+	buildCustomerStatement: "pure",
 	// clients.ts
 	listClients: "app-scoped",
 	getClientById: "app-scoped",
 	getClientIntelligence: "app-scoped",
+	getCustomerStatement: "app-scoped",
 	createClient: "app-scoped",
 	updateClient: "app-scoped",
 	archiveClient: "app-scoped",
@@ -81,14 +83,38 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	buildComplianceDashboardReport: "pure",
 	// compliance-export.ts
 	buildInvoiceExportContent: "pure",
+	// Pure serializer over already-loaded export rows (no client access); the
+	// xlsx projection is a base64 workbook string of the same rows.
+	buildInvoiceExportArtifact: "pure",
 	// Pure per-row total derivation over an already-loaded export row; no reads.
 	invoiceTotalForExportRow: "pure",
+	// Typed per-line projection of the same accountant rows; no reads.
+	canonicalAccountingLines: "pure",
+	// QuickBooks CSV projection of already-loaded export rows; warnings and
+	// limits only, no reads.
+	buildQboInvoicesExport: "pure",
+	// Zoho Books CSV projection of already-loaded export rows; warnings and a
+	// byte guard only, no reads.
+	buildZohoInvoicesExport: "pure",
 	// einvoice-validation.ts — caller session selects active workspace, then
 	// invoice and customer reads both carry that workspace filter.
 	validateWorkspaceInvoice: "app-scoped",
 	loadWorkspaceInvoiceSubmissionSnapshot: "app-scoped",
 	// Pure shape predicate over an already-loaded snapshot; performs no reads.
 	hasStoredComplianceSnapshot: "pure",
+	// expenses.ts — WP-C. list/create/update/void/totals resolve the caller's
+	// active workspace and filter by it; writes additionally gate on the
+	// owner|member role in application code (the no-RLS fake has no policies).
+	listExpenses: "app-scoped",
+	createExpense: "app-scoped",
+	updateExpense: "app-scoped",
+	voidExpense: "app-scoped",
+	getExpenseTotals: "app-scoped",
+	// Pure aggregation over already-loaded expense rows; no query surface.
+	buildExpenseTotals: "pure",
+	// Global reference lookup: no tenant column exists, RLS grants SELECT to
+	// authenticated and no write path is exposed.
+	listExpenseCategories: "rls-only",
 	// einvoice-provider-credentials.ts — derives active workspace with the
 	// verified user client, then scopes service-role ciphertext access by it.
 	saveEInvoiceProviderCredentials: "server-admin",
@@ -177,6 +203,13 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	deleteEmptyDrafts: "app-scoped",
 	duplicate: "app-scoped",
 	convertProformaToInvoice: "app-scoped",
+	// WP-D: pure accept predicate over an already-loaded quote.
+	quoteAcceptanceIssue: "pure",
+	// WP-D: public accept path. The workspace id is resolved from the bearer
+	// token by public-invoice-repository before this is called; every read and
+	// write below is filtered by that workspace id (defense in depth on top of
+	// the token-scoped read).
+	convertQuoteToInvoice: "public-token",
 	importCsv: "app-scoped",
 	markInvoiceSent: "app-scoped",
 	recordDeliveryEvent: "app-scoped",
@@ -226,6 +259,16 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	listPublicInvoicePayments: "public-token",
 	listPublicInvoicePaymentsForInvoice: "public-token",
 	rawRowToInvoiceState: "pure",
+	// payment-claims.ts — WP-A. list/confirm/reject take the USER-scoped
+	// client: reads are workspace-scoped by RLS, and confirm/reject first
+	// resolve the claim (and recordPayment resolves the active workspace) from
+	// the verified session. insertPaymentClaim takes the service-role client,
+	// but its workspace/invoice ids are derived by the caller from the bearer
+	// token, never from the request body.
+	listPaymentClaims: "app-scoped",
+	confirmPaymentClaim: "app-scoped",
+	rejectPaymentClaim: "app-scoped",
+	insertPaymentClaim: "public-token",
 	// paystack-server.ts
 	ensurePaystackTransferCharge: "server-admin",
 	confirmPaystackWebhookPayment: "server-admin",
@@ -233,6 +276,9 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	// signature or the scheduler secret, never a tenant-supplied id.
 	logPaymentAnomaly: "server-admin",
 	reconcilePendingPaystackCharges: "server-admin",
+	// Pure marker class: tags a provider error message as safe to show a payer.
+	// No data, session, or query surface of any kind.
+	PublicPaymentError: "pure",
 	// money.ts — pure integer minor-unit conversion, no query surface
 	nairaToKobo: "pure",
 	koboToNaira: "pure",
@@ -254,14 +300,15 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	updateSchedule: "app-scoped",
 	deleteSchedule: "app-scoped",
 	setScheduleStatus: "app-scoped",
+	// resolves the caller's active workspace, then filters runs by it
+	listRecurringRuns: "app-scoped",
 	// reminders.ts
 	defaultRule: "pure",
-	// currentRule() reads reminder_rules with no WHERE clause: the ONLY gate
-	// is RLS on the caller's own JWT client (owner-scoped table). Not safe
-	// against a no-RLS client, which is why they are deliberately not
-	// exercised by the no-RLS fake in tenant-isolation.test.ts.
-	getReminderSettings: "rls-only",
-	saveReminderSettings: "rls-only",
+	// currentRule() filters reminder_rules by owner_id. With the user-scoped
+	// client that matches RLS; with the service-role scheduler client the
+	// app-layer filter is the only gate, so these are app-scoped.
+	getReminderSettings: "app-scoped",
+	saveReminderSettings: "app-scoped",
 	getCollectionOverview: "app-scoped",
 	getInvoiceTimeline: "app-scoped",
 	pauseInvoiceReminders: "app-scoped",
@@ -271,7 +318,15 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	markReminderEventStatus: "rls-only",
 	// resolves the caller's active workspace, then filters invoices by it
 	runReminderBatch: "app-scoped",
-	// resolves the caller's active workspace and filters events by owner_id
+	// filters reminder_runs by owner_id (the scheduler writes owner_id too)
+	listReminderRuns: "app-scoped",
+	// pure projection of an already-loaded invoice's buyer email; no reads
+	buyerEmailForInvoice: "pure",
+	// reminders-send-queue.ts — resolves the caller's active workspace and
+	// filters events by owner_id. The daily Resend cap is account-wide, so the
+	// count deliberately reads cross-tenant on the service-role client
+	// (countAccountEmailsSentToday); the listing and every write stay on the
+	// caller's client. Server-only module (not browser-reachable).
 	sendQueuedEmails: "app-scoped",
 	// reports.ts
 	getRevenueCashFlow: "app-scoped",
@@ -289,6 +344,14 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	resolveActiveWorkspaceId: "session",
 	listWorkspaces: "app-scoped",
 	setActiveWorkspace: "session",
+	// workspace-members.ts (WP-E) — server-only invite directory. The listing
+	// joins better_auth."user" for the email (PostgREST cannot reach that
+	// schema), and the insert runs on the service-role client because RLS only
+	// admits a user's OWN membership. Every caller passes a workspace id
+	// resolved from the verified session, never from the request body.
+	findUserIdByEmail: "server-admin",
+	listWorkspaceMembers: "server-admin",
+	addWorkspaceMember: "server-admin",
 	// invoice-repository.ts (src/server — third query surface)
 	// identity client is minted from the verified request session
 	getInvoiceUserContext: "session",
@@ -310,10 +373,22 @@ const CLASSIFICATIONS: Record<string, Classification> = {
 	// the route suite.
 	getPublicInvoicePage: "public-token",
 	getInvoiceByToken: "public-token",
+	// Pure token-shape regex: no client, no query, no tenant id. It only
+	// rejects a malformed share token before the RPC is reached.
+	isWellFormedPublicInvoiceToken: "pure",
 	// Admin client UPDATE on invoices: the target id comes from the RPC result
 	// for the caller's own share token, never from input, so the write stays
 	// on that one invoice.
 	recordPublicInvoiceView: "public-token",
+	// Admin client INSERT of a payment_claim: the workspace/invoice ids are
+	// derived from the bearer token by this same module, never from input; the
+	// insert only records an unverified claim (never a payment).
+	submitPublicPaymentClaim: "public-token",
+	// WP-D: Admin client accept. The workspace and the quote are resolved from
+	// the bearer token by this module, never from input; the created invoice is
+	// linked to the quote exactly once by a conditional update whose database
+	// backstop is the partial unique index `invoices_quote_converted_invoice_unique`.
+	submitPublicQuoteAcceptance: "public-token",
 };
 
 const DATA_DIR = join(import.meta.dirname);
@@ -474,6 +549,9 @@ const ROUTE_CLASSIFICATIONS: Record<string, Classification> = {
 	"auth/$first/$second.ts": "session",
 	"auth/supabase-session.ts": "session",
 	"email/resend/webhook.ts": "server-admin",
+	// Scheduler entry point: shared secret (INVOICE_SCHEDULER_SECRET), no
+	// session or tenant id in the request.
+	"cron/tick.ts": "server-admin",
 	"integrations/quickbooks/callback.ts": "session",
 	"integrations/quickbooks/connect.ts": "session",
 	"integrations/xero/callback.ts": "session",
@@ -483,6 +561,17 @@ const ROUTE_CLASSIFICATIONS: Record<string, Classification> = {
 	// `$id` is the public share token, not a row id
 	"invoice/download/$id.ts": "public-token",
 	"invoice/public/$token.ts": "public-token",
+	// WP-A: buyer "I've paid" — token-scoped, rate-limited, evidence only.
+	"invoice/public/claim.ts": "public-token",
+	// WP-D: buyer "Accept quote" — token-scoped, rate-limited; creates one
+	// invoice from the quote resolved by the bearer token.
+	"invoice/public/quote-accept.ts": "public-token",
+	// WP-A: seller confirm/reject — identity from the verified session; the
+	// user-scoped client carries RLS for the claim write.
+	"invoice/claims/$id.ts": "session",
+	// WP-A: seller claim list for one invoice — session; the repository
+	// resolves the invoice through the caller's active workspace.
+	"invoice/claims.index.ts": "session",
 	"invoice/scheduled.ts": "server-admin",
 	// invoice read goes through getById(session client, session user, id)
 	"invoice/send/$id.ts": "session",
@@ -500,6 +589,9 @@ const ROUTE_CLASSIFICATIONS: Record<string, Classification> = {
 	"security/link-stepup/status.ts": "session",
 	"security/link-stepup/verify.ts": "session",
 	"test/fixtures.ts": "test-only",
+	// WP-E: identity + active workspace + caller role come from the verified
+	// session; the owner-only invite writes through the service-role client.
+	"workspace/members.ts": "session",
 };
 
 function routeFiles(dir: string, prefix = ""): string[] {

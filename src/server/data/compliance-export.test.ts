@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NRS_INFORMATIONAL_DISCLAIMER } from "../../features/compliance/nigeria";
 import {
+	buildInvoiceExportArtifact,
 	buildInvoiceExportContent,
 	type ComplianceExportInvoiceRow,
 	type ComplianceExportKind,
@@ -21,6 +22,15 @@ const ALL_KINDS: ComplianceExportKind[] = [
 	"tax_summary_csv",
 	"customer_ledger_csv",
 	"normalized_accounting",
+	"accountant_lines_csv",
+];
+
+// The XLSX kinds are async (base64 workbook) and are covered in their own
+// suites; calling the sync builder with one must fail loudly instead of
+// emitting CSV bytes named `.xlsx`.
+const SYNC_ONLY: ComplianceExportKind[] = [
+	"accountant_lines_xlsx",
+	"vat_sales_schedule_xlsx",
 ];
 
 describe("compliance export content", () => {
@@ -33,6 +43,36 @@ describe("compliance export content", () => {
 		}
 	});
 
+	it("rejects the async xlsx kinds on the sync builder", () => {
+		for (const kind of SYNC_ONLY) {
+			expect(() => buildInvoiceExportContent(kind, [ROW], 0)).toThrow(
+				/buildInvoiceExportArtifact/,
+			);
+		}
+	});
+
+	it("rejects the QuickBooks kind on both generic builders", async () => {
+		// QuickBooks needs its dedicated profile (warnings + limits); falling
+		// through to the generic writer would emit the wrong columns.
+		expect(() =>
+			buildInvoiceExportContent("qbo_invoices_csv", [ROW], 0),
+		).toThrow(/buildQboInvoicesExport/);
+		await expect(
+			buildInvoiceExportArtifact("qbo_invoices_csv", [ROW], 0),
+		).rejects.toThrow(/buildQboInvoicesExport/);
+	});
+
+	it("rejects the Zoho kind on both generic builders", async () => {
+		// Zoho needs its dedicated profile (tax name/amount, 10 MB guard);
+		// falling through to the generic writer would emit the wrong columns.
+		expect(() =>
+			buildInvoiceExportContent("zoho_invoices_csv", [ROW], 0),
+		).toThrow(/buildZohoInvoicesExport/);
+		await expect(
+			buildInvoiceExportArtifact("zoho_invoices_csv", [ROW], 0),
+		).rejects.toThrow(/buildZohoInvoicesExport/);
+	});
+
 	it("leads CSV exports with the disclaimer before the header row", () => {
 		const lines = buildInvoiceExportContent(
 			"tax_summary_csv",
@@ -41,15 +81,15 @@ describe("compliance export content", () => {
 		).split("\n");
 		expect(lines[0]).toBe(JSON.stringify(NRS_INFORMATIONAL_DISCLAIMER));
 		expect(lines[1]).toBe(
-			"invoiceNumber,customerName,currency,total,status,issueDate,dueDate",
+			"invoiceNumber,customerName,documentType,currency,subtotal,vat,withholdingTax,total,status,issueDate,dueDate",
 		);
 		expect(lines).toHaveLength(3);
 	});
 
-	it("keeps CSV rows unchanged behind the disclaimer line", () => {
+	it("keeps CSV rows behind the disclaimer line", () => {
 		const csv = buildInvoiceExportContent("invoices_csv", [ROW], 0);
 		expect(csv.split("\n")[2]).toBe(
-			'"INV-2026-0001","Adaeze Foods Ltd","NGN",666500,"sent","2026-10-01","2026-10-15"',
+			'"INV-2026-0001","Adaeze Foods Ltd","standard","NGN",0,0,0,666500,"sent","2026-10-01","2026-10-15"',
 		);
 	});
 
@@ -87,7 +127,7 @@ describe("compliance export totals", () => {
 				compliance: { netPayable: "161250" },
 			}),
 		).toBe(
-			'"INV-2026-0001","Adaeze Foods Ltd","NGN",161250,"sent","2026-10-01","2026-10-15"',
+			'"INV-2026-0001","Adaeze Foods Ltd","standard","NGN",0,0,0,161250,"sent","2026-10-01","2026-10-15"',
 		);
 	});
 
@@ -98,7 +138,7 @@ describe("compliance export totals", () => {
 				payment_amount: 0,
 				compliance: { grandTotal: 100000, withholdingTaxAmount: 5000 },
 			}),
-		).toContain('"NGN",95000,');
+		).toContain('"NGN",0,0,5000,95000,');
 	});
 
 	it("falls back to the summed line items", () => {
@@ -112,13 +152,82 @@ describe("compliance export totals", () => {
 					{ quantity: 1, price: 250.25 },
 				],
 			}),
-		).toContain('"NGN",1250.25,');
+		).toContain('"NGN",0,0,0,1250.25,');
 	});
 
 	it("still exports the paid amount when nothing else is available", () => {
 		expect(totalCell({ ...ROW, compliance: undefined })).toContain(
-			'"NGN",666500,',
+			'"NGN",0,0,0,666500,',
 		);
+	});
+});
+
+/**
+ * The stored compliance snapshot already carries the tax split
+ * (`subtotal`, `totalTax`, `withholdingTaxAmount`); the export used to drop it.
+ * `document_type` identifies a credit note, whose money columns must export
+ * negative so revenue reduces correctly in a spreadsheet.
+ */
+describe("compliance export tax split and document type", () => {
+	function csvRow(row: ComplianceExportInvoiceRow) {
+		return buildInvoiceExportContent("invoices_csv", [row], 0).split("\n")[2];
+	}
+
+	const SPLIT_SNAPSHOT = {
+		subtotal: 100000,
+		totalTax: 7500,
+		withholdingTaxAmount: 5000,
+		netPayable: 102500,
+	};
+
+	it("exports the stored subtotal, VAT and withholding split", () => {
+		expect(
+			csvRow({ ...ROW, payment_amount: 0, compliance: SPLIT_SNAPSHOT }),
+		).toBe(
+			'"INV-2026-0001","Adaeze Foods Ltd","standard","NGN",100000,7500,5000,102500,"sent","2026-10-01","2026-10-15"',
+		);
+	});
+
+	it("defaults documentType to standard and missing money to zero", () => {
+		expect(csvRow(ROW)).toContain('"standard","NGN",0,0,0,666500,');
+	});
+
+	it("signs credit notes negative and leaves standard invoices positive", () => {
+		expect(
+			csvRow({
+				...ROW,
+				document_type: "credit_note",
+				compliance: SPLIT_SNAPSHOT,
+			}),
+		).toBe(
+			'"INV-2026-0001","Adaeze Foods Ltd","credit_note","NGN",-100000,-7500,-5000,-102500,"sent","2026-10-01","2026-10-15"',
+		);
+		expect(
+			csvRow({
+				...ROW,
+				document_type: "standard",
+				compliance: SPLIT_SNAPSHOT,
+			}),
+		).toBe(
+			'"INV-2026-0001","Adaeze Foods Ltd","standard","NGN",100000,7500,5000,102500,"sent","2026-10-01","2026-10-15"',
+		);
+	});
+
+	it("keeps debit notes and pro-formas positive but identified", () => {
+		expect(
+			csvRow({
+				...ROW,
+				document_type: "debit_note",
+				compliance: SPLIT_SNAPSHOT,
+			}),
+		).toContain('"debit_note","NGN",100000,7500,5000,102500,');
+		expect(
+			csvRow({
+				...ROW,
+				document_type: "proforma",
+				compliance: SPLIT_SNAPSHOT,
+			}),
+		).toContain('"proforma","NGN",100000,7500,5000,102500,');
 	});
 });
 
@@ -138,7 +247,7 @@ describe("compliance export spreadsheet safety", () => {
 		expect(row).not.toContain('"=HYPERLINK');
 	});
 
-	it("leaves the numeric total column free of the guard", () => {
+	it("leaves the numeric money columns free of the guard", () => {
 		// A leading apostrophe would turn the total into text and break
 		// spreadsheet arithmetic on the very column the export exists for.
 		const csv = buildInvoiceExportContent(
@@ -146,6 +255,6 @@ describe("compliance export spreadsheet safety", () => {
 			[{ ...ROW, compliance: { netPayable: 161250 } }],
 			0,
 		);
-		expect(csv.split("\n")[2]).toContain('"NGN",161250,');
+		expect(csv.split("\n")[2]).toContain('"NGN",0,0,0,161250,');
 	});
 });

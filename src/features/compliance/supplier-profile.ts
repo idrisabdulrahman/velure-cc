@@ -5,14 +5,24 @@
  *
  * These are FORMAT checks, not legal verification. The exact Nigerian TIN
  * structure/checksum is explicitly unconfirmed in SPEC 6.2 item 4; we accept
- * the 10-digit shape the UI hints at and reject obvious placeholder values.
- * Never present these checks as tax-authority validation.
+ * the 10-12 digit length NRS/Zoho guidance describes and reject obvious
+ * placeholder values. Never present these checks as tax-authority validation.
  */
 
-export const NIGERIA_TIN_DIGITS = 10;
+/**
+ * Accepted Nigerian TIN length range. A 10-digit-only rule was too narrow:
+ * NRS guidance and mainstream accounting tools (Zoho Books) describe a
+ * 10-12 digit TIN, and a strict 10-digit check risks flagging valid customer
+ * TINs. The exact structure is still UNCONFIRMED (SPEC 6.2 item 4), so an
+ * out-of-range length stays a `tin_format` warning, never a hard block.
+ */
+export const NIGERIA_TIN_MIN_DIGITS = 10;
+export const NIGERIA_TIN_MAX_DIGITS = 12;
 
-/** 10-digit TIN shape (SPEC 6.2 item 4: exact format unconfirmed). */
-export const NIGERIA_TIN_PATTERN = new RegExp(`^\\d{${NIGERIA_TIN_DIGITS}}$`);
+/** 10-12 digit TIN shape (SPEC 6.2 item 4: exact format unconfirmed). */
+export const NIGERIA_TIN_PATTERN = new RegExp(
+	`^\\d{${NIGERIA_TIN_MIN_DIGITS},${NIGERIA_TIN_MAX_DIGITS}}$`,
+);
 
 /** Canonical CAC RC shape the settings UI hints at: RC-1234567. */
 export const NIGERIA_RC_PATTERN = /^RC-?\d{7}$/;
@@ -49,7 +59,7 @@ const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/;
  * TODO(tin-checksum): the Nigerian TIN checksum/structure rule is UNCONFIRMED
  * (SPEC 6.2 item 4). When an authoritative rule is confirmed, implement it
  * here and return `false` for TINs that fail it. Until then this accepts every
- * 10-digit, non-placeholder string — a format check, not legal validation.
+ * 10-12 digit, non-placeholder string — a format check, not legal validation.
  */
 function tinPassesChecksum(tin: string): boolean {
 	void tin;
@@ -70,6 +80,16 @@ export type TinValidation =
 			ok: false;
 			code: "tin_required" | "tin_format" | "tin_placeholder";
 			message: string;
+			/**
+			 * `blocking` refuses the save; `warning` records a `needs_review`
+			 * flag but lets the value persist. The 10-12 digit shape is
+			 * UNCONFIRMED (SPEC 6.2 item 4; a provider sample even shows a
+			 * dashed TIN), so `tin_format` is a warning until NRS confirms the
+			 * rule — a strict block risks turning away valid customers
+			 * (2026-10-30 review). `tin_required` and `tin_placeholder` stay
+			 * blocking.
+			 */
+			severity: "blocking" | "warning";
 	  };
 
 export function validateSupplierTin(value?: string | null): TinValidation {
@@ -78,14 +98,16 @@ export function validateSupplierTin(value?: string | null): TinValidation {
 		return {
 			ok: false,
 			code: "tin_required",
-			message: "TIN is required (10 digits).",
+			message: `TIN is required (${NIGERIA_TIN_MIN_DIGITS}-${NIGERIA_TIN_MAX_DIGITS} digits).`,
+			severity: "blocking",
 		};
 	}
 	if (!NIGERIA_TIN_PATTERN.test(tin)) {
 		return {
 			ok: false,
 			code: "tin_format",
-			message: `TIN must be exactly ${NIGERIA_TIN_DIGITS} digits.`,
+			message: `TIN must be ${NIGERIA_TIN_MIN_DIGITS}-${NIGERIA_TIN_MAX_DIGITS} digits.`,
+			severity: "warning",
 		};
 	}
 	if (isAllSameDigit(tin) || PLACEHOLDER_TINS.has(tin)) {
@@ -93,6 +115,7 @@ export function validateSupplierTin(value?: string | null): TinValidation {
 			ok: false,
 			code: "tin_placeholder",
 			message: "That looks like a placeholder TIN. Enter your real TIN.",
+			severity: "blocking",
 		};
 	}
 	if (!tinPassesChecksum(tin)) {
@@ -100,9 +123,36 @@ export function validateSupplierTin(value?: string | null): TinValidation {
 			ok: false,
 			code: "tin_format",
 			message: "TIN failed its checksum rule.",
+			severity: "warning",
 		};
 	}
 	return { ok: true, tin };
+}
+
+/**
+ * A stored TIN as a usable value: the trimmed identifier, or `undefined` when
+ * the stored string is blank or a BLOCKING placeholder (`tin_placeholder`).
+ *
+ * The profile save paths still REJECT placeholders. This helper exists for the
+ * invoice write boundary: the seller/buyer identity is server-derived from the
+ * stored workspace supplier profile / client row, so a legacy placeholder TIN
+ * already stored there would otherwise be written into the snapshot and then
+ * refused by `assertValidTin` — blocking every create with an error the user
+ * cannot fix from the invoice editor (e.g. a freelancer, whose TIN field is
+ * off). Treating a placeholder as "no TIN" lets the invoice be created; the
+ * profile stays flagged `needs_review` with `tin_placeholder`.
+ *
+ * A `tin_format` warning value (unconfirmed shape, SPEC 6.2 item 4) is kept —
+ * the write path already accepts it.
+ */
+export function storedTinOrUndefined(
+	value?: string | null,
+): string | undefined {
+	const tin = compact(value).replace(/\s+/g, "");
+	if (!tin) return undefined;
+	const result = validateSupplierTin(tin);
+	if (!result.ok && result.severity === "blocking") return undefined;
+	return result.ok ? result.tin : tin;
 }
 
 export type RcValidation =
@@ -192,6 +242,11 @@ export type SupplierProfileIssueCode =
 export type SupplierProfileIssue = {
 	code: SupplierProfileIssueCode;
 	message: string;
+	/**
+	 * `blocking` refuses the save; `warning` persists the value and records a
+	 * `needs_review` flag. Omitted means `blocking`.
+	 */
+	severity?: "blocking" | "warning";
 };
 
 export type SupplierProfileStatus = "complete" | "needs_review";
@@ -280,8 +335,11 @@ export function validateSupplierProfile(
 		rcNumber = compact(input.rcNumber);
 	}
 
+	const blocking = issues.filter(
+		(issue) => (issue.severity ?? "blocking") === "blocking",
+	);
 	return {
-		valid: issues.length === 0,
+		valid: blocking.length === 0,
 		status: issues.length === 0 ? "complete" : "needs_review",
 		issues,
 		normalized: {
@@ -301,8 +359,8 @@ const ISSUE_MESSAGES: Record<SupplierProfileIssueCode, string> = {
 	address_country_required: "Country (2-letter code) is required.",
 	address_not_structured:
 		"Address must be entered as street, state/region and country.",
-	tin_required: "TIN is required (10 digits).",
-	tin_format: "TIN must be exactly 10 digits.",
+	tin_required: "TIN is required (10-12 digits).",
+	tin_format: "TIN must be 10-12 digits.",
 	tin_placeholder: "Placeholder TINs are not accepted.",
 	cac_rc_required: "CAC RC number is required.",
 	cac_rc_format: "CAC RC number must use the RC-1234567 format.",

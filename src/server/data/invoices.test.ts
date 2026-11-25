@@ -36,7 +36,7 @@ describe("invoice list contracts", () => {
 		expect(doc.compliance?.grandTotal).toBe(8251.65);
 	});
 
-	it("uses Midday's bounded invoice page size", () => {
+	it("uses the bounded invoice page size", () => {
 		expect(INVOICE_LIST_PAGE_SIZE).toBe(25);
 		const rows = Array.from({ length: 52 }, (_, index) => ({
 			id: String(index),

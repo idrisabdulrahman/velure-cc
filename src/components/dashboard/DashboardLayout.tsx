@@ -1,9 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
+import {
+	Outlet,
+	useLinkProps,
+	useLocation,
+	useNavigate,
+} from "@tanstack/react-router";
 import { useReducedMotion } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
 import {
 	BellRing,
+	Blocks,
 	Building2,
 	ChartNoAxesCombined,
 	Check,
@@ -11,14 +17,16 @@ import {
 	FileText,
 	LayoutGrid,
 	Menu,
+	ReceiptText,
 	Repeat2,
 	Scale,
 	Search,
 	Settings,
+	ShieldCheck,
 	Users,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { VelureSymbol } from "#/components/brand/velure-symbol";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { InvoiclySymbol } from "#/components/brand/invoicly-symbol";
 import { ProfileDropdown } from "#/components/dashboard/profile-dropdown";
 import { CommandPalette } from "#/components/global-search/command-palette";
 import { RouteTransition } from "#/components/navigation/RouteTransition";
@@ -26,15 +34,18 @@ import { useLenis } from "#/components/scroll/use-lenis";
 import { TextSizeToggle } from "#/components/text-size/text-size-toggle";
 import { ThemeToggle } from "#/components/theme/theme-toggle";
 import { AppLoader } from "#/components/ui/app-loader";
+import { Button } from "#/components/ui/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
+import { Spinner } from "#/components/ui/spinner";
 import { toast } from "#/components/ui/use-toast";
 import { authClient } from "#/lib/auth-client";
 import { useDashboardAuth, useWorkspaceActions } from "#/lib/auth-hook";
+import { verificationCallbackURL } from "#/lib/auth-redirect";
 import { useSupabaseSession } from "#/lib/supabase-session";
 import { listClients } from "#/server/data/clients";
 import {
@@ -97,6 +108,13 @@ const navItems = [
 		description: "Revenue and cash-flow clarity",
 	},
 	{
+		to: "/expenses",
+		icon: ReceiptText,
+		match: (pathname: string) => matchesPathSegment(pathname, "/expenses"),
+		label: "Expenses",
+		description: "Log and categorise spend",
+	},
+	{
 		to: "/invoices/products",
 		icon: FileText,
 		match: (pathname: string) =>
@@ -138,6 +156,22 @@ const settingsItems = [
 		label: "General",
 		description: "Business profile and account plan",
 	},
+	{
+		to: "/settings/security",
+		icon: ShieldCheck,
+		match: (pathname: string) =>
+			matchesPathSegment(pathname, "/settings/security"),
+		label: "Security",
+		description: "Sessions, password, and linked sign-in providers",
+	},
+	{
+		to: "/settings/integrations",
+		icon: Blocks,
+		match: (pathname: string) =>
+			matchesPathSegment(pathname, "/settings/integrations"),
+		label: "Integrations",
+		description: "Planned connections to payment and accounting tools",
+	},
 ] as const;
 
 function CountBadge({ count }: { count: number | undefined }) {
@@ -165,6 +199,50 @@ function ReminderBadge({ count }: { count: number | undefined }) {
 	);
 }
 
+/**
+ * A shell link whose `aria-current` follows the layout's own `match`
+ * predicate, not TanStack Router's prefix rule.
+ *
+ * `<Link>` writes `aria-current="page"` from its default prefix matching and
+ * spreads it last, so a passed attribute cannot override it: on a nested route
+ * it marks both the parent and the child current (e.g. `/invoices` *and*
+ * `/invoices/products`), which breaks the WAI-ARIA rule that exactly one item
+ * is current. `useLinkProps` gives the same `href`, preloading and navigation
+ * handlers without that attribute, so the attribute is set here from `active`.
+ */
+function SidebarNavLink({
+	to,
+	active,
+	className,
+	title,
+	onNavigate,
+	children,
+}: {
+	to: string;
+	active: boolean;
+	className?: string;
+	title?: string;
+	onNavigate: () => void;
+	children: ReactNode;
+}) {
+	const linkProps = useLinkProps({ to, onClick: onNavigate });
+	// Drop the router's own `aria-current` (spread last by `<Link>`, so a prop
+	// cannot override it) and set it from `active` instead. Any `data-status`
+	// the router also emits is harmless and left in place.
+	const { "aria-current": _routerAriaCurrent, ...anchorProps } = linkProps;
+
+	return (
+		<a
+			{...anchorProps}
+			title={title}
+			className={className}
+			aria-current={active ? "page" : undefined}
+		>
+			{children}
+		</a>
+	);
+}
+
 export function DashboardLayout() {
 	const location = useLocation();
 	const navigate = useNavigate();
@@ -175,6 +253,10 @@ export function DashboardLayout() {
 	const [ensuringWorkspace, setEnsuringWorkspace] = useState(false);
 	const [navOpen, setNavOpen] = useState(false);
 	const [paletteOpen, setPaletteOpen] = useState(false);
+	const [resendingVerification, setResendingVerification] = useState(false);
+	const [verificationMessage, setVerificationMessage] = useState<string | null>(
+		null,
+	);
 
 	// Use unified auth hook
 	const {
@@ -403,6 +485,100 @@ export function DashboardLayout() {
 		});
 	}, [authReturnPath, navigate]);
 
+	// Verification is checked before any of the provisioning gates: an
+	// unverified session cannot mint the Supabase bridge token, so every later
+	// gate would wait forever on a bridge that will never succeed.
+	const sessionNeedsVerification = session?.user?.emailVerified === false;
+
+	const onResendVerification = async () => {
+		const address = session?.user?.email;
+		if (!address || resendingVerification) return;
+
+		setResendingVerification(true);
+		setVerificationMessage(null);
+		try {
+			const result = await authClient.sendVerificationEmail({
+				email: address,
+				callbackURL: verificationCallbackURL(
+					window.location.pathname + window.location.search,
+				),
+			});
+			setVerificationMessage(
+				result.error
+					? (result.error.message ??
+							"Could not send the verification email. Try again in a moment.")
+					: "Verification email sent. Check your inbox.",
+			);
+		} catch {
+			setVerificationMessage(
+				"Could not send the verification email. Try again in a moment.",
+			);
+		} finally {
+			setResendingVerification(false);
+		}
+	};
+
+	if (sessionNeedsVerification) {
+		return (
+			<div className="hm-app flex min-h-dvh items-center justify-center bg-paper p-6 text-ink">
+				<div className="ui-panel w-full max-w-md rounded-[var(--hm-r-card)] border border-rule bg-paper p-6 sm:p-8">
+					<h1
+						className="text-[30px] font-extrabold tracking-[-0.028em] text-ink"
+						style={{ fontFamily: "var(--hm-font-display)", lineHeight: 1.06 }}
+					>
+						Verify your email
+					</h1>
+					<p className="mt-2 text-sm leading-6 text-ink-3">
+						Confirm{" "}
+						<span className="font-medium text-ink">
+							{session?.user?.email ?? "your email address"}
+						</span>{" "}
+						to open your workspace. The verification link expires after one
+						hour.
+					</p>
+
+					{verificationMessage ? (
+						<p
+							role="status"
+							className="mt-4 rounded-[var(--hm-r-input)] border border-warn-line bg-warn-soft px-3 py-2 text-sm text-warn"
+						>
+							{verificationMessage}
+						</p>
+					) : null}
+
+					<Button
+						type="button"
+						onClick={() => {
+							void onResendVerification();
+						}}
+						disabled={resendingVerification}
+						className="hm-btn hm-btn--primary mt-4 h-11 w-full"
+					>
+						{resendingVerification ? (
+							<>
+								<Spinner size={16} className="mr-2" />
+								Sending
+							</>
+						) : (
+							"Resend verification email"
+						)}
+					</Button>
+
+					<button
+						type="button"
+						onClick={async () => {
+							await authClient.signOut();
+							await navigate({ to: "/auth" });
+						}}
+						className="mt-3 block w-full text-center text-sm text-ink-3 transition-colors duration-150 hover:text-brand"
+					>
+						Sign out
+					</button>
+				</div>
+			</div>
+		);
+	}
+
 	if (
 		waitingForInitialSession ||
 		isPending ||
@@ -483,19 +659,20 @@ export function DashboardLayout() {
 				}`}
 			>
 				<div className="border-b border-rule px-5 py-5">
-					<Link
+					<SidebarNavLink
 						to="/invoices"
-						onClick={() => setNavOpen(false)}
+						active={false}
+						onNavigate={() => setNavOpen(false)}
 						className="flex items-center gap-3"
 					>
-						<VelureSymbol className="h-7 w-7" />
+						<InvoiclySymbol className="h-7 w-auto" />
 						<div>
 							<p className="text-[11px] font-bold uppercase tracking-[0.24em] text-ink">
-								Velure
+								Invoicly
 							</p>
 							<p className="text-xs text-ink-3">Operations workspace</p>
 						</div>
-					</Link>
+					</SidebarNavLink>
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
 							<button
@@ -553,9 +730,10 @@ export function DashboardLayout() {
 								Workspace
 							</p>
 							<div className="space-y-0.5">
-								<Link
+								<SidebarNavLink
 									to="/invoices"
-									onClick={() => setNavOpen(false)}
+									active={invoicesActive}
+									onNavigate={() => setNavOpen(false)}
 									className={navLinkClass(invoicesActive)}
 								>
 									<LayoutGrid
@@ -571,17 +749,18 @@ export function DashboardLayout() {
 										Invoices
 									</span>
 									<CountBadge count={counts["/invoices"]} />
-								</Link>
+								</SidebarNavLink>
 
 								{navItems.map((item) => {
 									const Icon = item.icon;
 									const active = item.match(location.pathname);
 
 									return (
-										<Link
+										<SidebarNavLink
 											key={item.to}
 											to={item.to}
-											onClick={() => setNavOpen(false)}
+											active={active}
+											onNavigate={() => setNavOpen(false)}
 											className={navLinkClass(active)}
 										>
 											<Icon
@@ -601,7 +780,7 @@ export function DashboardLayout() {
 											) : item.to === "/invoices/products" ? (
 												<CountBadge count={counts["/invoices/products"]} />
 											) : null}
-										</Link>
+										</SidebarNavLink>
 									);
 								})}
 							</div>
@@ -641,11 +820,12 @@ export function DashboardLayout() {
 									}
 
 									return (
-										<Link
+										<SidebarNavLink
 											key={item.to}
 											to={item.to}
+											active={active}
 											title={item.description}
-											onClick={() => setNavOpen(false)}
+											onNavigate={() => setNavOpen(false)}
 											className={navLinkClass(active)}
 										>
 											<Icon
@@ -665,7 +845,7 @@ export function DashboardLayout() {
 													count={counts["/settings/collections"]}
 												/>
 											) : null}
-										</Link>
+										</SidebarNavLink>
 									);
 								})}
 							</div>
@@ -699,18 +879,32 @@ export function DashboardLayout() {
 								<Menu className="h-4 w-4" />
 							</button>
 							<p className="flex min-w-0 items-center gap-2 text-[13px] text-ink-3">
-								<VelureSymbol className="h-5 w-5" />
+								<InvoiclySymbol className="h-5 w-auto" />
 								<span className="hidden min-w-0 truncate sm:inline">
 									{workspaceLabel}
 								</span>
 								<span className="mx-2 hidden sm:inline">/</span>
-								<span className="min-w-0 truncate font-medium text-ink">
+								{/* Below 360 px the header controls leave no room for the page
+								    title, and a truncated "Inv…" reads as a fault. The page
+								    heading below still names the screen. */}
+								<span className="hidden min-w-0 truncate font-medium text-ink min-[360px]:inline">
 									{activePageLabel}
 								</span>
 							</p>
 						</div>
 
 						<div className="flex items-center gap-2">
+							{/* Below md the search field is hidden, and a phone has no ⌘K.
+							    Without this the palette was unreachable on every phone. */}
+							<button
+								type="button"
+								onClick={() => setPaletteOpen(true)}
+								aria-label="Search or jump to"
+								title="Search or jump to"
+								className="grid h-9 w-9 place-items-center rounded-[var(--hm-r-btn)] border border-rule bg-paper-2 text-ink-3 transition-colors hover:border-brand-line hover:bg-brand-soft hover:text-ink md:hidden"
+							>
+								<Search className="h-4 w-4" />
+							</button>
 							<button
 								type="button"
 								onClick={() => setPaletteOpen(true)}

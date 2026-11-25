@@ -154,7 +154,10 @@ function seedTables(): FakeTables {
 				phone: null,
 				website: null,
 				billing_address: "1 Buyer Way",
-				tax_id: "1234567890",
+				// A real-shaped TIN. The walkthrough placeholder (1234567890) is
+				// deliberately rejected at the invoice-save boundary too, so it
+				// cannot stand in here.
+				tax_id: "8129473650",
 				currency: "NGN",
 				payment_terms: "Net 14",
 				internal_notes: null,
@@ -335,6 +338,32 @@ describe("markInvoiceSent draft gate", () => {
 		await markInvoiceSent(client, USER_A, "inv-a-draft-linked");
 		expect(row("inv-a-draft-linked")?.delivered_at).toBeTruthy();
 		expect(row("inv-a-draft-linked")?.status).toBe("unpaid");
+	});
+
+	it("does not regress an already-accepted quote back to sent", async () => {
+		// A quote whose client already accepted it keeps its terminal state; a
+		// later "mark as sent" must not overwrite quote_status/quote_accepted_at.
+		(tables.invoices as Array<Record<string, unknown>>).push(
+			invoiceRow("inv-a-quote-accepted", WS_A, {
+				document_type: "proforma",
+				customer_id: CLIENT_A,
+				customer_name: "Client A",
+				status: "unpaid",
+				delivered_at: "2026-01-05T00:00:00.000Z",
+				finalized_at: "2026-01-05T00:00:00.000Z",
+				quote_status: "accepted",
+				quote_sent_at: "2026-01-04T00:00:00.000Z",
+				quote_accepted_at: "2026-01-05T00:00:00.000Z",
+				quote_converted_invoice_id: "inv-a-issued-linked",
+			}),
+		);
+
+		await markInvoiceSent(client, USER_A, "inv-a-quote-accepted");
+
+		expect(row("inv-a-quote-accepted")?.quote_status).toBe("accepted");
+		expect(row("inv-a-quote-accepted")?.quote_accepted_at).toBe(
+			"2026-01-05T00:00:00.000Z",
+		);
 	});
 });
 

@@ -31,6 +31,7 @@ import {
 	ReceiptText,
 	Search,
 	Settings2,
+	Share2,
 	X,
 } from "lucide-react";
 import {
@@ -41,6 +42,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { FaTelegram, FaWhatsapp } from "react-icons/fa6";
 import { DatePicker } from "#/components/navigation/DatePicker";
 import { Button } from "#/components/ui/button";
 import { Calendar } from "#/components/ui/calendar";
@@ -100,21 +102,34 @@ import {
 	netPayableFromCompliance,
 	PERSISTABLE_WARNING_CODES,
 } from "#/features/compliance/persist";
-import type {
-	InvoiceComplianceSnapshot,
-	JurisdictionCode,
-	SellerTaxStatus,
-	TaxTreatment,
-	TemplateVariant,
-	WithholdingCategory,
-	WithholdingRecipientEntityType,
-	WithholdingRecipientResidency,
+import {
+	NIGERIA_TIN_MAX_DIGITS,
+	NIGERIA_TIN_MIN_DIGITS,
+	storedTinOrUndefined,
+} from "#/features/compliance/supplier-profile";
+import {
+	DISCOUNT_MODE_OPTIONS,
+	type DiscountMode,
+	type InvoiceComplianceSnapshot,
+	type JurisdictionCode,
+	type SellerTaxStatus,
+	type TaxTreatment,
+	type TemplateVariant,
+	type WithholdingCategory,
+	type WithholdingRecipientEntityType,
+	type WithholdingRecipientResidency,
 } from "#/features/compliance/types";
 import { isCorrectionSource } from "#/features/invoices/correction-sources";
+import { lineMissingClassification } from "#/features/invoices/customer-gate";
 import { formatMoney } from "#/features/invoices/format";
 import type { ImportedInvoiceDraft } from "#/features/invoices/import-spreadsheet";
-import { lineTotalKobo, priceToKobo } from "#/features/invoices/line-money";
-import { toEditorDoc } from "#/features/invoices/midday-adapter";
+import { toEditorDoc } from "#/features/invoices/invoice-document-adapter";
+import {
+	lineTotalKobo,
+	priceToKobo,
+	subtotalKobo,
+} from "#/features/invoices/line-money";
+import { buildInvoiceShareLinks } from "#/features/invoices/share-links";
 import type {
 	InvoiceDocumentType,
 	InvoiceLineItem,
@@ -129,7 +144,7 @@ import {
 	VAT_CATEGORY_OPTIONS,
 } from "#/features/products/product-form-utils";
 import { useUnifiedAuth } from "#/lib/auth-hook";
-import type { EditorDoc } from "#/lib/midday-invoice/types";
+import type { EditorDoc } from "#/lib/invoice-document/types";
 import { useSupabaseSession } from "#/lib/supabase-session";
 import { createClient, listClients } from "#/server/data/clients";
 import {
@@ -145,6 +160,7 @@ import { cn } from "#/utils/cn";
 
 import { NotesEditor } from "./editor/notes-editor";
 import { InlineLabelInput } from "./inline-label-input";
+import { InvoiceQrCode } from "./invoice-qr-code";
 
 type LineItem = InvoiceLineItem;
 
@@ -170,6 +186,7 @@ type CreatedInvoiceSummary = {
 	customerName: string;
 	customerEmail: string;
 	total: number;
+	currency: string;
 };
 
 type SellerProfileType = "freelancer" | "business";
@@ -416,7 +433,7 @@ export function toPersistableCompliance(compliance: InvoiceComplianceSnapshot) {
 }
 
 function sanitizeTinInput(raw: string) {
-	return raw.replace(/\D/g, "").slice(0, 10);
+	return raw.replace(/\D/g, "").slice(0, NIGERIA_TIN_MAX_DIGITS);
 }
 
 function sanitizeRcInput(raw: string) {
@@ -578,8 +595,8 @@ export function CreateInvoicePanel({
 	const [customerName, setCustomerName] = useState("");
 	const [customerEmail, setCustomerEmail] = useState("");
 	const [customerPoNumber, setCustomerPoNumber] = useState("");
-	const [fromName, setFromName] = useState("Velure Studio");
-	const [fromEmail, setFromEmail] = useState("hello@velure.app");
+	const [fromName, setFromName] = useState("Invoicly Studio");
+	const [fromEmail, setFromEmail] = useState("hello@invoicly.cv");
 	const [paymentDetails, setPaymentDetails] = useState("");
 	const [notes, setNotes] = useState<EditorDoc | null>(null);
 	const [topBlock, setTopBlock] = useState<EditorDoc | null>(null);
@@ -597,6 +614,8 @@ export function CreateInvoicePanel({
 	const [includeQr, setIncludeQr] = useState(false);
 	const [includeDiscount, setIncludeDiscount] = useState(false);
 	const [discount, setDiscount] = useState(0);
+	const [discountMode, setDiscountMode] =
+		useState<DiscountMode>("invoice_after_tax");
 	const [templateLabels, setTemplateLabels] = useState({
 		title: "Invoice",
 		customerLabel: "To",
@@ -721,6 +740,20 @@ export function CreateInvoicePanel({
 	const autosaveInFlightRef = useRef(false);
 	const autosavePendingRef = useRef(false);
 	const autosaveNowRef = useRef<() => void>(() => {});
+	const autosaveHasUnsavedRef = useRef(false);
+	// The newest save state for the current render. `persistAutosaveDraft` reads
+	// this at call time so a save that starts, and the retry that runs when an
+	// in-flight save finishes, always send the newest edit rather than a stale
+	// snapshot captured when the request began.
+	const autosaveRuntimeRef = useRef<{
+		signature: string;
+		canSave: boolean;
+		buildArgs: () => Parameters<typeof autosaveDraft>[2];
+	}>({
+		signature: "",
+		canSave: false,
+		buildArgs: () => ({}) as Parameters<typeof autosaveDraft>[2],
+	});
 
 	useEffect(() => {
 		if (productSearchIndex === null) {
@@ -791,12 +824,17 @@ export function CreateInvoicePanel({
 	useEffect(() => {
 		if (!workspace) return;
 
+		// A legacy placeholder TIN stored on the workspace is not a real tax
+		// id: treat it as absent so the editor opens in Freelancer mode with an
+		// empty TIN field instead of defaulting to Registered business and
+		// prefilling the placeholder (2026-11-10).
+		const workspaceSellerTin = storedTinOrUndefined(workspace.taxId) ?? "";
 		const nextSellerTaxStatus =
 			(workspace.sellerTaxStatus as SellerTaxStatus | undefined) ??
 			"below_threshold_not_charging_vat";
 		setSellerProfileType(
 			nextSellerTaxStatus === "vat_registered" ||
-				workspace.taxId ||
+				workspaceSellerTin ||
 				workspace.rcNumber
 				? "business"
 				: "freelancer",
@@ -812,7 +850,7 @@ export function CreateInvoicePanel({
 				documentType,
 			),
 		);
-		setFromName(workspace.legalName || workspace.name || "Velure Studio");
+		setFromName(workspace.legalName || workspace.name || "Invoicly Studio");
 		setFromEmail(workspace.email ?? "");
 		setLogoUrl(workspace.logoUrl ?? "");
 		setPaymentDetails(workspace.paymentDetails ?? "");
@@ -820,8 +858,8 @@ export function CreateInvoicePanel({
 		setDueDate(
 			buildDueDate(workspace.defaultPaymentTermsDays ?? 14, issueDate),
 		);
-		setSellerTin(workspace.taxId ?? "");
-		setShowSellerTin(!!workspace.taxId);
+		setSellerTin(workspaceSellerTin);
+		setShowSellerTin(!!workspaceSellerTin);
 		setSellerRcNumber(workspace.rcNumber ?? "");
 		setShowSellerRc(!!workspace.rcNumber);
 	}, [workspace]);
@@ -836,6 +874,7 @@ export function CreateInvoicePanel({
 		setIncludeQr(savedTemplateSettings.includeQr ?? false);
 		setIncludeDiscount(savedTemplateSettings.includeDiscount ?? false);
 		setDiscount(savedTemplateSettings.discount ?? 0);
+		setDiscountMode(savedTemplateSettings.discountMode ?? "invoice_after_tax");
 		setTemplateLabels((current) => ({
 			...current,
 			...Object.fromEntries(
@@ -854,6 +893,7 @@ export function CreateInvoicePanel({
 		includeQr,
 		includeDiscount,
 		discount: includeDiscount ? discount : 0,
+		discountMode: includeDiscount ? discountMode : "none",
 	};
 
 	useEffect(() => {
@@ -929,68 +969,78 @@ export function CreateInvoicePanel({
 	const sellerRcForSubmission =
 		showSellerRc && sellerRcNumber.trim() ? sellerRcNumber.trim() : "";
 
-	const compliance = useMemo(
-		() =>
-			calculateInvoiceCompliance({
-				seller: {
-					legalName: fromName.trim() || undefined,
-					email: fromEmail.trim() || undefined,
-					countryCode: getCountryCodeFromCurrency(
-						workspace?.baseCurrency ?? "NGN",
-					),
-					taxId: sellerTinForSubmission || undefined,
-					rcNumber: sellerRcForSubmission || undefined,
-				},
-				buyer: {
-					legalName: customerName.trim() || undefined,
-					email: customerEmail.trim() || undefined,
-					countryCode: getCountryCodeFromCurrency(currency),
-				},
-				sellerTaxStatus,
-				placeOfSupply: getCountryCodeFromCurrency(
+	const compliance = useMemo(() => {
+		// The engine rejects a discount larger than the subtotal. Clamp the
+		// preview so typing a large number cannot crash the panel; the save path
+		// still rejects the out-of-bounds value with a clear error.
+		const engineSubtotal = subtotalKobo(lineItems) / 100;
+		const engineDiscount = includeDiscount
+			? Math.min(Math.max(discount, 0), engineSubtotal)
+			: 0;
+		return calculateInvoiceCompliance({
+			seller: {
+				legalName: fromName.trim() || undefined,
+				email: fromEmail.trim() || undefined,
+				countryCode: getCountryCodeFromCurrency(
 					workspace?.baseCurrency ?? "NGN",
 				),
-				currency,
-				taxRuleSetVersion:
-					workspace?.taxRuleSetVersion ?? NIGERIA_TAX_RULE_SET_VERSION,
-				taxTreatment,
-				taxRate:
-					taxTreatment === "exclusive_rate"
-						? NIGERIA_VAT_RATE
-						: taxTreatment === "inclusive_rate"
-							? NIGERIA_VAT_RATE
-							: 0,
-				taxLabel: taxTreatment === "exempt" ? "Exempt" : "VAT",
-				withholding: {
-					...defaultWithholdingSelection(),
-					category: withholdingCategory,
-					recipientEntityType: withholdingRecipientEntityType,
-					recipientResidency: withholdingRecipientResidency,
-				},
-				lineItems,
-			}),
-		[
-			currency,
-			customerEmail,
-			customerName,
-			fromEmail,
-			fromName,
-			lineItems,
-			showSellerTin,
-			showSellerRc,
-			sellerRcForSubmission,
-			sellerRcNumber,
+				taxId: sellerTinForSubmission || undefined,
+				rcNumber: sellerRcForSubmission || undefined,
+			},
+			buyer: {
+				legalName: customerName.trim() || undefined,
+				email: customerEmail.trim() || undefined,
+				countryCode: getCountryCodeFromCurrency(currency),
+			},
 			sellerTaxStatus,
-			sellerTinForSubmission,
-			sellerTin,
+			placeOfSupply: getCountryCodeFromCurrency(
+				workspace?.baseCurrency ?? "NGN",
+			),
+			currency,
+			taxRuleSetVersion:
+				workspace?.taxRuleSetVersion ?? NIGERIA_TAX_RULE_SET_VERSION,
 			taxTreatment,
-			withholdingCategory,
-			withholdingRecipientEntityType,
-			withholdingRecipientResidency,
-			workspace?.baseCurrency,
-			workspace?.taxRuleSetVersion,
-		],
-	);
+			taxRate:
+				taxTreatment === "exclusive_rate"
+					? NIGERIA_VAT_RATE
+					: taxTreatment === "inclusive_rate"
+						? NIGERIA_VAT_RATE
+						: 0,
+			taxLabel: taxTreatment === "exempt" ? "Exempt" : "VAT",
+			withholding: {
+				...defaultWithholdingSelection(),
+				category: withholdingCategory,
+				recipientEntityType: withholdingRecipientEntityType,
+				recipientResidency: withholdingRecipientResidency,
+			},
+			lineItems,
+			discount: includeDiscount && discountMode !== "line" ? engineDiscount : 0,
+			discountMode: includeDiscount ? discountMode : "none",
+		});
+	}, [
+		currency,
+		customerEmail,
+		customerName,
+		discount,
+		discountMode,
+		fromEmail,
+		fromName,
+		includeDiscount,
+		lineItems,
+		showSellerTin,
+		showSellerRc,
+		sellerRcForSubmission,
+		sellerRcNumber,
+		sellerTaxStatus,
+		sellerTinForSubmission,
+		sellerTin,
+		taxTreatment,
+		withholdingCategory,
+		withholdingRecipientEntityType,
+		withholdingRecipientResidency,
+		workspace?.baseCurrency,
+		workspace?.taxRuleSetVersion,
+	]);
 
 	const filteredClients = useMemo(() => {
 		const q = customerSearch.trim().toLowerCase();
@@ -1056,24 +1106,21 @@ export function CreateInvoicePanel({
 	const footerIconButtonClass =
 		"inline-flex h-10 w-10 items-center justify-center rounded-md border border-rule bg-paper text-ink-2 transition-[opacity,background-color,border-color,color] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-paper-2 hover:text-ink";
 
-	const createdInvoicePublicUrl = createdInvoice
-		? `${typeof window !== "undefined" ? window.location.origin : ""}/i/${createdInvoice.token}`
-		: "";
 	const tinDigits = sellerTinForSubmission.length;
-	const tinIsValid =
-		sellerTinForSubmission.length === 0 || sellerTinForSubmission.length === 10;
-	const tinHintText =
-		tinDigits === 10
-			? "Valid TIN format"
-			: tinDigits === 0
-				? "0/10 digits"
-				: `${tinDigits}/10 digits`;
-	const tinHintClass =
-		tinDigits === 10
-			? "text-ok"
-			: tinDigits === 0
-				? "text-ink-3"
-				: "text-brand";
+	const tinLengthValid =
+		tinDigits >= NIGERIA_TIN_MIN_DIGITS && tinDigits <= NIGERIA_TIN_MAX_DIGITS;
+	const tinIsValid = tinDigits === 0 || tinLengthValid;
+	const tinRangeLabel = `${NIGERIA_TIN_MIN_DIGITS}-${NIGERIA_TIN_MAX_DIGITS} digits`;
+	const tinHintText = tinLengthValid
+		? "Valid TIN format"
+		: tinDigits === 0
+			? `0/${tinRangeLabel}`
+			: `${tinDigits}/${tinRangeLabel}`;
+	const tinHintClass = tinLengthValid
+		? "text-ok"
+		: tinDigits === 0
+			? "text-ink-3"
+			: "text-brand";
 	const rcIsValid =
 		sellerRcForSubmission.length === 0 ||
 		/^RC-\d{7}$/i.test(sellerRcForSubmission);
@@ -1083,18 +1130,30 @@ export function CreateInvoicePanel({
 		isVatEnabled || sellerTaxStatus === "vat_registered";
 	const sellerTinWillNotPrint = showSellerTin && !sellerTinForSubmission;
 	const netPayable = netPayableFromCompliance(compliance);
+	const displayDiscount = includeDiscount
+		? discountMode === "line"
+			? lineItems.reduce((sum, item) => sum + (item.discount ?? 0), 0)
+			: Math.min(Math.max(discount, 0), subtotalKobo(lineItems) / 100)
+		: 0;
 	const totalsMaximumFractionDigits = includeDecimals ? 2 : 0;
 	const hasPricedLineItem = lineItems.some(
 		(item) => item.name.trim().length > 0 && item.price > 0,
 	);
-	const firstMissingTaxLine = isVatEnabled
-		? lineItems.find(
-				(item) =>
-					item.name.trim() &&
-					item.price > 0 &&
-					(!item.unit?.trim() || !item.classificationCode?.trim()),
-			)
-		: undefined;
+	// The server's leave-Draft gate (assertCustomerForIssueTransition) requires
+	// a unit, a supported VAT category and a goods/service code on every line it
+	// finalizes - not only when the invoice charges VAT. The Create button asks
+	// `lineMissingClassification`, the same predicate the gate uses, so the panel
+	// can never let through a submit the server then rejects for fields a non-VAT
+	// invoice did not show.
+	const firstMissingTaxLine = lineItems.find(
+		(item) =>
+			item.name.trim().length > 0 &&
+			lineMissingClassification({
+				...item,
+				// The payload persists this fallback, so validate what is sent.
+				vatCategory: item.vatCategory ?? defaultVatCategory,
+			}),
+	);
 	const dueDateInvalid = Boolean(issueDate && dueDate && dueDate < issueDate);
 	const canSubmit =
 		customerName.trim().length > 1 &&
@@ -1139,21 +1198,13 @@ export function CreateInvoicePanel({
 			});
 		}
 	};
-	const autosaveStatusText =
-		autosaveStatus === "saving"
-			? "Saving..."
-			: autosaveStatus === "saved"
-				? "Draft saved"
-				: autosaveStatus === "error"
-					? "Not saved"
-					: "";
 	const hasMeaningfulDraft = useMemo(() => {
 		const defaultFromName =
-			workspace?.legalName || workspace?.name || "Velure Studio";
-		const defaultFromEmail = workspace?.email ?? "hello@velure.app";
+			workspace?.legalName || workspace?.name || "Invoicly Studio";
+		const defaultFromEmail = workspace?.email ?? "hello@invoicly.cv";
 		const defaultLogoUrl = workspace?.logoUrl ?? "";
 		const defaultPaymentDetails = workspace?.paymentDetails ?? "";
-		const defaultSellerTin = workspace?.taxId ?? "";
+		const defaultSellerTin = storedTinOrUndefined(workspace?.taxId) ?? "";
 		const defaultSellerRc = workspace?.rcNumber ?? "";
 		const defaultPaymentTermsDays = workspace?.defaultPaymentTermsDays ?? 14;
 		const defaultDueDate = buildDueDate(defaultPaymentTermsDays, issueDate);
@@ -1282,6 +1333,22 @@ export function CreateInvoicePanel({
 		],
 	);
 
+	// Never claim "Draft saved" while a newer edit has not been persisted:
+	// `autosaveSignatureRef` only advances on a successful save, so a mismatch
+	// means the on-screen draft is ahead of what is stored. Surface that
+	// immediately instead of after the debounce fires.
+	const hasUnsavedAutosave =
+		hasMeaningfulDraft && autosaveSignature !== autosaveSignatureRef.current;
+	autosaveHasUnsavedRef.current = hasUnsavedAutosave;
+	const autosaveStatusText =
+		autosaveStatus === "error"
+			? "Not saved"
+			: autosaveStatus === "saving" || hasUnsavedAutosave
+				? "Saving..."
+				: autosaveStatus === "saved"
+					? "Draft saved"
+					: "";
+
 	const buildDraftMutationArgs = (id?: string | null) => ({
 		id: id ?? undefined,
 		token: autosaveTokenRef.current,
@@ -1350,18 +1417,23 @@ export function CreateInvoicePanel({
 		},
 	});
 
-	const persistAutosaveDraft = async () => {
-		if (
-			composerStage !== "editor" ||
-			!hasMeaningfulDraft ||
-			!tinIsValid ||
-			!rcIsValid ||
-			(isCorrectionDocumentType(documentType) && !correctsInvoiceId)
-		) {
-			return;
-		}
+	autosaveRuntimeRef.current = {
+		signature: autosaveSignature,
+		canSave:
+			composerStage === "editor" &&
+			hasMeaningfulDraft &&
+			tinIsValid &&
+			rcIsValid &&
+			!(isCorrectionDocumentType(documentType) && !correctsInvoiceId),
+		buildArgs: () => buildDraftMutationArgs(autosaveDraftIdRef.current),
+	};
 
-		if (autosaveSignatureRef.current === autosaveSignature) return;
+	const persistAutosaveDraft = async () => {
+		const runtime = autosaveRuntimeRef.current;
+		if (!runtime.canSave) return;
+
+		const signature = runtime.signature;
+		if (autosaveSignatureRef.current === signature) return;
 		if (autosaveInFlightRef.current) {
 			autosavePendingRef.current = true;
 			return;
@@ -1375,11 +1447,11 @@ export function CreateInvoicePanel({
 			const saved = await autosaveDraft(
 				supabaseClient,
 				userId,
-				buildDraftMutationArgs(autosaveDraftIdRef.current),
+				runtime.buildArgs(),
 			);
 			autosaveDraftIdRef.current = saved.id;
 			setInvoiceNumber(saved.invoiceNumber);
-			autosaveSignatureRef.current = autosaveSignature;
+			autosaveSignatureRef.current = signature;
 			setAutosaveStatus("saved");
 		} catch (_error) {
 			setAutosaveStatus("error");
@@ -1387,6 +1459,8 @@ export function CreateInvoicePanel({
 			autosaveInFlightRef.current = false;
 			if (autosavePendingRef.current) {
 				autosavePendingRef.current = false;
+				// Re-read the runtime ref so a change that landed while this
+				// save was in flight is the one that persists.
 				void persistAutosaveDraft();
 			}
 		}
@@ -1423,14 +1497,24 @@ export function CreateInvoicePanel({
 		const onVisibilityChange = () => {
 			if (document.visibilityState === "hidden") flushDraft();
 		};
+		const onBeforeUnload = (event: BeforeUnloadEvent) => {
+			if (!autosaveHasUnsavedRef.current) return;
+			// Best-effort flush first; the confirmation gives the write a chance
+			// to complete before a hard reload discards the pending edit.
+			flushDraft();
+			event.preventDefault();
+			event.returnValue = "";
+		};
 
 		document.addEventListener("visibilitychange", onVisibilityChange);
 		window.addEventListener("pagehide", flushDraft);
+		window.addEventListener("beforeunload", onBeforeUnload);
 
 		return () => {
 			flushDraft();
 			document.removeEventListener("visibilitychange", onVisibilityChange);
 			window.removeEventListener("pagehide", flushDraft);
+			window.removeEventListener("beforeunload", onBeforeUnload);
 		};
 	}, []);
 
@@ -1704,6 +1788,9 @@ export function CreateInvoicePanel({
 	const resetDraft = () => {
 		const nextIssueDate = buildIssueDate();
 		const nextTermDays = 14;
+		// Same placeholder rule as the workspace effect: a legacy placeholder
+		// TIN is not a real tax id.
+		const workspaceSellerTin = storedTinOrUndefined(workspace?.taxId) ?? "";
 
 		setComposerStage("editor");
 		setCreatedInvoice(null);
@@ -1724,8 +1811,8 @@ export function CreateInvoicePanel({
 		setCustomerName("");
 		setCustomerEmail("");
 		setCustomerPoNumber("");
-		setFromName(workspace?.legalName || workspace?.name || "Velure Studio");
-		setFromEmail(workspace?.email ?? "hello@velure.app");
+		setFromName(workspace?.legalName || workspace?.name || "Invoicly Studio");
+		setFromEmail(workspace?.email ?? "hello@invoicly.cv");
 		setLogoUrl(workspace?.logoUrl ?? "");
 		setPaymentDetails(workspace?.paymentDetails ?? "");
 		setNotes(null);
@@ -1752,7 +1839,7 @@ export function CreateInvoicePanel({
 		setTemplateName("Default NG");
 		setSellerProfileType(
 			workspace?.sellerTaxStatus === "vat_registered" ||
-				workspace?.taxId ||
+				workspaceSellerTin ||
 				workspace?.rcNumber
 				? "business"
 				: "freelancer",
@@ -1770,8 +1857,8 @@ export function CreateInvoicePanel({
 		setWithholdingCategory("none");
 		setWithholdingRecipientEntityType("corporate");
 		setWithholdingRecipientResidency("resident");
-		setSellerTin(workspace?.taxId ?? "");
-		setShowSellerTin(!!workspace?.taxId);
+		setSellerTin(workspaceSellerTin);
+		setShowSellerTin(!!workspaceSellerTin);
 		setSellerRcNumber(workspace?.rcNumber ?? "");
 		setShowSellerRc(!!workspace?.rcNumber);
 		setSettingsOpen(false);
@@ -1796,7 +1883,7 @@ export function CreateInvoicePanel({
 		if (!tinIsValid) {
 			toast({
 				title: "Check seller tax ID",
-				description: "Leave TIN blank or enter exactly 10 digits.",
+				description: `Leave TIN blank or enter ${NIGERIA_TIN_MIN_DIGITS}-${NIGERIA_TIN_MAX_DIGITS} digits.`,
 				variant: "error",
 			});
 			return;
@@ -1812,8 +1899,7 @@ export function CreateInvoicePanel({
 		if (requiresSellerTin && !sellerTinForSubmission) {
 			toast({
 				title: "Seller TIN needed for VAT",
-				description:
-					"Switch to Below threshold or add a 10-digit TIN before charging VAT.",
+				description: `Switch to Below threshold or add a ${NIGERIA_TIN_MIN_DIGITS}-${NIGERIA_TIN_MAX_DIGITS} digit TIN before charging VAT.`,
 				variant: "error",
 			});
 			openComplianceDialog();
@@ -1935,6 +2021,7 @@ export function CreateInvoicePanel({
 				customerName: created.customerName,
 				customerEmail,
 				total: netPayable,
+				currency,
 			});
 			setComposerStage("success");
 			onCreated?.(created.id);
@@ -1976,6 +2063,15 @@ export function CreateInvoicePanel({
 	};
 
 	if (composerStage === "success" && createdInvoice) {
+		const shareLinks = buildInvoiceShareLinks({
+			token: createdInvoice.token,
+			origin: typeof window !== "undefined" ? window.location.origin : "",
+			invoiceNumber: createdInvoice.invoiceNumber,
+			customerName: createdInvoice.customerName,
+			documentType: createdInvoice.documentType,
+			amountLabel: formatMoney(createdInvoice.total, createdInvoice.currency),
+		});
+
 		return (
 			<div
 				className={`flex h-full min-h-0 w-full flex-col ${isSheetMode ? "" : "pb-6"}`}
@@ -1986,26 +2082,26 @@ export function CreateInvoicePanel({
 					<div className="mx-auto flex h-full min-h-0 w-full max-w-[720px] flex-col border border-rule bg-paper">
 						<div className="flex min-h-0 flex-1 flex-col px-6 py-6">
 							<div>
-								<h2 className="text-[34px] font-medium tracking-[-0.03em] text-ink">
+								<h2 className="text-[30px] font-medium tracking-[-0.03em] text-ink">
 									Created
 								</h2>
-								<p className="mt-2 text-sm text-ink-3">
+								<p className="mt-1.5 text-[13px] text-ink-3">
 									Your{" "}
 									{INVOICE_DOCUMENT_TYPE_LABELS[createdInvoice.documentType]}{" "}
 									was created successfully.
 								</p>
 							</div>
 
-							<div className="relative my-auto border border-rule bg-paper-2 p-5 pb-7">
-								<div className="flex items-start justify-between gap-4 text-sm text-ink-3">
-									<div className="text-[13px]">
+							<div className="relative mx-auto my-auto w-full max-w-[430px] border border-rule bg-paper-2 p-4 pb-6">
+								<div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 text-[12px] text-ink-3">
+									<div className="whitespace-nowrap">
 										{INVOICE_DOCUMENT_TYPE_LABELS[createdInvoice.documentType]}{" "}
 										No:{" "}
 										<span className="font-medium text-ink">
 											{createdInvoice.invoiceNumber}
 										</span>
 									</div>
-									<div className="text-[13px]">
+									<div className="whitespace-nowrap">
 										{createdInvoice.documentType === "proforma"
 											? "Valid Until"
 											: "Due Date"}
@@ -2016,20 +2112,20 @@ export function CreateInvoicePanel({
 									</div>
 								</div>
 
-								<div className="mt-8">
-									<div className="text-[18px] font-medium text-ink">
+								<div className="mt-6">
+									<div className="text-[16px] font-medium text-ink">
 										{createdInvoice.customerName}
 									</div>
 									{createdInvoice.customerEmail ? (
-										<div className="mt-3 text-[13px] text-ink-3 underline underline-offset-2">
+										<div className="mt-2 text-[12px] text-ink-3 underline underline-offset-2">
 											{createdInvoice.customerEmail}
 										</div>
 									) : null}
 								</div>
 
-								<div className="mt-10 flex items-end justify-between gap-4 border-b border-rule pb-5">
-									<div className="text-[13px] text-ink-3">Total</div>
-									<div className="text-[18px] text-ink">
+								<div className="mt-8 flex items-end justify-between gap-4 border-b border-rule pb-4">
+									<div className="text-[12px] text-ink-3">Total</div>
+									<div className="text-[16px] text-ink">
 										{formatMoney(
 											createdInvoice.total,
 											normalizeCurrency(currency),
@@ -2040,39 +2136,99 @@ export function CreateInvoicePanel({
 									</div>
 								</div>
 
-								<div className="mt-10">
-									<div className="text-[28px] font-medium tracking-[-0.03em] text-ink">
+								<div className="mt-8">
+									<div className="text-[22px] font-medium tracking-[-0.03em] text-ink">
 										Details
 									</div>
-									<div className="mt-10">
+									<div className="mt-6">
 										<div className="mb-2 text-[12px] text-ink-3">
 											Share link
 										</div>
-										<div className="flex items-center gap-2">
-											<div className="flex h-10 flex-1 items-center border border-rule bg-paper px-3 text-[13px] text-ink-3">
-												<span className="truncate">
-													{createdInvoicePublicUrl}
-												</span>
+										<div className="flex flex-col gap-2">
+											<div className="flex h-10 min-w-0 items-center border border-rule bg-paper px-3 text-[13px] text-ink-3">
+												<span className="truncate">{shareLinks.publicUrl}</span>
 											</div>
-											<button
-												type="button"
-												onClick={() =>
-													void copyInvoiceLink(createdInvoice.token)
-												}
-												className={footerIconButtonClass}
-												aria-label="Copy share link"
-											>
-												<Copy className="h-4 w-4" />
-											</button>
-											<a
-												href={createdInvoicePublicUrl}
-												target="_blank"
-												rel="noreferrer"
-												className={footerIconButtonClass}
-												aria-label="Preview before download"
-											>
-												<Download className="h-4 w-4" />
-											</a>
+											<div className="flex flex-wrap items-center gap-2">
+												<a
+													href={shareLinks.telegramHref}
+													target="_blank"
+													rel="noreferrer"
+													className={footerIconButtonClass}
+													aria-label="Share on Telegram"
+													title="Share on Telegram"
+												>
+													<FaTelegram className="h-4 w-4" />
+												</a>
+												<a
+													href={shareLinks.whatsappHref}
+													target="_blank"
+													rel="noreferrer"
+													className={footerIconButtonClass}
+													aria-label="Share on WhatsApp"
+													title="Share on WhatsApp"
+												>
+													<FaWhatsapp className="h-4 w-4" />
+												</a>
+												<button
+													type="button"
+													onClick={async () => {
+														if (navigator.share) {
+															await navigator.share({
+																title: `${INVOICE_DOCUMENT_TYPE_LABELS[createdInvoice.documentType]} ${createdInvoice.invoiceNumber}`,
+																text: shareLinks.text,
+																url: shareLinks.publicUrl,
+															});
+															return;
+														}
+														await navigator.clipboard.writeText(
+															shareLinks.publicUrl,
+														);
+													}}
+													className={footerIconButtonClass}
+													aria-label="Share link"
+													title="Share link"
+												>
+													<Share2 className="h-4 w-4" />
+												</button>
+												<button
+													type="button"
+													onClick={() =>
+														void copyInvoiceLink(createdInvoice.token)
+													}
+													className={footerIconButtonClass}
+													aria-label="Copy share link"
+												>
+													<Copy className="h-4 w-4" />
+												</button>
+												<a
+													href={shareLinks.publicUrl}
+													target="_blank"
+													rel="noreferrer"
+													className={footerIconButtonClass}
+													aria-label="Preview before download"
+												>
+													<Download className="h-4 w-4" />
+												</a>
+											</div>
+										</div>
+									</div>
+								</div>
+								<div className="mt-5 flex items-center gap-3 border-t border-rule pt-5">
+									<InvoiceQrCode
+										value={shareLinks.publicUrl}
+										size={76}
+										label={`QR code for ${INVOICE_DOCUMENT_TYPE_LABELS[createdInvoice.documentType]} ${createdInvoice.invoiceNumber}`}
+									/>
+									<div className="min-w-0">
+										<div className="text-[12px] font-medium text-ink">
+											Scan to open
+										</div>
+										<div className="mt-1 text-[11px] leading-[1.45] text-ink-3">
+											Unique to this{" "}
+											{INVOICE_DOCUMENT_TYPE_LABELS[
+												createdInvoice.documentType
+											].toLowerCase()}{" "}
+											— it opens the public link above.
 										</div>
 									</div>
 								</div>
@@ -2147,7 +2303,7 @@ export function CreateInvoicePanel({
 										))}
 									</ol>
 								) : null}
-								<div className="mb-5 flex w-fit rounded-md border border-rule bg-paper-2 p-1">
+								<div className="mb-5 flex w-fit max-w-full flex-wrap rounded-md border border-rule bg-paper-2 p-1">
 									{DOCUMENT_TYPE_OPTIONS.map((option) => (
 										<button
 											key={option.value}
@@ -2623,6 +2779,7 @@ export function CreateInvoicePanel({
 									onChange={(content) =>
 										setTopBlock(content as EditorDoc | null)
 									}
+									ariaLabel="Invoice introduction"
 									placeholder="Optional introduction or terms above line items"
 									className="mb-4 min-h-14 border-y border-dashed border-rule bg-paper px-1 py-3"
 								/>
@@ -3075,7 +3232,7 @@ export function CreateInvoicePanel({
 																}}
 																className={cn(
 																	"mt-2 flex max-w-full flex-wrap items-center gap-1.5 text-left text-[11px] text-ink-2 hover:text-brand",
-																	(!isVatEnabled || isEmptyLine) && "hidden",
+																	isEmptyLine && "hidden",
 																)}
 															>
 																<span className="rounded-full bg-paper-2 px-2 py-1">
@@ -3093,8 +3250,7 @@ export function CreateInvoicePanel({
 																</span>
 																{taxDetailsOpen ? "▾" : "▸"}
 															</button>
-															{isVatEnabled &&
-															missingTaxDetails &&
+															{missingTaxDetails &&
 															blurredTaxLineIds.includes(item.id) &&
 															(item.name.trim() || item.price > 0) ? (
 																<p
@@ -3105,7 +3261,7 @@ export function CreateInvoicePanel({
 																	this line.
 																</p>
 															) : null}
-															{isVatEnabled && taxDetailsOpen ? (
+															{taxDetailsOpen ? (
 																<div className="mt-2 grid gap-2 @md:grid-cols-3">
 																	<div className="min-w-0">
 																		<label
@@ -3204,6 +3360,12 @@ export function CreateInvoicePanel({
 																			placeholder="Enter code"
 																		/>
 																	</div>
+																	<p className="@md:col-span-3 text-[11px] leading-[1.45] text-ink-3">
+																		Unit, VAT category and goods/service code
+																		are the structured line fields used by tax
+																		summaries and e-invoice data exports. Your
+																		buyer does not see the code on the invoice.
+																	</p>
 																</div>
 															) : null}
 														</CreateSortableLineItem>
@@ -3239,6 +3401,20 @@ export function CreateInvoicePanel({
 												})}
 											</span>
 										</div>
+										{includeDiscount && displayDiscount > 0 ? (
+											<div className="mt-2 flex items-center justify-between">
+												<span>{templateLabels.discountLabel}</span>
+												<span
+													key={`discount-${currency}-${displayDiscount}-${totalsMaximumFractionDigits}`}
+													className="font-mono invoice-value-fade"
+												>
+													-{" "}
+													{formatMoney(displayDiscount, currency, {
+														maximumFractionDigits: totalsMaximumFractionDigits,
+													})}
+												</span>
+											</div>
+										) : null}
 										{isVatEnabled ? (
 											<div className="mt-2 flex items-center justify-between">
 												<span>{selectedTaxSetting?.label}</span>
@@ -3341,6 +3517,7 @@ export function CreateInvoicePanel({
 													onChange={(content) =>
 														setNotes(content as EditorDoc | null)
 													}
+													ariaLabel="Invoice notes"
 													placeholder={NOTE_PLACEHOLDER}
 													className="min-h-20 w-full border-0 bg-transparent px-0 py-1"
 												/>
@@ -3352,6 +3529,7 @@ export function CreateInvoicePanel({
 											onChange={(content) =>
 												setBottomBlock(content as EditorDoc | null)
 											}
+											ariaLabel="Invoice footer"
 											placeholder="Optional footer or legal text"
 											className="mt-4 min-h-14 border-y border-dashed border-rule bg-paper px-1 py-3"
 										/>
@@ -3725,6 +3903,7 @@ export function CreateInvoicePanel({
 											autosaveStatus === "error" ? "text-warn" : "text-ink-2",
 										)}
 										aria-live="polite"
+										data-testid="invoice-autosave-status"
 									>
 										{autosaveStatusText || "\u00a0"}
 									</div>
@@ -3950,6 +4129,36 @@ export function CreateInvoicePanel({
 											}
 											className="h-9 border-rule bg-paper text-ink"
 										/>
+									</label>
+								) : null}
+								{includeDiscount ? (
+									<label
+										htmlFor="invoice-discount-mode"
+										className="mt-3 block text-[12px] text-ink-3"
+									>
+										<span className="mb-1 block">Discount applies</span>
+										<Select
+											value={discountMode}
+											onValueChange={(value) =>
+												setDiscountMode(value as DiscountMode)
+											}
+										>
+											<SelectTrigger
+												id="invoice-discount-mode"
+												className="h-9 border-rule bg-paper text-ink"
+											>
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												{DISCOUNT_MODE_OPTIONS.filter(
+													(option) => option.value !== "none",
+												).map((option) => (
+													<SelectItem key={option.value} value={option.value}>
+														{option.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
 									</label>
 								) : null}
 								<label

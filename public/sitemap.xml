@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Static sitemap for the public marketing and legal routes only.
+  Authenticated workspace routes and token-scoped public invoice links are
+  intentionally excluded. Redirect-only routes (/solutions/* and /security,
+  which 307s to /#security) are excluded: a sitemap should list canonical 200
+  URLs. Keep in sync with src/routes/{index,features,pricing,privacy,terms}.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+	<url>
+		<loc>https://invoicly.cv/</loc>
+	</url>
+	<url>
+		<loc>https://invoicly.cv/features</loc>
+	</url>
+	<url>
+		<loc>https://invoicly.cv/pricing</loc>
+	</url>
+	<url>
+		<loc>https://invoicly.cv/privacy</loc>
+	</url>
+	<url>
+		<loc>https://invoicly.cv/terms</loc>
+	</url>
+</urlset>

@@ -3,6 +3,7 @@ import type { SupplierProfileInput } from "./supplier-profile";
 import {
 	composeSupplierAddress,
 	SUPPLIER_ADDRESS_MAX_LENGTHS,
+	storedTinOrUndefined,
 	supplierProfileBanner,
 	validateSupplierProfile,
 	validateSupplierRcNumber,
@@ -12,6 +13,8 @@ import {
 describe("validateSupplierTin (B1, SPEC 6.2 item 4)", () => {
 	it.each([
 		["plain 10-digit", "1234560000"],
+		["plain 11-digit", "12345600001"],
+		["plain 12-digit", "123456000012"],
 		["digits with spaces are compacted", " 1234 5600 00 "],
 		["leading/trailing whitespace tolerated", "\t2345678901\n"],
 	])("accepts %s", (_label, value) => {
@@ -32,7 +35,7 @@ describe("validateSupplierTin (B1, SPEC 6.2 item 4)", () => {
 
 	it.each([
 		["too short", "123456789"],
-		["too long", "12345678901"],
+		["too long", "1234567890123"],
 		["letters", "123456789A"],
 		["alphanumeric", "1234567890A"],
 	])("rejects %s as a format problem", (_label, value) => {
@@ -46,6 +49,8 @@ describe("validateSupplierTin (B1, SPEC 6.2 item 4)", () => {
 		["all zeros", "0000000000"],
 		["all ones", "1111111111"],
 		["all nines", "9999999999"],
+		["11-digit all ones", "11111111111"],
+		["12-digit all twos", "222222222222"],
 		["ascending sequence", "0123456789"],
 		["descending sequence", "9876543210"],
 	])("rejects the placeholder class: %s", (_label, value) => {
@@ -267,6 +272,34 @@ describe("validateSupplierProfile structured address (B1)", () => {
 			);
 			expect(codes).not.toContain("address_not_structured");
 		}
+	});
+});
+
+describe("storedTinOrUndefined (invoice write boundary)", () => {
+	it.each([
+		["10-digit real TIN", "8129473650", "8129473650"],
+		["11-digit real TIN", "81294736501", "81294736501"],
+		["12-digit real TIN", "812947365012", "812947365012"],
+		["real TIN with surrounding whitespace", "  8129473650  ", "8129473650"],
+		["real TIN with internal spaces", "8129 473 650", "8129473650"],
+		// Format-warning shapes stay (write path accepts them; warning only).
+		["too-short shape (warning)", "12345", "12345"],
+		["too-long shape (warning)", "1234567890123", "1234567890123"],
+		["letters in shape (warning)", "123456789A", "123456789A"],
+		// Blocking placeholders are dropped.
+		["SPEC P6 literal placeholder", "1234567890", undefined],
+		["other literal placeholder", "0123456789", undefined],
+		["other literal placeholder 2", "9876543210", undefined],
+		["all-zero", "0000000000", undefined],
+		["all-one", "1111111111", undefined],
+		["placeholder with internal spaces", "1234 5678 90", undefined],
+		// Blank.
+		["empty", "", undefined],
+		["whitespace only", "   ", undefined],
+		["null", null, undefined],
+		["undefined", undefined, undefined],
+	])("maps a stored TIN (%s)", (_label, input, expected) => {
+		expect(storedTinOrUndefined(input)).toBe(expected);
 	});
 });
 

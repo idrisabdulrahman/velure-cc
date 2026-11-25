@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { serialize } from "cookie";
 import { auth } from "#/lib/auth";
+import { withAuthConnection } from "#/server/auth-database";
 
 export const LINK_STEP_UP_COOKIE_NAME = "invoice_link_stepup";
 
@@ -13,6 +14,7 @@ type AuthSession = {
 	user: {
 		id: string;
 		email: string;
+		emailVerified?: boolean | null;
 		twoFactorEnabled?: boolean | null;
 	};
 };
@@ -60,7 +62,7 @@ async function callAuthEndpoint(
 		body: init?.body ? JSON.stringify(init.body) : undefined,
 	});
 
-	return auth.handler(authRequest);
+	return withAuthConnection(() => auth.handler(authRequest));
 }
 
 export async function getAuthSessionFromRequest(request: Request) {

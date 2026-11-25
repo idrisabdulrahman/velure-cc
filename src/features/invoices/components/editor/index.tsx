@@ -15,6 +15,7 @@ interface EditorProps {
 	placeholder?: string;
 	tabIndex?: number;
 	className?: string;
+	ariaLabel?: string;
 }
 
 export function Editor({
@@ -24,6 +25,7 @@ export function Editor({
 	placeholder,
 	tabIndex,
 	className,
+	ariaLabel,
 }: EditorProps) {
 	const editor = useEditor({
 		extensions: registerExtensions({ placeholder }),
@@ -34,6 +36,9 @@ export function Editor({
 		editorProps: {
 			attributes: {
 				class: className ?? "",
+				role: "textbox",
+				"aria-multiline": "true",
+				...(ariaLabel ? { "aria-label": ariaLabel } : {}),
 			},
 		},
 	});

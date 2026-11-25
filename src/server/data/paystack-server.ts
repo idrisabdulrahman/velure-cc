@@ -66,6 +66,23 @@ export function logPaymentAnomaly(anomaly: {
 }
 
 /**
+ * An error whose message is deliberately safe to show the payer.
+ *
+ * `ensurePaystackTransferCharge` rejects with several actionable causes
+ * (missing client email, non-NGN invoice, no collectible amount). The route
+ * used to collapse all of them into one generic string, so the payer saw
+ * "Could not prepare transfer account" with no way to act on it. Throwing this
+ * class marks a message as public; anything else stays generic so config and
+ * provider internals never reach the browser.
+ */
+export class PublicPaymentError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "PublicPaymentError";
+	}
+}
+
+/**
  * F8 — resolve the reusable pending charge for an invoice, or `null`.
  *
  * A pending charge is reused only while it still matches the invoice's
@@ -113,29 +130,31 @@ async function findReusableCharge(
 export async function ensurePaystackTransferCharge(token: string) {
 	const client = getSupabaseAdminClient();
 	const row = await invoiceByToken(client, token);
-	if (!row) throw new Error("Invoice not found.");
+	if (!row) throw new PublicPaymentError("Invoice not found.");
 	const invoice = rawRowToInvoiceState(row);
 	const snapshot = getInvoicePaymentSnapshot(invoice);
 	const collectionAmount = collectionAmountForInvoice(invoice, snapshot);
 	const issue = payableInvoiceIssue(invoice);
-	if (issue) throw new Error(issue);
+	if (issue) throw new PublicPaymentError(issue);
 	const workspace = row.workspaces as { country_code: string | null } | null;
 	const capabilities = getPaymentCapabilities(
 		workspace ? { countryCode: workspace.country_code } : null,
 	);
 	if (!capabilities.automaticBankTransfer)
-		throw new Error(
+		throw new PublicPaymentError(
 			"Automatic bank transfer is not available for this workspace.",
 		);
 	if (collectionAmount <= 0)
-		throw new Error("Invoice has no collectible amount.");
+		throw new PublicPaymentError("Invoice has no collectible amount.");
 	// F9 (user-confirmed policy): Paystack Pay-with-Transfer for a Nigerian
 	// workspace settles in NGN only and the app has no FX handling, so refuse
 	// any other invoice currency rather than forward one Paystack may reject
 	// or settle unexpectedly.
 	const currency = String(row.currency ?? "").toUpperCase();
 	if (currency !== "NGN")
-		throw new Error("Only NGN invoices can be paid by Paystack transfer.");
+		throw new PublicPaymentError(
+			"Only NGN invoices can be paid by Paystack transfer.",
+		);
 	// F8: reuse a pending virtual account only while it still matches the
 	// current amount and currency; a stale one is expired here so a fresh,
 	// correct charge is created below.
@@ -157,7 +176,7 @@ export async function ensurePaystackTransferCharge(token: string) {
 			).data?.email
 		: undefined;
 	if (!email || !/^\S+@\S+\.\S+$/.test(email))
-		throw new Error(
+		throw new PublicPaymentError(
 			"Invoice needs a valid client email before Paystack transfer.",
 		);
 	const secret = process.env.PAYSTACK_SECRET_KEY;

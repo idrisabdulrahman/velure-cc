@@ -21,7 +21,8 @@
  */
 
 import {
-	NIGERIA_TIN_DIGITS,
+	NIGERIA_TIN_MAX_DIGITS,
+	NIGERIA_TIN_MIN_DIGITS,
 	validateSupplierTin,
 } from "../compliance/supplier-profile";
 
@@ -29,7 +30,7 @@ export const BUYER_TYPES = ["b2b", "b2c"] as const;
 export type BuyerType = (typeof BUYER_TYPES)[number];
 
 /**
- * New clients without an explicit type default to B2B: Velure's core motion
+ * New clients without an explicit type default to B2B: Invoicly's core motion
  * is business invoicing, and the migration backfills every pre-existing row
  * as B2B for the same reason (a flagged missing TIN drives the fix).
  */
@@ -59,13 +60,18 @@ export type BuyerProfileIssue = {
 /**
  * Issue codes that block persistence (format problems). Everything else is a
  * completeness gap that is flagged, not rejected.
+ *
+ * Note: `tin_format` is deliberately NOT here. The required TIN shape is
+ * UNCONFIRMED (SPEC 6.2 item 4; a provider sample shows a dashed TIN), so a
+ * wrong-shaped TIN is stored and flagged `needs_review` rather than refusing
+ * the buyer — a strict block would turn away valid customers (2026-10-30
+ * review). Placeholder TINs are still rejected.
  */
 const BLOCKING_ISSUE_CODES = new Set<BuyerProfileIssueCode>([
 	"buyer_type_invalid",
 	"email_required",
 	"email_format",
 	"address_too_long",
-	"tin_format",
 	"tin_placeholder",
 	"name_required",
 ]);
@@ -155,7 +161,7 @@ export function validateBuyerProfile(
 	} else if (buyerType === "b2b" && !taxId) {
 		push(
 			"tin_required",
-			`TIN is required for B2B buyers (${NIGERIA_TIN_DIGITS} digits).`,
+			`TIN is required for B2B buyers (${NIGERIA_TIN_MIN_DIGITS}-${NIGERIA_TIN_MAX_DIGITS} digits).`,
 		);
 	} else if (taxId) {
 		const tinResult = validateSupplierTin(taxId);

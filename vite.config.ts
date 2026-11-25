@@ -1,13 +1,70 @@
+import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
+import type { Plugin } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
 
 const isTest = process.env.VITEST === "true";
 
+/**
+ * The Nitro preset is selected by `NITRO_PRESET` (see `package.json` scripts),
+ * the same way the Cloudflare Pages build already works.
+ *
+ * `cloudflare_module` inherits Nitro's default `.output` directory, which is
+ * also where the Node/VPS build lands. They would overwrite each other, and
+ * deploying a Node entry to Workers fails confusingly. Give the Worker its own
+ * directory so both artifacts can coexist and neither can silently replace the
+ * other. The Pages preset already owns `dist`; Node keeps `.output`.
+ */
+const isCloudflareWorker = process.env.NITRO_PRESET === "cloudflare_module";
+const workerOutputDir = "dist-worker";
+
+/**
+ * The Node PDF stack (`@react-pdf/renderer`, fontkit, brotli, yoga, pdfkit) is
+ * `reject` on Workers, so shipping it there is 2.6 MiB of chunks that can only
+ * fail. Aliasing it to a stub for the Worker build removes the dead weight and
+ * makes the PDF path deterministically use `renderFallbackPdf`; the Node/VPS
+ * build and the tests keep the real renderer. See
+ * `src/server/pdf-stack.worker-stub.ts`.
+ */
+const workerOnlyAliases = isCloudflareWorker
+	? {
+			"@react-pdf/renderer": "./src/server/pdf-stack.worker-stub.ts",
+			"#/lib/invoice-document/templates/pdf":
+				"./src/server/pdf-stack.worker-stub.ts",
+		}
+	: undefined;
+
+/**
+ * The success-panel QR (`InvoiceQrCode`) is generated in the browser. The
+ * Node entry of `qrcode` evaluates `fs` and `pngjs` at module scope, so it must
+ * not be pulled into the Worker's server build.
+ *
+ * This has to be a plugin rather than a `resolve.alias` entry: an alias would
+ * also rewrite the **client** build of the same Worker build, shipping the
+ * throwing stub to the browser and silently breaking every QR.
+ */
+function qrCodeServerStub(): Plugin {
+	return {
+		name: "velure-qrcode-server-stub",
+		enforce: "pre",
+		resolveId(source) {
+			if (this.environment?.name === "client") return null;
+			if (source === "qrcode") {
+				return fileURLToPath(
+					new URL("./src/server/qr-code.worker-stub.ts", import.meta.url),
+				);
+			}
+			return null;
+		},
+	};
+}
+
 const config = defineConfig({
+	resolve: workerOnlyAliases ? { alias: workerOnlyAliases } : {},
 	build: {
 		chunkSizeWarningLimit: 1000, // raises the warning threshold to 1MB
 		rollupOptions: {
@@ -43,7 +100,8 @@ const config = defineConfig({
 		exclude: [
 			"**/node_modules/**",
 			"**/dist/**",
-			"**/tests/e2e/**",
+			"**/tests/**",
+			"**/e2e/**",
 			"**/.worktrees/**",
 		],
 	},
@@ -54,7 +112,13 @@ const config = defineConfig({
 		noExternal: [/^@visx\//],
 	},
 	plugins: [
-		!isTest ? nitro({ rollupConfig: { external: [/^@sentry\//] } }) : null,
+		!isTest
+			? nitro({
+					...(isCloudflareWorker ? { output: { dir: workerOutputDir } } : {}),
+					rollupConfig: { external: [/^@sentry\//] },
+				})
+			: null,
+		isCloudflareWorker ? qrCodeServerStub() : null,
 		tsconfigPaths({ projects: ["./tsconfig.json"] }),
 		tailwindcss(),
 		!isTest ? tanstackStart() : null,

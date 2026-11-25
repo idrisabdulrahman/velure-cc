@@ -26,10 +26,12 @@ import { formatInvoiceDate, formatMoney } from "#/features/invoices/format";
 import type { InvoiceStatus } from "#/features/invoices/types";
 import { useUnifiedAuth } from "#/lib/auth-hook";
 import { useSupabaseSession } from "#/lib/supabase-session";
+import { isWorkspaceViewer, useWorkspaceRole } from "#/lib/workspace-role";
 import {
 	getCollectionOverview,
 	getInvoiceTimeline,
 	getReminderSettings,
+	listReminderRuns,
 	markManualException as markManualExceptionSupabase,
 	pauseInvoiceReminders,
 	queueReminderEvent as queueReminderEventSupabase,
@@ -124,6 +126,8 @@ function PaymentRemindersSettingsPage() {
 	const authState = useUnifiedAuth();
 	const userId = authState.data?.user?.id;
 	const { client: supabaseClient } = useSupabaseSession(userId);
+	const role = useWorkspaceRole();
+	const isViewer = isWorkspaceViewer(role);
 	const canRead = Boolean(supabaseClient && userId);
 	const requireSupabase = () => {
 		if (!supabaseClient || !userId)
@@ -138,6 +142,15 @@ function PaymentRemindersSettingsPage() {
 		},
 		enabled: canRead,
 	});
+	const { data: recentRuns } = useQuery({
+		queryKey: ["supabase-reminder-runs", userId ?? "none"],
+		queryFn: () => {
+			const context = requireSupabase();
+			return listReminderRuns(context.client, context.userId, 5);
+		},
+		enabled: canRead,
+	});
+	const latestRun = recentRuns?.[0];
 	const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(
 		null,
 	);
@@ -232,7 +245,7 @@ function PaymentRemindersSettingsPage() {
 		overdueCadenceDays: 3,
 		maxOverdueReminders: 3,
 		escalateAfterCount: 3,
-		businessSignature: "Velure Finance Team",
+		businessSignature: "Invoicly Finance Team",
 	});
 	const {
 		data: collectionOverview,
@@ -314,7 +327,7 @@ function PaymentRemindersSettingsPage() {
 			overdueCadenceDays: settings.overdueCadenceDays,
 			maxOverdueReminders: settings.maxOverdueReminders,
 			escalateAfterCount: settings.escalateAfterCount,
-			businessSignature: settings.businessSignature ?? "Velure Finance Team",
+			businessSignature: settings.businessSignature ?? "Invoicly Finance Team",
 		});
 	}, [settings]);
 
@@ -350,17 +363,64 @@ function PaymentRemindersSettingsPage() {
 					</h1>
 					<p className="mt-2 text-sm text-ink-3">
 						Find unpaid invoices, queue polite customer emails, and move
-						exceptions into internal review. This stays inside invoicing; Velure
-						does not add legal escalation tools.
+						exceptions into internal review. This stays inside invoicing;
+						Invoicly does not add legal escalation tools.
 					</p>
 				</div>
 				<Button
 					className="min-w-fit whitespace-nowrap bg-brand px-4 text-brand-ink hover:bg-brand-hi"
+					disabled={isViewer}
 					onClick={() => setScheduleOpen(true)}
 				>
 					<Settings2 className="mr-2 h-4 w-4" /> Reminder schedule
 				</Button>
 			</div>
+
+			{isViewer ? (
+				<div
+					role="status"
+					className="rounded-md border border-rule bg-paper-2 px-4 py-3"
+				>
+					<p className="text-sm font-medium text-ink">Read-only access</p>
+					<p className="mt-1 text-sm text-ink-3">
+						You are a viewer in this workspace. You can read everything and run
+						exports, but only the owner can change settings.
+					</p>
+				</div>
+			) : null}
+
+			<Callout tone="info" title="Status: scheduled scan.">
+				Invoicly scans sent, unpaid invoices on a schedule and queues the
+				reminders due under the schedule below. Automatic customer email sending
+				is an explicit opt-in, so queued reminders are delivered once background
+				sending is enabled or when you press Send queue. You can also run the
+				scan manually at any time.
+			</Callout>
+
+			<Panel
+				title="Last automatic run"
+				sub={
+					recentRuns === undefined
+						? "Loading…"
+						: latestRun
+							? new Date(latestRun.createdAt).toLocaleString()
+							: "No run recorded yet"
+				}
+			>
+				{latestRun ? (
+					<p className="text-sm text-ink-2">
+						{latestRun.scannedCount} invoices scanned · {latestRun.queuedCount}{" "}
+						queued · {latestRun.sentCount} sent
+						{latestRun.notes ? ` · ${latestRun.notes}` : ""}
+					</p>
+				) : (
+					<p className="text-sm text-ink-2">
+						No automatic run has been recorded for this workspace yet. Until the
+						scheduler is active, use Scan invoices below — the schedule does not
+						send on its own.
+					</p>
+				)}
+			</Panel>
 
 			<KpiStrip>
 				<Kpi
@@ -419,7 +479,7 @@ function PaymentRemindersSettingsPage() {
 						label={`Automatic reminders are ${policy.enabled ? "on" : "off"}`}
 						description={`First reminder ${policy.daysBeforeDue} days before due, then every ${policy.overdueCadenceDays} days.`}
 						checked={policy.enabled}
-						disabled={busyAction !== null}
+						disabled={isViewer || busyAction !== null}
 						onChange={async (checked) => {
 							const next = { ...policy, enabled: checked };
 							setPolicy(next);
@@ -447,7 +507,7 @@ function PaymentRemindersSettingsPage() {
 						<Button
 							variant="outline"
 							className="border-rule bg-paper"
-							disabled={busyAction !== null}
+							disabled={isViewer || busyAction !== null}
 							onClick={async () => {
 								setBusyAction("find");
 								try {
@@ -473,7 +533,7 @@ function PaymentRemindersSettingsPage() {
 						<Button
 							variant="outline"
 							className="border-rule bg-paper"
-							disabled={busyAction !== null || queueEmpty}
+							disabled={isViewer || busyAction !== null || queueEmpty}
 							title={queueEmpty ? "Nothing is ready to send" : undefined}
 							onClick={async () => {
 								setBusyAction("send");
@@ -499,6 +559,15 @@ function PaymentRemindersSettingsPage() {
 						</Button>
 					</div>
 				</div>
+				{isViewer ? (
+					<p className="mt-4 rounded-md border border-rule bg-paper-2 px-4 py-3 text-xs text-ink-3">
+						Current schedule: first reminder {policy.daysBeforeDue} days before
+						due, then every {policy.overdueCadenceDays} days · up to{" "}
+						{policy.maxOverdueReminders} overdue emails · review after{" "}
+						{policy.escalateAfterCount} · signature &ldquo;
+						{policy.businessSignature}&rdquo;.
+					</p>
+				) : null}
 			</Panel>
 
 			{lastRunResult ? (
@@ -542,6 +611,7 @@ function PaymentRemindersSettingsPage() {
 								min={0}
 								step={1}
 								value={policy.daysBeforeDue}
+								disabled={isViewer}
 								aria-invalid={Boolean(errors.daysBeforeDue)}
 								onChange={(event) => {
 									setPolicy((current) => ({
@@ -568,6 +638,7 @@ function PaymentRemindersSettingsPage() {
 								min={1}
 								step={1}
 								value={policy.overdueCadenceDays}
+								disabled={isViewer}
 								aria-invalid={Boolean(errors.overdueCadenceDays)}
 								onChange={(event) => {
 									setPolicy((current) => ({
@@ -595,6 +666,7 @@ function PaymentRemindersSettingsPage() {
 								max={3}
 								step={1}
 								value={policy.maxOverdueReminders}
+								disabled={isViewer}
 								aria-invalid={Boolean(errors.maxOverdueReminders)}
 								onChange={(event) => {
 									setPolicy((current) => ({
@@ -623,6 +695,7 @@ function PaymentRemindersSettingsPage() {
 								max={3}
 								step={1}
 								value={policy.escalateAfterCount}
+								disabled={isViewer}
 								aria-invalid={Boolean(errors.escalateAfterCount)}
 								onChange={(event) => {
 									setPolicy((current) => ({
@@ -648,6 +721,7 @@ function PaymentRemindersSettingsPage() {
 						</p>
 						<Input
 							value={policy.businessSignature}
+							disabled={isViewer}
 							aria-invalid={Boolean(errors.businessSignature)}
 							onChange={(event) => {
 								setPolicy((current) => ({
@@ -659,7 +733,7 @@ function PaymentRemindersSettingsPage() {
 									businessSignature: undefined,
 								}));
 							}}
-							placeholder="Velure Finance Team"
+							placeholder="Invoicly Finance Team"
 							className={`${errors.businessSignature ? "border-danger" : "border-rule"} bg-paper`}
 						/>
 						<p className="text-xs text-ink-3">
@@ -678,7 +752,7 @@ function PaymentRemindersSettingsPage() {
 						<Button
 							type="button"
 							className="w-full bg-brand text-brand-ink hover:bg-brand-hi"
-							disabled={busyAction !== null}
+							disabled={isViewer || busyAction !== null}
 							onClick={async () => {
 								const nextErrors = validateReminderPolicy(policy);
 								setErrors(nextErrors);
@@ -727,8 +801,8 @@ function PaymentRemindersSettingsPage() {
 						</div>
 					) : null}
 					<p className="mt-3 text-xs text-ink-3">
-						Customer reminders use the buyer email saved on the invoice. Velure
-						will not send a reminder when that email is missing.
+						Customer reminders use the buyer email saved on the invoice.
+						Invoicly will not send a reminder when that email is missing.
 					</p>
 				</SheetContent>
 			</Sheet>
@@ -891,7 +965,9 @@ function PaymentRemindersSettingsPage() {
 										type="button"
 										className="bg-brand text-brand-ink hover:bg-brand-hi"
 										disabled={
-											sendDisabledReason !== null || busyAction !== null
+											isViewer ||
+											sendDisabledReason !== null ||
+											busyAction !== null
 										}
 										title={sendDisabledReason ?? undefined}
 										onClick={async () => {
@@ -943,7 +1019,7 @@ function PaymentRemindersSettingsPage() {
 										type="button"
 										variant="outline"
 										className="border-rule bg-transparent"
-										disabled={busyAction !== null}
+										disabled={isViewer || busyAction !== null}
 										onClick={async () => {
 											if (!selectedInvoice) return;
 											if (selectedInvoice.reminder?.paused) {
@@ -1013,7 +1089,9 @@ function PaymentRemindersSettingsPage() {
 									type="button"
 									variant="outline"
 									className="mt-2 border-rule bg-transparent"
-									disabled={note.trim().length === 0 || busyAction !== null}
+									disabled={
+										isViewer || note.trim().length === 0 || busyAction !== null
+									}
 									onClick={async () => {
 										if (!selectedInvoice) return;
 										setBusyAction("manual");

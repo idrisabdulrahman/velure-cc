@@ -235,7 +235,7 @@ async function ensureProvider() {
 		body: JSON.stringify({
 			provider_type: "oidc",
 			identifier: PROVIDER_IDENTIFIER,
-			name: "Velure (A10 products gate)",
+			name: "Invoicly (A10 products gate)",
 			client_id: "velure-supabase-client",
 			client_secret: CLIENT_SECRET,
 			issuer: ISSUER_URL,

@@ -9,6 +9,7 @@ interface NotesEditorProps {
 	onChange?: (content?: JSONContent | null) => void;
 	placeholder?: string;
 	tabIndex?: number;
+	ariaLabel?: string;
 }
 
 export function NotesEditor({
@@ -17,6 +18,7 @@ export function NotesEditor({
 	onChange,
 	placeholder,
 	tabIndex,
+	ariaLabel,
 }: NotesEditorProps) {
 	const [content, setContent] = useState<JSONContent | null | undefined>(
 		initialContent,
@@ -39,6 +41,7 @@ export function NotesEditor({
 			onUpdate={handleUpdate}
 			placeholder={placeholder}
 			tabIndex={tabIndex}
+			ariaLabel={ariaLabel}
 			className={cn(
 				"text-[11px] leading-[18px] text-ink invoice-editor",
 				className,

@@ -8,7 +8,11 @@ import type {
 	ComplianceExportInvoiceRow,
 	ComplianceExportKind,
 } from "./compliance-export";
-import { buildInvoiceExportContent } from "./compliance-export";
+import {
+	buildInvoiceExportArtifact,
+	buildQboInvoicesExport,
+	buildZohoInvoicesExport,
+} from "./compliance-export";
 import {
 	assertSequenceCounterChangeAllowed,
 	workspaceNumberingLocked,
@@ -387,16 +391,43 @@ export async function getComplianceDashboard(
  */
 const EXPORT_INVOICE_PAGE_SIZE = 1000;
 
+/** `clients.id` → `tax_id` for a workspace (buyer TIN of the VAT schedule). */
+async function loadClientTinMap(
+	client: Supabase,
+	workspaceId: string,
+): Promise<Map<string, string | null>> {
+	const tinByClientId = new Map<string, string | null>();
+	for (let offset = 0; ; offset += EXPORT_INVOICE_PAGE_SIZE) {
+		const { data, error } = await client
+			.from("clients")
+			.select("id, tax_id")
+			.eq("workspace_id", workspaceId)
+			.order("id", { ascending: true })
+			.range(offset, offset + EXPORT_INVOICE_PAGE_SIZE - 1);
+		if (error) throw error;
+		const page = (data ?? []) as Array<{
+			id: string;
+			tax_id: string | null;
+		}>;
+		for (const entry of page) {
+			tinByClientId.set(entry.id, entry.tax_id ?? null);
+		}
+		if (page.length < EXPORT_INVOICE_PAGE_SIZE) break;
+	}
+	return tinByClientId;
+}
+
 async function loadAllExportInvoices(
 	client: Supabase,
 	workspaceId: string,
+	kind: ComplianceExportKind,
 ): Promise<ComplianceExportInvoiceRow[]> {
 	const rows: ComplianceExportInvoiceRow[] = [];
 	for (let offset = 0; ; offset += EXPORT_INVOICE_PAGE_SIZE) {
 		const { data, error } = await client
 			.from("invoices")
 			.select(
-				"invoice_number, customer_name, currency, payment_amount, status, issue_date, due_date, compliance, line_items",
+				"invoice_number, customer_name, customer_id, document_type, currency, payment_amount, status, issue_date, due_date, compliance, line_items, template_settings",
 			)
 			.eq("workspace_id", workspaceId)
 			.order("id", { ascending: true })
@@ -406,7 +437,17 @@ async function loadAllExportInvoices(
 		rows.push(...page);
 		if (page.length < EXPORT_INVOICE_PAGE_SIZE) break;
 	}
-	return rows;
+	// Only the VAT sales schedule needs the buyer TIN, which lives on the
+	// client, not on the invoice. Resolve it once per workspace for that kind.
+	if (kind !== "vat_sales_schedule_xlsx") return rows;
+	const tinByClientId = await loadClientTinMap(client, workspaceId);
+	return rows.map((row) => ({
+		...row,
+		customer_tin:
+			row.customer_id != null
+				? (tinByClientId.get(String(row.customer_id)) ?? null)
+				: null,
+	}));
 }
 
 export async function createInvoiceExport(
@@ -418,20 +459,40 @@ export async function createInvoiceExport(
 	if (!workspaceId) throw new Error("Workspace not found.");
 	const { data: workspace } = await client
 		.from("workspaces")
-		.select("id, name, legal_name")
+		.select("id, name, legal_name, base_currency")
 		.eq("id", workspaceId)
 		.single();
-	const source = workspace?.legal_name || workspace?.name || "VELURE";
+	const source = workspace?.legal_name || workspace?.name || "INVOICLY";
 	const prefix =
 		(source.match(/[A-Za-z0-9]+/g) ?? [])
 			.map((x) => x[0])
 			.join("")
 			.slice(0, 12)
-			.toUpperCase() || "VELURE";
-	const rows = await loadAllExportInvoices(client, workspaceId);
+			.toUpperCase() || "INVOICLY";
+	const rows = await loadAllExportInvoices(client, workspaceId, kind);
 	const now = Date.now();
-	const content = buildInvoiceExportContent(kind, rows, now);
-	const fileName = `${prefix}-${kind}-${now}.${kind === "normalized_accounting" ? "json" : "csv"}`;
+	const built =
+		kind === "qbo_invoices_csv"
+			? buildQboInvoicesExport(rows, {
+					baseCurrency: workspace?.base_currency ?? "NGN",
+				})
+			: kind === "zoho_invoices_csv"
+				? buildZohoInvoicesExport(rows, {
+						baseCurrency: workspace?.base_currency ?? "NGN",
+					})
+				: {
+						content: await buildInvoiceExportArtifact(kind, rows, now),
+						warnings: [] as string[],
+						invoiceCount: rows.length,
+						lineCount: rows.length,
+					};
+	const fileExtension =
+		kind === "normalized_accounting"
+			? "json"
+			: kind === "accountant_lines_xlsx" || kind === "vat_sales_schedule_xlsx"
+				? "xlsx"
+				: "csv";
+	const fileName = `${prefix}-${kind}-${now}.${fileExtension}`;
 	const { data, error } = await client
 		.from("invoice_exports")
 		.insert({
@@ -440,7 +501,7 @@ export async function createInvoiceExport(
 			kind,
 			status: "ready",
 			file_name: fileName,
-			content,
+			content: built.content,
 		})
 		.select("id, file_name, content")
 		.single();
@@ -449,10 +510,21 @@ export async function createInvoiceExport(
 		action: "invoice.export",
 		resourceType: "invoice_export",
 		resourceId: data.id,
-		after: { kind, fileName, rowCount: rows.length },
+		after: {
+			kind,
+			fileName,
+			rowCount: built.lineCount,
+			invoiceCount: built.invoiceCount,
+			warnings: built.warnings,
+		},
 		message: `Generated a ${kind} export.`,
 	});
-	return { id: data.id, fileName: data.file_name, content: data.content };
+	return {
+		id: data.id,
+		fileName: data.file_name,
+		content: data.content,
+		warnings: built.warnings,
+	};
 }
 
 export async function retryInvoiceExport(

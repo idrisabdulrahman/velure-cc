@@ -34,8 +34,8 @@ function invoice(overrides: Partial<InvoiceRecord> = {}): InvoiceRecord {
 		],
 		compliance: {
 			seller: {
-				legalName: "Velure Ltd",
-				tradingName: "Velure",
+				legalName: "Invoicly Ltd",
+				tradingName: "Invoicly",
 				countryCode: "NG",
 				address: "1 Seller Road",
 				taxId: "TIN-SELLER",
@@ -114,7 +114,7 @@ describe("toCanonicalInvoice", () => {
 			documentType: "standard",
 			currency: "NGN",
 			seller: {
-				legalName: "Velure Ltd",
+				legalName: "Invoicly Ltd",
 				jurisdiction: {
 					scheme: "source.jurisdictionCode",
 					value: "NG",
@@ -183,6 +183,34 @@ describe("toCanonicalInvoice", () => {
 		expect(Object.isFrozen(canonical)).toBe(true);
 		expect(Object.isFrozen(canonical.lines)).toBe(true);
 		expect(Object.isFrozen(canonical.lines[0])).toBe(true);
+	});
+
+	it("carries the structured postal address through to the canonical party", () => {
+		const source = invoice();
+		if (!source.compliance) throw new Error("Expected compliance fixture.");
+		const canonical = toCanonicalInvoice(
+			invoice({
+				compliance: {
+					...source.compliance,
+					seller: {
+						...source.compliance.seller,
+						postalAddress: {
+							street: "1 Seller Road",
+							lga: "Ikeja",
+							state: "Lagos",
+						},
+					},
+				},
+			}),
+		);
+		expect(canonical.seller.postalAddress).toEqual({
+			street: "1 Seller Road",
+			lga: "Ikeja",
+			state: "Lagos",
+			countryCode: "NG",
+		});
+		// Buyer has no structured data (free-text billing address only).
+		expect(canonical.buyer).not.toHaveProperty("postalAddress");
 	});
 
 	it("preserves cross-border metadata and correction/pro-forma document types", () => {
@@ -291,6 +319,7 @@ describe("toCanonicalInvoice", () => {
 		expect(canonical.lines[0]?.unitPrice).toBe("1.005");
 		expect(canonical.totals).toEqual({
 			invoiceTotal: "1.005",
+			discountMode: "invoice_after_tax",
 			discount: "0.005",
 		});
 	});
@@ -304,5 +333,44 @@ describe("toCanonicalInvoice", () => {
 		expect(() => toCanonicalInvoice(source)).toThrow(
 			"Line line-invalid unit price must be a finite decimal amount.",
 		);
+	});
+
+	it("round-trips the stored discount mode and per-line discounts", () => {
+		const lineMode = toCanonicalInvoice(
+			invoice({
+				lineItems: [{ ...invoice().lineItems[0], discount: 10 }],
+				templateSettings: {
+					includeDiscount: true,
+					discountMode: "line",
+				},
+			}),
+		);
+		expect(lineMode.lines[0]?.discount).toBe("10");
+		expect(lineMode.totals.discountMode).toBe("line");
+		expect(lineMode.totals.discount).toBe("10");
+
+		const subCent = toCanonicalInvoice(
+			invoice({
+				lineItems: [{ ...invoice().lineItems[0], discount: 10.005 }],
+				templateSettings: { includeDiscount: true, discountMode: "line" },
+			}),
+		);
+		// Money is integer kobo; a sub-cent source value is rounded to the
+		// nearest kobo, never carried through as three decimal places.
+		expect(subCent.lines[0]?.discount).toBe("10.01");
+		expect(subCent.totals.discount).toBe("10.01");
+
+		const afterTax = toCanonicalInvoice(
+			invoice({
+				templateSettings: {
+					includeDiscount: true,
+					discount: 10,
+					discountMode: "invoice_after_tax",
+				},
+			}),
+		);
+		expect(afterTax.totals.discountMode).toBe("invoice_after_tax");
+		expect(afterTax.totals.discount).toBe("10");
+		expect(afterTax.lines[0]).not.toHaveProperty("discount");
 	});
 });

@@ -13,8 +13,8 @@ vi.mock("./env", () => ({
 	getServerEnv: (name: string) =>
 		({
 			RESEND_API_KEY: "key",
-			RESEND_FROM_EMAIL: "Velure <billing@example.com>",
-			SITE_URL: "https://velure.app",
+			RESEND_FROM_EMAIL: "Invoicly <billing@example.com>",
+			SITE_URL: "https://invoicly.cv",
 		})[name],
 }));
 
@@ -27,7 +27,7 @@ describe("onboarding mailer", () => {
 		});
 		expect(send).toHaveBeenCalledWith(
 			expect.objectContaining({
-				subject: "Welcome to Velure",
+				subject: "Welcome to Invoicly",
 				to: "ada@example.com",
 			}),
 			expect.objectContaining({

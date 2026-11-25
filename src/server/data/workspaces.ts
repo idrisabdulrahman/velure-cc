@@ -18,7 +18,7 @@ export type Supabase = SupabaseClient<Database>;
 
 export type WorkspaceRole = "owner" | "member" | "viewer";
 
-const DEFAULT_WORKSPACE_NAME = "Velure Workspace";
+const DEFAULT_WORKSPACE_NAME = "Invoicly Workspace";
 export const NIGERIA_TAX_RULE_SET_VERSION = "ng-2026-q1";
 
 export function normalizeWorkspaceName(value?: string) {
@@ -379,7 +379,7 @@ type EnsureWorkspaceOptions = {
 			seller_tax_status: "vat_registered",
 			tax_rule_set_version: NIGERIA_TAX_RULE_SET_VERSION,
 			reminders_enabled: true,
-			reminder_signature: "Velure Finance Team",
+			reminder_signature: "Invoicly Finance Team",
 			invoice_number_mode: "prefix",
 			invoice_number_prefix: "INV",
 			next_invoice_sequence: 1,

@@ -154,7 +154,7 @@ describe("NRS official sources grounding", () => {
 		expect(route).toContain("NRS_INFORMATIONAL_DISCLAIMER");
 	});
 
-	it("states that Velure is not connected to or endorsed by the NRS", () => {
+	it("states that Invoicly is not connected to or endorsed by the NRS", () => {
 		expect(NRS_OFFICIAL_SOURCES_INTRO).toContain(NON_AFFILIATION_PHRASE);
 	});
 

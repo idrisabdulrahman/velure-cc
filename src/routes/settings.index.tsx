@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { FormField } from "#/components/redesign/form-field";
 import { Panel } from "#/components/redesign/panel";
 import { StatusPill } from "#/components/redesign/status-pill";
+import { MembersPanel } from "#/components/settings/members-panel";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -21,9 +22,12 @@ import { Input } from "#/components/ui/input";
 import { PanelLoader } from "#/components/ui/panel-loader";
 import { Textarea } from "#/components/ui/textarea";
 import { toast } from "#/components/ui/use-toast";
+import { canConfirmAccountDeletion } from "#/features/account/deletion-confirmation";
 import { NIGERIA_TAX_RULE_SET_VERSION } from "#/features/compliance/nigeria";
 import {
 	composeSupplierAddress,
+	NIGERIA_TIN_MAX_DIGITS,
+	NIGERIA_TIN_MIN_DIGITS,
 	SUPPLIER_ADDRESS_MAX_LENGTHS,
 	type SupplierProfileIssueCode,
 	type SupplierProfileValidation,
@@ -33,6 +37,7 @@ import {
 } from "#/features/compliance/supplier-profile";
 import { authClient } from "#/lib/auth-client";
 import { useSupabaseSession } from "#/lib/supabase-session";
+import { isWorkspaceViewer } from "#/lib/workspace-role";
 import {
 	getWorkspaceSettings,
 	SUPPLIER_PROFILE_REJECTION_PREFIX,
@@ -176,8 +181,12 @@ function validate(form: BusinessForm): FormErrors {
 	// B1 supplier profile: validated TIN, required CAC RC, structured address.
 	// Same rules the server enforces — the client check is UX, the server is
 	// the boundary.
+	// Only blocking profile issues become inline field errors. Warnings (e.g.
+	// the unconfirmed TIN shape) must not look save-blocking; the "flagged for
+	// review" banner surfaces them after a successful save.
 	const profile = profileValidationFor(form);
 	for (const issue of profile.issues) {
+		if ((issue.severity ?? "blocking") !== "blocking") continue;
 		const field = PROFILE_ISSUE_FIELDS[issue.code];
 		if (field && !errors[field]) errors[field] = issue.message;
 	}
@@ -392,7 +401,12 @@ function SettingsPage() {
 	const memberSince = formatDate(
 		(user as { createdAt?: string | Date } | undefined)?.createdAt,
 	);
-	const canDeleteAccount = deleteConfirm === "DELETE" && !deletingAccount;
+	// GitHub-style confirmation: the typed keyword is the workspace's own
+	// business name, not a fixed word such as "DELETE". It is empty until the
+	// workspace loads, which keeps the action disabled.
+	const deleteKeyword = (workspace?.name ?? "").trim();
+	const canDeleteAccount =
+		canConfirmAccountDeletion(deleteConfirm, deleteKeyword) && !deletingAccount;
 
 	const handleDeleteAccount = async () => {
 		if (!canDeleteAccount) return;
@@ -404,7 +418,9 @@ function SettingsPage() {
 				headers: { "content-type": "application/json" },
 				body: JSON.stringify({ callbackURL: "/" }),
 			});
-			if (!response.ok) throw new Error("Account deletion is not enabled.");
+			if (!response.ok) {
+				throw new Error("We couldn't delete your account. Please try again.");
+			}
 			if (typeof window !== "undefined") {
 				window.localStorage.removeItem("velure-business-logo");
 			}
@@ -431,6 +447,7 @@ function SettingsPage() {
 		!form.addressState.trim() ||
 		!form.country.trim();
 	const loaded = Boolean(workspace);
+	const isViewer = isWorkspaceViewer(workspace?.role);
 	const nameError =
 		errors.name ??
 		(loaded && !form.name.trim() ? "Business name is required." : undefined);
@@ -468,6 +485,19 @@ function SettingsPage() {
 					The preview on the right shows how it lands on an invoice.
 				</p>
 			</div>
+
+			{isViewer ? (
+				<div
+					role="status"
+					className="rounded-md border border-rule bg-paper-2 px-4 py-3"
+				>
+					<p className="text-sm font-medium text-ink">Read-only access</p>
+					<p className="mt-1 text-sm text-ink-3">
+						You are a viewer in this workspace. You can read everything and run
+						exports, but only the owner can change settings.
+					</p>
+				</div>
+			) : null}
 
 			{settingsPending ? <PanelLoader label="Loading settings" /> : null}
 			{!settingsPending && settingsError ? (
@@ -623,17 +653,19 @@ function SettingsPage() {
 								<FormField
 									label="TIN *"
 									error={errors.taxId}
-									hint="10 digits from your tax record. Placeholder values are rejected."
+									hint={`${NIGERIA_TIN_MIN_DIGITS}-${NIGERIA_TIN_MAX_DIGITS} digits from your tax record. Placeholder values are rejected.`}
 								>
 									<Input
 										value={form.taxId}
 										onChange={(event) =>
 											updateField(
 												"taxId",
-												event.target.value.replace(/\D/g, "").slice(0, 10),
+												event.target.value
+													.replace(/\D/g, "")
+													.slice(0, NIGERIA_TIN_MAX_DIGITS),
 											)
 										}
-										placeholder="10-digit TIN"
+										placeholder={`${NIGERIA_TIN_MIN_DIGITS}-${NIGERIA_TIN_MAX_DIGITS} digit TIN`}
 										inputMode="numeric"
 										aria-invalid={Boolean(errors.taxId)}
 										className={`rounded-md bg-paper text-ink focus-visible:border-brand ${
@@ -899,7 +931,7 @@ function SettingsPage() {
 									updateField("paymentDetails", event.target.value)
 								}
 								placeholder={
-									"Bank Name: Zenith Bank\nAccount Name: Velure Studio\nAccount Number: 0123456789"
+									"Bank Name: Zenith Bank\nAccount Name: Invoicly Studio\nAccount Number: 0123456789"
 								}
 								className="min-h-28 rounded-md border-rule bg-paper text-ink focus-visible:border-brand"
 							/>
@@ -987,6 +1019,8 @@ function SettingsPage() {
 				</div>
 			</div>
 
+			<MembersPanel canInvite={workspace?.role === "owner"} />
+
 			<Panel title="Account info">
 				<div className="grid gap-3 sm:grid-cols-2">
 					<ReadOnlyItem label="Member Since" value={memberSince} />
@@ -1003,6 +1037,10 @@ function SettingsPage() {
 								<Link to="/pricing">PRO</Link>
 							</Button>
 						</div>
+						<p className="mt-2 text-xs leading-5 text-ink-3">
+							Status: no plan is enforced yet. Every workspace has full access;
+							paid plans are not billed or gated.
+						</p>
 					</div>
 				</div>
 			</Panel>
@@ -1019,7 +1057,7 @@ function SettingsPage() {
 					<div className="rounded-md border border-rule bg-paper-2 px-4 py-3">
 						<p className="text-sm font-medium text-ink">Tax disclaimer</p>
 						<p className="mt-1 text-sm text-ink-3">
-							Velure helps structure invoice data for Nigerian finance
+							Invoicly helps structure invoice data for Nigerian finance
 							workflows. Confirm VAT, WHT, and filing treatment with your
 							accountant or tax advisor.
 						</p>
@@ -1057,13 +1095,27 @@ function SettingsPage() {
 								<AlertDialogDescription className="text-ink-3">
 									This cannot be undone. Your workspace, invoices, clients,
 									exports, reminders, sessions, and sign-in records will be
-									permanently deleted. Type DELETE to confirm.
+									permanently deleted. Type{" "}
+									{deleteKeyword ? (
+										<strong className="font-semibold text-ink">
+											{deleteKeyword}
+										</strong>
+									) : (
+										"your business name"
+									)}{" "}
+									to confirm.
 								</AlertDialogDescription>
 							</AlertDialogHeader>
 							<Input
 								value={deleteConfirm}
 								onChange={(event) => setDeleteConfirm(event.target.value)}
-								placeholder="DELETE"
+								placeholder={deleteKeyword || "Business name"}
+								aria-label={
+									deleteKeyword
+										? `Type ${deleteKeyword} to confirm account deletion`
+										: "Type your business name to confirm account deletion"
+								}
+								autoComplete="off"
 								className="rounded-md border-danger-line bg-paper text-ink placeholder:text-ink-3 focus-visible:border-danger-line"
 							/>
 							<AlertDialogFooter>
@@ -1090,36 +1142,41 @@ function SettingsPage() {
 				</div>
 			</Panel>
 
-			<div
-				className={`pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-5 transition-transform duration-200 ${
-					dirty ? "translate-y-0" : "translate-y-[120%]"
-				}`}
-			>
-				<div className="pointer-events-auto flex items-center gap-4 rounded-lg border border-rule bg-paper-2 py-2.5 pr-2.5 pl-4 shadow-lg">
-					<span className="flex items-center gap-2.5 text-[13px] text-ink">
-						<span aria-hidden="true" className="h-2 w-2 rounded-full bg-warn" />
-						Unsaved changes
-					</span>
-					<Button
-						type="button"
-						variant="outline"
-						onClick={resetForm}
-						className="h-9 rounded-md border-rule bg-transparent px-3 text-sm text-ink-2 hover:bg-paper-3"
-					>
-						Discard
-					</Button>
-					<Button
-						type="button"
-						disabled={saving || requiredInvalid}
-						onClick={() => {
-							void saveChanges();
-						}}
-						className="h-9 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi disabled:opacity-50"
-					>
-						{saving ? "Saving..." : "Save changes"}
-					</Button>
+			{!isViewer ? (
+				<div
+					className={`pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-5 transition-transform duration-200 ${
+						dirty ? "translate-y-0" : "translate-y-[120%]"
+					}`}
+				>
+					<div className="pointer-events-auto flex items-center gap-4 rounded-lg border border-rule bg-paper-2 py-2.5 pr-2.5 pl-4 shadow-lg">
+						<span className="flex items-center gap-2.5 text-[13px] text-ink">
+							<span
+								aria-hidden="true"
+								className="h-2 w-2 rounded-full bg-warn"
+							/>
+							Unsaved changes
+						</span>
+						<Button
+							type="button"
+							variant="outline"
+							onClick={resetForm}
+							className="h-9 rounded-md border-rule bg-transparent px-3 text-sm text-ink-2 hover:bg-paper-3"
+						>
+							Discard
+						</Button>
+						<Button
+							type="button"
+							disabled={saving || requiredInvalid}
+							onClick={() => {
+								void saveChanges();
+							}}
+							className="h-9 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi disabled:opacity-50"
+						>
+							{saving ? "Saving..." : "Save changes"}
+						</Button>
+					</div>
 				</div>
-			</div>
+			) : null}
 		</div>
 	);
 }

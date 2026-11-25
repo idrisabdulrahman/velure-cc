@@ -21,6 +21,7 @@ import {
 } from "#/features/products/product-form-utils";
 import { useUnifiedAuth } from "#/lib/auth-hook";
 import { useSupabaseSession } from "#/lib/supabase-session";
+import { canMutateWorkspace, useWorkspaceRole } from "#/lib/workspace-role";
 import { createProduct } from "#/server/data/products";
 
 export const Route = createFileRoute("/invoices/products/new")({
@@ -68,6 +69,8 @@ function NewProductPage() {
 	const authState = useUnifiedAuth();
 	const userId = authState.data?.user?.id;
 	const { client: supabaseClient } = useSupabaseSession(userId);
+	// WP-E: viewers cannot create catalog items.
+	const canMutate = canMutateWorkspace(useWorkspaceRole());
 	const [state, setState] = useState<FormState>(initialState);
 	const [submitting, setSubmitting] = useState(false);
 	const [attemptedSubmit, setAttemptedSubmit] = useState(false);
@@ -88,6 +91,27 @@ function NewProductPage() {
 
 	const inputClass =
 		"h-10 rounded-md border-rule bg-paper text-sm text-ink placeholder:text-ink-3 focus-visible:border-brand-line focus-visible:ring-0";
+
+	if (!canMutate) {
+		return (
+			<div className="flex h-full w-full flex-col items-center justify-center gap-3 text-center">
+				<p className="text-sm font-medium text-ink">
+					Read-only access to this workspace
+				</p>
+				<p className="max-w-sm text-sm text-ink-3">
+					Only the workspace owner can add catalog items.
+				</p>
+				<Button
+					type="button"
+					variant="outline"
+					onClick={() => navigate({ to: "/invoices/products" })}
+					className="h-10 rounded-md border-rule bg-transparent text-sm font-medium text-ink-2 hover:bg-paper-3 hover:text-ink"
+				>
+					Back to products
+				</Button>
+			</div>
+		);
+	}
 
 	const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
@@ -149,7 +173,7 @@ function NewProductPage() {
 					<div className="p-4 md:p-5">
 						<form onSubmit={onSubmit} className="space-y-4">
 							<div className="grid gap-3 md:grid-cols-2">
-								<Field label="Product type">
+								<Field label="Product type" htmlFor="product-type">
 									<Select
 										value={state.type}
 										onValueChange={(value) =>
@@ -159,7 +183,10 @@ function NewProductPage() {
 											}))
 										}
 									>
-										<SelectTrigger className={`${inputClass} w-full`}>
+										<SelectTrigger
+											id="product-type"
+											className={`${inputClass} w-full`}
+										>
 											<SelectValue placeholder="Type" />
 										</SelectTrigger>
 										<SelectContent className="border-rule bg-paper-2 text-ink">
@@ -168,14 +195,17 @@ function NewProductPage() {
 										</SelectContent>
 									</Select>
 								</Field>
-								<Field label="Unit name">
+								<Field label="Unit name" htmlFor="product-unit-name">
 									<Select
 										value={state.unitName}
 										onValueChange={(value) =>
 											setState((prev) => ({ ...prev, unitName: value }))
 										}
 									>
-										<SelectTrigger className={`${inputClass} w-full`}>
+										<SelectTrigger
+											id="product-unit-name"
+											className={`${inputClass} w-full`}
+										>
 											<SelectValue placeholder="Unit" />
 										</SelectTrigger>
 										<SelectContent className="border-rule bg-paper-2 text-ink">
@@ -310,6 +340,7 @@ function NewProductPage() {
 
 							<div className="inline-flex items-center gap-2 text-sm text-ink-2">
 								<Switch
+									aria-label="Active"
 									checked={state.isActive}
 									onCheckedChange={(checked) =>
 										setState((prev) => ({ ...prev, isActive: checked }))

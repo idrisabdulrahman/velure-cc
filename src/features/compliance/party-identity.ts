@@ -1,4 +1,8 @@
-import { composeSupplierAddress } from "./supplier-profile";
+import {
+	composeSupplierAddress,
+	storedTinOrUndefined,
+} from "./supplier-profile";
+import type { StructuredPostalAddress } from "./types";
 
 /**
  * Server-derived party identity for the persisted invoice compliance snapshot.
@@ -17,6 +21,7 @@ import { composeSupplierAddress } from "./supplier-profile";
 
 export type DerivedPartyIdentity = {
 	address?: string;
+	postalAddress?: StructuredPostalAddress;
 	taxId?: string;
 	rcNumber?: string;
 	countryCode?: string;
@@ -33,9 +38,32 @@ function text(value: string | null | undefined): string | undefined {
 }
 
 /**
+ * Builds the structured postal address from the parts Invoicly actually stores.
+ * Returns `undefined` when every part is empty, so a profile with no structured
+ * address never emits an empty object into the snapshot.
+ */
+function structuredPostalAddress(input: {
+	street?: string | null;
+	lga?: string | null;
+	state?: string | null;
+}): StructuredPostalAddress | undefined {
+	const street = text(input.street);
+	const lga = text(input.lga);
+	const state = text(input.state);
+	if (!street && !lga && !state) return undefined;
+	return {
+		...(street ? { street } : {}),
+		...(lga ? { lga } : {}),
+		...(state ? { state } : {}),
+	};
+}
+
+/**
  * Seller identity from the workspace supplier profile. Composes the structured
  * address (street, LGA, state) and falls back to the legacy free-text address
- * only when every structured part is empty.
+ * only when every structured part is empty. A stored placeholder TIN is
+ * dropped (`storedTinOrUndefined`) so a legacy placeholder never becomes
+ * invoice identity and blocks creation.
  */
 export function supplierIdentityFromProfile(input: {
 	address?: string | null;
@@ -53,20 +81,28 @@ export function supplierIdentityFromProfile(input: {
 				lga: input.addressLga,
 				state: input.addressState,
 			}) || text(input.address),
-		taxId: text(input.taxId),
+		postalAddress: structuredPostalAddress({
+			street: input.addressStreet,
+			lga: input.addressLga,
+			state: input.addressState,
+		}),
+		taxId: storedTinOrUndefined(input.taxId),
 		rcNumber: text(input.rcNumber),
 		countryCode: text(input.countryCode),
 	};
 }
 
-/** Buyer identity from the workspace-scoped `clients` row. */
+/**
+ * Buyer identity from the workspace-scoped `clients` row. A stored placeholder
+ * TIN is dropped (`storedTinOrUndefined`) — same rule as the seller side.
+ */
 export function buyerIdentityFromClient(input: {
 	billingAddress?: string | null;
 	taxId?: string | null;
 }): DerivedPartyIdentity {
 	return {
 		address: text(input.billingAddress),
-		taxId: text(input.taxId),
+		taxId: storedTinOrUndefined(input.taxId),
 	};
 }
 
@@ -80,9 +116,9 @@ function asParty(value: unknown): Record<string, unknown> {
  * Overwrites the derived keys on a party, keeping every other field the
  * snapshot producer wrote. A derived `undefined` deletes the field so a
  * client-supplied value can never stand in for an authority that has none
- * (address, taxId, rcNumber). `countryCode` is only replaced when the authority
- * supplies one, so a snapshot default (e.g. the workspace's `countryCode`)
- * survives an unset legacy column.
+ * (address, postalAddress, taxId, rcNumber). `countryCode` is only replaced
+ * when the authority supplies one, so a snapshot default (e.g. the workspace's
+ * `countryCode`) survives an unset legacy column.
  */
 function overrideParty(
 	current: unknown,
@@ -109,8 +145,14 @@ export function applyPartyIdentity(
 	compliance: Record<string, unknown>,
 	identity: DerivedPartyIdentityMap,
 ): Record<string, unknown> {
-	const sellerKeys = ["address", "taxId", "rcNumber", "countryCode"] as const;
-	const buyerKeys = ["address", "taxId"] as const;
+	const sellerKeys = [
+		"address",
+		"postalAddress",
+		"taxId",
+		"rcNumber",
+		"countryCode",
+	] as const;
+	const buyerKeys = ["address", "postalAddress", "taxId"] as const;
 	return {
 		...compliance,
 		...(identity.seller
@@ -119,7 +161,7 @@ export function applyPartyIdentity(
 						compliance.seller,
 						identity.seller,
 						sellerKeys,
-						["address", "taxId", "rcNumber"],
+						["address", "postalAddress", "taxId", "rcNumber"],
 					),
 				}
 			: {}),

@@ -41,6 +41,7 @@ import { toast } from "#/components/ui/use-toast";
 import { formatCompactMoney, formatMoney } from "#/features/invoices/format";
 import { useUnifiedAuth } from "#/lib/auth-hook";
 import { useSupabaseSession } from "#/lib/supabase-session";
+import { canMutateWorkspace, useWorkspaceRole } from "#/lib/workspace-role";
 import {
 	archiveProduct,
 	duplicateProduct,
@@ -165,6 +166,8 @@ function ProductCatalogPage() {
 	const authState = useUnifiedAuth();
 	const userId = authState.data?.user?.id;
 	const { client: supabaseClient } = useSupabaseSession(userId);
+	// WP-E: viewers get the catalog and analytics, never the write controls.
+	const canMutate = canMutateWorkspace(useWorkspaceRole());
 	const {
 		data: productsQuery,
 		isPending: isProductsLoading,
@@ -230,14 +233,16 @@ function ProductCatalogPage() {
 						Manage your product catalog and view sales analytics.
 					</p>
 				</div>
-				<Button
-					type="button"
-					onClick={() => navigate({ to: "/invoices/products/new" })}
-					className="h-10 shrink-0 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi"
-				>
-					<Plus className="mr-1.5 h-4 w-4" />
-					New Product
-				</Button>
+				{canMutate ? (
+					<Button
+						type="button"
+						onClick={() => navigate({ to: "/invoices/products/new" })}
+						className="h-10 shrink-0 rounded-md bg-brand px-4 text-sm font-medium text-brand-ink hover:bg-brand-hi"
+					>
+						<Plus className="mr-1.5 h-4 w-4" />
+						New Product
+					</Button>
+				) : null}
 			</div>
 
 			<Tabs
@@ -274,6 +279,7 @@ function ProductCatalogPage() {
 							params: { id },
 						})
 					}
+					canMutate={canMutate}
 				/>
 			) : (
 				<AnalyticsTab
@@ -306,6 +312,7 @@ function CatalogTab({
 	onStatusChange,
 	onCreate,
 	onEdit,
+	canMutate,
 }: {
 	products: ProductRow[];
 	analyticsByProduct: Map<string, AnalyticsRow>;
@@ -319,6 +326,7 @@ function CatalogTab({
 	onStatusChange: (value: "all" | "active" | "archived") => void;
 	onCreate: () => void;
 	onEdit: (id: string) => void;
+	canMutate: boolean;
 }) {
 	const authState = useUnifiedAuth();
 	const userId = authState.data?.user?.id;
@@ -378,7 +386,7 @@ function CatalogTab({
 					tone="warn"
 					title="Possible duplicates"
 					action={
-						singleCopy
+						canMutate && singleCopy
 							? {
 									label: "Archive the copy",
 									onClick: () => void handleArchive(singleCopy.id),
@@ -405,7 +413,7 @@ function CatalogTab({
 										</span>
 										: same name, same {formatMoney(group.price, "NGN")}.
 									</p>
-									{singleCopy ? null : (
+									{canMutate && !singleCopy ? (
 										<Button
 											type="button"
 											variant="outline"
@@ -414,7 +422,7 @@ function CatalogTab({
 										>
 											Archive the copy
 										</Button>
-									)}
+									) : null}
 								</div>
 							);
 						})}
@@ -495,14 +503,16 @@ function CatalogTab({
 								title="No products yet."
 								copy="Create products and services to speed up invoice creation."
 								action={
-									<Button
-										type="button"
-										onClick={onCreate}
-										className="h-9 rounded-md bg-brand px-3 text-sm font-medium text-brand-ink hover:bg-brand-hi"
-									>
-										<Plus className="mr-1.5 h-4 w-4" />
-										New Product
-									</Button>
+									canMutate ? (
+										<Button
+											type="button"
+											onClick={onCreate}
+											className="h-9 rounded-md bg-brand px-3 text-sm font-medium text-brand-ink hover:bg-brand-hi"
+										>
+											<Plus className="mr-1.5 h-4 w-4" />
+											New Product
+										</Button>
+									) : undefined
 								}
 							/>
 						)
@@ -587,30 +597,38 @@ function CatalogTab({
 															>
 																<Eye className="h-4 w-4" />
 															</ProductAction>
-															<ProductAction
-																label="Edit product"
-																tooltip="Edit price and catalog information"
-																onClick={() => onEdit(product.id)}
-															>
-																<Pencil className="h-4 w-4" />
-															</ProductAction>
-															<ProductAction
-																label="Duplicate product"
-																tooltip="Duplicate this catalog item"
-																onClick={() => void handleDuplicate(product.id)}
-															>
-																<Copy className="h-4 w-4" />
-															</ProductAction>
-															{product.isActive && (
-																<ProductAction
-																	label="Archive product"
-																	tooltip="Archive this product"
-																	onClick={() => void handleArchive(product.id)}
-																	danger
-																>
-																	<Archive className="h-4 w-4" />
-																</ProductAction>
-															)}
+															{canMutate ? (
+																<>
+																	<ProductAction
+																		label="Edit product"
+																		tooltip="Edit price and catalog information"
+																		onClick={() => onEdit(product.id)}
+																	>
+																		<Pencil className="h-4 w-4" />
+																	</ProductAction>
+																	<ProductAction
+																		label="Duplicate product"
+																		tooltip="Duplicate this catalog item"
+																		onClick={() =>
+																			void handleDuplicate(product.id)
+																		}
+																	>
+																		<Copy className="h-4 w-4" />
+																	</ProductAction>
+																	{product.isActive && (
+																		<ProductAction
+																			label="Archive product"
+																			tooltip="Archive this product"
+																			onClick={() =>
+																				void handleArchive(product.id)
+																			}
+																			danger
+																		>
+																			<Archive className="h-4 w-4" />
+																		</ProductAction>
+																	)}
+																</>
+															) : null}
 														</div>
 													</td>
 												</tr>

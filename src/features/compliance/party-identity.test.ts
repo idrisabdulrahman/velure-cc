@@ -17,6 +17,11 @@ describe("supplierIdentityFromProfile", () => {
 		});
 		expect(identity).toEqual({
 			address: "1 Workspace Way, Ikeja, Lagos",
+			postalAddress: {
+				street: "1 Workspace Way",
+				lga: "Ikeja",
+				state: "Lagos",
+			},
 			taxId: "8129473650",
 			rcNumber: "RC-1234567",
 			countryCode: "NG",
@@ -51,9 +56,31 @@ describe("supplierIdentityFromProfile", () => {
 			countryCode: null,
 		});
 		expect(identity.address).toBeUndefined();
+		expect(identity.postalAddress).toBeUndefined();
 		expect(identity.taxId).toBeUndefined();
 		expect(identity.rcNumber).toBeUndefined();
 		expect(identity.countryCode).toBeUndefined();
+	});
+
+	it("drops a stored placeholder seller TIN (legacy data must not block creation)", () => {
+		// Live 2026-11-10: workspace "Fr35No Inc." stored tax_id = 1234567890,
+		// which the create path rejected with "placeholder TIN" even for a
+		// freelancer whose TIN field was off.
+		const identity = supplierIdentityFromProfile({ taxId: "1234567890" });
+		expect(identity.taxId).toBeUndefined();
+	});
+
+	it("keeps a format-warning seller TIN (unconfirmed shape is accepted)", () => {
+		expect(supplierIdentityFromProfile({ taxId: "12345" }).taxId).toBe("12345");
+	});
+
+	it("carries only the structured parts that exist (no city/postalZone invented)", () => {
+		expect(
+			supplierIdentityFromProfile({
+				addressStreet: "2 New Way",
+				addressState: "Abuja",
+			}).postalAddress,
+		).toEqual({ street: "2 New Way", state: "Abuja" });
 	});
 });
 
@@ -62,15 +89,27 @@ describe("buyerIdentityFromClient", () => {
 		expect(
 			buyerIdentityFromClient({
 				billingAddress: "  2 Buyer Road  ",
-				taxId: " 9876543210 ",
+				taxId: " 8129473650 ",
 			}),
-		).toEqual({ address: "2 Buyer Road", taxId: "9876543210" });
+		).toEqual({ address: "2 Buyer Road", taxId: "8129473650" });
 	});
 
 	it("omits a blank address or tax id", () => {
 		expect(
 			buyerIdentityFromClient({ billingAddress: "", taxId: null }),
 		).toEqual({ address: undefined, taxId: undefined });
+	});
+
+	it("drops a stored placeholder TIN instead of carrying it into the invoice", () => {
+		expect(
+			buyerIdentityFromClient({
+				billingAddress: "2 Buyer Road",
+				taxId: "1234567890",
+			}),
+		).toEqual({ address: "2 Buyer Road", taxId: undefined });
+		expect(
+			buyerIdentityFromClient({ taxId: "0000000000" }).taxId,
+		).toBeUndefined();
 	});
 });
 
@@ -94,6 +133,11 @@ describe("applyPartyIdentity", () => {
 		const applied = applyPartyIdentity(base, {
 			seller: {
 				address: "1 Workspace Way, Ikeja, Lagos",
+				postalAddress: {
+					street: "1 Workspace Way",
+					lga: "Ikeja",
+					state: "Lagos",
+				},
 				taxId: "8129473650",
 				rcNumber: "RC-1234567",
 				countryCode: "NG",
@@ -104,6 +148,11 @@ describe("applyPartyIdentity", () => {
 			legalName: "Client Claimed Seller",
 			email: "seller@example.test",
 			address: "1 Workspace Way, Ikeja, Lagos",
+			postalAddress: {
+				street: "1 Workspace Way",
+				lga: "Ikeja",
+				state: "Lagos",
+			},
 			taxId: "8129473650",
 			rcNumber: "RC-1234567",
 			countryCode: "NG",
@@ -115,6 +164,21 @@ describe("applyPartyIdentity", () => {
 		});
 		// Non-party snapshot fields are untouched.
 		expect(applied.subtotal).toBe(100);
+	});
+
+	it("clears a client-supplied postal address when the authority has none", () => {
+		const applied = applyPartyIdentity(
+			{
+				seller: { postalAddress: { street: "forged" } },
+				buyer: { postalAddress: { street: "forged" } },
+			},
+			{
+				seller: supplierIdentityFromProfile({}),
+				buyer: buyerIdentityFromClient({}),
+			},
+		);
+		expect(applied.seller).not.toHaveProperty("postalAddress");
+		expect(applied.buyer).not.toHaveProperty("postalAddress");
 	});
 
 	it("clears a client-supplied seller identity when the workspace has none", () => {

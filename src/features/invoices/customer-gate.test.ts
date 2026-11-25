@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { VAT_CATEGORY_OPTIONS } from "#/features/products/product-form-utils";
 import {
 	CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE,
+	lineMissingClassification,
 	transitionLeavesDraft,
 } from "./customer-gate";
 import type { InvoiceStatus } from "./types";
@@ -52,5 +54,57 @@ describe("transitionLeavesDraft", () => {
 		expect(CUSTOMER_REQUIRED_TO_LEAVE_DRAFT_MESSAGE).not.toMatch(
 			/compliant|clearance|nrs/i,
 		);
+	});
+});
+
+/**
+ * B3 — the line-classification rule is shared by the server gate and the
+ * composer. It used to be applied by the composer only when the invoice charged
+ * VAT, while the server demanded it for every finalize, so a seller whose tax
+ * treatment applies no VAT got a rejection for fields the form never showed.
+ */
+describe("lineMissingClassification", () => {
+	const complete = {
+		unit: "pcs",
+		vatCategory: "exempt",
+		classificationCode: "123456",
+	};
+
+	it("accepts a fully classified line of any VAT category", () => {
+		for (const vatCategory of ["standard", "zero_rated", "exempt"]) {
+			expect(lineMissingClassification({ ...complete, vatCategory })).toBe(
+				false,
+			);
+		}
+	});
+
+	it("rejects a missing unit, category or code regardless of tax treatment", () => {
+		expect(lineMissingClassification({ ...complete, unit: "" })).toBe(true);
+		expect(lineMissingClassification({ ...complete, unit: undefined })).toBe(
+			true,
+		);
+		expect(
+			lineMissingClassification({ ...complete, classificationCode: "  " }),
+		).toBe(true);
+		expect(
+			lineMissingClassification({ ...complete, vatCategory: undefined }),
+		).toBe(true);
+		expect(lineMissingClassification({ ...complete, vatCategory: "" })).toBe(
+			true,
+		);
+	});
+
+	it("rejects an unsupported VAT category", () => {
+		expect(
+			lineMissingClassification({ ...complete, vatCategory: "reduced" }),
+		).toBe(true);
+	});
+
+	it("accepts the categories the composer offers", () => {
+		for (const option of VAT_CATEGORY_OPTIONS) {
+			expect(
+				lineMissingClassification({ ...complete, vatCategory: option.value }),
+			).toBe(false);
+		}
 	});
 });
