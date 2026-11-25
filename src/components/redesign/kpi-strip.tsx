@@ -38,7 +38,7 @@ export function Kpi({
 				/>
 				<span className="min-w-0 truncate">{label}</span>
 			</span>
-			<span className="mt-[11px] block font-num text-2xl font-medium tracking-tight whitespace-nowrap tabular-nums text-ink">
+			<span className="mt-[11px] block truncate font-num text-2xl font-medium tracking-tight whitespace-nowrap tabular-nums text-ink">
 				{value}
 			</span>
 			{sub ? (

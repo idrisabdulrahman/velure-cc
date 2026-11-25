@@ -298,12 +298,14 @@ function NumberStepperInput({
 	min,
 	step,
 	onChange,
+	label = "value",
 }: {
 	value: number;
 	disabled: boolean;
 	min: number;
 	step: number;
 	onChange: (value: number) => void;
+	label?: string;
 }) {
 	const apply = (next: number) => {
 		const rounded = step < 1 ? Math.round(next * 100) / 100 : Math.round(next);
@@ -317,7 +319,7 @@ function NumberStepperInput({
 				disabled={disabled}
 				onClick={() => apply(value - step)}
 				className="inline-flex h-full w-10 items-center justify-center border-r border-rule text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
-				aria-label="Decrease value"
+				aria-label={`Decrease ${label}`}
 			>
 				-
 			</button>
@@ -327,6 +329,7 @@ function NumberStepperInput({
 				min={min}
 				step={step}
 				value={value}
+				aria-label={label}
 				onFocus={(event) => event.currentTarget.select()}
 				onChange={(event) => apply(Number(event.target.value) || min)}
 				className="h-full w-full border-0 bg-transparent px-3 text-center text-sm text-ink [appearance:textfield] outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -336,7 +339,7 @@ function NumberStepperInput({
 				disabled={disabled}
 				onClick={() => apply(value + step)}
 				className="inline-flex h-full w-10 items-center justify-center border-l border-rule text-ink-2 transition-colors hover:bg-paper-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
-				aria-label="Increase value"
+				aria-label={`Increase ${label}`}
 			>
 				+
 			</button>
@@ -1657,6 +1660,7 @@ export function InvoiceDetailsSheet({
 																			value={item.quantity}
 																			min={1}
 																			step={1}
+																			label="Quantity"
 																			onChange={(quantity) =>
 																				updateLine(item.id, { quantity })
 																			}
@@ -1671,6 +1675,7 @@ export function InvoiceDetailsSheet({
 																			value={item.price}
 																			min={0}
 																			step={0.01}
+																			label="Unit price"
 																			onChange={(price) =>
 																				updateLine(item.id, { price })
 																			}
@@ -2096,8 +2101,8 @@ export function InvoiceDetailsSheet({
 														className="h-10 rounded-md border-rule bg-paper text-ink"
 													/>
 													<p className="mt-2 text-xs text-ink-2">
-														Enter the reference above, then choose “Mark as
-														paid” under Status to record it.
+														Enter the reference, then use “Mark as paid” in the
+														Status section above.
 													</p>
 												</Field>
 											</div>

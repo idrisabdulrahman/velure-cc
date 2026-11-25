@@ -52,6 +52,7 @@ export function LinkItem({ editor, open, setOpen }: LinkItemProps) {
 						) : (
 							<MdOutlineAddLink className="size-4" />
 						)}
+						<span className="sr-only">Add or edit link</span>
 					</BubbleMenuButton>
 				</div>
 			</PopoverTrigger>
@@ -76,7 +77,8 @@ export function LinkItem({ editor, open, setOpen }: LinkItemProps) {
 							size="icon"
 							variant="outline"
 							type="button"
-							className="flex size-7 items-center border-none p-1 text-danger transition-all hover:bg-danger-soft"
+							aria-label="Remove link"
+							className="flex size-8 items-center border-none p-1 text-danger transition-all hover:bg-danger-soft"
 							onClick={() => {
 								editor.chain().focus().unsetLink().run();
 								if (inputRef.current) {
@@ -90,8 +92,9 @@ export function LinkItem({ editor, open, setOpen }: LinkItemProps) {
 					) : (
 						<Button
 							size="icon"
-							className="size-7"
+							className="size-8"
 							type="button"
+							aria-label="Apply link"
 							onClick={handleSubmit}
 						>
 							<MdOutlineCheck className="size-4" />
