@@ -245,7 +245,76 @@ export function verifyBachsWebhook(
 	);
 }
 
-export function parseBachsPayment(event: unknown) {
+/** A settled Bachs collection, in the shape `confirm_bachs_payment` expects. */
+export type BachsSettlement = {
+	input_reference: string;
+	input_account: string;
+	input_provider_payment_id: string | null;
+	input_amount: number;
+	input_currency: "NGN";
+	input_event_type: string;
+	input_provider_status: string;
+};
+
+/**
+ * A non-settling lifecycle event. `failed` is deliberately retryable (Bachs
+ * keeps the checkout open), `expired` closes the checkout but a late bank
+ * transfer may still settle it, and `manual_review` is never auto-applied.
+ */
+export type BachsLifecycle = {
+	input_reference: string;
+	input_account: string;
+	input_provider_payment_id: string | null;
+	input_event_type: string;
+	input_provider_status: string;
+	input_outcome: "failed" | "expired" | "manual_review";
+	input_reason: string | null;
+};
+
+export type ParsedBachsEvent =
+	| ({ kind: "settle" } & BachsSettlement)
+	| ({ kind: "lifecycle" } & BachsLifecycle);
+
+const DECIMAL_AMOUNT = /^\d{1,12}(\.\d{1,2})?$/;
+
+function isCheckoutId(value: unknown): value is string {
+	return typeof value === "string" && value.startsWith("chk_");
+}
+
+function isChargeId(value: unknown): value is string {
+	return typeof value === "string" && value.startsWith("ch_");
+}
+
+function parseAmount(value: unknown): number | null {
+	if (typeof value !== "string" || !DECIMAL_AMOUNT.test(value)) return null;
+	const amount = Number(value);
+	return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+/**
+ * The account a webhook belongs to. Bachs puts the connected account in the
+ * top-level `account` on forwarded events and in `organization_id` on the
+ * account's own events; prefer `account`, then fall back, so a connected
+ * account can never be confused with the platform's organization.
+ */
+function eventAccount(
+	account: unknown,
+	organizationId: unknown,
+): string | null {
+	for (const candidate of [account, organizationId]) {
+		if (typeof candidate === "string" && candidate.startsWith("acct_"))
+			return candidate;
+	}
+	return null;
+}
+
+/**
+ * Parses every Bachs event this app can act on. `collection.succeeded` is the
+ * documented source of truth for fulfilment; `checkout.completed` stays as a
+ * compatibility fallback. `collection.failed` / `checkout.expired` return a
+ * lifecycle event so the ledger can record them without cancelling the order.
+ */
+export function parseBachsEvent(event: unknown): ParsedBachsEvent | null {
 	if (!event || typeof event !== "object") return null;
 	const { type, organization_id, account, data } = event as {
 		type?: string;
@@ -253,9 +322,13 @@ export function parseBachsPayment(event: unknown) {
 		account?: string;
 		data?: {
 			checkout_id?: string;
-			status?: string;
+			charge_id?: string | null;
+			status?: string | null;
 			mode?: string;
-			payment_status?: string;
+			payment_status?: string | null;
+			amount?: string;
+			currency?: string | null;
+			reason?: string | null;
 			charge?: {
 				id?: string;
 				amount?: string;
@@ -264,36 +337,144 @@ export function parseBachsPayment(event: unknown) {
 			};
 		};
 	};
-	// The event carries the account as top-level `organization_id` (per
-	// docs.bachs.io webhook payloads); `account` is kept as a defensive
-	// fallback for alternate envelope shapes.
-	const orgAccount = organization_id ?? account;
-	const charge = data?.charge;
-	if (
-		type !== "checkout.completed" ||
-		typeof orgAccount !== "string" ||
-		!orgAccount.startsWith("acct_") ||
-		data?.status !== "completed" ||
-		data.mode !== "payment" ||
-		data.payment_status !== "paid" ||
-		typeof data.checkout_id !== "string" ||
-		!data.checkout_id.startsWith("chk_") ||
-		charge?.status !== "succeeded" ||
-		charge.currency !== "NGN" ||
-		typeof charge.id !== "string" ||
-		!charge.id.startsWith("ch_") ||
-		typeof charge.amount !== "string" ||
-		!/^\d{1,12}(\.\d{1,2})?$/.test(charge.amount) ||
-		Number(charge.amount) <= 0
-	)
-		return null;
-	return {
-		input_reference: data.checkout_id,
-		input_account: orgAccount,
-		input_provider_payment_id: charge.id,
-		input_amount: Number(charge.amount),
-		input_currency: "NGN",
-		input_event_type: type,
-		input_provider_status: charge.status,
-	};
+	const inputAccount = eventAccount(account, organization_id);
+	if (!inputAccount || !data || typeof data !== "object") return null;
+
+	if (type === "collection.succeeded") {
+		const reference = data.checkout_id;
+		const amount = parseAmount(data.amount);
+		const status =
+			typeof data.status === "string" ? data.status.toUpperCase() : "";
+		const knownStatus =
+			status === "SUCCEEDED" || status === "ACCEPTED" || status === "OVERPAID";
+		if (
+			!isCheckoutId(reference) ||
+			amount === null ||
+			!knownStatus ||
+			(data.charge_id != null && !isChargeId(data.charge_id))
+		)
+			return null;
+		const inputProviderPaymentId = isChargeId(data.charge_id)
+			? data.charge_id
+			: null;
+
+		// A success in another currency can never match the NGN charge it
+		// references, so park the collected money for a person rather than
+		// silently dropping it.
+		if (data.currency !== "NGN") {
+			return {
+				kind: "lifecycle",
+				input_reference: reference,
+				input_account: inputAccount,
+				input_provider_payment_id: inputProviderPaymentId,
+				input_event_type: type,
+				input_provider_status: status,
+				input_outcome: "manual_review",
+				input_reason:
+					typeof data.currency === "string" && data.currency.trim()
+						? `currency_${data.currency.toLowerCase()}`
+						: "currency_missing",
+			};
+		}
+
+		if (status === "SUCCEEDED") {
+			return {
+				kind: "settle",
+				input_reference: reference,
+				input_account: inputAccount,
+				input_provider_payment_id: inputProviderPaymentId,
+				input_amount: amount,
+				input_currency: "NGN",
+				input_event_type: type,
+				input_provider_status: status,
+			};
+		}
+		// ACCEPTED / OVERPAID collected money on terms other than the exact
+		// requested amount. Never auto-settle those; a person reconciles them.
+		return {
+			kind: "lifecycle",
+			input_reference: reference,
+			input_account: inputAccount,
+			input_provider_payment_id: inputProviderPaymentId,
+			input_event_type: type,
+			input_provider_status: status,
+			input_outcome: "manual_review",
+			input_reason: `collection_${status.toLowerCase()}`,
+		};
+	}
+
+	if (type === "collection.failed") {
+		const reference = data.checkout_id;
+		const status =
+			typeof data.status === "string" ? data.status.toUpperCase() : "";
+		if (!isCheckoutId(reference)) return null;
+		if (status !== "FAILED" && status !== "EXPIRED") return null;
+		return {
+			kind: "lifecycle",
+			input_reference: reference,
+			input_account: inputAccount,
+			input_provider_payment_id: isChargeId(data.charge_id)
+				? data.charge_id
+				: null,
+			input_event_type: type,
+			input_provider_status: status,
+			// FAILED is explicitly not final: the checkout stays open. EXPIRED
+			// closes this charge, but a late transfer can still settle it.
+			input_outcome: status === "EXPIRED" ? "expired" : "failed",
+			input_reason:
+				typeof data.reason === "string" && data.reason.trim()
+					? data.reason.trim().slice(0, 200)
+					: null,
+		};
+	}
+
+	if (type === "checkout.expired") {
+		const reference = data.checkout_id;
+		if (!isCheckoutId(reference)) return null;
+		return {
+			kind: "lifecycle",
+			input_reference: reference,
+			input_account: inputAccount,
+			input_provider_payment_id: null,
+			input_event_type: type,
+			input_provider_status: "expired",
+			input_outcome: "expired",
+			input_reason: null,
+		};
+	}
+
+	if (type === "checkout.completed") {
+		const charge = data.charge;
+		if (
+			data.status !== "completed" ||
+			data.mode !== "payment" ||
+			data.payment_status !== "paid" ||
+			!isCheckoutId(data.checkout_id) ||
+			charge?.status !== "succeeded" ||
+			charge.currency !== "NGN"
+		)
+			return null;
+		const amount = parseAmount(charge.amount);
+		if (!isChargeId(charge.id) || amount === null) return null;
+		return {
+			kind: "settle",
+			input_reference: data.checkout_id,
+			input_account: inputAccount,
+			input_provider_payment_id: charge.id,
+			input_amount: amount,
+			input_currency: "NGN",
+			input_event_type: type,
+			input_provider_status: charge.status,
+		};
+	}
+
+	return null;
+}
+
+/** Settlement-only projection, kept for callers that only handle payment. */
+export function parseBachsPayment(event: unknown): BachsSettlement | null {
+	const parsed = parseBachsEvent(event);
+	if (parsed?.kind !== "settle") return null;
+	const { kind: _kind, ...payment } = parsed;
+	return payment;
 }

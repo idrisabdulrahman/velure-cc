@@ -1,5 +1,4 @@
 import { calculateInvoiceCompliance } from "#/features/compliance/calculate";
-import { NIGERIA_AUTHORITY_LABEL } from "#/features/compliance/nigeria";
 import type { DiscountMode } from "#/features/compliance/types";
 import type {
 	EditorDoc,
@@ -183,7 +182,6 @@ function buildTemplate(invoice: InvoiceRecord): Template {
 			compliance.seller.rcNumber
 				? `CAC RC Number: ${compliance.seller.rcNumber}`
 				: undefined,
-			NIGERIA_AUTHORITY_LABEL,
 		]),
 		noteDetails: null,
 		dateFormat,
@@ -211,8 +209,10 @@ function buildTemplate(invoice: InvoiceRecord): Template {
 }
 
 export function getInvoiceTemplateSize(template: Template) {
+	// 1 CSS px = 1 pt, so the sheet size equals the PDF page size. LETTER is
+	// US Letter in points (8.5 × 11 in), not a scaled-up A4.
 	if (template.size === "letter") {
-		return { width: 750, height: 1056 };
+		return { width: 612, height: 792 };
 	}
 
 	return { width: 595, height: 842 };

@@ -2215,6 +2215,19 @@ export type Database = {
       }
       invoke_scheduler_tick: { Args: never; Returns: number }
       public_invoice_by_token: { Args: { input_token: string }; Returns: Json }
+      record_bachs_payment_outcome: {
+        Args: {
+          input_account: string
+          input_event_type: string
+          input_outcome: string
+          input_provider_payment_id?: string
+          input_provider_status: string
+          input_raw_event?: Json
+          input_reason?: string
+          input_reference: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       audit_action:

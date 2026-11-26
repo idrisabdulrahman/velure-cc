@@ -78,6 +78,76 @@ describe("NRS honesty claims (e-invoicing SPEC A1-A3)", () => {
 	});
 });
 
+/* Priority-4 guard: no UI/copy may claim official NRS/MBS existence of a
+ * recognised clearance or IRN until a real certified-provider integration
+ * exists. Negation-aware so the honest "not NRS-cleared" disclaimers pass
+ * while a positive claim on any line fails. */
+const README_PATH = fileURLToPath(
+	new URL("../../../README.md", import.meta.url),
+);
+
+const CLEARANCE_CLAIM_PATTERNS: RegExp[] = [
+	/\bNRS[-\s]?(?:certified|cleared|approved|accredited|compliant)\b/i,
+	/\bMBS[-\s]?(?:certified|cleared|approved|accredited|compliant)\b/i,
+	/\bcertified e-?invoicing\b/i,
+	/\bclearance\b[^.\n]{0,30}\b(?:issued|granted|obtained|confirmed|validated|secured)\b/i,
+	/\bIRN\b[^.\n]{0,30}\b(?:issued|generated|created|obtained|validated)\b/i,
+];
+
+/** A claim is honest only where the same line negates it. */
+const NEGATION_PATTERN =
+	/\b(?:not|never|no|none|without|cannot|can't|isn't|aren't|doesn't|don't|unable|unsupported)\b/i;
+
+function clearanceClaims(text: string): string[] {
+	const claims: string[] = [];
+	for (const line of text.split("\n")) {
+		if (NEGATION_PATTERN.test(line)) continue;
+		for (const pattern of CLEARANCE_CLAIM_PATTERNS) {
+			const match = line.match(pattern);
+			if (match) claims.push(`${match[0]} :: ${line.trim()}`);
+		}
+	}
+	return claims;
+}
+
+describe("no positive NRS/MBS clearance claim anywhere", () => {
+	it("makes no positive clearance claim in src UI/copy or the README", () => {
+		const files = [...sourceFiles(SRC_DIR), README_PATH];
+		const offenders = files.flatMap((path) =>
+			clearanceClaims(readFileSync(path, "utf8")).map(
+				(claim) => `${path}: ${claim}`,
+			),
+		);
+		expect(offenders).toEqual([]);
+	});
+
+	it("labels mock clearance as mock rather than real", () => {
+		const sheet = readFileSync(
+			new URL(
+				"../../features/invoices/components/invoice-details-sheet.tsx",
+				import.meta.url,
+			),
+			"utf8",
+		);
+		expect(sheet).toContain("MOCK SANDBOX");
+		expect(sheet).toMatch(/MOCK SANDBOX — NOT NRS CLEARED/);
+	});
+});
+
+/* Priority-1 honesty: automatic bank-transfer verification is not advertised
+ * as operational while the live provider end-to-end is still unverified, so
+ * the surfaces keep the pilot / coming-soon framing. */
+describe("bank-transfer collection framing", () => {
+	it("keeps collection framed as pilot and not open yet", () => {
+		expect(readRoute("pricing.tsx")).toMatch(
+			/bank transfer[\s\S]{0,40}in pilot/i,
+		);
+		const integrations = readRoute("settings.integrations.tsx");
+		expect(integrations).toContain("Coming soon");
+		expect(integrations).toMatch(/not\s+open yet/i);
+	});
+});
+
 /* Official-sources grounding for the same copy. The URLs were fetched live
  * and verified genuine; these tests pin them, their scheme, the
  * non-affiliation wording, and the absence of claim words so the

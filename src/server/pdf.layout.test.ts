@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
 	decodePDFRawStream,
 	PDFDocument,
 	PDFHexString,
 	PDFRawStream,
 	PDFRef,
+	StandardFonts,
 } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 import { toInvoiceDocument } from "#/features/invoices/invoice-document-adapter";
@@ -147,6 +150,111 @@ async function render(record: InvoiceRecord): Promise<Invoice> {
 	return toInvoiceDocument(record);
 }
 
+type TextRun = {
+	page: number;
+	x: number;
+	y: number;
+	font: "regular" | "bold";
+	size: number;
+	text: string;
+};
+
+/**
+ * Every text run on every page with the exact matrix origin (`Tm`), face and
+ * point size it is drawn at, so a run's real drawn extent can be measured and
+ * not just its origin.
+ */
+async function extractTextRuns(bytes: Uint8Array): Promise<TextRun[]> {
+	const pdf = await PDFDocument.load(bytes);
+	const decoder = new TextDecoder("windows-1252");
+	const runs: TextRun[] = [];
+
+	pdf.getPages().forEach((page, index) => {
+		const contents = page.node.normalizedEntries().Contents;
+		if (!contents) return;
+		const entries =
+			contents instanceof PDFRawStream ? [contents] : contents.asArray();
+
+		for (const entry of entries) {
+			const stream =
+				entry instanceof PDFRef ? pdf.context.lookup(entry) : entry;
+			if (!(stream instanceof PDFRawStream)) continue;
+			const content = decoder.decode(decodePDFRawStream(stream).decode());
+			// `pdf-lib` wraps each `drawText` in `BT … ET`; a hex `Tj` operand
+			// never contains the letters `B`/`T`, so the boundaries are exact.
+			for (const block of content.matchAll(/BT([\s\S]*?)ET/g)) {
+				const body = block[1] ?? "";
+				const tf = /\/(\S+) ([\d.]+) Tf/.exec(body);
+				const tm = /([\d.-]+) ([\d.-]+) Tm/.exec(body);
+				const hex = /<([0-9A-Fa-f]+)>\s*Tj/.exec(body);
+				if (!tf || !tm || !hex) continue;
+				const text = decoder.decode(
+					Uint8Array.from(
+						(hex[1] ?? "")
+							.match(/.{2}/g)
+							?.map((pair) => Number.parseInt(pair, 16)) ?? [],
+					),
+				);
+				runs.push({
+					page: index + 1,
+					x: Number(tm[1]),
+					y: Number(tm[2]),
+					font: /Bold/i.test(tf[1] ?? "") ? "bold" : "regular",
+					size: Number(tf[2]),
+					text,
+				});
+			}
+		}
+	});
+
+	return runs;
+}
+
+/** MediaBox dimensions of every page. */
+async function pageSizes(bytes: Uint8Array) {
+	const pdf = await PDFDocument.load(bytes);
+	return pdf.getPages().map((page) => ({
+		width: page.getWidth(),
+		height: page.getHeight(),
+	}));
+}
+
+/** The `w 0 0 h 0 0 cm` matrices that place an image (the workspace logo). */
+async function imageScales(
+	bytes: Uint8Array,
+): Promise<Array<[number, number]>> {
+	const pdf = await PDFDocument.load(bytes);
+	const decoder = new TextDecoder("windows-1252");
+	const scales: Array<[number, number]> = [];
+
+	for (const page of pdf.getPages()) {
+		const contents = page.node.normalizedEntries().Contents;
+		if (!contents) continue;
+		const entries =
+			contents instanceof PDFRawStream ? [contents] : contents.asArray();
+		for (const entry of entries) {
+			const stream =
+				entry instanceof PDFRef ? pdf.context.lookup(entry) : entry;
+			if (!(stream instanceof PDFRawStream)) continue;
+			const content = decoder.decode(decodePDFRawStream(stream).decode());
+			for (const match of content.matchAll(/([\d.]+) 0 0 ([\d.]+) 0 0 cm/g)) {
+				const width = Number(match[1]);
+				const height = Number(match[2]);
+				if (width > 1 && height > 1) scales.push([width, height]);
+			}
+		}
+	}
+
+	return scales;
+}
+
+function logoDataUrl() {
+	const png = readFileSync(
+		fileURLToPath(new URL("../../public/icon-192.png", import.meta.url)),
+	);
+	return `data:image/png;base64,${png.toString("base64")}`;
+}
+
 describe("invoice PDF layout", () => {
 	it("prints the preview's header, parties, table, totals and payment details", async () => {
 		const bytes = await renderInvoicePdfDocument(
@@ -232,5 +340,101 @@ describe("invoice PDF layout", () => {
 		const text = await extractPdfText(bytes);
 		expect(text).toContain("Net Amount Payable");
 		expect(text).toContain("₦519,400.00");
+	});
+
+	it("prints on A4 by default and switches to US Letter when selected", async () => {
+		const a4 = await pageSizes(
+			await renderInvoicePdfDocument(await render(buildIssuedInvoice())),
+		);
+		expect(a4[0]?.width).toBeCloseTo(595.28, 1);
+		expect(a4[0]?.height).toBeCloseTo(841.89, 1);
+
+		const letter = await pageSizes(
+			await renderInvoicePdfDocument(
+				await render(buildIssuedInvoice({ invoiceSize: "LETTER" })),
+			),
+		);
+		expect(letter[0]?.width).toBeCloseTo(612, 1);
+		expect(letter[0]?.height).toBeCloseTo(792, 1);
+	});
+
+	it("keeps every drawn line inside the page margins", async () => {
+		const bytes = await renderInvoicePdfDocument(
+			await render(buildIssuedInvoice()),
+		);
+		const runs = await extractTextRuns(bytes);
+		expect(runs.length).toBeGreaterThan(20);
+
+		// The renderer uses the standard Helvetica faces, so their metrics
+		// reproduce the drawn width of every run exactly.
+		const scratch = await PDFDocument.create();
+		const fonts = {
+			regular: await scratch.embedFont(StandardFonts.Helvetica),
+			bold: await scratch.embedFont(StandardFonts.HelveticaBold),
+		};
+		const sizes = await pageSizes(bytes);
+
+		for (const run of runs) {
+			const page = sizes[run.page - 1];
+			if (!page) throw new Error(`no size for page ${run.page}`);
+			const width = fonts[run.font].widthOfTextAtSize(run.text, run.size);
+			// `p-8` = 32pt on all four sides, allowing for rounding. Checking
+			// the drawn right edge, not just the origin, catches a long
+			// right-aligned or unbreakable token overflowing the margin.
+			expect(run.x).toBeGreaterThanOrEqual(31.5);
+			expect(run.x + width).toBeLessThanOrEqual(page.width - 32 + 0.5);
+			expect(run.y).toBeGreaterThanOrEqual(31.5);
+			expect(run.y).toBeLessThanOrEqual(page.height - 32 + 1);
+		}
+
+		// A right-aligned value must actually reach the right margin, which
+		// proves the widths are measured and the bound above is not vacuous.
+		const reachesRightEdge = runs.some((run) => {
+			const page = sizes[run.page - 1];
+			if (!page) return false;
+			const width = fonts[run.font].widthOfTextAtSize(run.text, run.size);
+			return Math.abs(run.x + width - (page.width - 32)) < 1;
+		});
+		expect(reachesRightEdge).toBe(true);
+	});
+
+	it("never prints the NRS authority label as a seller identity line", async () => {
+		const bytes = await renderInvoicePdfDocument(
+			await render(buildIssuedInvoice()),
+		);
+		const text = await extractPdfText(bytes);
+		expect(text).not.toContain("Nigeria Revenue Service");
+		expect(text).not.toContain("NRS");
+		// The real seller identity is still there.
+		expect(text).toContain("Invoicly Ltd");
+		expect(text).toContain("TIN: 12345678-0001");
+	});
+
+	it("embeds the workspace logo at a bounded size", async () => {
+		const bytes = await renderInvoicePdfDocument(
+			await render(buildIssuedInvoice({ logoUrl: logoDataUrl() })),
+		);
+		const scales = await imageScales(bytes);
+		expect(scales.length).toBe(1);
+		const [width, height] = scales[0] ?? [0, 0];
+		// The 192×192 source is scaled to fit the 80pt height cap.
+		expect(width).toBeLessThanOrEqual(80.5);
+		expect(height).toBeLessThanOrEqual(80.5);
+		expect(width).toBeGreaterThan(40);
+		expect(height).toBeGreaterThan(40);
+	});
+
+	it("skips a logo whose format the PDF cannot embed", async () => {
+		const bytes = await renderInvoicePdfDocument(
+			await render(
+				buildIssuedInvoice({
+					logoUrl:
+						"data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoB",
+				}),
+			),
+		);
+		expect(await imageScales(bytes)).toEqual([]);
+		// The rest of the invoice still renders.
+		expect(await extractPdfText(bytes)).toContain("Invoicly Ltd");
 	});
 });

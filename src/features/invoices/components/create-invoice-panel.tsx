@@ -1348,43 +1348,42 @@ export function CreateInvoicePanel({
 		templateName,
 		workspace,
 	]);
-	const autosaveSignature = useMemo(
-		() =>
-			JSON.stringify({
-				compliance,
-				currency,
-				customerEmail,
-				customerName,
-				customerPoNumber,
-				dateFormat,
-				depositRequest,
-				documentType,
-				correctsInvoiceId,
-				dueDate,
-				fromEmail,
-				fromName,
-				includeDecimals,
-				invoiceNumber,
-				invoiceSize,
-				lineItems,
-				logoUrl,
-				notes,
-				paymentDetails,
-				paymentTermDays,
-				sellerRcForSubmission,
-				sellerTaxStatus,
-				sellerTinForSubmission,
-				showCustomerEmail,
-				showFromEmail,
-				showNoteSection,
-				showPaymentDetailsSection,
-				shipmentDetails,
-				templateName,
-				taxTreatment,
-				withholdingCategory,
-				withholdingRecipientEntityType,
-				withholdingRecipientResidency,
-			}),
+	const autosaveSignatureFields = useMemo(
+		() => ({
+			compliance,
+			currency,
+			customerEmail,
+			customerName,
+			customerPoNumber,
+			dateFormat,
+			depositRequest,
+			documentType,
+			correctsInvoiceId,
+			dueDate,
+			fromEmail,
+			fromName,
+			includeDecimals,
+			invoiceNumber,
+			invoiceSize,
+			lineItems,
+			logoUrl,
+			notes,
+			paymentDetails,
+			paymentTermDays,
+			sellerRcForSubmission,
+			sellerTaxStatus,
+			sellerTinForSubmission,
+			showCustomerEmail,
+			showFromEmail,
+			showNoteSection,
+			showPaymentDetailsSection,
+			shipmentDetails,
+			templateName,
+			taxTreatment,
+			withholdingCategory,
+			withholdingRecipientEntityType,
+			withholdingRecipientResidency,
+		}),
 		[
 			compliance,
 			currency,
@@ -1420,6 +1419,10 @@ export function CreateInvoicePanel({
 			withholdingRecipientEntityType,
 			withholdingRecipientResidency,
 		],
+	);
+	const autosaveSignature = useMemo(
+		() => JSON.stringify(autosaveSignatureFields),
+		[autosaveSignatureFields],
 	);
 
 	// Never claim "Draft saved" while a newer edit has not been persisted:
@@ -1548,7 +1551,14 @@ export function CreateInvoicePanel({
 			);
 			autosaveDraftIdRef.current = saved.id;
 			setInvoiceNumber(saved.invoiceNumber);
-			autosaveSignatureRef.current = signature;
+			// The server assigns the invoice number on the first save. Align the
+			// saved signature with the state the server now holds, otherwise the
+			// echo into `invoiceNumber` would read as a newer, unsaved edit and
+			// the editor would stay on "Saving..." forever.
+			autosaveSignatureRef.current = JSON.stringify({
+				...(JSON.parse(signature) as Record<string, unknown>),
+				invoiceNumber: saved.invoiceNumber,
+			});
 			setAutosaveStatus("saved");
 			return true;
 		} catch (_error) {
@@ -4179,6 +4189,16 @@ export function CreateInvoicePanel({
 								</div>
 
 								<div className="ml-auto flex flex-wrap items-center justify-end gap-x-2 gap-y-2">
+									{autosaveStatus === "error" && hasMeaningfulDraft ? (
+										<button
+											type="button"
+											onClick={() => void persistAutosaveDraft({ force: true })}
+											className="text-[12px] font-medium text-warn underline underline-offset-2 transition-colors duration-[110ms] ease-out hover:text-ink"
+											data-testid="invoice-autosave-retry"
+										>
+											Retry
+										</button>
+									) : null}
 									<div
 										className={cn(
 											"min-w-28 text-right text-[12px]",

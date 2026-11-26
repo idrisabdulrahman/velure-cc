@@ -67,8 +67,8 @@ const TITLE_SIZE = 21;
 const NET_SIZE = 15;
 /** `w-[320px]` on the totals block. */
 const SUMMARY_WIDTH = 320;
-/** One `py-1` totals row. */
-const SUMMARY_ROW = 19;
+/** One `py-1` totals row: ~17px line box (leading 1.55 on 11px) + 8px padding. */
+const SUMMARY_ROW = 25;
 /** `gap-4` between line-item columns. */
 const TABLE_GAP = 16;
 const LOGO_MAX_HEIGHT = 80;
@@ -551,9 +551,10 @@ function drawHeader(layout: PdfLayout, doc: Invoice, logo: PDFImage | null) {
 		layout.contentWidth - (logoWidth > 0 ? logoWidth + COLUMN_GAP : 0),
 	);
 
+	// `text-[21px]` with the app's 1.55 base line-height, then `mb-1`.
 	layout.line([{ text: template.title, font: fonts.bold }], {
 		size: TITLE_SIZE,
-		leading: 26,
+		leading: 33,
 	});
 	layout.advance(4);
 
@@ -568,11 +569,14 @@ function drawHeader(layout: PdfLayout, doc: Invoice, logo: PDFImage | null) {
 				text: fitText(fonts.regular, value, BODY_SIZE, valueRoom),
 			},
 		]);
-		layout.advance(BODY_LEADING);
+		// `text-[11px]` at 1.55 line-height plus the `gap-0.5` row gap.
+		layout.advance(17);
 		layout.advance(2);
 	}
 
-	layout.jumpTo(Math.max(layout.top, MARGIN + logoHeight));
+	// The meta block owns `mb-2`; the header row is as tall as the taller of the
+	// meta block and the logo. The parties block adds its own `mt-6`.
+	layout.jumpTo(Math.max(layout.top + 8, MARGIN + logoHeight));
 }
 
 function drawLabeledBlock(
@@ -616,8 +620,9 @@ function drawParties(layout: PdfLayout, doc: Invoice) {
 function drawTopBlock(layout: PdfLayout, doc: Invoice) {
 	const lines = wrapRichText(doc.topBlock, layout.contentWidth, layout.fonts);
 	if (lines.length === 0) return;
+	// The preview gives the top block no margin of its own; the line-item
+	// table's `mt-5` provides the gap below it.
 	layout.drawWrapped(lines);
-	layout.spacer(16);
 }
 
 function lineItemDescription(
@@ -665,7 +670,7 @@ function drawLineItems(layout: PdfLayout, doc: Invoice) {
 			align: "right",
 		});
 		layout.advance(BODY_LEADING);
-		layout.rule({ offset: LABEL_GAP });
+		layout.rule({ offset: LABEL_GAP, thickness: 1 });
 		layout.advance(LABEL_GAP * 2);
 	};
 
@@ -792,11 +797,11 @@ function drawSummary(layout: PdfLayout, doc: Invoice) {
 
 	const height = rows.reduce(
 		(sum, row) =>
-			sum + (row.kind === "total" ? 58 : row.kind === "net" ? 24 : SUMMARY_ROW),
+			sum + (row.kind === "total" ? 73 : row.kind === "net" ? 27 : SUMMARY_ROW),
 		0,
 	);
 
-	layout.spacer(40);
+	layout.spacer(48);
 	layout.ensure(height + 24);
 	const x = layout.right - SUMMARY_WIDTH;
 
@@ -812,36 +817,39 @@ function drawSummary(layout: PdfLayout, doc: Invoice) {
 		}
 
 		if (row.kind === "total") {
+			// `mt-2` + 1px top border + `py-4`, with `text-[21px]`.
 			layout.advance(8);
-			layout.rule({ x, width: SUMMARY_WIDTH });
+			layout.rule({ x, width: SUMMARY_WIDTH, thickness: 1 });
 			layout.advance(16);
 			layout.stamp([{ text: row.label, color: PDF_MUTED }], {
 				x,
-				leading: 26,
+				leading: 33,
 			});
 			layout.stamp([{ text: row.value }], {
 				x: layout.right,
 				size: TITLE_SIZE,
-				leading: 26,
+				leading: 33,
 				align: "right",
 			});
-			layout.advance(26);
+			layout.advance(33);
 			layout.advance(16);
 			continue;
 		}
 
-		layout.stamp([{ text: row.label, color: PDF_MUTED }], { x, leading: 20 });
+		// `pb-1` with the 15px net figure (line-height 1.55 ≈ 23px).
+		layout.stamp([{ text: row.label, color: PDF_MUTED }], { x, leading: 23 });
 		layout.stamp([{ text: row.value, font: layout.fonts.bold }], {
 			x: layout.right,
 			size: NET_SIZE,
-			leading: 20,
+			leading: 23,
 			align: "right",
 		});
-		layout.advance(20);
+		layout.advance(23);
 		layout.advance(4);
 	}
 
-	layout.spacer(24);
+	// `mb-8` in the print appearance.
+	layout.spacer(32);
 }
 
 function drawFooter(layout: PdfLayout, doc: Invoice) {
@@ -873,7 +881,7 @@ function drawFooter(layout: PdfLayout, doc: Invoice) {
 		layout.fonts,
 	);
 	const bottomHeight =
-		bottomLines.length > 0 ? 24 + bottomLines.length * BODY_LEADING : 0;
+		bottomLines.length > 0 ? 32 + bottomLines.length * BODY_LEADING : 0;
 	const footerHeight = columnsHeight + bottomHeight;
 	if (footerHeight === 0) return;
 
@@ -923,7 +931,8 @@ function drawFooter(layout: PdfLayout, doc: Invoice) {
 
 	layout.jumpTo(mark + columnsHeight);
 	if (bottomLines.length > 0) {
-		layout.advance(24);
+		// `space-y-8` in the print appearance.
+		layout.advance(32);
 		layout.drawWrapped(bottomLines);
 	}
 }

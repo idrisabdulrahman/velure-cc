@@ -36,6 +36,11 @@ import {
 	validateSupplierProfile,
 } from "#/features/compliance/supplier-profile";
 import { authClient } from "#/lib/auth-client";
+import {
+	LOGO_ACCEPT_ATTRIBUTE,
+	logoUploadErrorMessage,
+	normalizeLogoFile,
+} from "#/lib/logo-upload";
 import { useSupabaseSession } from "#/lib/supabase-session";
 import { isWorkspaceViewer } from "#/lib/workspace-role";
 import {
@@ -283,23 +288,19 @@ function SettingsPage() {
 		setErrors((current) => ({ ...current, logo: undefined }));
 		if (!file) return;
 
-		if (file.size > 2 * 1024 * 1024) {
-			setErrors((current) => ({
-				...current,
-				logo: "Logo must be 2MB or smaller.",
-			}));
-			return;
-		}
-
-		const reader = new FileReader();
-		reader.onload = () => {
-			const result = typeof reader.result === "string" ? reader.result : null;
-			setLogoPreview(result);
-			if (result && typeof window !== "undefined") {
-				window.localStorage.setItem("invoicly-business-logo", result);
-			}
-		};
-		reader.readAsDataURL(file);
+		void normalizeLogoFile(file)
+			.then((result) => {
+				setLogoPreview(result);
+				if (typeof window !== "undefined") {
+					window.localStorage.setItem("invoicly-business-logo", result);
+				}
+			})
+			.catch((error: unknown) => {
+				setErrors((current) => ({
+					...current,
+					logo: logoUploadErrorMessage(error),
+				}));
+			});
 	};
 
 	const resetForm = () => {
@@ -599,7 +600,7 @@ function SettingsPage() {
 								<input
 									ref={fileInputRef}
 									type="file"
-									accept="image/png,image/jpeg,image/webp"
+									accept={LOGO_ACCEPT_ATTRIBUTE}
 									className="hidden"
 									aria-label="Business logo file"
 									onChange={(event) => onLogoChange(event.target.files?.[0])}

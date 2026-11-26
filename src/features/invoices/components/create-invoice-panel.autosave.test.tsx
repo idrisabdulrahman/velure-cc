@@ -269,9 +269,42 @@ describe("invoice draft autosave status", () => {
 		// The hidden step is gone: a draft saves before classification exists.
 		expect(lineItems[0].unit).toBeUndefined();
 		expect(lineItems[0].classificationCode).toBeUndefined();
-		// The inline "Draft saved" status is not asserted here: when the server
-		// assigns the number the signature changes once more, and this jsdom +
-		// React 19 harness leaves the status text at "Saving..." even though the
-		// save succeeded (reproduces on the base component, not from this work).
+		// The server assigned the number. The editor must settle on "Draft saved"
+		// instead of treating the echoed number as a newer, unsaved edit.
+		expect(statusText()).toBe("Draft saved");
+		// And it must not re-save the same content just because the number is
+		// now part of the signature.
+		await advance(1200);
+		expect(hoisted.autosaveDraft).toHaveBeenCalledTimes(1);
+	});
+
+	it("shows Not saved after a failed save and retries it", async () => {
+		await render();
+		expect(statusText()).toBe("Draft saved");
+
+		hoisted.autosaveDraft.mockReset();
+		hoisted.autosaveDraft.mockRejectedValueOnce(new Error("offline"));
+
+		await setQuantity("2");
+		await advance(1200);
+		expect(statusText()).toBe("Not saved");
+		const retry = container.querySelector<HTMLButtonElement>(
+			'[data-testid="invoice-autosave-retry"]',
+		);
+		expect(retry).not.toBeNull();
+
+		hoisted.autosaveDraft.mockResolvedValue({
+			id: "invoice-1",
+			invoiceNumber: "INV-2026-000009",
+		});
+		await act(async () => {
+			retry?.click();
+		});
+		await flush();
+
+		expect(statusText()).toBe("Draft saved");
+		expect(
+			container.querySelector('[data-testid="invoice-autosave-retry"]'),
+		).toBeNull();
 	});
 });

@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	bachsConfig,
+	parseBachsEvent,
 	parseBachsPayment,
 	validateBachsCheckoutResponse,
 	verifyBachsWebhook,
@@ -92,6 +93,179 @@ describe("Bachs invoice confirmation", () => {
 			input_account: "acct_sellerA",
 			input_reference: "chk_invoiceA",
 		});
+	});
+});
+
+describe("Bachs collection lifecycle", () => {
+	const succeeded = {
+		id: "evt_succeeded",
+		type: "collection.succeeded",
+		organization_id: "acct_sellerA",
+		data: {
+			charge_id: "ch_invoiceA",
+			checkout_id: "chk_invoiceA",
+			reference: "ORD-1",
+			status: "SUCCEEDED",
+			amount: "10000.00",
+			currency: "NGN",
+			customer: { id: "cust_1", email: "buyer@example.com" },
+		},
+	};
+
+	it("settles a SUCCEEDED collection from the documented fulfilment event", () => {
+		expect(parseBachsEvent(succeeded)).toEqual({
+			kind: "settle",
+			input_reference: "chk_invoiceA",
+			input_account: "acct_sellerA",
+			input_provider_payment_id: "ch_invoiceA",
+			input_amount: 10000,
+			input_currency: "NGN",
+			input_event_type: "collection.succeeded",
+			input_provider_status: "SUCCEEDED",
+		});
+	});
+
+	it("settles a legacy collection that has no charge id", () => {
+		expect(
+			parseBachsEvent({
+				...succeeded,
+				data: { ...succeeded.data, charge_id: null },
+			}),
+		).toMatchObject({
+			kind: "settle",
+			input_reference: "chk_invoiceA",
+			input_provider_payment_id: null,
+			input_amount: 10000,
+		});
+	});
+
+	it("never auto-settles ACCEPTED or OVERPAID collections", () => {
+		for (const status of ["ACCEPTED", "OVERPAID"]) {
+			expect(
+				parseBachsEvent({
+					...succeeded,
+					data: { ...succeeded.data, status },
+				}),
+			).toMatchObject({
+				kind: "lifecycle",
+				input_outcome: "manual_review",
+				input_reference: "chk_invoiceA",
+				input_provider_status: status,
+			});
+		}
+	});
+
+	it("prefers the connected account over the organization on forwarded events", () => {
+		expect(
+			parseBachsEvent({
+				...succeeded,
+				organization_id: "acct_platform",
+				account: "acct_sellerA",
+			}),
+		).toMatchObject({ input_account: "acct_sellerA" });
+	});
+
+	it("records a failed collection as retryable, not final", () => {
+		expect(
+			parseBachsEvent({
+				type: "collection.failed",
+				organization_id: "acct_sellerA",
+				data: {
+					charge_id: "ch_invoiceA",
+					checkout_id: "chk_invoiceA",
+					status: "FAILED",
+					amount: "10000.00",
+					currency: "NGN",
+					reason: "Payment authorization failed",
+				},
+			}),
+		).toEqual({
+			kind: "lifecycle",
+			input_reference: "chk_invoiceA",
+			input_account: "acct_sellerA",
+			input_provider_payment_id: "ch_invoiceA",
+			input_event_type: "collection.failed",
+			input_provider_status: "FAILED",
+			input_outcome: "failed",
+			input_reason: "Payment authorization failed",
+		});
+	});
+
+	it("marks an expired checkout without cancelling the invoice", () => {
+		expect(
+			parseBachsEvent({
+				type: "checkout.expired",
+				organization_id: "acct_sellerA",
+				data: {
+					checkout_id: "chk_invoiceA",
+					status: "expired",
+					mode: "payment",
+					payment_status: null,
+					amount: "10000.00",
+					currency: "NGN",
+					charge: null,
+				},
+			}),
+		).toEqual({
+			kind: "lifecycle",
+			input_reference: "chk_invoiceA",
+			input_account: "acct_sellerA",
+			input_provider_payment_id: null,
+			input_event_type: "checkout.expired",
+			input_provider_status: "expired",
+			input_outcome: "expired",
+			input_reason: null,
+		});
+	});
+
+	it("ignores unrelated, unmatched and malformed deliveries", () => {
+		expect(parseBachsEvent(null)).toBeNull();
+		expect(parseBachsEvent({ type: "invoice.paid" })).toBeNull();
+		expect(
+			parseBachsEvent({
+				...succeeded,
+				data: { ...succeeded.data, checkout_id: null },
+			}),
+		).toBeNull();
+		expect(
+			parseBachsEvent({
+				...succeeded,
+				data: { ...succeeded.data, status: "PENDING" },
+			}),
+		).toBeNull();
+		// A malformed, non-string status must not throw.
+		expect(
+			parseBachsEvent({
+				...succeeded,
+				data: { ...succeeded.data, status: 42 as unknown as string },
+			}),
+		).toBeNull();
+	});
+
+	it("parks a non-NGN success for manual review instead of dropping it", () => {
+		expect(
+			parseBachsEvent({
+				...succeeded,
+				data: { ...succeeded.data, currency: "USD" },
+			}),
+		).toMatchObject({
+			kind: "lifecycle",
+			input_reference: "chk_invoiceA",
+			input_account: "acct_sellerA",
+			input_outcome: "manual_review",
+			input_reason: "currency_usd",
+			input_event_type: "collection.succeeded",
+			input_provider_status: "SUCCEEDED",
+		});
+	});
+
+	it("keeps the settlement-only projection free of lifecycle events", () => {
+		expect(
+			parseBachsPayment({
+				...succeeded,
+				data: { ...succeeded.data, status: "ACCEPTED" },
+			}),
+		).toBeNull();
 	});
 });
 

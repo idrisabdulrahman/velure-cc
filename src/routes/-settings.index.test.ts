@@ -59,4 +59,14 @@ describe("settings supplier profile save flow", () => {
 		expect(source).toContain("SUPPLIER_PROFILE_REJECTION_PREFIX");
 		expect(source).toContain('"Check your registration details"');
 	});
+
+	it("normalizes the logo to an embeddable format before storing it", () => {
+		// The PDF embeds only PNG/JPEG, so the form must run the shared
+		// normalizer (rather than reading any file to a data URL directly) and
+		// drive its `accept` list from the same constant.
+		expect(source).toContain("normalizeLogoFile(file)");
+		expect(source).toContain("accept={LOGO_ACCEPT_ATTRIBUTE}");
+		expect(source).toContain("logoUploadErrorMessage(error)");
+		expect(source).not.toContain("reader.readAsDataURL(file)");
+	});
 });

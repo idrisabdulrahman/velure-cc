@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { parseBachsPayment, verifyBachsWebhook } from "#/server/bachs-invoices";
+import { parseBachsEvent, verifyBachsWebhook } from "#/server/bachs-invoices";
 import {
 	consumeFixedWindowRateLimit,
 	getClientIp,
@@ -52,14 +52,38 @@ export async function handle({ request }: { request: Request }) {
 	} catch {
 		return new Response(null, { status: 400 });
 	}
-	const payment = parseBachsPayment(event);
-	if (!payment) return Response.json({ ignored: true });
+	const parsed = parseBachsEvent(event);
+	if (!parsed) return Response.json({ ignored: true });
+	const client = getSupabaseAdminClient();
+
+	if (parsed.kind === "lifecycle") {
+		// Failed / expired / manual-review events are recorded for
+		// reconciliation but never change the invoice balance and never block
+		// a later success on the same reference.
+		const { error } = await client.rpc("record_bachs_payment_outcome", {
+			input_reference: parsed.input_reference,
+			input_account: parsed.input_account,
+			input_event_type: parsed.input_event_type,
+			input_provider_status: parsed.input_provider_status,
+			input_outcome: parsed.input_outcome,
+			// The generated RPC args model an absent optional text as
+			// `undefined`; the parser represents absence as `null`.
+			input_reason: parsed.input_reason ?? undefined,
+			input_provider_payment_id: parsed.input_provider_payment_id ?? undefined,
+			input_raw_event: event,
+		});
+		if (error) return new Response(null, { status: 503 });
+		return Response.json({ received: true, ignored: true });
+	}
+
+	const { kind: _kind, ...payment } = parsed;
 	// The raw event is signature-verified at this point; store it so
 	// reconciliation and disputes have the provider's own record.
-	const { data, error } = await getSupabaseAdminClient().rpc(
-		"confirm_bachs_payment",
-		{ ...payment, input_raw_event: event },
-	);
+	const { data, error } = await client.rpc("confirm_bachs_payment", {
+		...payment,
+		input_provider_payment_id: payment.input_provider_payment_id ?? undefined,
+		input_raw_event: event,
+	});
 	if (error) return new Response(null, { status: 503 });
 	if (typeof data === "object" && data && !Array.isArray(data)) {
 		const result = data as {
