@@ -775,8 +775,21 @@ export function rowToInvoiceDoc(row: InvoiceRow) {
 
 /** Port of convex/invoices.ts mapInvoice — derived status + amounts. */
 export function mapInvoice(invoice: any): Invoice {
-	const total = invoiceAmount(invoice);
-	const paymentAmount = legacyPaymentAmount(invoice, total);
+	// Resolve the effective compliance snapshot ONCE, before deriving the total,
+	// so a legacy/imported row with a NULL compliance column is valued with the
+	// same default (VAT applied) that the UI, PDF and payment snapshot use.
+	// Deriving `total` from the raw NULL compliance first would map a pre-VAT
+	// total while `compliance.netPayable` / `collectionAmount` show the
+	// VAT-inclusive value, splitting the money path.
+	const compliance =
+		invoice.compliance ??
+		defaultCompliance({
+			customerName: invoice.customerName,
+			lineItems: invoice.lineItems ?? [],
+		});
+	const valued = { ...invoice, compliance };
+	const total = invoiceAmount(valued);
+	const paymentAmount = legacyPaymentAmount(valued, total);
 	// WP8/C2: expose the TRUTHFUL delivery evidence only (stored `delivered_at`
 	// plus lifecycle delivery), mirroring `public.invoice_is_issued`
 	// (20261020000000). The status-based `updatedAt` fallback in
@@ -789,7 +802,7 @@ export function mapInvoice(invoice: any): Invoice {
 		invoice.deliveredAt ??
 		invoice.lifecycle?.emailDeliveredAt ??
 		invoice.lifecycle?.sentAt;
-	const status = getDerivedInvoiceStatus(invoice);
+	const status = getDerivedInvoiceStatus(valued);
 
 	return {
 		id: invoice.id,
@@ -844,12 +857,7 @@ export function mapInvoice(invoice: any): Invoice {
 		notes: invoice.notes,
 		internalNotes: invoice.internalNotes,
 		lineItems: invoice.lineItems,
-		compliance:
-			invoice.compliance ??
-			defaultCompliance({
-				customerName: invoice.customerName,
-				lineItems: invoice.lineItems ?? [],
-			}),
+		compliance,
 		fiscalization:
 			invoice.fiscalization ??
 			((

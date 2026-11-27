@@ -6,6 +6,7 @@ import {
 	paginateInvoiceRows,
 	rowToInvoiceDoc,
 } from "./invoices";
+import { getPublicPaymentContextForInvoice } from "./payments";
 
 describe("invoice list contracts", () => {
 	it("coerces string numerics from JSON columns in rowToInvoiceDoc", () => {
@@ -148,5 +149,54 @@ describe("public invoice fiscalization projection", () => {
 			status: "not_configured",
 		});
 		expect(forgedFromCompliance.compliance).not.toHaveProperty("fiscalization");
+	});
+});
+
+describe("NULL-compliance money-path consistency", () => {
+	// Regression: mapInvoice derived `total` from the raw NULL compliance column
+	// before applying the `defaultCompliance` fallback, so a legacy/imported row
+	// mapped to a pre-VAT total while `compliance.grandTotal` and the payment
+	// collection amount used the VAT-inclusive default. Every surface that reads
+	// a money value off the mapped invoice must agree.
+	const legacyRow = (overrides: Record<string, unknown> = {}) => ({
+		id: "inv-legacy",
+		token: "pub-legacy",
+		invoiceNumber: "LEGACY-1",
+		customerName: "Legacy Buyer",
+		currency: "NGN",
+		status: "unpaid",
+		lineItems: [{ id: "li-1", name: "Service", quantity: 1, price: 1000 }],
+		compliance: null,
+		paymentAmount: 0,
+		createdAt: 1,
+		updatedAt: 1,
+		...overrides,
+	});
+
+	it("values a NULL-compliance row consistently across total, balance, compliance and collection", async () => {
+		const mapped = mapInvoice(legacyRow() as never);
+		// ₦1,000 subtotal + 7.5% VAT = ₦1,075.
+		expect(mapped.total).toBe(1075);
+		expect(mapped.balance).toBe(1075);
+		expect((mapped.compliance as { grandTotal: number }).grandTotal).toBe(1075);
+		expect(
+			(mapped.compliance as { netPayable?: number }).netPayable,
+		).toBeUndefined();
+
+		const context = await getPublicPaymentContextForInvoice(
+			null as never,
+			mapped as never,
+			"NG",
+		);
+		expect(context.collectionAmount).toBe(1075);
+	});
+
+	it("derives status from the same VAT-inclusive total a legacy row is valued at", () => {
+		// A payment equal to the pre-VAT line sum must not read as fully paid once
+		// the row is valued with the default VAT-inclusive snapshot.
+		const mapped = mapInvoice(legacyRow({ paymentAmount: 1000 }) as never);
+		expect(mapped.total).toBe(1075);
+		expect(mapped.balance).toBe(75);
+		expect(mapped.status).toBe("partially-paid");
 	});
 });

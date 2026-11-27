@@ -98,7 +98,7 @@ describe("public invoice repository", () => {
 					template_settings: null,
 					top_block: null,
 					bottom_block: null,
-					compliance: null,
+					compliance: { netPayable: 100 },
 					fiscalization: null,
 					lifecycle: {},
 					created_at: "2026-08-27T09:00:00.000Z",

@@ -151,7 +151,10 @@ function installAuditEndpoint(client: Supabase) {
 		init?: RequestInit,
 	) =>
 		handleAuditWrite({
-			request: new Request(new URL(String(input), "http://invoicly.test"), init),
+			request: new Request(
+				new URL(String(input), "http://invoicly.test"),
+				init,
+			),
 		})) as typeof fetch);
 	return admin;
 }
@@ -388,7 +391,16 @@ const invoiceRow = {
 	delivered_at: "2026-10-02T10:00:00.000Z",
 	canceled_at: null,
 	line_items: [{ id: "li-1", name: "Service", quantity: 1, price: 5000 }],
-	compliance: null,
+	// Real writes always persist a compliance snapshot; a settled ₦5,000 payment
+	// needs the snapshot to value the invoice at ₦5,000 (the NULL-compliance
+	// fallback now applies the default VAT-inclusive snapshot, see mapInvoice).
+	compliance: {
+		subtotal: 5000,
+		totalTax: 0,
+		grandTotal: 5000,
+		netPayable: 5000,
+		withholdingTaxAmount: 0,
+	},
 	lifecycle: {},
 	created_at: "2026-10-01T09:00:00.000Z",
 	updated_at: "2026-10-02T10:00:00.000Z",
