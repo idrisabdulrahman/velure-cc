@@ -223,7 +223,7 @@ The config therefore selects the header by runtime
 | Workers | `cf-connecting-ip` | The edge sets it and strips any client copy, so it cannot be forged. There is no `x-forwarded-for`. |
 | Node (VPS) | `x-forwarded-for` | nginx must REPLACE it (`proxy_set_header X-Forwarded-For $remote_addr`). Trusting `cf-connecting-ip` here would be spoofable, because nothing in front of the process validates it. |
 
-Verification after the fix, on `https://invoicly.noicepikachu.workers.dev`: three
+Verification after the fix, on the canonical host `https://invoicly.cv`: three
 failed sign-ins returned 401 and the fourth returned 429 with
 `{"message":"Too many requests. Please try again later."}`, and the table held
 exactly one row with `count = 4` whose `key` is a 64-character hex digest.
@@ -394,7 +394,7 @@ as mock.
 
 ## 8. Phase 8 — acceptance checklist
 
-Run on `*.workers.dev` before any custom domain is attached.
+Run on the canonical host `https://invoicly.cv` after each deploy.
 
 - [ ] Static assets load; no 404 on client routes after a hard refresh.
 - [ ] Sign up, verify, sign in, sign out; session survives reload.
@@ -521,9 +521,9 @@ Recorded so the next agent does not re-derive them:
 
 ## 13.1 What the first live deploy proved
 
-Deployed 2026-11-03 to `https://invoicly.noicepikachu.workers.dev`
-(worker `invoicly`, hasher `invoicly-password-hasher`, account
-`699cc6ec07aa29df7034163270b23f87`).
+First deployed 2026-11-03 (worker `invoicly`, hasher `invoicly-password-hasher`,
+account `699cc6ec07aa29df7034163270b23f87`); the canonical host is now
+`https://invoicly.cv`.
 
 - Build and deploy are reproducible: `pnpm build:worker` then `npx wrangler
   deploy` (the `deploy:worker` script fails because `wrangler` is not on the

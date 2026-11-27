@@ -2,11 +2,11 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "invoicly",
 	"compatibility_date": "2026-11-02",
-	// Renamed from `velure` (2026-11-22). The public entry points are the
-	// custom domain https://invoicly.cv (attached via the Cloudflare Custom
-	// Domains API, service `invoicly`) and
-	// https://invoicly.noicepikachu.workers.dev. `workers_dev` stays pinned so
-	// the deploy does not depend on a default.
+	// Renamed from `velure` (2026-11-22). The public entry point is the
+	// canonical custom domain https://invoicly.cv (attached via the Cloudflare
+	// Custom Domains API, service `invoicly`). `workers_dev` stays pinned so the
+	// deploy does not depend on a default; the canonical host is the custom
+	// domain, not the generated *.workers.dev name.
 	"workers_dev": true,
 	// Per-version preview URLs are extra public endpoints nothing here uses.
 	"preview_urls": false,

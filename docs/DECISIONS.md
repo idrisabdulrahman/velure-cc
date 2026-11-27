@@ -153,7 +153,10 @@ These block work that depends on the answer. Unattended runs must stop here.
   created, `reminder_events_invoice_stage_channel_unique` created, and the
   `invoicly-scheduler-tick` job scheduled (`*/10 * * * *`, active).
 - **Vault:** `invoicly_scheduler_url` =
-  `https://invoicly-f2c.pages.dev/api/cron/tick`; `invoicly_scheduler_secret` =
+  the scheduler tick endpoint (set 2026-10-29 to a `*.pages.dev` host; the
+  canonical host is now `https://invoicly.cv`, so rotate this Vault value to
+  `https://invoicly.cv/api/cron/tick` when convenient);
+  `invoicly_scheduler_secret` =
   a fresh 32-byte random hex generated **inside** Postgres
   (`extensions.gen_random_bytes`), so its value is not recorded here. Retrieve
   with `select decrypted_secret from vault.decrypted_secrets where
@@ -277,8 +280,8 @@ These block work that depends on the answer. Unattended runs must stop here.
   `pnpm deploy:pages` = `build:pages` + `wrangler pages deploy dist
   --project-name invoicly --branch main --env-file .env`. No git push is
   involved; `development` remains local-only.
-- **Result:** deployed revision `709411ca`
-  (`https://709411ca.invoicly-f2c.pages.dev`). Live checks (read-only):
+- **Result:** deployed revision `709411ca` (historical `*.pages.dev` preview
+  URL; the canonical host is now `https://invoicly.cv`). Live checks (read-only):
   `POST /api/cron/tick` → **401** (route now exists; the old build 404'd),
   `GET /` → **200**, `GET /auth` → **200**.
 - **First live tick (06:30 UTC) — partial.** `net._http_response` row
